@@ -22,4 +22,16 @@ export class DatabaseService implements OnModuleDestroy {
   async onModuleDestroy() {
     await this.pool.end();
   }
+
+  async healthCheck() {
+    const startedAt = Date.now();
+    const result = await this.pool.query<{ connected: number }>(
+      'select 1 as connected',
+    );
+
+    return {
+      ok: result.rows[0]?.connected === 1,
+      latencyMs: Date.now() - startedAt,
+    };
+  }
 }
