@@ -8,8 +8,10 @@ const healthSchema = z.object({
 
 export type HealthResponse = z.infer<typeof healthSchema>;
 
+const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+
 export async function fetchHealth(): Promise<HealthResponse> {
-  const response = await fetch('http://localhost:3000/health');
+  const response = await fetch(`${apiUrl}/health`);
 
   if (!response.ok) {
     throw new Error('Unable to reach API');
