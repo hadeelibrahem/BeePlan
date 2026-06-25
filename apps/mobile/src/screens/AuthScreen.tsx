@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  StyleSheet,
 } from 'react-native';
 
 interface AuthScreenProps {
@@ -88,28 +89,14 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
         <View className="py-10">
           {/* Logo / Brand Header */}
           <View className="items-center mb-8">
-            {/* Minimal Geometric Hexagon Bee Logo */}
-            <View className="w-16 h-16 items-center justify-center relative mb-4">
-              {/* Outer Hexagon shape */}
-              <View className="absolute inset-0 bg-[#FDEF4B] rounded-2xl rotate-45 opacity-20" />
-              <View className="w-12 h-12 bg-[#FDEF4B] rounded-xl items-center justify-center rotate-12 shadow-lg shadow-[#FDEF4B]/50">
-                {/* Honeybee stripe styling inside logo */}
-                <View className="w-8 h-8 justify-between py-1">
-                  <View className="h-1.5 bg-[#2B323F] rounded-full w-full" />
-                  <View className="h-1.5 bg-[#2B323F] rounded-full w-5/6 self-center" />
-                  <View className="h-1.5 bg-[#2B323F] rounded-full w-2/3 self-center" />
-                </View>
-              </View>
-              {/* Decorative antenna */}
-              <View className="absolute -top-1 left-4 w-1.5 h-1.5 rounded-full bg-[#FDEF4B]" />
-              <View className="absolute -top-1 right-4 w-1.5 h-1.5 rounded-full bg-[#FDEF4B]" />
-            </View>
+            {/* Minimal Geometric Honeycomb Bee Logo */}
+            <GlowingIcon />
 
             <Text className="text-3xl font-extrabold text-white tracking-tight">
               Bee<Text className="text-[#FDEF4B]">Plan</Text>
             </Text>
-            <Text className="text-xs text-[#8C9BAE] uppercase tracking-widest mt-1">
-              Smart Productivity
+            <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.18em] mt-2">
+              SMART PRODUCTIVITY
             </Text>
           </View>
 
@@ -317,3 +304,94 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
     </KeyboardAvoidingView>
   );
 }
+
+function GlowingIcon() {
+  return (
+    <View style={logoStyles.wrapper}>
+      <View style={logoStyles.glow} />
+
+      <View style={logoStyles.mark}>
+        <View style={logoStyles.stripesBox}>
+          <View style={[logoStyles.stripe, logoStyles.stripeFull]} />
+          <View style={[logoStyles.stripe, logoStyles.stripeFiveSixths]} />
+          <View style={[logoStyles.stripe, logoStyles.stripeTwoThirds]} />
+        </View>
+      </View>
+
+      <View style={[logoStyles.dot, logoStyles.dotLeft]} />
+      <View style={[logoStyles.dot, logoStyles.dotRight]} />
+    </View>
+  );
+}
+
+const logoStyles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    height: 64,
+    justifyContent: 'center',
+    marginBottom: 16,
+    position: 'relative',
+    width: 64,
+  },
+  glow: {
+    backgroundColor: '#FDEF4B',
+    borderRadius: 16,
+    bottom: 0,
+    left: 0,
+    opacity: 0.2,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    transform: [{ rotate: '45deg' }],
+  },
+  mark: {
+    alignItems: 'center',
+    backgroundColor: '#FDEF4B',
+    borderRadius: 12,
+    elevation: 10,
+    height: 48,
+    justifyContent: 'center',
+    shadowColor: '#FDEF4B',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    transform: [{ rotate: '12deg' }],
+    width: 48,
+  },
+  stripesBox: {
+    height: 32,
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    width: 32,
+  },
+  stripe: {
+    backgroundColor: '#2B323F',
+    borderRadius: 3,
+    height: 6,
+  },
+  stripeFull: {
+    width: 32,
+  },
+  stripeFiveSixths: {
+    alignSelf: 'center',
+    width: 27,
+  },
+  stripeTwoThirds: {
+    alignSelf: 'center',
+    width: 21,
+  },
+  dot: {
+    backgroundColor: '#FDEF4B',
+    borderRadius: 3,
+    height: 6,
+    position: 'absolute',
+    top: -4,
+    width: 6,
+  },
+  dotLeft: {
+    left: 16,
+  },
+  dotRight: {
+    right: 16,
+  },
+});

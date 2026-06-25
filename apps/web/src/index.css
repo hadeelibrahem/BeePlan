@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --color-primary-yellow: #FDEF4B;
+  --color-dark-gray-blue: #2B323F;
+}
+
 body {
   margin: 0;
   font-family:
