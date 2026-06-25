@@ -19,3 +19,7 @@ Copy `apps/api/.env.example` to `apps/api/.env` and set `DATABASE_URL` before ru
 ## Structure
 
 See `PROJECT_STRUCTURE.md` for the frontend/backend folder split and where to add new files.
+
+## Deploy
+
+See `RAILWAY_DEPLOY.md` for Railway backend deployment steps.
