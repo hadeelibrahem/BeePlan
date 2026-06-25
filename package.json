@@ -1,0 +1,19 @@
+{
+  "name": "beeplan",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "mobile": "npm --prefix apps/mobile run start --",
+    "mobile:android": "npm --prefix apps/mobile run android --",
+    "mobile:ios": "npm --prefix apps/mobile run ios --",
+    "mobile:web": "npm --prefix apps/mobile run web --",
+    "web": "npm --prefix apps/web run dev",
+    "web:build": "npm --prefix apps/web run build",
+    "api": "npm --prefix apps/api run start:dev",
+    "api:build": "npm --prefix apps/api run build",
+    "api:test": "npm --prefix apps/api run test",
+    "db:generate": "npm --prefix apps/api run db:generate",
+    "db:migrate": "npm --prefix apps/api run db:migrate",
+    "db:studio": "npm --prefix apps/api run db:studio"
+  }
+}
