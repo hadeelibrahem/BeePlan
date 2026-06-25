@@ -12,30 +12,46 @@
 6. اختاري region قريب من Railway قدر الإمكان.
 7. اضغطي `Create new project`.
 
-## 2. Get Database URL
+## 2. Database URL
 
-بعد ما يجهز المشروع:
-
-1. افتحي project.
-2. روحي إلى `Project Settings`.
-3. افتحي `Database`.
-4. روحي لقسم `Connection string`.
-5. اختاري connection string من نوع URI.
-
-استخدمي connection pooling إذا متاح، خصوصًا لما التطبيق يكون مستضاف على Railway.
-
-الشكل بيكون قريب من:
+مشروع Supabase الحالي يعطي connection string بهذا الشكل:
 
 ```text
-postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
+postgresql://postgres.bhbihmbnlnpzqfqhoenj:[YOUR-PASSWORD]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres
 ```
 
-استبدلي:
+استبدلي `[YOUR-PASSWORD]` بكلمة مرور قاعدة بيانات Supabase.
 
-- `PASSWORD` بكلمة مرور قاعدة البيانات.
-- أي placeholder يظهر من Supabase بالقيمة الفعلية.
+ملاحظة: هذا الرابط يستخدم shared transaction-mode pooler على port `6543`، وهو مناسب للاستضافة مثل Railway.
 
-## 3. Local Env
+## 3. ORM Status
+
+Drizzle ORM مركب وجاهز بالفعل داخل `apps/api`:
+
+```bash
+npm install drizzle-orm
+npm install drizzle-kit --save-dev
+```
+
+لا تحتاجي تعيدي تشغيلهم إلا إذا حذفتي `node_modules`.
+
+ملفات Drizzle عندنا:
+
+```text
+apps/api/drizzle.config.ts
+apps/api/src/db/schema.ts
+apps/api/src/db/database.service.ts
+```
+
+ملاحظة: Supabase docs تعرض `drizzle/schema.ts` كمثال، لكن في مشروع NestJS عندنا مكان الـ schema هو:
+
+```text
+apps/api/src/db/schema.ts
+```
+
+و `drizzle.config.ts` مضبوط عليه.
+
+## 4. Local Env
 
 اعملي ملف:
 
@@ -47,13 +63,21 @@ apps/api/.env
 
 ```env
 PORT=3000
-DATABASE_URL="postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres"
+DATABASE_URL="postgresql://postgres.bhbihmbnlnpzqfqhoenj:[YOUR-PASSWORD]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres"
 DB_SSL=true
 ```
 
 مهم: لا ترفعي `.env` على GitHub.
 
-## 4. Test API Locally
+أو انسخي الملف الجاهز:
+
+```bash
+copy apps\api\.env.supabase.example apps\api\.env
+```
+
+ثم بدلي `[YOUR-PASSWORD]` بكلمة المرور الحقيقية.
+
+## 5. Test API Locally
 
 من جذر المشروع:
 
@@ -69,7 +93,7 @@ http://localhost:3000/health
 
 إذا رجع JSON فيه `ok: true`، فالـ API شغال.
 
-## 5. Drizzle Migrations
+## 6. Drizzle Migrations
 
 لإنشاء migration من schema الحالي:
 
@@ -89,14 +113,14 @@ npm run db:migrate
 apps/api/src/db/schema.ts
 ```
 
-## 6. Railway Variables With Supabase
+## 7. Railway Variables With Supabase
 
 لما نرجع نكمل Railway، لا تضيفي Railway PostgreSQL.
 
 بدلًا من ذلك، في خدمة API على Railway افتحي `Variables` وأضيفي:
 
 ```text
-DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql://postgres.bhbihmbnlnpzqfqhoenj:[YOUR-PASSWORD]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres
 DB_SSL=true
 NODE_ENV=production
 ```
@@ -109,7 +133,7 @@ PORT
 
 Railway يضيف `PORT` تلقائيًا.
 
-## 7. Supabase SQL Check
+## 8. Supabase SQL Check
 
 بعد تشغيل migrations، تقدري تتأكدي من الجدول من Supabase:
 
@@ -122,7 +146,17 @@ Railway يضيف `PORT` تلقائيًا.
 select * from users;
 ```
 
-## 8. Common Issues
+## 9. Agent Skills Optional
+
+Supabase يقترح:
+
+```bash
+npx skills add supabase/agent-skills
+```
+
+هذا اختياري ومخصص لبعض أدوات AI. المشروع لا يحتاجه حتى يشتغل.
+
+## 10. Common Issues
 
 ### Password Has Special Characters
 

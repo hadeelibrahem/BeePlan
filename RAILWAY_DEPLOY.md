@@ -25,7 +25,7 @@ SUPABASE_SETUP.md
 بعدها افتحي خدمة الـ API في Railway وروحي على `Variables` وأضيفي:
 
 ```text
-DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql://postgres.bhbihmbnlnpzqfqhoenj:[YOUR-PASSWORD]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres
 DB_SSL=true
 NODE_ENV=production
 ```
