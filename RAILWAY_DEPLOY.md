@@ -14,17 +14,19 @@
 
 ## 2. Database
 
-من Railway:
+نستخدم Supabase كقاعدة PostgreSQL بدل Railway PostgreSQL.
 
-1. اضغطي `New`.
-2. اختاري `Database`.
-3. اختاري `PostgreSQL`.
-4. افتحي خدمة الـ API.
-5. روحي على `Variables`.
-6. أضيفي:
+جهزي Supabase أولًا من:
 
 ```text
-DATABASE_URL=${{Postgres.DATABASE_URL}}
+SUPABASE_SETUP.md
+```
+
+بعدها افتحي خدمة الـ API في Railway وروحي على `Variables` وأضيفي:
+
+```text
+DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
+DB_SSL=true
 NODE_ENV=production
 ```
 

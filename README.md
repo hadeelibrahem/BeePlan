@@ -23,3 +23,7 @@ See `PROJECT_STRUCTURE.md` for the frontend/backend folder split and where to ad
 ## Deploy
 
 See `RAILWAY_DEPLOY.md` for Railway backend deployment steps.
+
+## Database
+
+See `SUPABASE_SETUP.md` for Supabase PostgreSQL setup steps.
