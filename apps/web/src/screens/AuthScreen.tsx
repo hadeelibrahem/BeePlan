@@ -57,9 +57,15 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
       }
       setIsLoading(false)
       setIsSuccess(true)
-    } catch {
+    } catch (error) {
       setIsLoading(false)
-      setSubmitError(isSignUp ? 'Sign up failed. Please try again.' : 'Sign in failed. Please try again.')
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : isSignUp
+            ? 'Sign up failed. Please try again.'
+            : 'Sign in failed. Please try again.',
+      )
     }
   }
 
