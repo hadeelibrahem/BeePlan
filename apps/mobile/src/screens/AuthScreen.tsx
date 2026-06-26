@@ -10,6 +10,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import BeePlanLogo from '../components/BeePlanLogo';
+import { signUp } from '../lib/api';
+import {
+  getPasswordStrength,
+  hasNoErrors,
+  validateSignIn,
+  validateSignUp,
+  type AuthErrors,
+} from '../lib/authValidation';
 
 interface AuthScreenProps {
   onSuccess: (email: string) => void;
@@ -24,48 +32,41 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [errors, setErrors] = useState<AuthErrors>({});
+  const [submitError, setSubmitError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const signUpFields = { name, email, password, confirmPassword };
+  const passwordStrength = getPasswordStrength(password);
+  const isSignUpValid = hasNoErrors(validateSignUp(signUpFields));
+  const isSubmitDisabled = isLoading || (isSignUp && !isSignUpValid);
 
   const validate = () => {
-    const newErrors: { [key: string]: string } = {};
-
-    if (isSignUp && !name.trim()) {
-      newErrors.name = 'Full name is required';
-    }
-
-    if (!email.trim()) {
-      newErrors.email = 'Email address is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email';
-    }
-
-    if (!password) {
-      newErrors.password = 'Password is required';
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-
-    if (isSignUp) {
-      if (!confirmPassword) {
-        newErrors.confirmPassword = 'Please confirm your password';
-      } else if (confirmPassword !== password) {
-        newErrors.confirmPassword = 'Passwords do not match';
-      }
-    }
-
+    const newErrors = isSignUp ? validateSignUp(signUpFields) : validateSignIn(email, password);
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return hasNoErrors(newErrors);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setSubmitError('');
+    setSuccessMessage('');
     if (!validate()) return;
 
     setIsLoading(true);
-    // Simulate API Request
-    setTimeout(() => {
+    try {
+      if (isSignUp) {
+        await signUp({ fullName: name.trim(), email: email.trim(), password });
+        setSuccessMessage('Account created successfully.');
+        setTimeout(() => onSuccess(email), 700);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        onSuccess(email);
+      }
       setIsLoading(false);
-      onSuccess(email);
-    }, 1200);
+    } catch {
+      setIsLoading(false);
+      setSubmitError(isSignUp ? 'Sign up failed. Please try again.' : 'Sign in failed. Please try again.');
+    }
   };
 
   const toggleMode = () => {
@@ -75,6 +76,8 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
     setEmail('');
     setPassword('');
     setConfirmPassword('');
+    setSubmitError('');
+    setSuccessMessage('');
   };
 
   return (
@@ -122,7 +125,15 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                       placeholder="e.g. John Doe"
                       placeholderTextColor="#64748B"
                       value={name}
-                      onChangeText={setName}
+                      onChangeText={(value) => {
+                        setName(value);
+                        setErrors((previous) => ({
+                          ...previous,
+                          name: isSignUp && !value.trim() ? 'Full name is required' : undefined,
+                        }));
+                        setSubmitError('');
+                        setSuccessMessage('');
+                      }}
                       className="text-white text-base"
                     />
                   </View>
@@ -146,7 +157,15 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                     placeholder="name@example.com"
                     placeholderTextColor="#64748B"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(value) => {
+                      setEmail(value);
+                      setErrors((previous) => ({
+                        ...previous,
+                        email: validateSignUp({ ...signUpFields, email: value }).email,
+                      }));
+                      setSubmitError('');
+                      setSuccessMessage('');
+                    }}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -181,7 +200,21 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                     placeholder="Enter password"
                     placeholderTextColor="#64748B"
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={(value) => {
+                      setPassword(value);
+                      setErrors((previous) => ({
+                        ...previous,
+                        password: isSignUp
+                          ? validateSignUp({ ...signUpFields, password: value }).password
+                          : undefined,
+                        confirmPassword:
+                          isSignUp && confirmPassword && confirmPassword !== value
+                            ? 'Passwords do not match'
+                            : undefined,
+                      }));
+                      setSubmitError('');
+                      setSuccessMessage('');
+                    }}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -195,6 +228,11 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                 </View>
                 {errors.password && (
                   <Text className="text-red-400 text-xs mt-1 ml-1">{errors.password}</Text>
+                )}
+                {isSignUp && password && (
+                  <Text className="text-[#8C9BAE] text-xs mt-1 ml-1">
+                    Password strength: <Text className="text-white font-bold">{passwordStrength}</Text>
+                  </Text>
                 )}
               </View>
 
@@ -213,7 +251,16 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                       placeholder="Re-enter password"
                       placeholderTextColor="#64748B"
                       value={confirmPassword}
-                      onChangeText={setConfirmPassword}
+                      onChangeText={(value) => {
+                        setConfirmPassword(value);
+                        setErrors((previous) => ({
+                          ...previous,
+                          confirmPassword:
+                            validateSignUp({ ...signUpFields, confirmPassword: value }).confirmPassword,
+                        }));
+                        setSubmitError('');
+                        setSuccessMessage('');
+                      }}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -227,13 +274,19 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   )}
                 </View>
               )}
+              {submitError && (
+                <Text className="text-red-400 text-xs mt-1 ml-1">{submitError}</Text>
+              )}
+              {successMessage && (
+                <Text className="text-emerald-400 text-xs mt-1 ml-1">{successMessage}</Text>
+              )}
 
               {/* Submit CTA Button */}
               <Pressable
                 onPress={handleSubmit}
-                disabled={isLoading}
+                disabled={isSubmitDisabled}
                 className={`h-14 rounded-2xl bg-[#FDEF4B] items-center justify-center mt-4 shadow-lg shadow-[#FDEF4B]/20 active:opacity-90 ${
-                  isLoading ? 'opacity-70' : ''
+                  isSubmitDisabled ? 'opacity-70' : ''
                 }`}
               >
                 {isLoading ? (

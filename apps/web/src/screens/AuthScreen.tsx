@@ -7,6 +7,14 @@ import {
   BrandHeader,
   PrimaryButton,
 } from '../components/AuthShared'
+import { signUp } from '../lib/api'
+import {
+  getPasswordStrength,
+  hasNoErrors,
+  validateSignIn,
+  validateSignUp,
+  type AuthErrors,
+} from '../lib/authValidation'
 
 export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
   const [isSignUp, setIsSignUp] = useState(false)
@@ -15,36 +23,44 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [errors, setErrors] = useState<{ [k: string]: string }>({})
+  const [errors, setErrors] = useState<AuthErrors>({})
   const [isLoading, setIsLoading] = useState(false)
   const [shakeActive, setShakeActive] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
+  const signUpFields = { name, email, password, confirmPassword }
+  const passwordStrength = getPasswordStrength(password)
+  const isSignUpValid = hasNoErrors(validateSignUp(signUpFields))
+  const isSubmitDisabled = isLoading || (isSignUp && !isSignUpValid)
 
   const validate = () => {
-    const e: { [k: string]: string } = {}
-    if (isSignUp && !name.trim()) e.name = 'Full name is required'
-    if (!email.trim()) e.email = 'Email address is required'
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Please enter a valid email'
-    if (!password) e.password = 'Password is required'
-    else if (password.length < 6) e.password = 'Password must be at least 6 characters'
-    if (isSignUp && !confirmPassword) e.confirmPassword = 'Please confirm your password'
-    else if (isSignUp && confirmPassword !== password) e.confirmPassword = 'Passwords do not match'
+    const e = isSignUp ? validateSignUp(signUpFields) : validateSignIn(email, password)
     setErrors(e)
-    return Object.keys(e).length === 0
+    return hasNoErrors(e)
   }
 
-  const handleSubmit = (ev: FormEvent) => {
+  const handleSubmit = async (ev: FormEvent) => {
     ev.preventDefault()
+    setSubmitError('')
     if (!validate()) {
       setShakeActive(true)
       setTimeout(() => setShakeActive(false), 500)
       return
     }
     setIsLoading(true)
-    setTimeout(() => {
+    try {
+      if (isSignUp) {
+        await signUp({ fullName: name.trim(), email: email.trim(), password })
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 900))
+      }
       setIsLoading(false)
       setIsSuccess(true)
-    }, 1500)
+    } catch {
+      setIsLoading(false)
+      setSubmitError(isSignUp ? 'Sign up failed. Please try again.' : 'Sign in failed. Please try again.')
+    }
   }
 
   const reset = () => {
@@ -53,6 +69,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
     setPassword('')
     setConfirmPassword('')
     setErrors({})
+    setSubmitError('')
   }
   const toggleMode = () => {
     setIsSignUp((s) => !s)
@@ -113,7 +130,11 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                   value={name}
                   onChange={(v) => {
                     setName(v)
-                    setErrors((p) => ({ ...p, name: '' }))
+                    setErrors((p) => ({
+                      ...p,
+                      name: isSignUp && !v.trim() ? 'Full name is required' : undefined,
+                    }))
+                    setSubmitError('')
                   }}
                   error={errors.name}
                 />
@@ -124,7 +145,11 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 value={email}
                 onChange={(v) => {
                   setEmail(v)
-                  setErrors((p) => ({ ...p, email: '' }))
+                  setErrors((p) => ({
+                    ...p,
+                    email: validateSignUp({ ...signUpFields, email: v }).email,
+                  }))
+                  setSubmitError('')
                 }}
                 error={errors.email}
               />
@@ -135,7 +160,17 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 value={password}
                 onChange={(v) => {
                   setPassword(v)
-                  setErrors((p) => ({ ...p, password: '' }))
+                  setErrors((p) => ({
+                    ...p,
+                    password: isSignUp
+                      ? validateSignUp({ ...signUpFields, password: v }).password
+                      : undefined,
+                    confirmPassword:
+                      isSignUp && confirmPassword && confirmPassword !== v
+                        ? 'Passwords do not match'
+                        : undefined,
+                  }))
+                  setSubmitError('')
                 }}
                 error={errors.password}
                 rightSlot={
@@ -159,6 +194,11 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                   </div>
                 }
               />
+              {isSignUp && password && (
+                <p className="text-xs text-[#8C9BAE] pl-1 -mt-2">
+                  Password strength: <span className="font-bold text-white">{passwordStrength}</span>
+                </p>
+              )}
               {isSignUp && (
                 <AuthInput
                   label="Confirm Password"
@@ -167,13 +207,21 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                   value={confirmPassword}
                   onChange={(v) => {
                     setConfirmPassword(v)
-                    setErrors((p) => ({ ...p, confirmPassword: '' }))
+                    setErrors((p) => ({
+                      ...p,
+                      confirmPassword:
+                        validateSignUp({ ...signUpFields, confirmPassword: v }).confirmPassword,
+                    }))
+                    setSubmitError('')
                   }}
                   error={errors.confirmPassword}
                 />
               )}
+              {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
               <div className="pt-1">
-                <PrimaryButton loading={isLoading}>{isSignUp ? 'Create Account' : 'Sign In'}</PrimaryButton>
+                <PrimaryButton loading={isLoading} disabled={isSubmitDisabled}>
+                  {isSignUp ? 'Create Account' : 'Sign In'}
+                </PrimaryButton>
               </div>
             </form>
 
