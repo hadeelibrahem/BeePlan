@@ -83,18 +83,20 @@ export function PrimaryButton({
   children,
   onClick,
   loading = false,
+  disabled = false,
   type = 'submit',
 }: {
   children: React.ReactNode
   onClick?: () => void
   loading?: boolean
+  disabled?: boolean
   type?: 'submit' | 'button'
 }) {
   return (
     <button
       type={type}
       onClick={onClick}
-      disabled={loading}
+      disabled={loading || disabled}
       className="w-full h-12 rounded-xl bg-[#FDEF4B] text-[#2B323F] text-xs font-bold uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all flex items-center justify-center shadow-lg shadow-[#FDEF4B]/10 btn-glow"
     >
       {loading ? (
