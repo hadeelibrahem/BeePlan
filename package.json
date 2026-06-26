@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "mobile": "npm --prefix apps/mobile run start --",
+    "mobile:tunnel": "npm --prefix apps/mobile run start -- --tunnel",
     "mobile:android": "npm --prefix apps/mobile run android --",
     "mobile:ios": "npm --prefix apps/mobile run ios --",
     "mobile:web": "npm --prefix apps/mobile run web --",

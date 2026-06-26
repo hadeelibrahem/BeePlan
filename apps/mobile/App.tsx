@@ -7,20 +7,40 @@ import { Text, Pressable, ScrollView, View } from 'react-native';
 import { fetchHealth } from './src/lib/api';
 import { useAppStore } from './src/store/useAppStore';
 import AuthScreen from './src/screens/AuthScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
+import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 
 const queryClient = new QueryClient();
 
+type AppScreen = 'auth' | 'forgot' | 'reset' | 'home';
+
 export default function App() {
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [screen, setScreen] = useState<AppScreen>('auth');
+  const [userEmail, setUserEmail] = useState<string>('');
 
   return (
     <QueryClientProvider client={queryClient}>
       <View className="flex-1 bg-[#2B323F]">
         <StatusBar style="light" />
-        {userEmail ? (
-          <HomeScreen email={userEmail} onSignOut={() => setUserEmail(null)} />
-        ) : (
-          <AuthScreen onSuccess={(email) => setUserEmail(email)} />
+        {screen === 'auth' && (
+          <AuthScreen
+            onSuccess={(email) => { setUserEmail(email); setScreen('home'); }}
+            onForgotPassword={() => setScreen('forgot')}
+          />
+        )}
+        {screen === 'forgot' && (
+          <ForgotPasswordScreen
+            onBack={() => setScreen('auth')}
+            onReset={() => setScreen('reset')}
+          />
+        )}
+        {screen === 'reset' && (
+          <ResetPasswordScreen
+            onBack={() => setScreen('auth')}
+          />
+        )}
+        {screen === 'home' && (
+          <HomeScreen email={userEmail} onSignOut={() => { setUserEmail(''); setScreen('auth'); }} />
         )}
       </View>
     </QueryClientProvider>
