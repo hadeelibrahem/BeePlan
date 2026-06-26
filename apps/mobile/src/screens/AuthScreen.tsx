@@ -63,9 +63,15 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
         onSuccess(email);
       }
       setIsLoading(false);
-    } catch {
+    } catch (error) {
       setIsLoading(false);
-      setSubmitError(isSignUp ? 'Sign up failed. Please try again.' : 'Sign in failed. Please try again.');
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : isSignUp
+            ? 'Sign up failed. Please try again.'
+            : 'Sign in failed. Please try again.',
+      );
     }
   };
 
