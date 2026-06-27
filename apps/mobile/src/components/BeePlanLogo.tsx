@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
-const YELLOW = '#FDEF4B';
-const DARK = '#2B323F';
+const YELLOW = '#fdef4b';
+const DARK = '#2b323f';
 const WHITE = '#FFFFFF';
-const MUTED = '#8C9BAE';
+const MUTED = '#A1A7B3';
 
 type BeePlanLogoProps = {
   size?: number;

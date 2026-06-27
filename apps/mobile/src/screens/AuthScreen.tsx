@@ -89,7 +89,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-[#2B323F]"
+      className="flex-1 bg-[#0E1116]"
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
@@ -103,12 +103,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
           </View>
 
           {/* Form Card */}
-          <View className="bg-[#353D4E] rounded-3xl p-6 border border-[#434D62] shadow-2xl">
+          <View className="rounded-3xl border border-[#272D36] bg-[#15181E] p-6 shadow-2xl">
             {/* Header within card */}
             <Text className="text-2xl font-bold text-white text-center">
               {isSignUp ? 'Create your account' : 'Welcome back'}
             </Text>
-            <Text className="text-sm text-[#8C9BAE] text-center mt-2 mb-6">
+            <Text className="mb-6 mt-2 text-center text-sm text-[#A1A7B3]">
               {isSignUp
                 ? 'Start organizing your reminders and plans with BeePlan.'
                 : 'Sign in to manage your reminders, tasks, and smart plans.'}
@@ -119,12 +119,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               {/* Full Name Input (Sign Up Only) */}
               {isSignUp && (
                 <View>
-                  <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider mb-2">
+                  <Text className="mb-2 text-xs font-black uppercase tracking-widest text-[#7F8794]">
                     Full Name
                   </Text>
                   <View
-                    className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border ${
-                      errors.name ? 'border-red-500' : 'border-[#434D62]'
+                    className={`rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
+                      errors.name ? 'border-red-500' : 'border-[#272D36]'
                     }`}
                   >
                     <TextInput
@@ -151,12 +151,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
               {/* Email Input */}
               <View>
-                <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider mb-2">
+                <Text className="mb-2 text-xs font-black uppercase tracking-widest text-[#7F8794]">
                   Email Address
                 </Text>
                 <View
-                  className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border ${
-                    errors.email ? 'border-red-500' : 'border-[#434D62]'
+                  className={`rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
+                    errors.email ? 'border-red-500' : 'border-[#272D36]'
                   }`}
                 >
                   <TextInput
@@ -186,20 +186,20 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               {/* Password Input */}
               <View>
                 <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider">
+                  <Text className="text-xs font-black uppercase tracking-widest text-[#7F8794]">
                     Password
                   </Text>
                   {!isSignUp && (
                     <Pressable onPress={onForgotPassword}>
-                      <Text className="text-xs font-semibold text-[#FDEF4B]">
+                      <Text className="text-xs font-semibold text-[#F5C542]">
                         Forgot Password?
                       </Text>
                     </Pressable>
                   )}
                 </View>
                 <View
-                  className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border flex-row justify-between items-center ${
-                    errors.password ? 'border-red-500' : 'border-[#434D62]'
+                  className={`flex-row items-center justify-between rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
+                    errors.password ? 'border-red-500' : 'border-[#272D36]'
                   }`}
                 >
                   <TextInput
@@ -227,7 +227,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                     className="text-white text-base flex-1"
                   />
                   <Pressable onPress={() => setShowPassword(!showPassword)}>
-                    <Text className="text-xs font-semibold text-[#8C9BAE] px-2">
+                    <Text className="px-2 text-xs font-semibold text-[#A1A7B3]">
                       {showPassword ? 'HIDE' : 'SHOW'}
                     </Text>
                   </Pressable>
@@ -236,7 +236,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   <Text className="text-red-400 text-xs mt-1 ml-1">{errors.password}</Text>
                 )}
                 {isSignUp && password && (
-                  <Text className="text-[#8C9BAE] text-xs mt-1 ml-1">
+                  <Text className="ml-1 mt-1 text-xs text-[#A1A7B3]">
                     Password strength: <Text className="text-white font-bold">{passwordStrength}</Text>
                   </Text>
                 )}
@@ -245,12 +245,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               {/* Confirm Password Input (Sign Up Only) */}
               {isSignUp && (
                 <View>
-                  <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider mb-2">
+                  <Text className="mb-2 text-xs font-black uppercase tracking-widest text-[#7F8794]">
                     Confirm Password
                   </Text>
                   <View
-                    className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border ${
-                      errors.confirmPassword ? 'border-red-500' : 'border-[#434D62]'
+                    className={`rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
+                      errors.confirmPassword ? 'border-red-500' : 'border-[#272D36]'
                     }`}
                   >
                     <TextInput
@@ -291,14 +291,14 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               <Pressable
                 onPress={handleSubmit}
                 disabled={isSubmitDisabled}
-                className={`h-14 rounded-2xl bg-[#FDEF4B] items-center justify-center mt-4 shadow-lg shadow-[#FDEF4B]/20 active:opacity-90 ${
+                className={`mt-4 h-14 items-center justify-center rounded-2xl bg-[#F5C542] shadow-lg shadow-[#F5C542]/20 active:opacity-90 ${
                   isSubmitDisabled ? 'opacity-70' : ''
                 }`}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#2B323F" />
+                  <ActivityIndicator color="#121820" />
                 ) : (
-                  <Text className="text-[#2B323F] font-bold text-base uppercase tracking-wider">
+                  <Text className="text-base font-bold uppercase tracking-wider text-[#121820]">
                     {isSignUp ? 'Create Account' : 'Sign In'}
                   </Text>
                 )}
@@ -307,32 +307,32 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
             {/* Divider */}
             <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-[#434D62]" />
-              <Text className="text-[#8C9BAE] text-xs font-semibold uppercase tracking-wider px-3">
+              <View className="h-px flex-1 bg-[#272D36]" />
+              <Text className="px-3 text-xs font-semibold uppercase tracking-wider text-[#A1A7B3]">
                 or continue with
               </Text>
-              <View className="flex-1 h-px bg-[#434D62]" />
+              <View className="h-px flex-1 bg-[#272D36]" />
             </View>
 
             {/* Social Authentication Buttons */}
             <View className="flex-row gap-3">
               {/* Google Button */}
-              <Pressable className="flex-1 h-12 border border-[#434D62] bg-[#2B323F] rounded-2xl flex-row items-center justify-center active:bg-[#353D4E]">
+              <Pressable className="h-12 flex-1 flex-row items-center justify-center rounded-2xl border border-[#272D36] bg-[#0E1116] active:bg-[#15181E]">
                 {/* Custom Google Logo drawing using layout */}
                 <View className="flex-row items-center">
                   <View className="w-5 h-5 rounded-full bg-white mr-2 items-center justify-center">
-                    <Text className="text-xs font-black text-[#2B323F]">G</Text>
+                    <Text className="text-xs font-black text-[#121820]">G</Text>
                   </View>
                   <Text className="text-white font-semibold text-sm">Google</Text>
                 </View>
               </Pressable>
 
               {/* Apple Button */}
-              <Pressable className="flex-1 h-12 border border-[#434D62] bg-[#2B323F] rounded-2xl flex-row items-center justify-center active:bg-[#353D4E]">
+              <Pressable className="h-12 flex-1 flex-row items-center justify-center rounded-2xl border border-[#272D36] bg-[#0E1116] active:bg-[#15181E]">
                 {/* Apple icon representation */}
                 <View className="flex-row items-center">
                   <View className="w-5 h-5 rounded-full bg-white mr-2 items-center justify-center">
-                    <Text className="text-xs font-black text-[#2B323F]">A</Text>
+                    <Text className="text-xs font-black text-[#121820]">A</Text>
                   </View>
                   <Text className="text-white font-semibold text-sm">Apple</Text>
                 </View>
@@ -342,11 +342,11 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
           {/* Bottom Switch Toggle */}
           <View className="flex-row justify-center items-center mt-6">
-            <Text className="text-[#8C9BAE] text-sm">
+            <Text className="text-sm text-[#A1A7B3]">
               {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
             </Text>
             <Pressable onPress={toggleMode}>
-              <Text className="text-[#FDEF4B] text-sm font-bold underline">
+              <Text className="text-sm font-bold text-[#F5C542] underline">
                 {isSignUp ? 'Sign In' : 'Sign Up'}
               </Text>
             </Pressable>

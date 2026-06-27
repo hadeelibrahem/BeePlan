@@ -1,11 +1,11 @@
 /* App.css - Premium Styles for BeePlan Responsive Web Auth Page */
 
 :root {
-  --yellow: #FDEF4B;
-  --dark-bg: #2B323F;
-  --card-bg: #353D4E;
-  --border-color: #434D62;
-  --text-muted: #8C9BAE;
+  --yellow: #F5C542;
+  --dark-bg: #0E1116;
+  --card-bg: #15181E;
+  --border-color: #272D36;
+  --text-muted: #A1A7B3;
 }
 
 /* Custom keyframes */
@@ -50,7 +50,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  opacity: 0.035;
+  opacity: 0.03;
   background-image: 
     radial-gradient(circle, var(--yellow) 10%, transparent 11%),
     radial-gradient(circle, var(--yellow) 10%, transparent 11%);
@@ -94,11 +94,22 @@
 }
 
 .text-glow {
-  text-shadow: 0 0 10px rgba(253, 239, 75, 0.25);
+  text-shadow: 0 0 10px rgba(245, 197, 66, 0.22);
 }
 
 /* Disable standard Tailwind borders for pure custom styling */
 input:focus {
   outline: none !important;
   box-shadow: none !important;
+}
+
+@keyframes beeplanRise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }

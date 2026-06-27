@@ -11,25 +11,22 @@ export function BrandHeader({ tagline = 'SMART PRODUCTIVITY' }: { tagline?: stri
 
 export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: string }) {
   return (
-    <div className="hidden lg:flex lg:w-1/2 bg-[#1F242E] relative flex-col justify-between p-16 overflow-hidden border-r border-[#434D62]/40 z-10">
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full border border-[#FDEF4B]/5 opacity-30 pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full border border-[#FDEF4B]/5 opacity-20 pointer-events-none" />
-
+    <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-r border-[#272D36] bg-[#0E1116] p-16 lg:flex lg:w-1/2">
       <div className="relative z-10">
         <BeePlanLogo showTagline size={56} />
       </div>
 
-      <div className="my-auto flex flex-col items-start space-y-6 relative z-10 max-w-md">
+      <div className="relative z-10 my-auto flex max-w-md flex-col items-start space-y-6">
         <div className="animate-float">
           <BeePlanLogo showTagline size={56} />
         </div>
-        <h2 className="text-4xl font-extrabold tracking-tight text-white leading-[1.15]">
+        <h2 className="text-4xl font-extrabold leading-[1.15] tracking-tight text-white">
           {headline}
         </h2>
-        <p className="text-slate-400 text-sm leading-relaxed">{sub}</p>
+        <p className="text-sm leading-relaxed text-[#A1A7B3]">{sub}</p>
       </div>
 
-      <div className="text-xs text-slate-500 relative z-10">
+      <div className="relative z-10 text-xs text-[#7F8794]">
         &copy; {new Date().getFullYear()} BeePlan Inc. All rights reserved.
       </div>
     </div>
@@ -55,14 +52,14 @@ export function AuthInput({
 }) {
   return (
     <div>
-      <label className="block text-[10px] font-bold text-[#8C9BAE] uppercase tracking-wider mb-1.5">
+      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#7F8794]">
         {label}
       </label>
       <div
-        className={`bg-[#2B323F] rounded-xl px-4 py-3 border flex items-center transition-all duration-200 ${
+        className={`flex items-center rounded-xl border bg-[#15181E] px-4 py-3 transition-all duration-200 ${
           error
             ? 'border-red-500'
-            : 'border-[#434D62] focus-within:border-[#FDEF4B] focus-within:ring-1 focus-within:ring-[#FDEF4B]/20'
+            : 'border-[#272D36] focus-within:border-[#F5C542]/70'
         }`}
       >
         <input
@@ -70,11 +67,11 @@ export function AuthInput({
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="flex-grow bg-transparent border-none p-0 text-white text-sm placeholder-slate-600 focus:outline-none focus:ring-0"
+          className="flex-grow border-none bg-transparent p-0 text-sm text-white placeholder:text-[#5F6876] focus:outline-none focus:ring-0"
         />
         {rightSlot}
       </div>
-      {error && <span className="text-red-400 text-xs mt-1.5 block pl-1">{error}</span>}
+      {error && <span className="mt-1.5 block pl-1 text-xs text-red-400">{error}</span>}
     </div>
   )
 }
@@ -97,10 +94,10 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={loading || disabled}
-      className="w-full h-12 rounded-xl bg-[#FDEF4B] text-[#2B323F] text-xs font-bold uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all flex items-center justify-center shadow-lg shadow-[#FDEF4B]/10 btn-glow"
+      className="flex h-12 w-full items-center justify-center rounded-xl bg-[#F5C542] text-xs font-bold uppercase tracking-wider text-[#121820] shadow-lg shadow-[#F5C542]/10 transition-all hover:bg-[#FFD84A] active:scale-95 disabled:bg-[#272D36] disabled:text-[#727A86]"
     >
       {loading ? (
-        <div className="w-5 h-5 border-2 border-[#2B323F]/30 border-t-[#2B323F] rounded-full animate-spin" />
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#121820]/30 border-t-[#121820]" />
       ) : (
         children
       )}
@@ -118,12 +115,12 @@ export function AuthFooterLink({
   onClick: () => void
 }) {
   return (
-    <div className="flex justify-center items-center mt-6 text-xs text-[#8C9BAE]">
+    <div className="mt-6 flex items-center justify-center text-xs text-[#A1A7B3]">
       <span>{prefix}</span>
       <button
         type="button"
         onClick={onClick}
-        className="text-[#FDEF4B] font-bold underline pl-1.5 hover:text-white transition-colors focus:outline-none"
+        className="pl-1.5 font-bold text-[#F5C542] underline transition-colors hover:text-white focus:outline-none"
       >
         {label}
       </button>
@@ -134,7 +131,7 @@ export function AuthFooterLink({
 export function AuthCard({ shake, children }: { shake: boolean; children: React.ReactNode }) {
   return (
     <div
-      className={`bg-[#353D4E]/85 backdrop-blur-md rounded-3xl p-8 sm:p-10 border border-[#434D62] w-full max-w-md shadow-2xl relative transition-all duration-300 ${
+      className={`relative w-full max-w-md rounded-3xl border border-[#272D36] bg-[#15181E]/95 p-8 shadow-2xl shadow-black/30 backdrop-blur-md transition-all duration-300 sm:p-10 ${
         shake ? 'animate-shake' : ''
       }`}
     >
@@ -153,14 +150,12 @@ export function AuthShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen flex items-stretch bg-[#2B323F] text-white font-sans relative overflow-hidden">
+    <div className="relative flex min-h-screen items-stretch overflow-hidden bg-[#0E1116] font-sans text-white">
       <div className="honeycomb-bg" />
-      <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-[#FDEF4B] opacity-[0.04] blur-[150px] pointer-events-none" />
-      <div className="absolute bottom-[-20%] left-[-10%] w-[650px] h-[650px] rounded-full bg-[#FDEF4B] opacity-[0.03] blur-[150px] pointer-events-none" />
 
       <LeftPanel headline={headline} sub={sub} />
 
-      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 sm:p-12 z-10 relative">
+      <div className="relative z-10 flex w-full flex-col items-center justify-center p-6 sm:p-12 lg:w-1/2">
         {children}
       </div>
     </div>
