@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   AuthCard,
   AuthFooterLink,
@@ -7,8 +7,13 @@ import {
   BrandHeader,
   PrimaryButton,
 } from '../components/AuthShared'
+import { useAuth } from '../hooks/useAuth'
 
 export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) {
+  const { updatePassword, verifyRecoveryCode } = useAuth()
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [codeVerified, setCodeVerified] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -16,6 +21,18 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
   const [isLoading, setIsLoading] = useState(false)
   const [shakeActive, setShakeActive] = useState(false)
   const [isDone, setIsDone] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [devResetCode, setDevResetCode] = useState('')
+
+  useEffect(() => {
+    const storedDevCode = window.sessionStorage.getItem('beeplan_reset_dev_code') ?? ''
+
+    setEmail(window.sessionStorage.getItem('beeplan_reset_email') ?? '')
+    setDevResetCode(storedDevCode)
+    if (storedDevCode) {
+      setCode(storedDevCode)
+    }
+  }, [])
 
   const strength = (() => {
     if (!password) return null
@@ -26,11 +43,43 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     return { label: 'Strong', color: 'bg-emerald-400', w: 'w-full' }
   })()
 
-  const handleSubmit = (ev: FormEvent) => {
+  const handleVerifyCode = async (ev: FormEvent) => {
     ev.preventDefault()
     const e: { [k: string]: string } = {}
+    setSubmitError('')
+
+    if (!email.trim()) e.email = 'Email address is required'
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Please enter a valid email'
+    if (!code.trim()) e.code = 'Reset code is required'
+
+    if (Object.keys(e).length > 0) {
+      setErrors(e)
+      setShakeActive(true)
+      setTimeout(() => setShakeActive(false), 500)
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await verifyRecoveryCode(email, code)
+      window.sessionStorage.setItem('beeplan_reset_email', email.trim())
+      setCodeVerified(true)
+      setErrors({})
+      setIsLoading(false)
+    } catch (err) {
+      setIsLoading(false)
+      setSubmitError(err instanceof Error ? err.message : 'Invalid or expired reset code. Please request a new code.')
+      setShakeActive(true)
+      setTimeout(() => setShakeActive(false), 500)
+    }
+  }
+
+  const handleSubmit = async (ev: FormEvent) => {
+    ev.preventDefault()
+    const e: { [k: string]: string } = {}
+    setSubmitError('')
     if (!password) e.password = 'Password is required'
-    else if (password.length < 6) e.password = 'Password must be at least 6 characters'
+    else if (password.length < 8) e.password = 'Password must be at least 8 characters'
     if (!confirmPassword) e.confirmPassword = 'Please confirm your password'
     else if (confirmPassword !== password) e.confirmPassword = 'Passwords do not match'
     if (Object.keys(e).length > 0) {
@@ -40,17 +89,27 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
       return
     }
     setIsLoading(true)
-    setTimeout(() => {
+    try {
+      await updatePassword(password)
+      window.sessionStorage.removeItem('beeplan_reset_email')
+      window.sessionStorage.removeItem('beeplan_reset_dev_code')
       setIsLoading(false)
       setIsDone(true)
-    }, 1500)
+      setTimeout(() => {
+        window.history.pushState(null, '', '/sign-in')
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      }, 1200)
+    } catch (err) {
+      setIsLoading(false)
+      setSubmitError(err instanceof Error ? err.message : 'Unable to update password. Please open the reset link again.')
+    }
   }
 
   const showHideBtn = (
     <button
       type="button"
       onClick={() => setShowPassword((s) => !s)}
-      className="px-1 text-[9px] font-bold text-[#A1A7B3] hover:text-white"
+      className="text-[9px] font-bold text-[#8C9BAE] hover:text-white px-1"
     >
       {showPassword ? 'HIDE' : 'SHOW'}
     </button>
@@ -60,7 +119,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     <AuthShell
       headline={
         <>
-          Secure your <span className="text-[#F5C542] text-glow">BeePlan workspace</span>.
+          Secure your <span className="text-[#FDEF4B] text-glow">BeePlan workspace</span>.
         </>
       }
       sub="Set a strong new password to protect your reminders, tasks, and smart plans from unauthorised access."
@@ -75,15 +134,15 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
               </svg>
             </div>
             <h3 className="text-2xl font-bold text-white tracking-tight">Password Updated!</h3>
-            <p className="mx-auto mt-3 max-w-xs text-xs leading-relaxed text-[#A1A7B3]">
-              Your BeePlan password has been reset successfully. You can now sign in with your new password.
+            <p className="text-xs text-[#8C9BAE] mt-3 leading-relaxed max-w-xs mx-auto">
+              Your BeePlan password has been reset successfully. Opening your workspace...
             </p>
             <button
               type="button"
               onClick={onBack}
-              className="mt-8 h-12 w-full rounded-xl bg-[#F5C542] text-xs font-bold uppercase tracking-wider text-[#121820] transition-all hover:bg-[#FFD84A]"
+              className="mt-8 w-full h-12 rounded-xl bg-[#FDEF4B] text-[#2B323F] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
             >
-              Back to Sign In
+              Open BeePlan
             </button>
           </div>
         ) : (
@@ -91,8 +150,8 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
             <BrandHeader />
 
             <div className="flex justify-center mb-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#F5C542]/25 bg-[#F5C542]/10">
-                <svg className="h-6 w-6 text-[#F5C542]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <div className="w-12 h-12 rounded-2xl bg-[#FDEF4B]/10 border border-[#FDEF4B]/25 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#FDEF4B]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path
                     d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
                     strokeLinecap="round"
@@ -103,55 +162,104 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
             </div>
 
             <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-white">Create New Password</h3>
-              <p className="mt-2 text-xs leading-relaxed text-[#A1A7B3]">
-                Choose a strong password for your BeePlan account.
+              <h3 className="text-xl font-bold text-white">
+                {codeVerified ? 'Create New Password' : 'Enter Reset Code'}
+              </h3>
+              <p className="text-xs text-[#8C9BAE] mt-2 leading-relaxed">
+                {codeVerified
+                  ? 'Choose a strong password for your BeePlan account.'
+                  : 'Enter the code we sent to your email before creating a new password.'}
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
+            {codeVerified ? (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <AuthInput
+                    label="New Password"
+                    placeholder="Enter new password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(v) => {
+                      setPassword(v)
+                      setErrors((p) => ({ ...p, password: '' }))
+                      setSubmitError('')
+                    }}
+                    error={errors.password}
+                    rightSlot={showHideBtn}
+                  />
+                  {strength && (
+                    <div className="mt-2 space-y-1">
+                      <div className="h-1 w-full bg-[#434D62] rounded-full overflow-hidden">
+                        <div className={`h-full ${strength.color} ${strength.w} rounded-full transition-all duration-300`} />
+                      </div>
+                      <p className="text-[10px] text-[#8C9BAE]">
+                        Strength: <span className="font-semibold text-white">{strength.label}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <AuthInput
-                  label="New Password"
-                  placeholder="Enter new password"
+                  label="Confirm New Password"
+                  placeholder="Re-enter new password"
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
+                  value={confirmPassword}
                   onChange={(v) => {
-                    setPassword(v)
-                    setErrors((p) => ({ ...p, password: '' }))
+                    setConfirmPassword(v)
+                    setErrors((p) => ({ ...p, confirmPassword: '' }))
+                    setSubmitError('')
                   }}
-                  error={errors.password}
+                  error={errors.confirmPassword}
                   rightSlot={showHideBtn}
                 />
-                {strength && (
-                  <div className="mt-2 space-y-1">
-                    <div className="h-1 w-full overflow-hidden rounded-full bg-[#272D36]">
-                      <div className={`h-full ${strength.color} ${strength.w} rounded-full transition-all duration-300`} />
-                    </div>
-                    <p className="text-[10px] text-[#A1A7B3]">
-                      Strength: <span className="font-semibold text-white">{strength.label}</span>
-                    </p>
-                  </div>
+
+                <div className="pt-1">
+                  <PrimaryButton loading={isLoading} disabled={isLoading}>
+                    {isLoading ? 'Updating...' : 'Update Password'}
+                  </PrimaryButton>
+                </div>
+                {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyCode} className="space-y-4">
+                <AuthInput
+                  label="Email Address"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(v) => {
+                    setEmail(v)
+                    setErrors((p) => ({ ...p, email: '' }))
+                    setSubmitError('')
+                  }}
+                  error={errors.email}
+                />
+
+                <AuthInput
+                  label="Reset Code"
+                  placeholder="Enter the code from your email"
+                  value={code}
+                  onChange={(v) => {
+                    setCode(v)
+                    setErrors((p) => ({ ...p, code: '' }))
+                    setSubmitError('')
+                  }}
+                  error={errors.code}
+                />
+                {devResetCode && (
+                  <p className="text-[#FDEF4B] text-xs pl-1">
+                    Development code: <span className="font-bold tracking-widest">{devResetCode}</span>
+                  </p>
                 )}
-              </div>
 
-              <AuthInput
-                label="Confirm New Password"
-                placeholder="Re-enter new password"
-                type={showPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(v) => {
-                  setConfirmPassword(v)
-                  setErrors((p) => ({ ...p, confirmPassword: '' }))
-                }}
-                error={errors.confirmPassword}
-                rightSlot={showHideBtn}
-              />
-
-              <div className="pt-1">
-                <PrimaryButton loading={isLoading}>Reset Password</PrimaryButton>
-              </div>
-            </form>
+                <div className="pt-1">
+                  <PrimaryButton loading={isLoading} disabled={isLoading}>
+                    {isLoading ? 'Checking...' : 'Verify Code'}
+                  </PrimaryButton>
+                </div>
+                {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
+              </form>
+            )}
 
             <AuthFooterLink prefix="Changed your mind?" label="Back to Sign In" onClick={onBack} />
           </div>
