@@ -16,14 +16,29 @@ import {
 import { useAuth } from './src/hooks/useAuth';
 import { LanguageProvider } from './src/i18n/LanguageContext';
 import { AuthProvider } from './src/providers/AuthProvider';
+import AllTasksScreen from './src/screens/AllTasksScreen';
 import AuthScreen from './src/screens/AuthScreen';
+import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
+import TaskDetailsScreen, { type TaskDetailsTask } from './src/screens/TaskDetailsScreen';
+import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
 const queryClient = new QueryClient();
 
-type AppScreen = 'auth' | 'forgot' | 'reset' | 'reminders' | 'create' | 'details' | 'edit';
+type AppScreen =
+  | 'auth'
+  | 'forgot'
+  | 'reset'
+  | 'dashboard'
+  | 'tasks'
+  | 'taskDetails'
+  | 'createTask'
+  | 'reminders'
+  | 'create'
+  | 'details'
+  | 'edit';
 
 export default function App() {
   return (
@@ -43,6 +58,7 @@ function ThemedApp() {
   const [screen, setScreen] = useState<AppScreen>('auth');
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
+  const [selectedTask, setSelectedTask] = useState<TaskDetailsTask | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { loading, user, signOut } = useAuth();
@@ -68,6 +84,12 @@ function ThemedApp() {
     fetchReminders().then(setReminders);
   }, [user]);
 
+  useEffect(() => {
+    if (user && screen === 'auth') {
+      setScreen('dashboard');
+    }
+  }, [user, screen]);
+
   const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null;
 
   async function handleToggle(id: string) {
@@ -79,13 +101,21 @@ function ThemedApp() {
   async function handleSignOut() {
     await signOut();
     setScreen('auth');
+    setSelectedTask(null);
     setSelectedId(null);
     setReminders([]);
   }
 
   if (loading) {
     return (
-      <View style={{ alignItems: 'center', backgroundColor: theme.colors.background, flex: 1, justifyContent: 'center' }}>
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: theme.colors.background,
+          flex: 1,
+          justifyContent: 'center',
+        }}
+      >
         <StatusBar backgroundColor={theme.colors.background} style={theme.statusBarStyle} translucent />
         <ActivityIndicator color={theme.colors.accent} />
       </View>
@@ -97,19 +127,13 @@ function ThemedApp() {
       <StatusBar backgroundColor={theme.colors.background} style={theme.statusBarStyle} translucent />
 
       {screen === 'reset' ? (
-        <ResetPasswordScreen
-          initialEmail={resetEmail}
-          initialCode={resetCode}
-          onBack={() => setScreen('auth')}
-        />
+        <ResetPasswordScreen initialEmail={resetEmail} initialCode={resetCode} onBack={() => setScreen('auth')} />
       ) : !user ? (
         <>
           {screen === 'auth' && (
-            <AuthScreen
-              onForgotPassword={() => setScreen('forgot')}
-              onSuccess={() => setScreen('reminders')}
-            />
+            <AuthScreen onForgotPassword={() => setScreen('forgot')} onSuccess={() => setScreen('dashboard')} />
           )}
+
           {screen === 'forgot' && (
             <ForgotPasswordScreen
               onBack={() => setScreen('auth')}
@@ -121,6 +145,33 @@ function ThemedApp() {
             />
           )}
         </>
+      ) : screen === 'dashboard' ? (
+        <TasksDashboardScreen
+          onSignOut={() => void handleSignOut()}
+          onViewTasks={() => setScreen('tasks')}
+          onViewReminders={() => setScreen('reminders')}
+          onCreateTask={() => setScreen('createTask')}
+        />
+      ) : screen === 'tasks' ? (
+        <AllTasksScreen
+          onBackDashboard={() => setScreen('dashboard')}
+          onViewReminders={() => setScreen('reminders')}
+          onCreateTask={() => setScreen('createTask')}
+          onViewTaskDetails={(task) => {
+            setSelectedTask(task);
+            setScreen('taskDetails');
+          }}
+        />
+      ) : screen === 'taskDetails' ? (
+        <TaskDetailsScreen
+          task={selectedTask}
+          onBack={() => setScreen('tasks')}
+          onEdit={() => setScreen('createTask')}
+          onDelete={() => setScreen('tasks')}
+          onMarkDone={() => setScreen('tasks')}
+        />
+      ) : screen === 'createTask' ? (
+        <CreateTaskScreen onCancel={() => setScreen('tasks')} onSave={() => setScreen('tasks')} />
       ) : screen === 'create' ? (
         <CreateReminderScreen
           onCancel={() => setScreen('reminders')}
@@ -131,11 +182,7 @@ function ThemedApp() {
           }}
         />
       ) : screen === 'details' && selectedReminder ? (
-        <ReminderDetailsScreen
-          reminder={selectedReminder}
-          onBack={() => setScreen('reminders')}
-          onEdit={() => setScreen('edit')}
-        />
+        <ReminderDetailsScreen reminder={selectedReminder} onBack={() => setScreen('reminders')} onEdit={() => setScreen('edit')} />
       ) : screen === 'edit' && selectedReminder ? (
         <EditReminderScreen
           reminder={selectedReminder}
