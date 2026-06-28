@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import {
   AuthCard,
   AuthFooterLink,
@@ -7,7 +7,8 @@ import {
   BrandHeader,
   PrimaryButton,
 } from '../components/AuthShared'
-import { signUp } from '../lib/api'
+import { useAuth } from '../hooks/useAuth'
+import { SocialLogin } from '../components/auth/SocialLogin'
 import {
   getPasswordStrength,
   hasNoErrors,
@@ -17,6 +18,8 @@ import {
 } from '../lib/authValidation'
 
 export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
+  const { clearOAuthError, oauthError, signIn, signUp } = useAuth()
+  const submitInFlightRef = useRef(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -28,6 +31,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
   const [shakeActive, setShakeActive] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   const signUpFields = { name, email, password, confirmPassword }
   const passwordStrength = getPasswordStrength(password)
@@ -42,23 +46,32 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
 
   const handleSubmit = async (ev: FormEvent) => {
     ev.preventDefault()
+    if (submitInFlightRef.current) {
+      return
+    }
+
     setSubmitError('')
+    clearOAuthError()
+    setSuccessMessage('')
     if (!validate()) {
       setShakeActive(true)
       setTimeout(() => setShakeActive(false), 500)
       return
     }
+    submitInFlightRef.current = true
     setIsLoading(true)
     try {
       if (isSignUp) {
-        await signUp({ fullName: name.trim(), email: email.trim(), password })
+        const hasSession = await signUp({ fullName: name.trim(), email: email.trim(), password })
+        if (!hasSession) {
+          setSuccessMessage('Account created successfully. Please check your email to confirm it.')
+          return
+        }
       } else {
-        await new Promise((resolve) => setTimeout(resolve, 900))
+        await signIn(email, password)
       }
-      setIsLoading(false)
       setIsSuccess(true)
     } catch (error) {
-      setIsLoading(false)
       setSubmitError(
         error instanceof Error
           ? error.message
@@ -66,6 +79,9 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
             ? 'Sign up failed. Please try again.'
             : 'Sign in failed. Please try again.',
       )
+    } finally {
+      submitInFlightRef.current = false
+      setIsLoading(false)
     }
   }
 
@@ -76,6 +92,8 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
     setConfirmPassword('')
     setErrors({})
     setSubmitError('')
+    clearOAuthError()
+    setSuccessMessage('')
   }
   const toggleMode = () => {
     setIsSignUp((s) => !s)
@@ -86,7 +104,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
     <AuthShell
       headline={
         <>
-          Organize reminders, tasks, and <span className="text-[#F5C542] text-glow">smart plans</span>.
+          Organize reminders, tasks, and <span className="text-[#FDEF4B] text-glow">smart plans</span>.
         </>
       }
       sub="Experience intelligent scheduling and seamless task mapping in a clean, minimal workspace crafted for premium productivity."
@@ -101,7 +119,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
               </svg>
             </div>
             <h3 className="text-2xl font-bold text-white tracking-tight">Authentication Approved</h3>
-            <p className="mt-3 text-sm text-[#A1A7B3]">
+            <p className="text-sm text-[#8C9BAE] mt-3">
               Welcome to your dashboard. Preparing your smart productivity plans...
             </p>
             <button
@@ -109,7 +127,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 setIsSuccess(false)
                 reset()
               }}
-              className="mt-8 rounded-xl border border-[#272D36] bg-[#15181E] px-6 py-2.5 text-xs font-semibold text-white transition-colors hover:border-[#F5C542]/50"
+              className="mt-8 px-6 py-2.5 rounded-xl border border-[#434D62] bg-[#2B323F] hover:bg-[#434D62] text-xs font-semibold text-white transition-colors"
             >
               Back to Auth Portal
             </button>
@@ -121,7 +139,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
               <h3 className="text-xl font-bold text-white">
                 {isSignUp ? 'Create your account' : 'Welcome back'}
               </h3>
-              <p className="mt-1.5 text-xs leading-relaxed text-[#A1A7B3]">
+              <p className="text-xs text-[#8C9BAE] mt-1.5 leading-relaxed">
                 {isSignUp
                   ? 'Start organizing your reminders and plans with BeePlan.'
                   : 'Sign in to manage your reminders, tasks, and smart plans.'}
@@ -141,6 +159,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                       name: isSignUp && !v.trim() ? 'Full name is required' : undefined,
                     }))
                     setSubmitError('')
+                    setSuccessMessage('')
                   }}
                   error={errors.name}
                 />
@@ -156,6 +175,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                     email: validateSignUp({ ...signUpFields, email: v }).email,
                   }))
                   setSubmitError('')
+                  setSuccessMessage('')
                 }}
                 error={errors.email}
               />
@@ -177,6 +197,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                         : undefined,
                   }))
                   setSubmitError('')
+                  setSuccessMessage('')
                 }}
                 error={errors.password}
                 rightSlot={
@@ -184,7 +205,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                     <button
                       type="button"
                       onClick={() => setShowPassword((s) => !s)}
-                      className="px-1 text-[9px] font-bold text-[#A1A7B3] hover:text-white"
+                      className="text-[9px] font-bold text-[#8C9BAE] hover:text-white px-1"
                     >
                       {showPassword ? 'HIDE' : 'SHOW'}
                     </button>
@@ -192,7 +213,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                       <button
                         type="button"
                         onClick={onForgot}
-                        className="whitespace-nowrap text-[9px] font-bold text-[#F5C542] hover:underline"
+                        className="text-[9px] font-bold text-[#FDEF4B] hover:underline whitespace-nowrap"
                       >
                         Forgot?
                       </button>
@@ -201,7 +222,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 }
               />
               {isSignUp && password && (
-                <p className="-mt-2 pl-1 text-xs text-[#A1A7B3]">
+                <p className="text-xs text-[#8C9BAE] pl-1 -mt-2">
                   Password strength: <span className="font-bold text-white">{passwordStrength}</span>
                 </p>
               )}
@@ -219,11 +240,15 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                         validateSignUp({ ...signUpFields, confirmPassword: v }).confirmPassword,
                     }))
                     setSubmitError('')
+                    setSuccessMessage('')
                   }}
                   error={errors.confirmPassword}
                 />
               )}
-              {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
+              {(oauthError || submitError) && (
+                <p className="text-red-400 text-xs pl-1">{oauthError || submitError}</p>
+              )}
+              {successMessage && <p className="text-emerald-400 text-xs pl-1">{successMessage}</p>}
               <div className="pt-1">
                 <PrimaryButton loading={isLoading} disabled={isSubmitDisabled}>
                   {isSignUp ? 'Create Account' : 'Sign In'}
@@ -232,27 +257,14 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
             </form>
 
             <div className="flex items-center my-5">
-              <div className="h-px flex-grow bg-[#272D36]" />
-              <span className="px-3 text-[9px] font-semibold uppercase tracking-wider text-[#A1A7B3]">
+              <div className="flex-grow h-px bg-[#434D62]" />
+              <span className="text-[9px] text-[#8C9BAE] uppercase tracking-wider font-semibold px-3">
                 or continue with
               </span>
-              <div className="h-px flex-grow bg-[#272D36]" />
+              <div className="flex-grow h-px bg-[#434D62]" />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {['Google', 'Apple'].map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="flex h-11 items-center justify-center space-x-2 rounded-xl border border-[#272D36] bg-[#15181E] text-xs font-medium text-white transition-all hover:border-[#F5C542]/40 active:scale-[0.98]"
-                >
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-black text-[#121820]">
-                    {p === 'Google' ? 'G' : ''}
-                  </span>
-                  <span>{p}</span>
-                </button>
-              ))}
-            </div>
+            <SocialLogin disabled={isLoading} onError={setSubmitError} />
 
             <AuthFooterLink
               prefix={isSignUp ? 'Already have an account?' : "Don't have an account?"}

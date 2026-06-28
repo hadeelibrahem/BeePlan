@@ -2,14 +2,17 @@
   "expo": {
     "name": "mobile",
     "slug": "mobile",
+    "scheme": "beeplan",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
+      "bundleIdentifier": "com.beeplan.app",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.beeplan.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

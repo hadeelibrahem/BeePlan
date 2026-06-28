@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import './App.css'
 import {
   CreateReminderScreen,
@@ -9,10 +9,21 @@ import {
   toggleReminderStatus,
   type Reminder,
 } from './features/reminders'
+import { useAuth } from './hooks/useAuth'
 import { LanguageProvider } from './i18n/LanguageContext'
+import AuthScreen from './screens/AuthScreen'
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
+import ResetPasswordScreen from './screens/ResetPasswordScreen'
 import { ThemeProvider } from './theme/ThemeContext'
 
-type Screen = 'list' | 'create' | 'details' | 'edit'
+type AuthScreenState = 'auth' | 'forgot' | 'reset'
+type AppScreen = 'list' | 'create' | 'details' | 'edit'
+
+function getAuthScreenFromPath(): AuthScreenState {
+  if (window.location.pathname === '/reset-password') return 'reset'
+  if (window.location.pathname === '/forgot-password') return 'forgot'
+  return 'auth'
+}
 
 export default function App() {
   return (
@@ -25,13 +36,34 @@ export default function App() {
 }
 
 function ThemedApp() {
-  const [screen, setScreen] = useState<Screen>('list')
+  const [authScreen, setAuthScreen] = useState<AuthScreenState>(() => getAuthScreenFromPath())
+  const [screen, setScreen] = useState<AppScreen>('list')
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const { loading, user, signOut } = useAuth()
 
   useEffect(() => {
-    fetchReminders().then(setReminders)
+    const syncPath = () => setAuthScreen(getAuthScreenFromPath())
+    window.addEventListener('popstate', syncPath)
+    return () => window.removeEventListener('popstate', syncPath)
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    fetchReminders().then(setReminders)
+  }, [user])
+
+  function navigateAuth(nextScreen: AuthScreenState) {
+    const path =
+      nextScreen === 'reset'
+        ? '/reset-password'
+        : nextScreen === 'forgot'
+          ? '/forgot-password'
+          : '/sign-in'
+
+    window.history.pushState(null, '', path)
+    setAuthScreen(nextScreen)
+  }
 
   const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null
 
@@ -39,6 +71,32 @@ function ThemedApp() {
     const updated = await toggleReminderStatus(id)
     if (!updated) return
     setReminders((current) => current.map((reminder) => (reminder.id === id ? updated : reminder)))
+  }
+
+  async function handleSignOut() {
+    await signOut()
+    setScreen('list')
+    navigateAuth('auth')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bp-bg)] text-[var(--bp-text)]">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[rgba(253,239,75,0.3)] border-t-[var(--bp-accent)]" />
+      </div>
+    )
+  }
+
+  if (authScreen === 'reset') {
+    return <ResetPasswordScreen onBack={() => navigateAuth('auth')} />
+  }
+
+  if (!user) {
+    if (authScreen === 'forgot') {
+      return <ForgotPasswordScreen onBack={() => navigateAuth('auth')} />
+    }
+
+    return <AuthScreen onForgot={() => navigateAuth('forgot')} />
   }
 
   if (screen === 'create') {
@@ -88,12 +146,20 @@ function ThemedApp() {
       }}
       onToggle={handleToggle}
     />,
+    <button
+      type="button"
+      onClick={() => void handleSignOut()}
+      className="fixed end-6 top-6 z-10 rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-2 text-xs font-bold text-[var(--bp-text)] shadow-lg transition hover:border-[var(--bp-accent)]"
+    >
+      Sign out
+    </button>,
   )
 }
 
-function renderShell(content: React.ReactNode) {
+function renderShell(content: ReactNode, overlay?: ReactNode) {
   return (
     <div className="min-h-screen bg-[var(--bp-bg)] text-[var(--bp-text)] transition-colors duration-200">
+      {overlay}
       <div className="mx-auto w-full max-w-7xl animate-[beeplanRise_420ms_ease-out] px-5 py-6 sm:px-8 lg:px-10">
         {content}
       </div>

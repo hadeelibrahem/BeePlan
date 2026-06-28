@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import BeePlanLogo from '../components/BeePlanLogo';
-import { signUp } from '../lib/api';
+import { useAuth } from '../hooks/useAuth';
 import {
   getPasswordStrength,
   hasNoErrors,
@@ -20,11 +20,14 @@ import {
 } from '../lib/authValidation';
 
 interface AuthScreenProps {
-  onSuccess: (email: string) => void;
+  onSuccess?: (email: string) => void;
   onForgotPassword?: () => void;
 }
 
 export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenProps) {
+  const { clearOAuthError, oauthError, signIn, signInWithGoogle, signUp } = useAuth();
+  const submitInFlightRef = useRef(false);
+  const googleInFlightRef = useRef(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,6 +35,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<AuthErrors>({});
   const [submitError, setSubmitError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -48,23 +52,31 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
   };
 
   const handleSubmit = async () => {
+    if (submitInFlightRef.current) {
+      return;
+    }
+
     setSubmitError('');
+    clearOAuthError();
     setSuccessMessage('');
     if (!validate()) return;
 
+    submitInFlightRef.current = true;
     setIsLoading(true);
     try {
       if (isSignUp) {
-        await signUp({ fullName: name.trim(), email: email.trim(), password });
-        setSuccessMessage('Account created successfully.');
-        setTimeout(() => onSuccess(email), 700);
+        const hasSession = await signUp({ fullName: name.trim(), email: email.trim(), password });
+        setSuccessMessage(
+          hasSession
+            ? 'Account created successfully.'
+            : 'Account created successfully. Please check your email to confirm it.',
+        );
+        if (hasSession) setTimeout(() => onSuccess?.(email), 700);
       } else {
-        await new Promise((resolve) => setTimeout(resolve, 900));
-        onSuccess(email);
+        await signIn(email, password);
+        onSuccess?.(email);
       }
-      setIsLoading(false);
     } catch (error) {
-      setIsLoading(false);
       setSubmitError(
         error instanceof Error
           ? error.message
@@ -72,6 +84,30 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
             ? 'Sign up failed. Please try again.'
             : 'Sign in failed. Please try again.',
       );
+    } finally {
+      submitInFlightRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (googleInFlightRef.current || isLoading) {
+      return;
+    }
+
+    googleInFlightRef.current = true;
+    setIsGoogleLoading(true);
+    setSubmitError('');
+    clearOAuthError();
+    setSuccessMessage('');
+
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Google sign-in failed. Please try again.');
+    } finally {
+      googleInFlightRef.current = false;
+      setIsGoogleLoading(false);
     }
   };
 
@@ -83,13 +119,14 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
     setPassword('');
     setConfirmPassword('');
     setSubmitError('');
+    clearOAuthError();
     setSuccessMessage('');
   };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-[#0E1116]"
+      className="flex-1 bg-[#2B323F]"
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
@@ -103,12 +140,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
           </View>
 
           {/* Form Card */}
-          <View className="rounded-3xl border border-[#272D36] bg-[#15181E] p-6 shadow-2xl">
+          <View className="bg-[#353D4E] rounded-3xl p-6 border border-[#434D62] shadow-2xl">
             {/* Header within card */}
             <Text className="text-2xl font-bold text-white text-center">
               {isSignUp ? 'Create your account' : 'Welcome back'}
             </Text>
-            <Text className="mb-6 mt-2 text-center text-sm text-[#A1A7B3]">
+            <Text className="text-sm text-[#8C9BAE] text-center mt-2 mb-6">
               {isSignUp
                 ? 'Start organizing your reminders and plans with BeePlan.'
                 : 'Sign in to manage your reminders, tasks, and smart plans.'}
@@ -119,12 +156,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               {/* Full Name Input (Sign Up Only) */}
               {isSignUp && (
                 <View>
-                  <Text className="mb-2 text-xs font-black uppercase tracking-widest text-[#7F8794]">
+                  <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider mb-2">
                     Full Name
                   </Text>
                   <View
-                    className={`rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
-                      errors.name ? 'border-red-500' : 'border-[#272D36]'
+                    className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border ${
+                      errors.name ? 'border-red-500' : 'border-[#434D62]'
                     }`}
                   >
                     <TextInput
@@ -151,12 +188,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
               {/* Email Input */}
               <View>
-                <Text className="mb-2 text-xs font-black uppercase tracking-widest text-[#7F8794]">
+                <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider mb-2">
                   Email Address
                 </Text>
                 <View
-                  className={`rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
-                    errors.email ? 'border-red-500' : 'border-[#272D36]'
+                  className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border ${
+                    errors.email ? 'border-red-500' : 'border-[#434D62]'
                   }`}
                 >
                   <TextInput
@@ -186,20 +223,20 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               {/* Password Input */}
               <View>
                 <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-xs font-black uppercase tracking-widest text-[#7F8794]">
+                  <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider">
                     Password
                   </Text>
                   {!isSignUp && (
                     <Pressable onPress={onForgotPassword}>
-                      <Text className="text-xs font-semibold text-[#F5C542]">
+                      <Text className="text-xs font-semibold text-[#FDEF4B]">
                         Forgot Password?
                       </Text>
                     </Pressable>
                   )}
                 </View>
                 <View
-                  className={`flex-row items-center justify-between rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
-                    errors.password ? 'border-red-500' : 'border-[#272D36]'
+                  className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border flex-row justify-between items-center ${
+                    errors.password ? 'border-red-500' : 'border-[#434D62]'
                   }`}
                 >
                   <TextInput
@@ -227,7 +264,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                     className="text-white text-base flex-1"
                   />
                   <Pressable onPress={() => setShowPassword(!showPassword)}>
-                    <Text className="px-2 text-xs font-semibold text-[#A1A7B3]">
+                    <Text className="text-xs font-semibold text-[#8C9BAE] px-2">
                       {showPassword ? 'HIDE' : 'SHOW'}
                     </Text>
                   </Pressable>
@@ -236,7 +273,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   <Text className="text-red-400 text-xs mt-1 ml-1">{errors.password}</Text>
                 )}
                 {isSignUp && password && (
-                  <Text className="ml-1 mt-1 text-xs text-[#A1A7B3]">
+                  <Text className="text-[#8C9BAE] text-xs mt-1 ml-1">
                     Password strength: <Text className="text-white font-bold">{passwordStrength}</Text>
                   </Text>
                 )}
@@ -245,12 +282,12 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               {/* Confirm Password Input (Sign Up Only) */}
               {isSignUp && (
                 <View>
-                  <Text className="mb-2 text-xs font-black uppercase tracking-widest text-[#7F8794]">
+                  <Text className="text-xs font-semibold text-[#8C9BAE] uppercase tracking-wider mb-2">
                     Confirm Password
                   </Text>
                   <View
-                    className={`rounded-2xl border bg-[#0E1116] px-4 py-3.5 ${
-                      errors.confirmPassword ? 'border-red-500' : 'border-[#272D36]'
+                    className={`bg-[#2B323F] rounded-2xl px-4 py-3.5 border ${
+                      errors.confirmPassword ? 'border-red-500' : 'border-[#434D62]'
                     }`}
                   >
                     <TextInput
@@ -280,8 +317,8 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   )}
                 </View>
               )}
-              {submitError && (
-                <Text className="text-red-400 text-xs mt-1 ml-1">{submitError}</Text>
+              {(oauthError || submitError) && (
+                <Text className="text-red-400 text-xs mt-1 ml-1">{oauthError || submitError}</Text>
               )}
               {successMessage && (
                 <Text className="text-emerald-400 text-xs mt-1 ml-1">{successMessage}</Text>
@@ -291,14 +328,14 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               <Pressable
                 onPress={handleSubmit}
                 disabled={isSubmitDisabled}
-                className={`mt-4 h-14 items-center justify-center rounded-2xl bg-[#F5C542] shadow-lg shadow-[#F5C542]/20 active:opacity-90 ${
+                className={`h-14 rounded-2xl bg-[#FDEF4B] items-center justify-center mt-4 shadow-lg shadow-[#FDEF4B]/20 active:opacity-90 ${
                   isSubmitDisabled ? 'opacity-70' : ''
                 }`}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#121820" />
+                  <ActivityIndicator color="#2B323F" />
                 ) : (
-                  <Text className="text-base font-bold uppercase tracking-wider text-[#121820]">
+                  <Text className="text-[#2B323F] font-bold text-base uppercase tracking-wider">
                     {isSignUp ? 'Create Account' : 'Sign In'}
                   </Text>
                 )}
@@ -307,34 +344,53 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
             {/* Divider */}
             <View className="flex-row items-center my-6">
-              <View className="h-px flex-1 bg-[#272D36]" />
-              <Text className="px-3 text-xs font-semibold uppercase tracking-wider text-[#A1A7B3]">
+              <View className="flex-1 h-px bg-[#434D62]" />
+              <Text className="text-[#8C9BAE] text-xs font-semibold uppercase tracking-wider px-3">
                 or continue with
               </Text>
-              <View className="h-px flex-1 bg-[#272D36]" />
+              <View className="flex-1 h-px bg-[#434D62]" />
             </View>
 
             {/* Social Authentication Buttons */}
             <View className="flex-row gap-3">
               {/* Google Button */}
-              <Pressable className="h-12 flex-1 flex-row items-center justify-center rounded-2xl border border-[#272D36] bg-[#0E1116] active:bg-[#15181E]">
+              <Pressable
+                onPress={handleGoogleSignIn}
+                disabled={isLoading || isGoogleLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+                className={`flex-1 h-12 border border-[#434D62] bg-[#2B323F] rounded-2xl flex-row items-center justify-center active:bg-[#353D4E] ${
+                  isGoogleLoading ? 'opacity-70' : ''
+                }`}
+              >
                 {/* Custom Google Logo drawing using layout */}
                 <View className="flex-row items-center">
-                  <View className="w-5 h-5 rounded-full bg-white mr-2 items-center justify-center">
-                    <Text className="text-xs font-black text-[#121820]">G</Text>
-                  </View>
-                  <Text className="text-white font-semibold text-sm">Google</Text>
+                  {isGoogleLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <View className="w-5 h-5 rounded-full bg-white mr-2 items-center justify-center">
+                        <Text className="text-xs font-black text-[#2B323F]">G</Text>
+                      </View>
+                      <Text className="text-white font-semibold text-sm">Google</Text>
+                    </>
+                  )}
                 </View>
               </Pressable>
 
               {/* Apple Button */}
-              <Pressable className="h-12 flex-1 flex-row items-center justify-center rounded-2xl border border-[#272D36] bg-[#0E1116] active:bg-[#15181E]">
+              <Pressable
+                disabled
+                accessibilityRole="button"
+                accessibilityLabel="Apple Sign In will be available in the production version"
+                className="flex-1 h-12 border border-[#434D62] bg-[#2B323F] rounded-2xl flex-row items-center justify-center opacity-60"
+              >
                 {/* Apple icon representation */}
                 <View className="flex-row items-center">
                   <View className="w-5 h-5 rounded-full bg-white mr-2 items-center justify-center">
-                    <Text className="text-xs font-black text-[#121820]">A</Text>
+                    <Text className="text-xs font-black text-[#2B323F]">A</Text>
                   </View>
-                  <Text className="text-white font-semibold text-sm">Apple</Text>
+                  <Text className="text-white font-semibold text-sm">Coming Soon</Text>
                 </View>
               </Pressable>
             </View>
@@ -342,11 +398,11 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
           {/* Bottom Switch Toggle */}
           <View className="flex-row justify-center items-center mt-6">
-            <Text className="text-sm text-[#A1A7B3]">
+            <Text className="text-[#8C9BAE] text-sm">
               {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
             </Text>
             <Pressable onPress={toggleMode}>
-              <Text className="text-sm font-bold text-[#F5C542] underline">
+              <Text className="text-[#FDEF4B] text-sm font-bold underline">
                 {isSignUp ? 'Sign In' : 'Sign Up'}
               </Text>
             </Pressable>

@@ -22,9 +22,23 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   avatarUrl: text('avatar_url'),
+  authProvider: varchar('auth_provider', { length: 40 }).notNull().default('password'),
+  googleId: varchar('google_id', { length: 255 }).unique(),
+  emailVerified: boolean('email_verified').notNull().default(false),
   timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+export const passwordResetCodes = pgTable('password_reset_codes', {
+  id: id(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  codeHash: text('code_hash').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'),
+  createdAt: createdAt(),
 });
 
 export const categories = pgTable('categories', {

@@ -1,149 +1,495 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
+  View,
   Text,
   TextInput,
-  View,
+  Pressable,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  StyleSheet,
 } from 'react-native';
 import BeePlanLogo from '../components/BeePlanLogo';
+import { useAuth } from '../hooks/useAuth';
+
+// ─── Brand constants ─────────────────────────────────────────────────────────
+const YELLOW = '#FDEF4B';
+const DARK_BG = '#2B323F';
+const CARD_BG = '#353D4E';
+const BORDER = '#434D62';
+const MUTED = '#8C9BAE';
 
 interface ForgotPasswordScreenProps {
+  /** Navigate back to Sign In */
   onBack: () => void;
-  onReset: () => void;
+  /** Navigate forward to Reset Password entry */
+  onReset: (email: string, devResetCode?: string) => void;
 }
 
+// ─── BeeLogo Component ───────────────────────────────────────────────────────
 export default function ForgotPasswordScreen({ onBack, onReset }: ForgotPasswordScreenProps) {
+  const { sendPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [submitError, setSubmitError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const handleSend = () => {
-    if (!email.trim()) {
-      setError('Email address is required');
-      return;
-    }
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email');
-      return;
-    }
+  const handleSend = async () => {
+    setSubmitError('');
+    if (!email.trim()) { setError('Email address is required'); return; }
+    if (!/\S+@\S+\.\S+/.test(email)) { setError('Please enter a valid email'); return; }
     setError('');
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const devResetCode = await sendPasswordReset(email);
       setIsLoading(false);
-      setSent(true);
-    }, 1400);
+      onReset(email.trim(), devResetCode);
+    } catch (err) {
+      setIsLoading(false);
+      const message = err instanceof Error ? err.message : '';
+      setSubmitError(message || 'Unable to send reset code. Please try again.');
+    }
   };
 
   return (
     <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-[#0E1116]"
     >
+      {/* Dot-grid background pattern */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {Array.from({ length: 15 }).map((_, row) =>
+          Array.from({ length: 8 }).map((_, col) => (
+            <View
+              key={`${row}-${col}`}
+              style={{
+                position: 'absolute',
+                top: row * 54 + 14,
+                left: col * 54 + 14,
+                width: 2,
+                height: 2,
+                borderRadius: 1,
+                backgroundColor: YELLOW,
+                opacity: 0.06,
+              }}
+            />
+          ))
+        )}
+      </View>
+
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+        contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
-        className="px-6"
+        showsVerticalScrollIndicator={false}
       >
-        <View className="py-10">
-          <View className="mb-8 items-center">
-            <BeePlanLogo size={58} showTagline />
-          </View>
+        {/* Auth Card */}
+        <View style={styles.card}>
+          {/* Brand Header */}
+          <BeePlanLogo size={50} showTagline style={styles.logoMark} />
 
-          <View className="rounded-3xl border border-[#272D36] bg-[#15181E] p-6">
-            {sent ? (
-              <View className="items-center">
-                <View className="mb-5 h-14 w-14 items-center justify-center rounded-2xl border border-[#F5C542]/30 bg-[#F5C542]/10">
-                  <Text className="text-xl font-black text-[#F5C542]">@</Text>
+          {sent ? (
+            /* ── Email Sent Success ── */
+            <View style={styles.successBlock}>
+              {/* Mail icon */}
+              <View style={styles.iconBox}>
+                <View style={styles.envelopeBody}>
+                  <View style={styles.envelopeLine} />
+                  <View style={[styles.envelopeLine, { width: 22 }]} />
                 </View>
-                <Text className="text-center text-2xl font-black text-white">Check your email</Text>
-                <Text className="mt-3 text-center text-sm leading-6 text-[#A1A7B3]">
-                  We sent a password reset link to{' '}
-                  <Text className="font-bold text-[#F5C542]">{email}</Text>.
-                </Text>
+              </View>
 
-                <Pressable onPress={onReset} className="mt-6 h-13 w-full items-center justify-center rounded-2xl bg-[#F5C542] py-4">
-                  <Text className="text-sm font-black uppercase tracking-wider text-[#121820]">
-                    Create New Password
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setSent(false);
-                    setEmail('');
-                  }}
-                  className="mt-3 h-12 w-full items-center justify-center rounded-2xl border border-[#272D36] bg-[#0E1116]"
-                >
-                  <Text className="text-sm font-bold text-[#A1A7B3]">Resend Email</Text>
+              <Text style={styles.heading}>Check your email</Text>
+              <Text style={styles.subText}>
+                We sent a 6-digit reset code. Enter it to create a new password.
+              </Text>
+
+              <Pressable
+                style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}
+                onPress={() => onReset(email.trim())}
+              >
+                <Text style={styles.primaryBtnText}>Enter Reset Code</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => { setSent(false); setEmail(''); setSubmitError(''); }}
+              >
+                <Text style={styles.ghostBtnText}>Send Another Code</Text>
+              </Pressable>
+
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Remember your password? </Text>
+                <Pressable onPress={onBack}>
+                  <Text style={styles.footerLink}>Back to Sign In</Text>
                 </Pressable>
               </View>
-            ) : (
-              <>
-                <View className="mb-5 items-center">
-                  <View className="h-12 w-12 items-center justify-center rounded-2xl border border-[#F5C542]/30 bg-[#F5C542]/10">
-                    <Text className="text-lg font-black text-[#F5C542]">?</Text>
-                  </View>
-                </View>
-                <Text className="text-center text-2xl font-black text-white">Forgot Password?</Text>
-                <Text className="mt-2 text-center text-sm leading-6 text-[#A1A7B3]">
-                  Enter your email and we will send you a reset link.
-                </Text>
+            </View>
+          ) : (
+            /* ── Email Form ── */
+            <>
+              {/* Lock icon */}
+              <View style={styles.iconBox}>
+                <View style={styles.lockArc} />
+                <View style={styles.lockBody} />
+              </View>
 
-                <View className="mt-6">
-                  <Text className="mb-2 text-xs font-black uppercase tracking-widest text-[#7F8794]">
-                    Email Address
-                  </Text>
-                  <View className={`rounded-2xl border bg-[#0E1116] px-4 py-3 ${error ? 'border-red-500' : 'border-[#272D36]'}`}>
-                    <TextInput
-                      placeholder="name@example.com"
-                      placeholderTextColor="#5F6876"
-                      value={email}
-                      onChangeText={(value) => {
-                        setEmail(value);
-                        setError('');
-                      }}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      returnKeyType="send"
-                      onSubmitEditing={handleSend}
-                      className="text-base text-white"
-                    />
-                  </View>
-                  {!!error && <Text className="mt-1 pl-1 text-xs text-red-400">{error}</Text>}
-                  <Text className="mt-2 text-xs leading-5 text-[#A1A7B3]">
-                    Use the email associated with your BeePlan account.
-                  </Text>
-                </View>
+              <Text style={styles.heading}>Forgot Password?</Text>
+              <Text style={styles.subText}>
+                Enter your email and we'll send you a reset code to get back into your account.
+              </Text>
 
+              {/* Email Field */}
+              <Text style={styles.inputLabel}>EMAIL ADDRESS</Text>
+              <View style={[styles.inputWrap, !!error && { borderColor: '#EF4444' }]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="name@example.com"
+                  placeholderTextColor="#556070"
+                  value={email}
+                  onChangeText={v => { setEmail(v); setError(''); setSubmitError(''); }}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  returnKeyType="send"
+                  onSubmitEditing={handleSend}
+                />
+              </View>
+              {!!error && <Text style={styles.errorText}>{error}</Text>}
+              {!!submitError && <Text style={styles.errorText}>{submitError}</Text>}
+
+              <Text style={styles.helperText}>
+                Make sure you enter the email associated with your BeePlan account.
+              </Text>
+
+              {/* CTA */}
+              <View style={styles.sendResetBtnShell}>
                 <Pressable
+                  style={({ pressed }) => [
+                    styles.sendResetBtnPressable,
+                    pressed && { opacity: 0.85 },
+                  ]}
                   onPress={handleSend}
                   disabled={isLoading}
-                  className="mt-6 h-14 items-center justify-center rounded-2xl bg-[#F5C542]"
                 >
-                  {isLoading ? (
-                    <ActivityIndicator color="#121820" />
-                  ) : (
-                    <Text className="text-sm font-black uppercase tracking-wider text-[#121820]">
-                      Send Reset Link
-                    </Text>
-                  )}
+                  <Text style={styles.sendResetBtnText}>{isLoading ? 'Sending...' : 'Send Reset Code'}</Text>
                 </Pressable>
-              </>
-            )}
+              </View>
 
-            <View className="mt-6 flex-row flex-wrap items-center justify-center">
-              <Text className="text-sm text-[#A1A7B3]">Remember your password? </Text>
-              <Pressable onPress={onBack}>
-                <Text className="text-sm font-bold text-[#F5C542] underline">Back to Sign In</Text>
-              </Pressable>
-            </View>
-          </View>
+              {/* Back */}
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Remember your password? </Text>
+                <Pressable onPress={onBack}>
+                  <Text style={styles.footerLink}>Back to Sign In</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: DARK_BG,
+  },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 48,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: CARD_BG,
+    borderRadius: 28,
+    paddingHorizontal: 26,
+    paddingVertical: 32,
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+    alignItems: 'center',
+  },
+
+  // ── Brand Header ──
+  logoMark: {
+    marginBottom: 22,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  wordmark: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  tagline: {
+    color: MUTED,
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 3,
+    marginTop: 6,
+    marginBottom: 22,
+  },
+
+  // ── Logo ──
+  logoWrapper: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  logoDiamond: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: YELLOW,
+    opacity: 0.18,
+    transform: [{ rotate: '45deg' }],
+  },
+  logoBee: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '32deg' }, { translateX: -1 }, { translateY: 2 }],
+    shadowColor: YELLOW,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  stripesContainer: {
+    alignItems: 'flex-start',
+    gap: 3,
+    transform: [{ rotate: '-32deg' }],
+  },
+  stripe: {
+    height: 2,
+    backgroundColor: DARK_BG,
+    borderRadius: 2,
+  },
+  antennaDot: {
+    position: 'absolute',
+    top: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: YELLOW,
+  },
+
+  // ── Icon Box ──
+  iconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: `${YELLOW}18`,
+    borderWidth: 1,
+    borderColor: `${YELLOW}40`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  lockArc: {
+    width: 18,
+    height: 10,
+    borderTopLeftRadius: 9,
+    borderTopRightRadius: 9,
+    borderWidth: 2.5,
+    borderBottomWidth: 0,
+    borderColor: YELLOW,
+    marginBottom: -1,
+  },
+  lockBody: {
+    width: 22,
+    height: 16,
+    borderRadius: 5,
+    backgroundColor: YELLOW,
+  },
+  envelopeBody: {
+    width: 28,
+    height: 20,
+    borderWidth: 2,
+    borderColor: YELLOW,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  envelopeLine: {
+    width: 16,
+    height: 2,
+    backgroundColor: YELLOW,
+    borderRadius: 1,
+  },
+
+  // ── Content ──
+  heading: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+    marginBottom: 10,
+  },
+  subText: {
+    color: MUTED,
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 24,
+    paddingHorizontal: 10,
+  },
+
+  // ── Input ──
+  inputLabel: {
+    color: MUTED,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginBottom: 6,
+    alignSelf: 'flex-start',
+  },
+  inputWrap: {
+    width: '100%',
+    backgroundColor: DARK_BG,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  input: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 11,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+    paddingLeft: 4,
+  },
+  helperText: {
+    color: MUTED,
+    fontSize: 10,
+    lineHeight: 15,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+  },
+
+  // ── Buttons ──
+  primaryBtn: {
+    width: '100%',
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: YELLOW,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  primaryBtnText: {
+    color: '#1F242E',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  sendResetBtnShell: {
+    width: '100%',
+    height: 54,
+    minHeight: 54,
+    borderRadius: 14,
+    backgroundColor: '#FDEF4B',
+    marginTop: 18,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FDEF4B',
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  sendResetBtnPressable: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FDEF4B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendResetBtnText: {
+    color: '#1F242E',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  ghostBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: DARK_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  ghostBtnText: {
+    color: MUTED,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // ── Footer ──
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 22,
+    flexWrap: 'wrap',
+  },
+  footerText: {
+    color: MUTED,
+    fontSize: 11,
+  },
+  footerLink: {
+    color: YELLOW,
+    fontSize: 11,
+    fontWeight: '800',
+    textDecorationLine: 'underline',
+  },
+
+  // ── Success block ──
+  successBlock: {
+    width: '100%',
+    alignItems: 'center',
+  },
+});
