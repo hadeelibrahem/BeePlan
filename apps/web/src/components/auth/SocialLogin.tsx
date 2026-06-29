@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from 'react';
+﻿import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { authService, type SocialAuthProvider } from '../../services/auth.service';
 
 const GoogleIcon = lazy(() =>
@@ -125,7 +125,7 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
               aria-disabled={isDisabled}
               disabled={isDisabled}
               onClick={() => void handleSocialLogin(provider)}
-              className="group h-12 w-full rounded-2xl border border-[#434D62] bg-[#2B323F] px-4 text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[#566277] hover:bg-[#353D4E] hover:shadow-lg hover:shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FDEF4B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#353D4E] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:bg-[#2B323F]"
+              className="group h-12 w-full rounded-2xl border border-[#3B465B] bg-[#2B3443] px-4 text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[#4B5870] hover:bg-[#2B3443] hover:shadow-lg hover:shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FDE64B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2B3443] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:bg-[#2B3443]"
             >
               <span className="flex items-center justify-center gap-3 text-sm font-bold">
                 {isLoading ? <LoadingSpinner /> : <ProviderIcon provider={provider} />}
@@ -146,3 +146,4 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
 }
 
 export const SocialLogin = memo(SocialLoginComponent);
+

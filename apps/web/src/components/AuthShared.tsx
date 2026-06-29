@@ -1,4 +1,4 @@
-import type React from 'react'
+﻿import type React from 'react'
 import { BeePlanLogo } from './BeePlanLogo'
 
 export function BrandHeader({ tagline = 'SMART PRODUCTIVITY' }: { tagline?: string }) {
@@ -11,7 +11,7 @@ export function BrandHeader({ tagline = 'SMART PRODUCTIVITY' }: { tagline?: stri
 
 export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: string }) {
   return (
-    <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-r border-[#272D36] bg-[#0E1116] p-16 lg:flex lg:w-1/2">
+    <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-r border-[#3B465B] bg-[#1F2937] p-16 lg:flex lg:w-1/2">
       <div className="relative z-10">
         <BeePlanLogo showTagline size={56} />
       </div>
@@ -23,7 +23,7 @@ export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: s
         <h2 className="text-4xl font-extrabold leading-[1.15] tracking-tight text-white">
           {headline}
         </h2>
-        <p className="text-sm leading-relaxed text-[#A1A7B3]">{sub}</p>
+        <p className="text-sm leading-relaxed text-[#94A3B8]">{sub}</p>
       </div>
 
       <div className="relative z-10 text-xs text-[#7F8794]">
@@ -56,10 +56,10 @@ export function AuthInput({
         {label}
       </label>
       <div
-        className={`flex items-center rounded-xl border bg-[#15181E] px-4 py-3 transition-all duration-200 ${
+        className={`flex items-center rounded-xl border bg-[#2B3443] px-4 py-3 transition-all duration-200 ${
           error
             ? 'border-red-500'
-            : 'border-[#272D36] focus-within:border-[#F5C542]/70'
+            : 'border-[#3B465B] focus-within:border-[#FDE64B]/70'
         }`}
       >
         <input
@@ -94,10 +94,10 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={loading || disabled}
-      className="flex h-12 w-full items-center justify-center rounded-xl bg-[#F5C542] text-xs font-bold uppercase tracking-wider text-[#121820] shadow-lg shadow-[#F5C542]/10 transition-all hover:bg-[#FFD84A] active:scale-95 disabled:bg-[#272D36] disabled:text-[#727A86]"
+      className="flex h-12 w-full items-center justify-center rounded-xl bg-[#FDE64B] text-xs font-bold uppercase tracking-wider text-[#1F2937] shadow-lg shadow-[#FDE64B]/10 transition-all hover:bg-[#FDE64B] active:scale-95 disabled:bg-[#3B465B] disabled:text-[#727A86]"
     >
       {loading ? (
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#121820]/30 border-t-[#121820]" />
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#1F2937]/30 border-t-[#1F2937]" />
       ) : (
         children
       )}
@@ -115,12 +115,12 @@ export function AuthFooterLink({
   onClick: () => void
 }) {
   return (
-    <div className="mt-6 flex items-center justify-center text-xs text-[#A1A7B3]">
+    <div className="mt-6 flex items-center justify-center text-xs text-[#94A3B8]">
       <span>{prefix}</span>
       <button
         type="button"
         onClick={onClick}
-        className="pl-1.5 font-bold text-[#F5C542] underline transition-colors hover:text-white focus:outline-none"
+        className="pl-1.5 font-bold text-[#FDE64B] underline transition-colors hover:text-white focus:outline-none"
       >
         {label}
       </button>
@@ -131,7 +131,7 @@ export function AuthFooterLink({
 export function AuthCard({ shake, children }: { shake: boolean; children: React.ReactNode }) {
   return (
     <div
-      className={`relative w-full max-w-md rounded-3xl border border-[#272D36] bg-[#15181E]/95 p-8 shadow-2xl shadow-black/30 backdrop-blur-md transition-all duration-300 sm:p-10 ${
+      className={`relative w-full max-w-md rounded-3xl border border-[#3B465B] bg-[#2B3443]/95 p-8 shadow-2xl shadow-black/30 backdrop-blur-md transition-all duration-300 sm:p-10 ${
         shake ? 'animate-shake' : ''
       }`}
     >
@@ -150,7 +150,7 @@ export function AuthShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="relative flex min-h-screen items-stretch overflow-hidden bg-[#0E1116] font-sans text-white">
+    <div className="relative flex min-h-screen items-stretch overflow-hidden bg-[#1F2937] font-sans text-white">
       <div className="honeycomb-bg" />
 
       <LeftPanel headline={headline} sub={sub} />
@@ -161,3 +161,4 @@ export function AuthShell({
     </div>
   )
 }
+
