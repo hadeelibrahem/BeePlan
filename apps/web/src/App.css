@@ -1,11 +1,11 @@
-/* App.css - Premium Styles for BeePlan Responsive Web Auth Page */
+﻿/* App.css - Premium Styles for BeePlan Responsive Web Auth Page */
 
 :root {
-  --yellow: #F5C542;
-  --dark-bg: #0E1116;
-  --card-bg: #15181E;
-  --border-color: #272D36;
-  --text-muted: #A1A7B3;
+  --yellow: #FDE64B;
+  --dark-bg: #1F2937;
+  --card-bg: #2B3443;
+  --border-color: #3B465B;
+  --text-muted: #94A3B8;
 }
 
 /* Custom keyframes */
@@ -113,3 +113,4 @@ input:focus {
     transform: translateY(0) scale(1);
   }
 }
+
