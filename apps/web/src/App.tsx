@@ -221,6 +221,7 @@ function ThemedApp() {
         setScreen('details')
       }}
       onToggle={handleToggle}
+      onBack={() => setScreen('dashboard')}
     />,
     signOutButton,
   )

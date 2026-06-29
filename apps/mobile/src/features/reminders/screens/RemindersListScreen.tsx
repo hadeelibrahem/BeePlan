@@ -25,9 +25,10 @@ type Props = {
   onCreate: () => void;
   onToggle: (id: string) => void;
   onSignOut?: () => void;
+  onBack?: () => void;
 };
 
-export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, onSignOut }: Props) {
+export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, onSignOut, onBack }: Props) {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const { theme, toggleTheme } = useTheme();
@@ -62,6 +63,19 @@ export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, o
         <View className="mb-5 flex-row items-center justify-between">
           <View>
             <View className="mb-0.5 flex-row items-center gap-2">
+              {onBack && (
+                <Pressable
+                  onPress={onBack}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('actions.back')}
+                  className="h-8 w-8 items-center justify-center rounded-full"
+                  style={themed.iconButton}
+                >
+                  <Text className="text-sm font-black" style={themed.iconButtonText}>
+                    {'←'}
+                  </Text>
+                </Pressable>
+              )}
               <BeePlanLogo size={28} iconOnly />
               <Text className="text-xl font-bold tracking-tight" style={themed.title}>
                 {t('common.brand_name')}

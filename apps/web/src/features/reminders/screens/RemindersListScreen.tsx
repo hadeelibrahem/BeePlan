@@ -13,9 +13,10 @@ type Props = {
   onSelect: (id: string) => void
   onCreate: () => void
   onToggle: (id: string) => void
+  onBack?: () => void
 }
 
-export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle }: Props) {
+export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, onBack }: Props) {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const { formatNumber, t } = useLanguage()
@@ -47,6 +48,16 @@ export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle }:
         <div className="mb-5 flex items-center justify-between gap-4">
           <div>
             <div className="mb-0.5 flex items-center gap-2">
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  aria-label={t('actions.back')}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-text)] transition hover:border-[var(--bp-accent)]"
+                >
+                  {'←'}
+                </button>
+              )}
               <BeePlanLogo size={28} iconOnly />
               <h1 className="text-xl font-bold tracking-tight text-[var(--bp-text)]">{t('common.brand_name')}</h1>
             </div>
