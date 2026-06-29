@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import BeePlanLogo from '../components/BeePlanLogo';
+import DeleteSubtaskModal from '../components/DeleteSubtaskModal';
+import SubtaskFormModal, { type SubtaskFormValues } from '../components/SubtaskFormModal';
 
 type Props = {
   onBack: () => void;
@@ -18,7 +20,7 @@ const palette = {
   muted: '#94A3B8',
 };
 
-const subtasks = [
+const initialSubtasks = [
   { title: 'Executive summary slide', done: true },
   { title: 'Q2 performance review data', done: true },
   { title: 'Channel allocation strategy', done: true },
@@ -29,6 +31,30 @@ const dependencies = ['Finish market research report', 'Approve creative assets'
 const attachments = ['Q3_Marketing_Strategy_v3.pdf', 'competitor_analysis_2026.xlsx'];
 
 export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: Props) {
+  const [subtasks, setSubtasks] = useState(initialSubtasks);
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [editingSubtaskIndex, setEditingSubtaskIndex] = useState<number | null>(null);
+  const [deletingSubtaskIndex, setDeletingSubtaskIndex] = useState<number | null>(null);
+
+  const handleAddSubtask = (values: SubtaskFormValues) => {
+    setSubtasks((current) => [...current, { title: values.title, done: false }]);
+    setAddingSubtask(false);
+  };
+
+  const handleEditSubtask = (values: SubtaskFormValues) => {
+    if (editingSubtaskIndex === null) return;
+    setSubtasks((current) =>
+      current.map((item, index) => (index === editingSubtaskIndex ? { ...item, title: values.title } : item)),
+    );
+    setEditingSubtaskIndex(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deletingSubtaskIndex === null) return;
+    setSubtasks((current) => current.filter((_, index) => index !== deletingSubtaskIndex));
+    setDeletingSubtaskIndex(null);
+  };
+
   return (
     <View className="flex-1" style={{ backgroundColor: palette.bg }}>
       <ScrollView className="px-5 pt-12" contentContainerStyle={{ paddingBottom: 140 }}>
@@ -101,14 +127,19 @@ export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: P
           </View>
         </Card>
 
-        <Card title="Editable Subtasks" action="+ Add">
-          {subtasks.map((item) => (
+        <Card title="Editable Subtasks" action="+ Add" onAction={() => setAddingSubtask(true)}>
+          {subtasks.map((item, index) => (
             <View key={item.title} className="mb-3 flex-row items-center gap-3 rounded-2xl border p-3" style={{ backgroundColor: palette.input, borderColor: palette.border }}>
               <View className="h-6 w-6 items-center justify-center rounded-lg border" style={{ borderColor: item.done ? '#22C55E' : palette.border, backgroundColor: item.done ? '#22C55E' : 'transparent' }}>
                 {item.done ? <Text className="text-[9px] font-black" style={{ color: palette.bg }}>OK</Text> : null}
               </View>
               <TextInput defaultValue={item.title} className="flex-1 rounded-xl px-3 py-2 text-white" style={{ backgroundColor: palette.card }} />
-              <Text className="text-xs font-black text-red-300">DEL</Text>
+              <TouchableOpacity onPress={() => setEditingSubtaskIndex(index)}>
+                <Text className="text-xs font-black text-slate-200">EDIT</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setDeletingSubtaskIndex(index)}>
+                <Text className="text-xs font-black text-red-300">DEL</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </Card>
@@ -174,11 +205,49 @@ export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: P
           <Text className="text-center font-black" style={{ color: palette.bg }}>Save Changes</Text>
         </TouchableOpacity>
       </View>
+
+      <SubtaskFormModal
+        visible={addingSubtask}
+        mode="add"
+        onCancel={() => setAddingSubtask(false)}
+        onSubmit={handleAddSubtask}
+      />
+
+      <SubtaskFormModal
+        visible={editingSubtaskIndex !== null}
+        mode="edit"
+        initialValues={editingSubtaskIndex !== null ? { title: subtasks[editingSubtaskIndex]?.title } : undefined}
+        onCancel={() => setEditingSubtaskIndex(null)}
+        onDelete={() => {
+          setDeletingSubtaskIndex(editingSubtaskIndex);
+          setEditingSubtaskIndex(null);
+        }}
+        onSubmit={handleEditSubtask}
+      />
+
+      <DeleteSubtaskModal
+        visible={deletingSubtaskIndex !== null}
+        subtaskTitle={deletingSubtaskIndex !== null ? subtasks[deletingSubtaskIndex]?.title : undefined}
+        onCancel={() => setDeletingSubtaskIndex(null)}
+        onConfirm={handleConfirmDelete}
+      />
     </View>
   );
 }
 
-function Card({ title, code, action, children }: { title: string; code?: string; action?: string; children: ReactNode }) {
+function Card({
+  title,
+  code,
+  action,
+  onAction,
+  children,
+}: {
+  title: string;
+  code?: string;
+  action?: string;
+  onAction?: () => void;
+  children: ReactNode;
+}) {
   return (
     <View className="mb-5 rounded-3xl border p-5 shadow-2xl" style={{ backgroundColor: palette.card, borderColor: palette.border }}>
       <View className="mb-5 flex-row items-center justify-between">
@@ -186,7 +255,11 @@ function Card({ title, code, action, children }: { title: string; code?: string;
           {code ? <Text style={{ color: palette.accent }}>{code} </Text> : null}
           {title}
         </Text>
-        {action ? <Text className="text-sm font-black" style={{ color: palette.accent }}>{action}</Text> : null}
+        {action ? (
+          <TouchableOpacity onPress={onAction}>
+            <Text className="text-sm font-black" style={{ color: palette.accent }}>{action}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
       {children}
     </View>

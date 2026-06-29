@@ -16,7 +16,13 @@ import {
   verifyResetCode,
   type AuthUser,
 } from '../lib/api';
-import { parseGoogleOAuthUrl, startGoogleSignIn } from '../services/auth.service';
+import {
+  getGoogleApprovalStatus,
+  parseApprovalToken,
+  parseGoogleOAuthMessage,
+  parseGoogleOAuthUrl,
+  startGoogleSignIn,
+} from '../services/auth.service';
 
 const AUTH_STORAGE_KEY = 'beeplan_auth_session';
 
@@ -31,6 +37,7 @@ type AuthContextValue = {
   accessToken: string | null;
   loading: boolean;
   oauthError: string;
+  oauthMessage: string;
   clearOAuthError: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (payload: { fullName: string; email: string; password: string }) => Promise<boolean>;
@@ -47,6 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [oauthError, setOauthError] = useState('');
+  const [oauthMessage, setOauthMessage] = useState('');
+  const [pendingApprovalToken, setPendingApprovalToken] = useState('');
   const [verifiedReset, setVerifiedReset] = useState<{ email: string; code: string } | null>(null);
 
   useEffect(() => {
@@ -80,28 +89,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleUrl = async (url: string | null) => {
       if (!url) return;
 
+      const googleMessage = parseGoogleOAuthMessage(url);
       const googleSession = parseGoogleOAuthUrl(url);
+
+      if (googleMessage) {
+        setOauthMessage(googleMessage);
+        setOauthError('');
+        setPendingApprovalToken(parseApprovalToken(url));
+        return;
+      }
 
       if (!googleSession) return;
 
       setOauthError('');
+      setOauthMessage('');
+      setPendingApprovalToken('');
       await saveSession(googleSession);
     };
 
     Linking.getInitialURL().then((url) => {
       void handleUrl(url).catch((error) => {
         setOauthError(error instanceof Error ? error.message : 'Google sign-in failed. Please try again.');
+        setOauthMessage('');
       });
     });
 
     const subscription = Linking.addEventListener('url', ({ url }) => {
       void handleUrl(url).catch((error) => {
         setOauthError(error instanceof Error ? error.message : 'Google sign-in failed. Please try again.');
+        setOauthMessage('');
       });
     });
 
     return () => subscription.remove();
   }, [saveSession]);
+
+  useEffect(() => {
+    if (!pendingApprovalToken || session) return;
+
+    let active = true;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const pollApproval = async () => {
+      try {
+        const result = await getGoogleApprovalStatus(pendingApprovalToken);
+
+        if (!active) return;
+
+        if (result.status === 'approved') {
+          await saveSession({ accessToken: result.accessToken, user: result.user });
+          setOauthError('');
+          setOauthMessage('');
+          setPendingApprovalToken('');
+          return;
+        }
+
+        if (result.status === 'denied') {
+          setOauthError('The login request was denied.');
+          setOauthMessage('');
+          setPendingApprovalToken('');
+          return;
+        }
+
+        if (result.status === 'expired') {
+          setOauthError('The login approval link has expired. Please try again.');
+          setOauthMessage('');
+          setPendingApprovalToken('');
+          return;
+        }
+
+        timeoutId = setTimeout(pollApproval, 2000);
+      } catch (error) {
+        if (!active) return;
+        setOauthError(error instanceof Error ? error.message : 'Unable to check login approval.');
+        setOauthMessage('');
+        setPendingApprovalToken('');
+      }
+    };
+
+    timeoutId = setTimeout(pollApproval, 1000);
+
+    return () => {
+      active = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [pendingApprovalToken, saveSession, session]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -112,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await saveSession(authResponse);
       setOauthError('');
+      setOauthMessage('');
     },
     [saveSession],
   );
@@ -126,6 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await saveSession(authResponse);
       setOauthError('');
+      setOauthMessage('');
 
       return true;
     },
@@ -134,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     setOauthError('');
+    setOauthMessage('');
     await startGoogleSignIn();
   }, []);
 
@@ -165,11 +240,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
     setOauthError('');
+    setOauthMessage('');
+    setPendingApprovalToken('');
     setSession(null);
   }, []);
 
   const clearOAuthError = useCallback(() => {
     setOauthError('');
+    setOauthMessage('');
+    setPendingApprovalToken('');
   }, []);
 
   const value = useMemo(
@@ -179,6 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken: session?.accessToken ?? null,
       loading,
       oauthError,
+      oauthMessage,
       clearOAuthError,
       signIn,
       signUp,
@@ -192,6 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearOAuthError,
       loading,
       oauthError,
+      oauthMessage,
       session,
       sendPasswordReset,
       signIn,

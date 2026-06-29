@@ -25,7 +25,7 @@ interface AuthScreenProps {
 }
 
 export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenProps) {
-  const { clearOAuthError, oauthError, signIn, signInWithGoogle, signUp } = useAuth();
+  const { clearOAuthError, oauthError, oauthMessage, signIn, signInWithGoogle, signUp } = useAuth();
   const submitInFlightRef = useRef(false);
   const googleInFlightRef = useRef(false);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -319,6 +319,9 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               )}
               {(oauthError || submitError) && (
                 <Text className="text-red-400 text-xs mt-1 ml-1">{oauthError || submitError}</Text>
+              )}
+              {oauthMessage && (
+                <Text className="text-emerald-400 text-xs mt-1 ml-1">{oauthMessage}</Text>
               )}
               {successMessage && (
                 <Text className="text-emerald-400 text-xs mt-1 ml-1">{successMessage}</Text>

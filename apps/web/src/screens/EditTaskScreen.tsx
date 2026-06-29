@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import { BeePlanLogo } from '../components/BeePlanLogo'
+import DeleteSubtaskModal from '../components/DeleteSubtaskModal'
+import SubtaskFormModal, { type SubtaskFormValues } from '../components/SubtaskFormModal'
 
 type EditTaskScreenProps = {
   onBack?: () => void
@@ -7,7 +10,7 @@ type EditTaskScreenProps = {
   onSave?: () => void
 }
 
-const subtasks = [
+const initialSubtasks = [
   { title: 'Executive summary slide', done: true },
   { title: 'Q2 performance review data', done: true },
   { title: 'Channel allocation strategy', done: true },
@@ -20,6 +23,30 @@ const attachments = [
 ]
 
 export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: EditTaskScreenProps) {
+  const [subtasks, setSubtasks] = useState(initialSubtasks)
+  const [addingSubtask, setAddingSubtask] = useState(false)
+  const [editingSubtaskIndex, setEditingSubtaskIndex] = useState<number | null>(null)
+  const [deletingSubtaskIndex, setDeletingSubtaskIndex] = useState<number | null>(null)
+
+  const handleAddSubtask = (values: SubtaskFormValues) => {
+    setSubtasks((current) => [...current, { title: values.title, done: false }])
+    setAddingSubtask(false)
+  }
+
+  const handleEditSubtask = (values: SubtaskFormValues) => {
+    if (editingSubtaskIndex === null) return
+    setSubtasks((current) =>
+      current.map((item, index) => (index === editingSubtaskIndex ? { ...item, title: values.title } : item)),
+    )
+    setEditingSubtaskIndex(null)
+  }
+
+  const handleConfirmDelete = () => {
+    if (deletingSubtaskIndex === null) return
+    setSubtasks((current) => current.filter((_, index) => index !== deletingSubtaskIndex))
+    setDeletingSubtaskIndex(null)
+  }
+
   return (
     <div className="min-h-screen bg-[#1F2937] text-white">
       <div className="mx-auto flex max-w-7xl gap-6 px-6 py-6">
@@ -109,16 +136,26 @@ export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: E
                 </div>
               </Card>
 
-              <Card title="Editable Subtasks" action="+ Add Subtask">
+              <Card title="Editable Subtasks" action="+ Add Subtask" onAction={() => setAddingSubtask(true)}>
                 <div className="space-y-3">
-                  {subtasks.map((item) => (
+                  {subtasks.map((item, index) => (
                     <div key={item.title} className="grid gap-3 rounded-2xl bg-[#2B3443] p-4 md:grid-cols-[32px_1fr_auto_auto] md:items-center">
                       <button className={`h-6 w-6 rounded-md border ${item.done ? 'border-green-400 bg-green-400 text-xs font-black text-[#1F2937]' : 'border-slate-500'}`}>
                         {item.done ? 'OK' : ''}
                       </button>
                       <input className="rounded-xl border border-[#3B465B] bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-[#FDE64B]" defaultValue={item.title} />
-                      <button className="rounded-xl bg-[#3B465B] px-4 py-3 text-sm font-bold text-slate-200">Edit</button>
-                      <button className="rounded-xl border border-red-500/40 px-4 py-3 text-sm font-bold text-red-300">Delete</button>
+                      <button
+                        onClick={() => setEditingSubtaskIndex(index)}
+                        className="rounded-xl bg-[#3B465B] px-4 py-3 text-sm font-bold text-slate-200"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeletingSubtaskIndex(index)}
+                        className="rounded-xl border border-red-500/40 px-4 py-3 text-sm font-bold text-red-300"
+                      >
+                        Delete
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -229,6 +266,37 @@ export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: E
           </footer>
         </main>
       </div>
+
+      {addingSubtask ? (
+        <SubtaskFormModal
+          mode="add"
+          onCancel={() => setAddingSubtask(false)}
+          onBack={() => setAddingSubtask(false)}
+          onSubmit={handleAddSubtask}
+        />
+      ) : null}
+
+      {editingSubtaskIndex !== null ? (
+        <SubtaskFormModal
+          mode="edit"
+          initialValues={{ title: subtasks[editingSubtaskIndex]?.title }}
+          onCancel={() => setEditingSubtaskIndex(null)}
+          onBack={() => setEditingSubtaskIndex(null)}
+          onDelete={() => {
+            setDeletingSubtaskIndex(editingSubtaskIndex)
+            setEditingSubtaskIndex(null)
+          }}
+          onSubmit={handleEditSubtask}
+        />
+      ) : null}
+
+      {deletingSubtaskIndex !== null ? (
+        <DeleteSubtaskModal
+          subtaskTitle={subtasks[deletingSubtaskIndex]?.title}
+          onCancel={() => setDeletingSubtaskIndex(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      ) : null}
     </div>
   )
 }
@@ -254,7 +322,19 @@ function CategoryDot({ label, color }: { label: string; color: string }) {
   )
 }
 
-function Card({ title, code, action, children }: { title: string; code?: string; action?: string; children: React.ReactNode }) {
+function Card({
+  title,
+  code,
+  action,
+  onAction,
+  children,
+}: {
+  title: string
+  code?: string
+  action?: string
+  onAction?: () => void
+  children: React.ReactNode
+}) {
   return (
     <section className="rounded-3xl border border-[#3B465B] bg-[#2B3443]/50 p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -262,7 +342,11 @@ function Card({ title, code, action, children }: { title: string; code?: string;
           {code ? <span className="text-[#FDE64B]">{code}</span> : null}
           {title}
         </h3>
-        {action ? <button className="font-bold text-[#FDE64B]">{action}</button> : null}
+        {action ? (
+          <button onClick={onAction} className="font-bold text-[#FDE64B]">
+            {action}
+          </button>
+        ) : null}
       </div>
       {children}
     </section>
