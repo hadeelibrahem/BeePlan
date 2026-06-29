@@ -12,12 +12,26 @@ import {
 import { useAuth } from './hooks/useAuth'
 import { LanguageProvider } from './i18n/LanguageContext'
 import AuthScreen from './screens/AuthScreen'
+import AllTasksScreen from './screens/AllTasksScreen'
+import CreateTaskScreen from './screens/CreateTaskScreen'
+import EditTaskScreen from './screens/EditTaskScreen'
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
 import ResetPasswordScreen from './screens/ResetPasswordScreen'
+import TaskDetailsScreen from './screens/TaskDetailsScreen'
+import TasksDashboardScreen from './screens/TasksDashboardScreen'
 import { ThemeProvider } from './theme/ThemeContext'
 
 type AuthScreenState = 'auth' | 'forgot' | 'reset'
-type AppScreen = 'list' | 'create' | 'details' | 'edit'
+type AppScreen =
+  | 'dashboard'
+  | 'tasks'
+  | 'createTask'
+  | 'taskDetails'
+  | 'editTask'
+  | 'list'
+  | 'create'
+  | 'details'
+  | 'edit'
 
 function getAuthScreenFromPath(): AuthScreenState {
   if (window.location.pathname === '/reset-password') return 'reset'
@@ -37,7 +51,7 @@ export default function App() {
 
 function ThemedApp() {
   const [authScreen, setAuthScreen] = useState<AuthScreenState>(() => getAuthScreenFromPath())
-  const [screen, setScreen] = useState<AppScreen>('list')
+  const [screen, setScreen] = useState<AppScreen>('dashboard')
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const { loading, user, signOut } = useAuth()
@@ -75,9 +89,19 @@ function ThemedApp() {
 
   async function handleSignOut() {
     await signOut()
-    setScreen('list')
+    setScreen('dashboard')
     navigateAuth('auth')
   }
+
+  const signOutButton = (
+    <button
+      type="button"
+      onClick={() => void handleSignOut()}
+      className="fixed end-6 top-6 z-10 rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-2 text-xs font-bold text-[var(--bp-text)] shadow-lg transition hover:border-[var(--bp-accent)]"
+    >
+      Sign out
+    </button>
+  )
 
   if (loading) {
     return (
@@ -97,6 +121,58 @@ function ThemedApp() {
     }
 
     return <AuthScreen onForgot={() => navigateAuth('forgot')} />
+  }
+
+  if (screen === 'dashboard') {
+    return renderShell(
+      <TasksDashboardScreen
+        reminders={reminders}
+        onViewReminders={() => setScreen('list')}
+        onViewTasks={() => setScreen('tasks')}
+      />,
+      signOutButton,
+    )
+  }
+
+  if (screen === 'tasks') {
+    return renderShell(
+      <AllTasksScreen
+        onBackDashboard={() => setScreen('dashboard')}
+        onCreateTask={() => setScreen('createTask')}
+        onViewTaskDetails={() => setScreen('taskDetails')}
+      />,
+      signOutButton,
+    )
+  }
+
+  if (screen === 'createTask') {
+    return renderShell(
+      <CreateTaskScreen onCancel={() => setScreen('tasks')} onSave={() => setScreen('tasks')} />,
+      signOutButton,
+    )
+  }
+
+  if (screen === 'taskDetails') {
+    return renderShell(
+      <TaskDetailsScreen
+        onBack={() => setScreen('tasks')}
+        onEdit={() => setScreen('editTask')}
+        onDelete={() => setScreen('tasks')}
+      />,
+      signOutButton,
+    )
+  }
+
+  if (screen === 'editTask') {
+    return renderShell(
+      <EditTaskScreen
+        onBack={() => setScreen('taskDetails')}
+        onCancel={() => setScreen('taskDetails')}
+        onDelete={() => setScreen('tasks')}
+        onSave={() => setScreen('taskDetails')}
+      />,
+      signOutButton,
+    )
   }
 
   if (screen === 'create') {
@@ -146,13 +222,7 @@ function ThemedApp() {
       }}
       onToggle={handleToggle}
     />,
-    <button
-      type="button"
-      onClick={() => void handleSignOut()}
-      className="fixed end-6 top-6 z-10 rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-2 text-xs font-bold text-[var(--bp-text)] shadow-lg transition hover:border-[var(--bp-accent)]"
-    >
-      Sign out
-    </button>,
+    signOutButton,
   )
 }
 

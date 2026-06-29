@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+﻿import { useRef, useState, type FormEvent } from 'react'
 import {
   AuthCard,
   AuthFooterLink,
@@ -104,7 +104,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
     <AuthShell
       headline={
         <>
-          Organize reminders, tasks, and <span className="text-[#FDEF4B] text-glow">smart plans</span>.
+          Organize reminders, tasks, and <span className="text-[#FDE64B] text-glow">smart plans</span>.
         </>
       }
       sub="Experience intelligent scheduling and seamless task mapping in a clean, minimal workspace crafted for premium productivity."
@@ -119,7 +119,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
               </svg>
             </div>
             <h3 className="text-2xl font-bold text-white tracking-tight">Authentication Approved</h3>
-            <p className="text-sm text-[#8C9BAE] mt-3">
+            <p className="text-sm text-[#94A3B8] mt-3">
               Welcome to your dashboard. Preparing your smart productivity plans...
             </p>
             <button
@@ -127,7 +127,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 setIsSuccess(false)
                 reset()
               }}
-              className="mt-8 px-6 py-2.5 rounded-xl border border-[#434D62] bg-[#2B323F] hover:bg-[#434D62] text-xs font-semibold text-white transition-colors"
+              className="mt-8 px-6 py-2.5 rounded-xl border border-[#3B465B] bg-[#2B3443] hover:bg-[#3B465B] text-xs font-semibold text-white transition-colors"
             >
               Back to Auth Portal
             </button>
@@ -139,7 +139,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
               <h3 className="text-xl font-bold text-white">
                 {isSignUp ? 'Create your account' : 'Welcome back'}
               </h3>
-              <p className="text-xs text-[#8C9BAE] mt-1.5 leading-relaxed">
+              <p className="text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
                 {isSignUp
                   ? 'Start organizing your reminders and plans with BeePlan.'
                   : 'Sign in to manage your reminders, tasks, and smart plans.'}
@@ -205,7 +205,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                     <button
                       type="button"
                       onClick={() => setShowPassword((s) => !s)}
-                      className="text-[9px] font-bold text-[#8C9BAE] hover:text-white px-1"
+                      className="text-[9px] font-bold text-[#94A3B8] hover:text-white px-1"
                     >
                       {showPassword ? 'HIDE' : 'SHOW'}
                     </button>
@@ -213,7 +213,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                       <button
                         type="button"
                         onClick={onForgot}
-                        className="text-[9px] font-bold text-[#FDEF4B] hover:underline whitespace-nowrap"
+                        className="text-[9px] font-bold text-[#FDE64B] hover:underline whitespace-nowrap"
                       >
                         Forgot?
                       </button>
@@ -222,7 +222,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 }
               />
               {isSignUp && password && (
-                <p className="text-xs text-[#8C9BAE] pl-1 -mt-2">
+                <p className="text-xs text-[#94A3B8] pl-1 -mt-2">
                   Password strength: <span className="font-bold text-white">{passwordStrength}</span>
                 </p>
               )}
@@ -257,11 +257,11 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
             </form>
 
             <div className="flex items-center my-5">
-              <div className="flex-grow h-px bg-[#434D62]" />
-              <span className="text-[9px] text-[#8C9BAE] uppercase tracking-wider font-semibold px-3">
+              <div className="flex-grow h-px bg-[#3B465B]" />
+              <span className="text-[9px] text-[#94A3B8] uppercase tracking-wider font-semibold px-3">
                 or continue with
               </span>
-              <div className="flex-grow h-px bg-[#434D62]" />
+              <div className="flex-grow h-px bg-[#3B465B]" />
             </div>
 
             <SocialLogin disabled={isLoading} onError={setSubmitError} />
@@ -277,3 +277,4 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
     </AuthShell>
   )
 }
+
