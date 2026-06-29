@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
 import type { Reminder } from '../types/reminders.types';
+import { getLocationLabel } from '../utils/locationLabel';
 
 type Props = {
   reminder: Reminder;
@@ -49,7 +50,7 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
           {reminder.location && (
             <Detail
               label={t('reminders.detailLocation')}
-              value={`${reminder.location.triggerType} ${reminder.location.name}, ${reminder.location.radiusMeters}m`}
+              value={`${reminder.location.triggerType} ${getLocationLabel(reminder.location)}, ${reminder.location.radiusMeters}m`}
               theme={theme}
             />
           )}

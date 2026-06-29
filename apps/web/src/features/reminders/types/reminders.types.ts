@@ -6,6 +6,21 @@ export type ReminderPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export type TriggerType = 'arrive' | 'leave'
 
+export type LocationMode = 'specific' | 'category'
+
+export type PlaceCategory =
+  | 'pharmacy'
+  | 'supermarket'
+  | 'hospital'
+  | 'gym'
+  | 'gas_station'
+  | 'restaurant'
+  | 'cafe'
+  | 'university'
+  | 'school'
+  | 'bank'
+  | 'atm'
+
 export type RepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly'
 
 export type ChecklistItem = {
@@ -32,7 +47,12 @@ export type Reminder = {
   reminderBeforeMinutes?: number
   repeatRule?: RepeatRule
   location?: {
-    name: string
+    mode: LocationMode
+    placeName?: string
+    address?: string
+    latitude?: number
+    longitude?: number
+    category?: PlaceCategory
     radiusMeters: number
     triggerType: TriggerType
   }

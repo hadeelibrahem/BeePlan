@@ -1,9 +1,31 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { NotificationPermissionDeniedError, scheduleReminderNotification } from '../../../lib/notifications';
 import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
 import { createReminder } from '../api/reminders.api';
 import { ReminderForm } from '../components/ReminderForm';
 import type { Reminder } from '../types/reminders.types';
+
+async function scheduleTimeReminderNotification(reminder: Reminder) {
+  if (reminder.type !== 'time' || !reminder.remindAt) return;
+
+  try {
+    await scheduleReminderNotification({
+      title: reminder.title,
+      body: reminder.description,
+      triggerDateTime: reminder.remindAt,
+      priority: reminder.priority,
+    });
+  } catch (error) {
+    if (error instanceof NotificationPermissionDeniedError) {
+      console.warn('[CreateReminderScreen] notification permission denied:', error.message);
+      Alert.alert('Notifications disabled', error.message);
+      return;
+    }
+
+    console.error('[CreateReminderScreen] failed to schedule notification:', error);
+  }
+}
 
 type Props = {
   onCancel: () => void;
@@ -39,6 +61,7 @@ export function CreateReminderScreen({ onCancel, onCreated }: Props) {
         submitLabel={t('reminders.saveReminder')}
         onSubmit={async (values) => {
           const reminder = await createReminder(values);
+          await scheduleTimeReminderNotification(reminder);
           onCreated(reminder);
         }}
       />

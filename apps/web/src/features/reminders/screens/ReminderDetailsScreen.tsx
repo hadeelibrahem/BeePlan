@@ -1,5 +1,6 @@
 import { useLanguage } from '../../../i18n/LanguageContext'
 import type { Reminder } from '../types/reminders.types'
+import { getLocationLabel } from '../utils/locationLabel'
 
 type Props = {
   reminder: Reminder
@@ -40,7 +41,10 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
             <Detail label={t('reminders.detailPriority')} value={reminder.priority} />
             {reminder.remindAt && <Detail label={t('reminders.detailWhen')} value={reminder.remindAt} />}
             {reminder.location && (
-              <Detail label={t('reminders.detailLocation')} value={`${reminder.location.triggerType} ${reminder.location.name}, ${reminder.location.radiusMeters}m`} />
+              <Detail
+                label={t('reminders.detailLocation')}
+                value={`${reminder.location.triggerType} ${getLocationLabel(reminder.location)}, ${reminder.location.radiusMeters}m`}
+              />
             )}
             {reminder.context && <Detail label={t('reminders.detailCondition')} value={reminder.context.condition} />}
           </div>

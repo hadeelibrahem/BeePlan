@@ -1,5 +1,6 @@
 import { useLanguage } from '../../../i18n/LanguageContext'
 import type { Reminder } from '../types/reminders.types'
+import { getLocationLabel } from '../utils/locationLabel'
 
 const TYPE_META = {
   time: { icon: 'T', color: 'text-[var(--bp-accent)]', bg: 'bg-[var(--bp-accent-soft)]', label: 'Time' },
@@ -112,7 +113,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
 function getSubtitle(reminder: Reminder) {
   if (reminder.type === 'time' && reminder.remindAt) return reminder.remindAt
   if (reminder.type === 'location' && reminder.location) {
-    return `${reminder.location.triggerType === 'arrive' ? 'Arriving at' : 'Leaving'} ${reminder.location.name}`
+    return `${reminder.location.triggerType === 'arrive' ? 'Arriving at' : 'Leaving'} ${getLocationLabel(reminder.location)}`
   }
   if (reminder.type === 'checklist' && reminder.checklistItems) {
     const done = reminder.checklistItems.filter((item) => item.isDone).length

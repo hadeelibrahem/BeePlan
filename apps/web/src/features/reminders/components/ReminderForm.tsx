@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import type {
   ChecklistItem,
@@ -7,10 +7,10 @@ import type {
   ReminderPriority,
   ReminderType,
   RepeatRule,
-  TriggerType,
 } from '../types/reminders.types'
 import { ChecklistInput } from './ChecklistInput'
 import { DateTimeSection } from './DateTimeSection'
+import { LocationReminderFields } from './LocationReminderFields'
 import { PrioritySelector } from './PrioritySelector'
 import { ReminderTypeSelector } from './ReminderTypeSelector'
 
@@ -24,7 +24,7 @@ const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
   remindAt: reminder?.remindAt ?? '',
   reminderBeforeMinutes: reminder?.reminderBeforeMinutes ?? 30,
   repeatRule: reminder?.repeatRule ?? defaultRepeatRule,
-  location: reminder?.location ?? { name: '', radiusMeters: 100, triggerType: 'arrive' },
+  location: reminder?.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' },
   context: reminder?.context ?? { condition: '', detail: '' },
   checklistItems: reminder?.checklistItems ?? [{ id: 'item-1', title: '', isDone: false }],
 })
@@ -32,17 +32,36 @@ const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
 type Props = {
   initialReminder?: Reminder
   submitLabel: string
-  onSubmit: (values: ReminderFormValues) => void
+  onSubmit: (values: ReminderFormValues) => Promise<void> | void
 }
 
 export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) {
   const [values, setValues] = useState<ReminderFormValues>(() => createInitialValues(initialReminder))
   const { t } = useLanguage()
+  const submitInFlightRef = useRef(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   const isValid = useMemo(() => {
     if (!values.title.trim()) return false
+    if (!values.type) return false
+    if (!values.priority) return false
+    if ((values.reminderBeforeMinutes ?? 0) < 0) return false
     if (values.type === 'time') return Boolean(values.remindAt?.trim())
-    if (values.type === 'location') return Boolean(values.location?.name.trim())
+    if (values.type === 'location') {
+      const location = values.location
+      if (!location) return false
+      if (!location.triggerType) return false
+      if (!(location.radiusMeters > 0)) return false
+      if (location.mode === 'specific') {
+        return Boolean(location.placeName?.trim() && location.latitude !== undefined && location.longitude !== undefined)
+      }
+      if (location.mode === 'category') {
+        return Boolean(location.category)
+      }
+      return false
+    }
     if (values.type === 'context') return Boolean(values.context?.condition.trim())
     if (values.type === 'checklist') return Boolean(values.checklistItems?.some((item) => item.title.trim()))
     return true
@@ -53,18 +72,32 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
   const setRepeatRule = (repeatRule: RepeatRule) => setValues((current) => ({ ...current, repeatRule }))
   const setChecklistItems = (checklistItems: ChecklistItem[]) =>
     setValues((current) => ({ ...current, checklistItems }))
-  const setTriggerType = (triggerType: TriggerType) =>
-    setValues((current) => ({
-      ...current,
-      location: { ...(current.location ?? { name: '', radiusMeters: 100 }), triggerType },
-    }))
+  const setLocation = (location: NonNullable<ReminderFormValues['location']>) =>
+    setValues((current) => ({ ...current, location }))
 
-  const submit = () => {
-    if (!isValid) return
-    onSubmit({
-      ...values,
-      checklistItems: values.checklistItems?.filter((item) => item.title.trim()),
-    })
+  const submit = async () => {
+    if (!isValid || submitInFlightRef.current) return
+
+    submitInFlightRef.current = true
+    setIsSubmitting(true)
+    setSubmitError('')
+    setSuccessMessage('')
+
+    try {
+      await onSubmit({
+        ...values,
+        checklistItems: values.checklistItems?.filter((item) => item.title.trim()),
+      })
+      setSuccessMessage(t('reminders.saveSuccess'))
+      if (!initialReminder) {
+        setValues(createInitialValues())
+      }
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Something went wrong. Please try again.')
+    } finally {
+      submitInFlightRef.current = false
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -72,7 +105,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
       className="grid gap-6"
       onSubmit={(event) => {
         event.preventDefault()
-        submit()
+        void submit()
       }}
     >
       <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)] focus-within:shadow-[0_0_24px_rgba(253,239,75,0.08)]">
@@ -112,66 +145,10 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
         )}
 
         {values.type === 'location' && (
-          <section className="grid gap-4">
-            <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)]">
-              <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
-                {t('reminders.locationName')}
-              </span>
-              <input
-                value={values.location?.name ?? ''}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    location: {
-                      ...(current.location ?? { radiusMeters: 100, triggerType: 'arrive' }),
-                      name: event.target.value,
-                    },
-                  }))
-                }
-                placeholder={t('reminders.locationPlaceholder')}
-                className="w-full bg-transparent py-2 text-base font-semibold text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)]"
-              />
-            </label>
-            <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)]">
-              <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
-                {t('reminders.radiusMeters')}
-              </span>
-              <input
-                type="number"
-                value={values.location?.radiusMeters ?? 100}
-                onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    location: {
-                      ...(current.location ?? { name: '', triggerType: 'arrive' }),
-                      radiusMeters: Number(event.target.value) || 100,
-                    },
-                  }))
-                }
-                className="w-full bg-transparent py-2 text-base font-semibold text-[var(--bp-text)] outline-none"
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {(['arrive', 'leave'] as TriggerType[]).map((triggerType) => {
-                const selected = values.location?.triggerType === triggerType
-                return (
-                  <button
-                    key={triggerType}
-                    type="button"
-                    onClick={() => setTriggerType(triggerType)}
-                    aria-pressed={selected}
-                    className={`rounded-full border px-4 py-3 text-xs font-black capitalize transition ${
-                      selected
-                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
-                        : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]'
-                    }`}
-                  >
-                    {t(`reminders.${triggerType}`)}
-                  </button>
-                )
-              })}
-            </div>
-          </section>
+          <LocationReminderFields
+            value={values.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' }}
+            onChange={setLocation}
+          />
         )}
 
         {values.type === 'context' && (
@@ -216,12 +193,15 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
       <PrioritySelector value={values.priority} onChange={setPriority} />
 
+      {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
+      {successMessage && <p className="text-emerald-400 text-xs pl-1">{successMessage}</p>}
+
       <button
         type="submit"
-        disabled={!isValid}
+        disabled={!isValid || isSubmitting}
         className="sticky bottom-4 rounded-2xl border border-[var(--bp-accent)] bg-[var(--bp-accent)] py-4 text-base font-black text-[var(--bp-accent-text)] shadow-[0_16px_40px_var(--bp-shadow)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--bp-border)] disabled:bg-[var(--bp-disabled)] disabled:text-[var(--bp-disabled-text)]"
       >
-        {submitLabel}
+        {isSubmitting ? t('reminders.saving') : submitLabel}
       </button>
     </form>
   )

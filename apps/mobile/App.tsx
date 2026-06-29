@@ -3,7 +3,7 @@ import './global.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, View } from 'react-native';
 import {
   CreateReminderScreen,
   EditReminderScreen,
@@ -65,15 +65,32 @@ function ThemedApp() {
 
   useEffect(() => {
     if (!user) return;
-    fetchReminders().then(setReminders);
+
+    console.log('[App] reminders screen mounted for user — calling GET /reminders');
+    fetchReminders()
+      .then((fetched) => {
+        console.log('[App] fetchReminders resolved with', fetched.length, 'reminder(s)');
+        setReminders(fetched);
+      })
+      .catch((error: unknown) => {
+        console.error('[App] fetchReminders failed:', error);
+        const message = error instanceof Error ? error.message : 'Could not load reminders.';
+        Alert.alert('Failed to load reminders', message);
+      });
   }, [user]);
 
   const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null;
 
   async function handleToggle(id: string) {
-    const updated = await toggleReminderStatus(id);
-    if (!updated) return;
-    setReminders((current) => current.map((reminder) => (reminder.id === id ? updated : reminder)));
+    try {
+      const updated = await toggleReminderStatus(id);
+      if (!updated) return;
+      setReminders((current) => current.map((reminder) => (reminder.id === id ? updated : reminder)));
+    } catch (error) {
+      console.error('[App] toggleReminderStatus failed:', error);
+      const message = error instanceof Error ? error.message : 'Could not update reminder.';
+      Alert.alert('Failed to update reminder', message);
+    }
   }
 
   async function handleSignOut() {

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
 import type { Reminder } from '../types/reminders.types';
+import { getLocationLabel } from '../utils/locationLabel';
 
 const TYPE_META = {
   time: { icon: 'T' },
@@ -193,7 +194,7 @@ function createStyles(theme: AppTheme, type: Reminder['type']) {
 function getSubtitle(reminder: Reminder) {
   if (reminder.type === 'time' && reminder.remindAt) return reminder.remindAt;
   if (reminder.type === 'location' && reminder.location) {
-    return `${reminder.location.triggerType === 'arrive' ? 'Arriving at' : 'Leaving'} ${reminder.location.name}`;
+    return `${reminder.location.triggerType === 'arrive' ? 'Arriving at' : 'Leaving'} ${getLocationLabel(reminder.location)}`;
   }
   if (reminder.type === 'checklist' && reminder.checklistItems) {
     const done = reminder.checklistItems.filter((item) => item.isDone).length;
