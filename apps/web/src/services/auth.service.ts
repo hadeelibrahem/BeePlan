@@ -9,6 +9,10 @@ export type SocialAuthResult = {
   cancelled: boolean;
 };
 
+type GoogleApprovalStatus =
+  | { status: 'pending' | 'denied' | 'expired' | 'used' }
+  | ({ status: 'approved' } & AuthResponse);
+
 function getRedirectPath() {
   const currentPath = `${window.location.pathname}${window.location.search}`;
   const redirectPath = currentPath.startsWith('/sign-in') ? '/' : currentPath;
@@ -78,6 +82,20 @@ function parseOAuthSession(): AuthResponse | null {
   }
 }
 
+function parseOAuthMessage() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+
+  return queryParams.get('message') ?? hashParams.get('message') ?? '';
+}
+
+function parseApprovalToken() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+
+  return queryParams.get('approval_token') ?? hashParams.get('approval_token') ?? '';
+}
+
 export const authService = {
   async signInWithSocial(provider: SocialAuthProvider): Promise<SocialAuthResult> {
     if (provider === 'apple') {
@@ -97,6 +115,29 @@ export const authService = {
 
   async getSocialSession(): Promise<AuthResponse | null> {
     return parseOAuthSession();
+  },
+
+  getSocialMessage() {
+    return parseOAuthMessage();
+  },
+
+  getApprovalToken() {
+    return parseApprovalToken();
+  },
+
+  async getGoogleApprovalStatus(token: string): Promise<GoogleApprovalStatus> {
+    const response = await fetch(`${apiUrl}/auth/google/approval/status?${new URLSearchParams({ token })}`);
+    const data = (await response.json().catch(() => null)) as GoogleApprovalStatus | { message?: string } | null;
+
+    if (!response.ok) {
+      throw new Error((data && 'message' in data && data.message) || 'Unable to check login approval.');
+    }
+
+    if (!data || !('status' in data)) {
+      throw new Error('Unable to check login approval.');
+    }
+
+    return data;
   },
 
   clearSocialSessionFromUrl(path?: string) {

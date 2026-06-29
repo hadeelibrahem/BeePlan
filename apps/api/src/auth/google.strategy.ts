@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, type Profile, type VerifyCallback } from 'passport-google-oauth20';
+import {
+  Strategy,
+  type Profile,
+  type VerifyCallback,
+} from 'passport-google-oauth20';
 import { AuthService } from './auth.service';
+import {
+  getGoogleClientId,
+  getGoogleClientSecret,
+} from './google-oauth.config';
 
 type GoogleProfile = Profile & {
   _json?: {
@@ -16,19 +24,16 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     private readonly authService: AuthService,
     configService: ConfigService,
   ) {
-    const clientID = configService.get<string>('GOOGLE_CLIENT_ID');
-    const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
+    const clientID = getGoogleClientId(configService);
+    const clientSecret = getGoogleClientSecret(configService);
     const callbackURL =
       configService.get<string>('GOOGLE_CALLBACK_URL') ??
       configService.get<string>('GOOGLE_REDIRECT_URI') ??
       `${configService.get<string>('API_PUBLIC_URL') ?? 'http://127.0.0.1:3000'}/auth/google/callback`;
 
     super({
-      clientID: clientID && clientID !== 'YOUR_GOOGLE_CLIENT_ID' ? clientID : 'google-client-id-not-configured',
-      clientSecret:
-        clientSecret && clientSecret !== 'YOUR_GOOGLE_CLIENT_SECRET'
-          ? clientSecret
-          : 'google-client-secret-not-configured',
+      clientID: clientID ?? 'google-client-id-not-configured',
+      clientSecret: clientSecret ?? 'google-client-secret-not-configured',
       callbackURL,
       scope: ['email', 'profile'],
     });

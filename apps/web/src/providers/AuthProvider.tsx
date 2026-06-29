@@ -29,6 +29,7 @@ type AuthContextValue = {
   accessToken: string | null;
   loading: boolean;
   oauthError: string;
+  oauthMessage: string;
   clearOAuthError: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (payload: { fullName: string; email: string; password: string }) => Promise<boolean>;
@@ -44,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [oauthError, setOauthError] = useState('');
+  const [oauthMessage, setOauthMessage] = useState('');
+  const [pendingApprovalToken, setPendingApprovalToken] = useState('');
   const [verifiedReset, setVerifiedReset] = useState<{ email: string; code: string } | null>(null);
 
   const saveSession = useCallback((nextSession: AuthSession) => {
@@ -66,15 +69,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authService
       .getSocialSession()
       .then((socialSession) => {
-        if (!active || !socialSession) return;
+        if (!active) return;
+
+        const socialMessage = authService.getSocialMessage();
+        const approvalToken = authService.getApprovalToken();
+
+        if (socialMessage) {
+          setOauthMessage(socialMessage);
+          setOauthError('');
+          setPendingApprovalToken(approvalToken);
+          authService.clearSocialSessionFromUrl('/sign-in');
+          return;
+        }
+
+        if (!socialSession) return;
+
         saveSession(socialSession);
         setOauthError('');
+        setOauthMessage('');
         authService.clearSocialSessionFromUrl();
       })
       .catch((error) => {
         if (active) {
           const message = error instanceof Error ? error.message : 'Google sign-in failed. Please try again.';
           setOauthError(message);
+          setOauthMessage('');
           authService.clearSocialSessionFromUrl('/sign-in');
         }
         // Social auth is optional for local development and should never block email login.
@@ -88,9 +107,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [saveSession]);
 
+  useEffect(() => {
+    if (!pendingApprovalToken || session) return;
+
+    let active = true;
+    let timeoutId: number | undefined;
+
+    const pollApproval = async () => {
+      try {
+        const result = await authService.getGoogleApprovalStatus(pendingApprovalToken);
+
+        if (!active) return;
+
+        if (result.status === 'approved') {
+          saveSession({
+            accessToken: result.accessToken,
+            user: result.user,
+          });
+          setOauthError('');
+          setOauthMessage('');
+          setPendingApprovalToken('');
+          authService.clearSocialSessionFromUrl();
+          return;
+        }
+
+        if (result.status === 'denied') {
+          setOauthError('The login request was denied.');
+          setOauthMessage('');
+          setPendingApprovalToken('');
+          return;
+        }
+
+        if (result.status === 'expired') {
+          setOauthError('The login approval link has expired. Please try again.');
+          setOauthMessage('');
+          setPendingApprovalToken('');
+          return;
+        }
+
+        timeoutId = window.setTimeout(pollApproval, 2000);
+      } catch (error) {
+        if (!active) return;
+        setOauthError(error instanceof Error ? error.message : 'Unable to check login approval.');
+        setOauthMessage('');
+        setPendingApprovalToken('');
+      }
+    };
+
+    timeoutId = window.setTimeout(pollApproval, 1000);
+
+    return () => {
+      active = false;
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [pendingApprovalToken, saveSession, session]);
+
   const signIn = useCallback(
     async (email: string, password: string) => {
       setOauthError('');
+      setOauthMessage('');
+      setPendingApprovalToken('');
       const authResponse = await login({
         email: email.trim().toLowerCase(),
         password,
@@ -104,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(
     async ({ fullName, email, password }: { fullName: string; email: string; password: string }) => {
       setOauthError('');
+      setOauthMessage('');
+      setPendingApprovalToken('');
       const authResponse = await register({
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
@@ -146,11 +224,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     await authService.signOutSocial();
     setOauthError('');
+    setOauthMessage('');
+    setPendingApprovalToken('');
     setSession(null);
   }, []);
 
   const clearOAuthError = useCallback(() => {
     setOauthError('');
+    setOauthMessage('');
+    setPendingApprovalToken('');
   }, []);
 
   const value = useMemo(
@@ -160,6 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken: session?.accessToken ?? null,
       loading,
       oauthError,
+      oauthMessage,
       clearOAuthError,
       signIn,
       signUp,
@@ -172,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearOAuthError,
       loading,
       oauthError,
+      oauthMessage,
       session,
       sendPasswordReset,
       signIn,

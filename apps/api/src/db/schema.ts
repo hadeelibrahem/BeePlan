@@ -22,7 +22,9 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   avatarUrl: text('avatar_url'),
-  authProvider: varchar('auth_provider', { length: 40 }).notNull().default('password'),
+  authProvider: varchar('auth_provider', { length: 40 })
+    .notNull()
+    .default('password'),
   googleId: varchar('google_id', { length: 255 }).unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
   timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
@@ -38,6 +40,23 @@ export const passwordResetCodes = pgTable('password_reset_codes', {
   codeHash: text('code_hash').notNull(),
   expiresAt: timestamp('expires_at').notNull(),
   usedAt: timestamp('used_at'),
+  createdAt: createdAt(),
+});
+
+export const googleLoginApprovals = pgTable('google_login_approvals', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  pollTokenHash: text('poll_token_hash').notNull().unique(),
+  googleId: varchar('google_id', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
+  fullName: varchar('full_name', { length: 255 }).notNull(),
+  avatarUrl: text('avatar_url'),
+  emailVerified: boolean('email_verified').notNull().default(true),
+  oauthState: text('oauth_state'),
+  decision: varchar('decision', { length: 20 }).notNull().default('pending'),
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'),
+  sessionClaimedAt: timestamp('session_claimed_at'),
   createdAt: createdAt(),
 });
 
