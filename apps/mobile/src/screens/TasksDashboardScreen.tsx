@@ -1,4 +1,12 @@
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
+import {
+  BottomNavBar,
+  FloatingActionButton,
+  ScreenLayout,
+  SectionCard,
+  StatsCard,
+} from '../components/layout'
+import { useTheme } from '../theme/useTheme'
 
 type Props = {
   onSignOut: () => void
@@ -13,116 +21,70 @@ export default function TasksDashboardScreen({
   onViewReminders,
   onCreateTask,
 }: Props) {
+  const { theme } = useTheme()
+  const { colors } = theme
+
   return (
-    <View className="flex-1 bg-[#1f2937]">
-      <ScrollView className="flex-1 px-5 pt-12" contentContainerStyle={{ paddingBottom: 120 }}>
-        <View className="mb-6 flex-row items-center justify-between">
-          <View className="flex-row items-center gap-3">
-            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-yellow-400">
-              <Text className="text-2xl">🐝</Text>
-            </View>
-
-            <View>
-              <Text className="text-2xl font-black text-white">BeePlan</Text>
-              <Text className="text-sm text-slate-400">Good morning, Fatima 👋</Text>
-            </View>
-          </View>
-
-          <View className="flex-row gap-2">
-            <TouchableOpacity className="rounded-2xl bg-white/10 px-4 py-3">
-              <Text className="text-white">☀️</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={onSignOut} className="rounded-2xl bg-yellow-400 px-4 py-3">
-              <Text className="font-bold text-black">Sign out</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View className="mb-5 rounded-2xl bg-white/10 px-5 py-4">
-          <Text className="text-slate-400">🔍 Search tasks...</Text>
-        </View>
-
-        <View className="mb-5 flex-row flex-wrap justify-between gap-y-4">
-          <StatCard icon="📅" value="8" title="Today's Tasks" />
-          <StatCard icon="✅" value="24" title="Completed" />
-          <StatCard icon="🚩" value="3" title="High Priority" />
-          <StatCard icon="⏰" value="2" title="Overdue" />
-        </View>
-
-        <View className="mb-5 rounded-3xl bg-white/10 p-5">
-          <View className="mb-4 flex-row items-center justify-between">
-            <View>
-              <Text className="text-lg font-bold text-white">Overall Progress</Text>
-              <Text className="text-sm text-slate-400">You're doing great! Keep it up.</Text>
-            </View>
-
-            <View className="h-16 w-16 items-center justify-center rounded-full border-4 border-yellow-400">
-              <Text className="font-black text-yellow-400">64%</Text>
-            </View>
-          </View>
-
-          <View className="h-3 rounded-full bg-slate-700">
-            <View className="h-3 w-[64%] rounded-full bg-yellow-400" />
-          </View>
-
-          <View className="mt-3 flex-row justify-between">
-            <Text className="text-sm text-slate-400">24 completed</Text>
-            <Text className="text-sm text-slate-400">32 total tasks</Text>
-          </View>
-        </View>
-
-        <View className="mb-5 rounded-3xl bg-white/10 p-5">
-          <View className="mb-5 flex-row justify-between">
-            <Text className="font-bold text-white">Today's Focus</Text>
-            <TouchableOpacity onPress={onViewTasks}>
-              <Text className="font-bold text-yellow-400">View All ›</Text>
-            </TouchableOpacity>
-          </View>
-
-          <FocusTask title="Finalize Q3 marketing strategy" time="10:00 AM" color="bg-red-400" />
-          <FocusTask title="Review design mockups for mobile app" time="1:30 PM" color="bg-orange-400" />
-          <FocusTask title="Team sync — weekly standup" time="9:00 AM" color="bg-yellow-400" done />
-          <FocusTask title="Update project documentation" time="4:00 PM" color="bg-slate-400" />
-        </View>
-
-        <View className="rounded-3xl bg-white/10 p-5">
-          <Text className="mb-4 font-bold text-white">Quick Actions</Text>
-
-          <View className="gap-3">
-            <ActionCard icon="➕" title="New Task" desc="Create a new task" onPress={onCreateTask} />
-            <ActionCard icon="🔔" title="New Reminder" desc="Add a reminder" onPress={onViewReminders} />
-            <ActionCard icon="📅" title="View Calendar" desc="See your schedule" />
-            <ActionCard icon="📂" title="All Tasks" desc="View all tasks" onPress={onViewTasks} />
-          </View>
-        </View>
-      </ScrollView>
-
-      <TouchableOpacity
-        onPress={onCreateTask}
-        className="absolute bottom-24 right-6 h-16 w-16 items-center justify-center rounded-3xl bg-yellow-400 shadow-xl"
-      >
-        <Text className="text-3xl font-bold text-black">+</Text>
-      </TouchableOpacity>
-
-      <View className="absolute bottom-4 left-5 right-5 flex-row items-center justify-around rounded-3xl bg-[#111827] py-4">
-        <NavItem active icon="▦" label="Dashboard" />
-        <NavItem icon="☑" label="Tasks" onPress={onViewTasks} />
-        <NavItem icon="🔔" label="Reminders" onPress={onViewReminders} />
-        <NavItem icon="📅" label="Calendar" />
-        <NavItem icon="👤" label="Profile" />
+    <ScreenLayout
+      headerSubtitle="Good morning, Fatima 👋"
+      onProfilePress={onSignOut}
+      fab={<FloatingActionButton onPress={onCreateTask} aboveNavBar />}
+      footer={<BottomNavBar active="dashboard" onNavigateTasks={onViewTasks} onNavigateReminders={onViewReminders} />}
+    >
+      <View className="mb-5 flex-row flex-wrap justify-between gap-y-4">
+        <StatsCard icon="📅" value="8" title="Today's Tasks" />
+        <StatsCard icon="✅" value="24" title="Completed" />
+        <StatsCard icon="🚩" value="3" title="High Priority" />
+        <StatsCard icon="⏰" value="2" title="Overdue" />
       </View>
-    </View>
-  )
-}
 
-function StatCard({ icon, value, title }: { icon: string; value: string; title: string }) {
-  return (
-    <View className="w-[48%] rounded-3xl bg-white/10 p-5">
-      <Text className="mb-4 text-2xl">{icon}</Text>
-      <Text className="text-3xl font-black text-white">{value}</Text>
-      <Text className="mt-2 font-bold text-white">{title}</Text>
-    </View>
+      <SectionCard className="mb-5">
+        <View className="mb-4 flex-row items-center justify-between">
+          <View>
+            <Text className="text-lg font-bold" style={{ color: colors.text }}>Overall Progress</Text>
+            <Text className="text-sm" style={{ color: colors.secondaryText }}>You're doing great! Keep it up.</Text>
+          </View>
+
+          <View className="h-16 w-16 items-center justify-center rounded-full border-4" style={{ borderColor: colors.accent }}>
+            <Text className="font-black" style={{ color: colors.accent }}>64%</Text>
+          </View>
+        </View>
+
+        <View className="h-3 rounded-full" style={{ backgroundColor: colors.progressTrack }}>
+          <View className="h-3 w-[64%] rounded-full" style={{ backgroundColor: colors.accent }} />
+        </View>
+
+        <View className="mt-3 flex-row justify-between">
+          <Text className="text-sm" style={{ color: colors.secondaryText }}>24 completed</Text>
+          <Text className="text-sm" style={{ color: colors.secondaryText }}>32 total tasks</Text>
+        </View>
+      </SectionCard>
+
+      <SectionCard className="mb-5">
+        <View className="mb-5 flex-row justify-between">
+          <Text className="font-bold" style={{ color: colors.text }}>Today's Focus</Text>
+          <Pressable onPress={onViewTasks} accessibilityRole="button" accessibilityLabel="View all tasks">
+            <Text className="font-bold" style={{ color: colors.accent }}>View All ›</Text>
+          </Pressable>
+        </View>
+
+        <FocusTask title="Finalize Q3 marketing strategy" time="10:00 AM" color={colors.error} />
+        <FocusTask title="Review design mockups for mobile app" time="1:30 PM" color={colors.warning} />
+        <FocusTask title="Team sync — weekly standup" time="9:00 AM" color={colors.accent} done />
+        <FocusTask title="Update project documentation" time="4:00 PM" color={colors.secondaryText} />
+      </SectionCard>
+
+      <SectionCard>
+        <Text className="mb-4 font-bold" style={{ color: colors.text }}>Quick Actions</Text>
+
+        <View className="gap-3">
+          <ActionCard icon="➕" title="New Task" desc="Create a new task" onPress={onCreateTask} />
+          <ActionCard icon="🔔" title="New Reminder" desc="Add a reminder" onPress={onViewReminders} />
+          <ActionCard icon="📅" title="View Calendar" desc="See your schedule" />
+          <ActionCard icon="📂" title="All Tasks" desc="View all tasks" onPress={onViewTasks} />
+        </View>
+      </SectionCard>
+    </ScreenLayout>
   )
 }
 
@@ -137,14 +99,25 @@ function FocusTask({
   color: string
   done?: boolean
 }) {
+  const { theme } = useTheme()
+  const { colors } = theme
+
   return (
     <View className="mb-4 flex-row items-center gap-4">
-      <View className={`h-5 w-5 rounded-full border ${done ? 'border-yellow-400 bg-yellow-400' : 'border-slate-500'}`} />
+      <View
+        className="h-5 w-5 rounded-full border"
+        style={{ borderColor: done ? colors.accent : colors.border, backgroundColor: done ? colors.accent : 'transparent' }}
+      />
       <View className="flex-1">
-        <Text className={`font-semibold ${done ? 'text-slate-500 line-through' : 'text-white'}`}>{title}</Text>
-        <Text className="text-sm text-slate-400">{time}</Text>
+        <Text
+          className={`font-semibold ${done ? 'line-through' : ''}`}
+          style={{ color: done ? colors.secondaryText : colors.text }}
+        >
+          {title}
+        </Text>
+        <Text className="text-sm" style={{ color: colors.secondaryText }}>{time}</Text>
       </View>
-      <View className={`h-2 w-2 rounded-full ${color}`} />
+      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
     </View>
   )
 }
@@ -160,30 +133,22 @@ function ActionCard({
   desc: string
   onPress?: () => void
 }) {
-  return (
-    <TouchableOpacity onPress={onPress} className="rounded-2xl bg-white/10 p-4">
-      <Text className="mb-2 text-2xl">{icon}</Text>
-      <Text className="font-bold text-white">{title}</Text>
-      <Text className="text-sm text-slate-400">{desc}</Text>
-    </TouchableOpacity>
-  )
-}
+  const { theme } = useTheme()
+  const { colors } = theme
 
-function NavItem({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: string
-  label: string
-  active?: boolean
-  onPress?: () => void
-}) {
   return (
-    <TouchableOpacity onPress={onPress} className="items-center">
-      <Text className="text-xl">{icon}</Text>
-      <Text className={`text-xs font-bold ${active ? 'text-yellow-400' : 'text-slate-400'}`}>{label}</Text>
-    </TouchableOpacity>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      className="rounded-2xl border p-4 active:opacity-80"
+      style={{ borderColor: colors.border, backgroundColor: colors.surfaceElevated }}
+    >
+      <View className="mb-2 h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: colors.accentSoft }}>
+        <Text className="text-base">{icon}</Text>
+      </View>
+      <Text className="font-bold" style={{ color: colors.text }}>{title}</Text>
+      <Text className="text-sm" style={{ color: colors.secondaryText }}>{desc}</Text>
+    </Pressable>
   )
 }

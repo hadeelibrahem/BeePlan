@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
+import { useTheme } from '../../../theme/useTheme';
 import type { ReminderType } from '../types/reminders.types';
 
 const TYPES: Array<{ value: ReminderType; labelKey: string; hintKey: string }> = [
@@ -16,16 +16,16 @@ type Props = {
 };
 
 export function ReminderTypeSelector({ value, onChange }: Props) {
-  const { theme } = useTheme();
   const { t } = useLanguage();
-  const styles = createStyles(theme);
+  const { theme } = useTheme();
+  const { colors } = theme;
 
   return (
     <View className="gap-3">
-      <Text className="text-xs font-black uppercase tracking-widest" style={styles.label}>
+      <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
         {t('reminders.reminderType')}
       </Text>
-      <View className="flex-row flex-wrap gap-2 rounded-2xl border p-1.5" style={styles.container}>
+      <View className="flex-row flex-wrap gap-2 rounded-2xl border p-1.5" style={{ borderColor: colors.border, backgroundColor: colors.input }}>
         {TYPES.map((type) => {
           const selected = value === type.value;
           return (
@@ -34,17 +34,14 @@ export function ReminderTypeSelector({ value, onChange }: Props) {
               onPress={() => onChange(type.value)}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              className="w-[48%] rounded-xl border px-3 py-3"
-              style={selected ? styles.selectedOption : styles.option}
+              className="w-[48%] rounded-xl border px-3 py-3 active:opacity-80"
+              style={{ borderColor: selected ? colors.accent : 'transparent', backgroundColor: selected ? colors.accentSoft : 'transparent' }}
             >
               <View className="flex-row items-start justify-between gap-2">
-                <Text className="flex-1 text-sm font-black" style={styles.text}>{t(type.labelKey)}</Text>
-                {selected && <View className="mt-1 h-2 w-2 rounded-full" style={styles.dot} />}
+                <Text className="flex-1 text-sm font-black" style={{ color: colors.text }}>{t(type.labelKey)}</Text>
+                {selected && <View className="mt-1 h-2 w-2 rounded-full" style={{ backgroundColor: colors.accent }} />}
               </View>
-              <Text
-                className="mt-1 text-xs font-semibold"
-                style={selected ? styles.selectedHint : styles.hint}
-              >
+              <Text className="mt-1 text-xs font-semibold" style={{ color: selected ? colors.accent : colors.secondaryText }}>
                 {t(type.hintKey)}
               </Text>
             </Pressable>
@@ -53,36 +50,4 @@ export function ReminderTypeSelector({ value, onChange }: Props) {
       </View>
     </View>
   );
-}
-
-function createStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    label: {
-      color: theme.colors.textSubtle,
-    },
-    container: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    option: {
-      backgroundColor: 'transparent',
-      borderColor: 'transparent',
-    },
-    selectedOption: {
-      backgroundColor: theme.colors.accentSoft,
-      borderColor: theme.colors.accent,
-    },
-    text: {
-      color: theme.colors.text,
-    },
-    hint: {
-      color: theme.colors.textSubtle,
-    },
-    selectedHint: {
-      color: theme.colors.accent,
-    },
-    dot: {
-      backgroundColor: theme.colors.accent,
-    },
-  });
 }

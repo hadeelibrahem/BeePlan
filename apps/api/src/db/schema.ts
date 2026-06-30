@@ -3,6 +3,7 @@ import {
   date,
   decimal,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -111,51 +112,23 @@ export const subtasks = pgTable('subtasks', {
 
 export const reminders = pgTable('reminders', {
   id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  reminderType: varchar('reminder_type', { length: 30 }).notNull(),
-  remindAt: timestamp('remind_at'),
-  status: varchar('status', { length: 20 }).notNull().default('active'),
+  type: varchar('type', { length: 30 }).notNull().default('time'),
+  triggerDateTime: timestamp('trigger_date_time'),
+  reminderBefore: integer('reminder_before'),
+  repeat: varchar('repeat', { length: 20 }).notNull().default('none'),
+  repeatInterval: integer('repeat_interval'),
+  repeatDaysOfWeek: jsonb('repeat_days_of_week'),
+  repeatEndDate: timestamp('repeat_end_date'),
+  notes: text('notes'),
   priority: varchar('priority', { length: 20 }).notNull().default('medium'),
+  status: varchar('status', { length: 20 }).notNull().default('active'),
+  location: jsonb('location'),
+  context: jsonb('context'),
+  checklistItems: jsonb('checklist_items'),
   createdAt: createdAt(),
-});
-
-export const reminderLocations = pgTable('reminder_locations', {
-  id: id(),
-  reminderId: uuid('reminder_id')
-    .notNull()
-    .unique()
-    .references(() => reminders.id, { onDelete: 'cascade' }),
-  locationName: varchar('location_name', { length: 255 }).notNull(),
-  latitude: decimal('latitude', { precision: 10, scale: 7 }).notNull(),
-  longitude: decimal('longitude', { precision: 10, scale: 7 }).notNull(),
-  radiusMeters: integer('radius_meters').notNull().default(100),
-  triggerType: varchar('trigger_type', { length: 20 }).notNull(),
-});
-
-export const reminderRecurrence = pgTable('reminder_recurrence', {
-  id: id(),
-  reminderId: uuid('reminder_id')
-    .notNull()
-    .unique()
-    .references(() => reminders.id, { onDelete: 'cascade' }),
-  frequency: varchar('frequency', { length: 20 }).notNull(),
-  interval: integer('interval').notNull().default(1),
-  daysOfWeek: text('days_of_week'),
-  endDate: timestamp('end_date'),
-});
-
-export const reminderChecklistItems = pgTable('reminder_checklist_items', {
-  id: id(),
-  reminderId: uuid('reminder_id')
-    .notNull()
-    .references(() => reminders.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  isDone: boolean('is_done').notNull().default(false),
+  updatedAt: updatedAt(),
 });
 
 export const habits = pgTable('habits', {

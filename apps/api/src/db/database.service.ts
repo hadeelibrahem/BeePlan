@@ -21,6 +21,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
   async onModuleInit() {
     await this.ensureUsersAuthColumns();
     await this.ensurePasswordResetCodesTable();
+    await this.ensureRemindersTable();
     await this.ensureGoogleLoginApprovalsTable();
   }
 
@@ -66,6 +67,47 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         used_at timestamp,
         created_at timestamp default now() not null
       )
+    `);
+  }
+
+  private async ensureRemindersTable() {
+    await this.getPool().query(`
+      create table if not exists reminders (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid references users(id) on delete cascade,
+        title varchar(255) not null,
+        type varchar(30) not null default 'time',
+        repeat varchar(20) not null default 'none',
+        priority varchar(20) not null default 'medium',
+        status varchar(20) not null default 'active',
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+
+    // Older deployments may have created `reminders` with a stricter shape
+    // (NOT NULL user_id, no auth-guard wiring exists yet to populate it) and
+    // different column names. These statements bring any existing table up
+    // to the current shape without dropping data.
+    await this.getPool().query(`
+      alter table reminders
+        add column if not exists type varchar(30) default 'time' not null,
+        add column if not exists repeat varchar(20) default 'none' not null,
+        add column if not exists trigger_date_time timestamp,
+        add column if not exists reminder_before integer,
+        add column if not exists repeat_interval integer,
+        add column if not exists repeat_days_of_week jsonb,
+        add column if not exists repeat_end_date timestamp,
+        add column if not exists notes text,
+        add column if not exists location jsonb,
+        add column if not exists context jsonb,
+        add column if not exists checklist_items jsonb,
+        add column if not exists updated_at timestamp default now() not null,
+        alter column user_id drop not null,
+        drop column if exists description,
+        drop column if exists reminder_type,
+        drop column if exists remind_at,
+        drop column if exists task_id
     `);
   }
 

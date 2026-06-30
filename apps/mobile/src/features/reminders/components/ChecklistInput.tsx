@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
+import { useTheme } from '../../../theme/useTheme';
 import type { ChecklistItem } from '../types/reminders.types';
 
 type Props = {
@@ -9,9 +9,9 @@ type Props = {
 };
 
 export function ChecklistInput({ value, onChange }: Props) {
-  const { theme } = useTheme();
   const { formatNumber, t } = useLanguage();
-  const styles = createStyles(theme);
+  const { theme } = useTheme();
+  const { colors } = theme;
 
   const addItem = () => {
     onChange([...value, { id: `item-${Date.now()}`, title: '', isDone: false }]);
@@ -28,67 +28,43 @@ export function ChecklistInput({ value, onChange }: Props) {
   return (
     <View>
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-xs font-black uppercase tracking-widest" style={styles.label}>
+        <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
           {t('reminders.checklist')}
         </Text>
         <Pressable
           onPress={addItem}
           accessibilityRole="button"
-          className="rounded-full border px-4 py-2"
-          style={styles.addButton}
+          className="rounded-full border px-4 py-2 active:opacity-80"
+          style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}
         >
-          <Text className="text-xs font-black" style={styles.accentText}>{t('reminders.addItem')}</Text>
+          <Text className="text-xs font-black" style={{ color: colors.accent }}>{t('reminders.addItem')}</Text>
         </Pressable>
       </View>
       <View className="gap-3">
         {value.map((item, index) => (
           <View key={item.id} className="flex-row items-center gap-2">
-            <View className="h-9 w-9 items-center justify-center rounded-full border" style={styles.indexBubble}>
-              <Text className="text-xs font-black" style={styles.accentText}>{formatNumber(index + 1)}</Text>
+            <View className="h-9 w-9 items-center justify-center rounded-full border" style={{ borderColor: colors.border, backgroundColor: colors.input }}>
+              <Text className="text-xs font-black" style={{ color: colors.accent }}>{formatNumber(index + 1)}</Text>
             </View>
             <TextInput
               placeholder={t('reminders.checklistItem')}
-              placeholderTextColor={theme.colors.textSubtle}
+              placeholderTextColor={colors.placeholder}
               value={item.title}
               onChangeText={(text) => updateItem(item.id, text)}
-              className="flex-1 rounded-2xl border px-4 py-3"
-              style={styles.input}
+              className="flex-1 rounded-2xl border px-4 py-3 text-sm"
+              style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
             />
             <Pressable
               onPress={() => removeItem(item.id)}
               accessibilityRole="button"
               accessibilityLabel={t('reminders.checklistItem')}
-              className="px-2 py-2"
+              className="px-2 py-2 active:opacity-70"
             >
-              <Text className="font-black" style={styles.label}>x</Text>
+              <Text className="font-black" style={{ color: colors.secondaryText }}>x</Text>
             </Pressable>
           </View>
         ))}
       </View>
     </View>
   );
-}
-
-function createStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    label: {
-      color: theme.colors.textSubtle,
-    },
-    accentText: {
-      color: theme.colors.accent,
-    },
-    addButton: {
-      backgroundColor: theme.colors.accentSoft,
-      borderColor: theme.colors.accent,
-    },
-    indexBubble: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    input: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-      color: theme.colors.text,
-    },
-  });
 }

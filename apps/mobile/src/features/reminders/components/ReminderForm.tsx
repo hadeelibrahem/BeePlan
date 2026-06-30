@@ -1,18 +1,21 @@
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Text, View } from 'react-native';
+import { InputField, PrimaryButton } from '../../../components/layout';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
+import { useTheme } from '../../../theme/useTheme';
 import type {
   ChecklistItem,
+  ChecklistReminderTrigger,
   Reminder,
   ReminderFormValues,
   ReminderPriority,
   ReminderType,
   RepeatRule,
-  TriggerType,
 } from '../types/reminders.types';
 import { ChecklistInput } from './ChecklistInput';
+import { ChecklistReminderSection } from './ChecklistReminderSection';
 import { DateTimeSection } from './DateTimeSection';
+import { LocationReminderFields } from './LocationReminderFields';
 import { PrioritySelector } from './PrioritySelector';
 import { ReminderTypeSelector } from './ReminderTypeSelector';
 
@@ -26,30 +29,71 @@ const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
   remindAt: reminder?.remindAt ?? '',
   reminderBeforeMinutes: reminder?.reminderBeforeMinutes ?? 30,
   repeatRule: reminder?.repeatRule ?? defaultRepeatRule,
-  location: reminder?.location ?? { name: '', radiusMeters: 100, triggerType: 'arrive' },
+  location: reminder?.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' },
   context: reminder?.context ?? { condition: '', detail: '' },
   checklistItems: reminder?.checklistItems ?? [{ id: 'item-1', title: '', isDone: false }],
+  checklistReminderTrigger: reminder?.checklistReminderTrigger ?? {
+    time: { type: 'none' },
+    location: { type: 'none' },
+  },
 });
 
 type Props = {
   initialReminder?: Reminder;
   submitLabel: string;
-  onSubmit: (values: ReminderFormValues) => void;
+  onSubmit: (values: ReminderFormValues) => Promise<void> | void;
 };
 
 export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) {
   const [values, setValues] = useState<ReminderFormValues>(() => createInitialValues(initialReminder));
-  const { theme } = useTheme();
   const { t } = useLanguage();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const submitInFlightRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const isValid = useMemo(() => {
     if (!values.title.trim()) return false;
     if (values.type === 'time') return Boolean(values.remindAt?.trim());
-    if (values.type === 'location') return Boolean(values.location?.name.trim());
+    if (values.type === 'location') {
+      const location = values.location;
+      if (!location) return false;
+      if (!location.triggerType) return false;
+      if (!(location.radiusMeters > 0)) return false;
+      if (location.mode === 'specific') {
+        return Boolean(
+          location.placeName?.trim() &&
+            Number.isFinite(location.latitude) &&
+            Number.isFinite(location.longitude),
+        );
+      }
+      if (location.mode === 'category') {
+        return Boolean(location.category);
+      }
+      return false;
+    }
     if (values.type === 'context') return Boolean(values.context?.condition.trim());
     if (values.type === 'checklist') {
-      return Boolean(values.checklistItems?.some((item) => item.title.trim()));
+      if (!values.checklistItems?.some((item) => item.title.trim())) return false;
+
+      const timeTrigger = values.checklistReminderTrigger?.time;
+      if (timeTrigger?.type === 'general_time' && !timeTrigger.generalTime?.category) return false;
+      if (timeTrigger?.type === 'specific_time') {
+        if (!timeTrigger.specificTime?.date?.trim() || !timeTrigger.specificTime?.time?.trim()) return false;
+      }
+
+      const locationTrigger = values.checklistReminderTrigger?.location;
+      if (locationTrigger?.type === 'general_location' && !locationTrigger.generalLocation?.category) return false;
+      if (locationTrigger?.type === 'specific_location') {
+        const place = locationTrigger.specificLocation;
+        if (!place?.geoapifyPlaceId || !place.placeName?.trim() || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+          return false;
+        }
+        if (!place.trigger) return false;
+      }
+
+      return true;
     }
     return true;
   }, [values]);
@@ -61,18 +105,30 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
     setValues((current) => ({ ...current, repeatRule }));
   const setChecklistItems = (checklistItems: ChecklistItem[]) =>
     setValues((current) => ({ ...current, checklistItems }));
-  const setTriggerType = (triggerType: TriggerType) =>
-    setValues((current) => ({
-      ...current,
-      location: { ...(current.location ?? { name: '', radiusMeters: 100 }), triggerType },
-    }));
+  const setChecklistReminderTrigger = (checklistReminderTrigger: ChecklistReminderTrigger) =>
+    setValues((current) => ({ ...current, checklistReminderTrigger }));
+  const setLocation = (location: NonNullable<ReminderFormValues['location']>) =>
+    setValues((current) => ({ ...current, location }));
 
-  const submit = () => {
-    if (!isValid) return;
-    onSubmit({
-      ...values,
-      checklistItems: values.checklistItems?.filter((item) => item.title.trim()),
-    });
+  const submit = async () => {
+    if (!isValid || submitInFlightRef.current) return;
+
+    submitInFlightRef.current = true;
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      await onSubmit({
+        ...values,
+        checklistItems: values.checklistItems?.filter((item) => item.title.trim()),
+      });
+    } catch (error) {
+      console.error('[ReminderForm] submit failed:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+    } finally {
+      submitInFlightRef.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   const triggerHelp = {
@@ -84,28 +140,21 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
   return (
     <View className="gap-6">
-      <View className="rounded-2xl border px-4 py-3" style={styles.field}>
-        <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
-          {t('reminders.title')}
-        </Text>
-        <TextInput
-          placeholder={t('reminders.titlePlaceholder', { brand_name: t('common.brand_name') })}
-          placeholderTextColor={theme.colors.textSubtle}
-          value={values.title}
-          onChangeText={(title) => setValues((current) => ({ ...current, title }))}
-          className="py-2 text-2xl font-black leading-8"
-          style={styles.input}
-        />
-      </View>
+      <InputField
+        label={t('reminders.title')}
+        placeholder={t('reminders.titlePlaceholder', { brand_name: t('common.brand_name') })}
+        value={values.title}
+        onChangeText={(title) => setValues((current) => ({ ...current, title }))}
+      />
 
       <ReminderTypeSelector value={values.type} onChange={setType} />
 
       <View className="gap-4">
         <View>
-          <Text className="text-xs font-black uppercase tracking-widest" style={styles.label}>
+          <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
             {t('reminders.trigger')}
           </Text>
-          <Text className="mt-1 text-sm" style={styles.helpText}>{triggerHelp}</Text>
+          <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>{triggerHelp}</Text>
         </View>
 
         {values.type === 'time' && (
@@ -122,191 +171,63 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
         )}
 
         {values.type === 'location' && (
-          <View className="gap-4">
-            <View className="rounded-2xl border px-4 py-3" style={styles.field}>
-              <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
-                {t('reminders.locationName')}
-              </Text>
-              <TextInput
-                placeholder={t('reminders.locationPlaceholder')}
-                placeholderTextColor={theme.colors.textSubtle}
-                value={values.location?.name}
-                onChangeText={(name) =>
-                  setValues((current) => ({
-                    ...current,
-                    location: { ...(current.location ?? { radiusMeters: 100, triggerType: 'arrive' }), name },
-                  }))
-                }
-                className="py-2 text-base font-semibold"
-                style={styles.input}
-              />
-            </View>
-            <View className="rounded-2xl border px-4 py-3" style={styles.field}>
-              <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
-                {t('reminders.radiusMeters')}
-              </Text>
-              <TextInput
-                keyboardType="numeric"
-                value={String(values.location?.radiusMeters ?? 100)}
-                onChangeText={(text) =>
-                  setValues((current) => ({
-                    ...current,
-                    location: {
-                      ...(current.location ?? { name: '', triggerType: 'arrive' }),
-                      radiusMeters: Number(text) || 100,
-                    },
-                  }))
-                }
-                className="py-2 text-base font-semibold"
-                style={styles.input}
-              />
-            </View>
-            <View className="flex-row gap-2">
-              {(['arrive', 'leave'] as TriggerType[]).map((triggerType) => {
-                const selected = values.location?.triggerType === triggerType;
-                return (
-                  <Pressable
-                    key={triggerType}
-                    onPress={() => setTriggerType(triggerType)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    className="flex-1 rounded-full border px-4 py-3"
-                    style={selected ? styles.selectedPill : styles.pill}
-                  >
-                    <Text
-                      className="text-center text-xs font-black capitalize"
-                      style={selected ? styles.selectedText : styles.input}
-                    >
-                      {t(`reminders.${triggerType}`)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+          <LocationReminderFields
+            value={values.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' }}
+            onChange={setLocation}
+          />
         )}
 
         {values.type === 'context' && (
           <View className="gap-4">
-            <TextInput
+            <InputField
               placeholder={t('reminders.contextPlaceholder')}
-              placeholderTextColor={theme.colors.textSubtle}
-              value={values.context?.condition}
+              value={values.context?.condition ?? ''}
               onChangeText={(condition) =>
                 setValues((current) => ({
                   ...current,
                   context: { ...(current.context ?? {}), condition },
                 }))
               }
-              className="rounded-2xl border px-4 py-4"
-              style={styles.textField}
             />
-            <TextInput
+            <InputField
               placeholder={t('reminders.contextDetailPlaceholder')}
-              placeholderTextColor={theme.colors.textSubtle}
-              value={values.context?.detail}
+              value={values.context?.detail ?? ''}
               onChangeText={(detail) =>
                 setValues((current) => ({
                   ...current,
                   context: { ...(current.context ?? { condition: '' }), detail },
                 }))
               }
-              className="rounded-2xl border px-4 py-4"
-              style={styles.textField}
             />
           </View>
         )}
 
         {values.type === 'checklist' && (
-          <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />
+          <View className="gap-4">
+            <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />
+            <ChecklistReminderSection
+              value={values.checklistReminderTrigger ?? { time: { type: 'none' }, location: { type: 'none' } }}
+              onChange={setChecklistReminderTrigger}
+            />
+          </View>
         )}
       </View>
 
-      <View>
-        <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={styles.label}>
-          {t('reminders.notes')}
-        </Text>
-        <TextInput
-          multiline
-          textAlignVertical="top"
-          placeholder={t('reminders.notesPlaceholder')}
-          placeholderTextColor={theme.colors.textSubtle}
-          value={values.description}
-          onChangeText={(description) => setValues((current) => ({ ...current, description }))}
-          className="min-h-24 rounded-2xl border px-4 py-4 text-base leading-6"
-          style={styles.textField}
-        />
-      </View>
+      <InputField
+        label={t('reminders.notes')}
+        placeholder={t('reminders.notesPlaceholder')}
+        value={values.description ?? ''}
+        onChangeText={(description) => setValues((current) => ({ ...current, description }))}
+        multiline
+      />
 
       <PrioritySelector value={values.priority} onChange={setPriority} />
 
-      <View className="rounded-3xl border p-2" style={styles.submitShell}>
-        <Pressable
-          disabled={!isValid}
-          onPress={submit}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !isValid }}
-          className="rounded-2xl py-4"
-          style={isValid ? styles.submitButton : styles.submitButtonDisabled}
-        >
-          <Text
-            className="text-center text-base font-black"
-            style={isValid ? styles.submitText : styles.submitTextDisabled}
-          >
-            {submitLabel}
-          </Text>
-        </Pressable>
-      </View>
+      {!!submitError && <Text className="px-1 text-xs font-semibold" style={{ color: colors.error }}>{submitError}</Text>}
+
+      <PrimaryButton onPress={() => void submit()} disabled={!isValid} loading={isSubmitting} fullWidth>
+        {submitLabel}
+      </PrimaryButton>
     </View>
   );
-}
-
-function createStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    field: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    label: {
-      color: theme.colors.textSubtle,
-    },
-    helpText: {
-      color: theme.colors.textMuted,
-    },
-    input: {
-      color: theme.colors.text,
-    },
-    textField: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-      color: theme.colors.text,
-    },
-    pill: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    selectedPill: {
-      backgroundColor: theme.colors.accentSoft,
-      borderColor: theme.colors.accent,
-    },
-    selectedText: {
-      color: theme.colors.accent,
-    },
-    submitShell: {
-      backgroundColor: theme.colors.surfaceElevated,
-      borderColor: theme.colors.border,
-    },
-    submitButton: {
-      backgroundColor: theme.colors.accent,
-    },
-    submitButtonDisabled: {
-      backgroundColor: theme.colors.disabled,
-    },
-    submitText: {
-      color: theme.colors.accentText,
-    },
-    submitTextDisabled: {
-      color: theme.colors.disabledText,
-    },
-  });
 }

@@ -109,7 +109,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     <button
       type="button"
       onClick={() => setShowPassword((s) => !s)}
-      className="text-[9px] font-bold text-[#8C9BAE] hover:text-white px-1"
+      className="text-[9px] font-bold text-[var(--bp-muted)] hover:text-[var(--bp-text)] px-1"
     >
       {showPassword ? 'HIDE' : 'SHOW'}
     </button>
@@ -119,7 +119,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     <AuthShell
       headline={
         <>
-          Secure your <span className="text-[#FDEF4B] text-glow">BeePlan workspace</span>.
+          Secure your <span className="text-[var(--bp-accent)] text-glow">BeePlan workspace</span>.
         </>
       }
       sub="Set a strong new password to protect your reminders, tasks, and smart plans from unauthorised access."
@@ -133,14 +133,14 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                 <polyline points="30,52 45,65 70,38" fill="none" />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-white tracking-tight">Password Updated!</h3>
-            <p className="text-xs text-[#8C9BAE] mt-3 leading-relaxed max-w-xs mx-auto">
+            <h3 className="text-2xl font-bold text-[var(--bp-text)] tracking-tight">Password Updated!</h3>
+            <p className="text-xs text-[var(--bp-muted)] mt-3 leading-relaxed max-w-xs mx-auto">
               Your BeePlan password has been reset successfully. Opening your workspace...
             </p>
             <button
               type="button"
               onClick={onBack}
-              className="mt-8 w-full h-12 rounded-xl bg-[#FDEF4B] text-[#2B323F] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
+              className="mt-8 w-full h-12 rounded-xl bg-[var(--bp-accent)] text-[var(--bp-accent-text)] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
             >
               Open BeePlan
             </button>
@@ -150,8 +150,8 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
             <BrandHeader />
 
             <div className="flex justify-center mb-5">
-              <div className="w-12 h-12 rounded-2xl bg-[#FDEF4B]/10 border border-[#FDEF4B]/25 flex items-center justify-center">
-                <svg className="w-6 h-6 text-[#FDEF4B]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <div className="w-12 h-12 rounded-2xl bg-[var(--bp-accent)]/10 border border-[var(--bp-accent)]/25 flex items-center justify-center">
+                <svg className="w-6 h-6 text-[var(--bp-accent)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path
                     d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
                     strokeLinecap="round"
@@ -162,10 +162,10 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
             </div>
 
             <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-white">
+              <h3 className="text-xl font-bold text-[var(--bp-text)]">
                 {codeVerified ? 'Create New Password' : 'Enter Reset Code'}
               </h3>
-              <p className="text-xs text-[#8C9BAE] mt-2 leading-relaxed">
+              <p className="text-xs text-[var(--bp-muted)] mt-2 leading-relaxed">
                 {codeVerified
                   ? 'Choose a strong password for your BeePlan account.'
                   : 'Enter the code we sent to your email before creating a new password.'}
@@ -190,11 +190,11 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                   />
                   {strength && (
                     <div className="mt-2 space-y-1">
-                      <div className="h-1 w-full bg-[#434D62] rounded-full overflow-hidden">
+                      <div className="h-1 w-full bg-[var(--bp-border)] rounded-full overflow-hidden">
                         <div className={`h-full ${strength.color} ${strength.w} rounded-full transition-all duration-300`} />
                       </div>
-                      <p className="text-[10px] text-[#8C9BAE]">
-                        Strength: <span className="font-semibold text-white">{strength.label}</span>
+                      <p className="text-[10px] text-[var(--bp-muted)]">
+                        Strength: <span className="font-semibold text-[var(--bp-text)]">{strength.label}</span>
                       </p>
                     </div>
                   )}
@@ -247,7 +247,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                   error={errors.code}
                 />
                 {devResetCode && (
-                  <p className="text-[#FDEF4B] text-xs pl-1">
+                  <p className="text-[var(--bp-accent)] text-xs pl-1">
                     Development code: <span className="font-bold tracking-widest">{devResetCode}</span>
                   </p>
                 )}

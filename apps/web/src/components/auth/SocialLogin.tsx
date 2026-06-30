@@ -44,7 +44,7 @@ function ProviderIcon({ provider }: { provider: SocialAuthProvider }) {
       {provider === 'google' ? (
         <GoogleIcon className="h-4 w-4 shrink-0" />
       ) : (
-        <AppleIcon className="h-4 w-4 shrink-0 text-white" />
+        <AppleIcon className="h-4 w-4 shrink-0 text-[var(--bp-text)]" />
       )}
     </Suspense>
   );
@@ -125,7 +125,7 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
               aria-disabled={isDisabled}
               disabled={isDisabled}
               onClick={() => void handleSocialLogin(provider)}
-              className="group h-12 w-full rounded-2xl border border-[#3B465B] bg-[#2B3443] px-4 text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[#4B5870] hover:bg-[#2B3443] hover:shadow-lg hover:shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FDE64B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#2B3443] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:bg-[#2B3443]"
+              className="group h-12 w-full rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 text-[var(--bp-text)] shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--bp-border)] hover:bg-[var(--bp-surface)] hover:shadow-lg hover:shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-surface)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:bg-[var(--bp-surface)]"
             >
               <span className="flex items-center justify-center gap-3 text-sm font-bold">
                 {isLoading ? <LoadingSpinner /> : <ProviderIcon provider={provider} />}

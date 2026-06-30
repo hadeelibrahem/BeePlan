@@ -1,7 +1,7 @@
 ﻿/* App.css - Premium Styles for BeePlan Responsive Web Auth Page */
 
 :root {
-  --yellow: #FDE64B;
+  --yellow: #F9E547;
   --dark-bg: #1F2937;
   --card-bg: #2B3443;
   --border-color: #3B465B;
@@ -111,6 +111,17 @@ input:focus {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes beeplanFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

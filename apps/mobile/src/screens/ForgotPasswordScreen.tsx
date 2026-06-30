@@ -1,34 +1,19 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { InputField, OutlineButton, PrimaryButton, SectionCard } from '../components/layout';
 import BeePlanLogo from '../components/BeePlanLogo';
 import { useAuth } from '../hooks/useAuth';
-
-// ─── Brand constants ─────────────────────────────────────────────────────────
-const YELLOW = '#FDEF4B';
-const DARK_BG = '#2B323F';
-const CARD_BG = '#353D4E';
-const BORDER = '#434D62';
-const MUTED = '#8C9BAE';
+import { useTheme } from '../theme/useTheme';
 
 interface ForgotPasswordScreenProps {
-  /** Navigate back to Sign In */
   onBack: () => void;
-  /** Navigate forward to Reset Password entry */
   onReset: (email: string, devResetCode?: string) => void;
 }
 
-// ─── BeeLogo Component ───────────────────────────────────────────────────────
 export default function ForgotPasswordScreen({ onBack, onReset }: ForgotPasswordScreenProps) {
+  const { theme } = useTheme();
+  const { colors } = theme;
   const { sendPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -38,8 +23,14 @@ export default function ForgotPasswordScreen({ onBack, onReset }: ForgotPassword
 
   const handleSend = async () => {
     setSubmitError('');
-    if (!email.trim()) { setError('Email address is required'); return; }
-    if (!/\S+@\S+\.\S+/.test(email)) { setError('Please enter a valid email'); return; }
+    if (!email.trim()) {
+      setError('Email address is required');
+      return;
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setError('Please enter a valid email');
+      return;
+    }
     setError('');
     setIsLoading(true);
     try {
@@ -54,11 +45,8 @@ export default function ForgotPasswordScreen({ onBack, onReset }: ForgotPassword
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      {/* Dot-grid background pattern */}
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {Array.from({ length: 15 }).map((_, row) =>
           Array.from({ length: 8 }).map((_, col) => (
@@ -71,425 +59,119 @@ export default function ForgotPasswordScreen({ onBack, onReset }: ForgotPassword
                 width: 2,
                 height: 2,
                 borderRadius: 1,
-                backgroundColor: YELLOW,
+                backgroundColor: colors.accent,
                 opacity: 0.06,
               }}
             />
-          ))
+          )),
         )}
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 48 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Auth Card */}
-        <View style={styles.card}>
-          {/* Brand Header */}
-          <BeePlanLogo size={50} showTagline style={styles.logoMark} />
+        <SectionCard className="w-full max-w-[400px] items-center px-6 py-8">
+          <BeePlanLogo size={50} showTagline style={{ marginBottom: 22 }} />
 
           {sent ? (
-            /* ── Email Sent Success ── */
-            <View style={styles.successBlock}>
-              {/* Mail icon */}
-              <View style={styles.iconBox}>
-                <View style={styles.envelopeBody}>
-                  <View style={styles.envelopeLine} />
-                  <View style={[styles.envelopeLine, { width: 22 }]} />
+            <View className="w-full items-center">
+              <IconBox>
+                <View className="h-5 w-7 items-center justify-center gap-1 rounded border-2" style={{ borderColor: colors.accent }}>
+                  <View className="h-0.5 w-4 rounded-full" style={{ backgroundColor: colors.accent }} />
+                  <View className="h-0.5 w-[22px] rounded-full" style={{ backgroundColor: colors.accent }} />
                 </View>
-              </View>
+              </IconBox>
 
-              <Text style={styles.heading}>Check your email</Text>
-              <Text style={styles.subText}>
+              <Text className="mb-2.5 text-center text-xl font-extrabold" style={{ color: colors.text }}>Check your email</Text>
+              <Text className="mb-6 px-2.5 text-center text-xs leading-5" style={{ color: colors.secondaryText }}>
                 We sent a 6-digit reset code. Enter it to create a new password.
               </Text>
 
-              <Pressable
-                style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.85 }]}
-                onPress={() => onReset(email.trim())}
-              >
-                <Text style={styles.primaryBtnText}>Enter Reset Code</Text>
-              </Pressable>
+              <PrimaryButton onPress={() => onReset(email.trim())} fullWidth>
+                Enter Reset Code
+              </PrimaryButton>
 
-              <Pressable
-                style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.7 }]}
-                onPress={() => { setSent(false); setEmail(''); setSubmitError(''); }}
+              <OutlineButton
+                onPress={() => {
+                  setSent(false);
+                  setEmail('');
+                  setSubmitError('');
+                }}
+                fullWidth
+                className="mt-3"
               >
-                <Text style={styles.ghostBtnText}>Send Another Code</Text>
-              </Pressable>
+                Send Another Code
+              </OutlineButton>
 
-              <View style={styles.footerRow}>
-                <Text style={styles.footerText}>Remember your password? </Text>
-                <Pressable onPress={onBack}>
-                  <Text style={styles.footerLink}>Back to Sign In</Text>
+              <View className="mt-5 flex-row flex-wrap items-center justify-center">
+                <Text className="text-xs" style={{ color: colors.secondaryText }}>Remember your password? </Text>
+                <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to sign in">
+                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accent }}>Back to Sign In</Text>
                 </Pressable>
               </View>
             </View>
           ) : (
-            /* ── Email Form ── */
-            <>
-              {/* Lock icon */}
-              <View style={styles.iconBox}>
-                <View style={styles.lockArc} />
-                <View style={styles.lockBody} />
-              </View>
+            <View className="w-full items-center">
+              <IconBox>
+                <View className="mb-[-1px] h-2.5 w-[18px] rounded-t-full border-2 border-b-0" style={{ borderColor: colors.accent }} />
+                <View className="h-4 w-[22px] rounded" style={{ backgroundColor: colors.accent }} />
+              </IconBox>
 
-              <Text style={styles.heading}>Forgot Password?</Text>
-              <Text style={styles.subText}>
+              <Text className="mb-2.5 text-center text-xl font-extrabold" style={{ color: colors.text }}>Forgot Password?</Text>
+              <Text className="mb-6 px-2.5 text-center text-xs leading-5" style={{ color: colors.secondaryText }}>
                 Enter your email and we'll send you a reset code to get back into your account.
               </Text>
 
-              {/* Email Field */}
-              <Text style={styles.inputLabel}>EMAIL ADDRESS</Text>
-              <View style={[styles.inputWrap, !!error && { borderColor: '#EF4444' }]}>
-                <TextInput
-                  style={styles.input}
+              <View className="w-full">
+                <InputField
+                  label="Email Address"
                   placeholder="name@example.com"
-                  placeholderTextColor="#556070"
                   value={email}
-                  onChangeText={v => { setEmail(v); setError(''); setSubmitError(''); }}
+                  onChangeText={(value) => {
+                    setEmail(value);
+                    setError('');
+                    setSubmitError('');
+                  }}
                   autoCapitalize="none"
                   keyboardType="email-address"
-                  returnKeyType="send"
-                  onSubmitEditing={handleSend}
+                  error={error || submitError || undefined}
                 />
+
+                <Text className="mb-1 text-[10px] leading-4" style={{ color: colors.secondaryText }}>
+                  Make sure you enter the email associated with your BeePlan account.
+                </Text>
+
+                <PrimaryButton onPress={() => void handleSend()} disabled={isLoading} loading={isLoading} fullWidth className="mt-4">
+                  Send Reset Code
+                </PrimaryButton>
               </View>
-              {!!error && <Text style={styles.errorText}>{error}</Text>}
-              {!!submitError && <Text style={styles.errorText}>{submitError}</Text>}
 
-              <Text style={styles.helperText}>
-                Make sure you enter the email associated with your BeePlan account.
-              </Text>
-
-              {/* CTA */}
-              <View style={styles.sendResetBtnShell}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.sendResetBtnPressable,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                  onPress={handleSend}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.sendResetBtnText}>{isLoading ? 'Sending...' : 'Send Reset Code'}</Text>
+              <View className="mt-5 flex-row flex-wrap items-center justify-center">
+                <Text className="text-xs" style={{ color: colors.secondaryText }}>Remember your password? </Text>
+                <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to sign in">
+                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accent }}>Back to Sign In</Text>
                 </Pressable>
               </View>
-
-              {/* Back */}
-              <View style={styles.footerRow}>
-                <Text style={styles.footerText}>Remember your password? </Text>
-                <Pressable onPress={onBack}>
-                  <Text style={styles.footerLink}>Back to Sign In</Text>
-                </Pressable>
-              </View>
-            </>
+            </View>
           )}
-        </View>
+        </SectionCard>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: DARK_BG,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 48,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: CARD_BG,
-    borderRadius: 28,
-    paddingHorizontal: 26,
-    paddingVertical: 32,
-    borderWidth: 1,
-    borderColor: BORDER,
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 12,
-    alignItems: 'center',
-  },
+function IconBox({ children }: { children: ReactNode }) {
+  const { theme } = useTheme();
 
-  // ── Brand Header ──
-  logoMark: {
-    marginBottom: 22,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  wordmark: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  tagline: {
-    color: MUTED,
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 3,
-    marginTop: 6,
-    marginBottom: 22,
-  },
-
-  // ── Logo ──
-  logoWrapper: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  logoDiamond: {
-    position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: YELLOW,
-    opacity: 0.18,
-    transform: [{ rotate: '45deg' }],
-  },
-  logoBee: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    backgroundColor: YELLOW,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ rotate: '32deg' }, { translateX: -1 }, { translateY: 2 }],
-    shadowColor: YELLOW,
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
-  },
-  stripesContainer: {
-    alignItems: 'flex-start',
-    gap: 3,
-    transform: [{ rotate: '-32deg' }],
-  },
-  stripe: {
-    height: 2,
-    backgroundColor: DARK_BG,
-    borderRadius: 2,
-  },
-  antennaDot: {
-    position: 'absolute',
-    top: 2,
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: YELLOW,
-  },
-
-  // ── Icon Box ──
-  iconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: `${YELLOW}18`,
-    borderWidth: 1,
-    borderColor: `${YELLOW}40`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  lockArc: {
-    width: 18,
-    height: 10,
-    borderTopLeftRadius: 9,
-    borderTopRightRadius: 9,
-    borderWidth: 2.5,
-    borderBottomWidth: 0,
-    borderColor: YELLOW,
-    marginBottom: -1,
-  },
-  lockBody: {
-    width: 22,
-    height: 16,
-    borderRadius: 5,
-    backgroundColor: YELLOW,
-  },
-  envelopeBody: {
-    width: 28,
-    height: 20,
-    borderWidth: 2,
-    borderColor: YELLOW,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  envelopeLine: {
-    width: 16,
-    height: 2,
-    backgroundColor: YELLOW,
-    borderRadius: 1,
-  },
-
-  // ── Content ──
-  heading: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.3,
-    marginBottom: 10,
-  },
-  subText: {
-    color: MUTED,
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 24,
-    paddingHorizontal: 10,
-  },
-
-  // ── Input ──
-  inputLabel: {
-    color: MUTED,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 6,
-    alignSelf: 'flex-start',
-  },
-  inputWrap: {
-    width: '100%',
-    backgroundColor: DARK_BG,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 4,
-  },
-  input: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 14,
-    paddingVertical: 0,
-  },
-  errorText: {
-    color: '#EF4444',
-    fontSize: 11,
-    alignSelf: 'flex-start',
-    marginBottom: 4,
-    paddingLeft: 4,
-  },
-  helperText: {
-    color: MUTED,
-    fontSize: 10,
-    lineHeight: 15,
-    alignSelf: 'flex-start',
-    marginTop: 6,
-  },
-
-  // ── Buttons ──
-  primaryBtn: {
-    width: '100%',
-    minHeight: 52,
-    borderRadius: 14,
-    backgroundColor: YELLOW,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: YELLOW,
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
-  primaryBtnText: {
-    color: '#1F242E',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  sendResetBtnShell: {
-    width: '100%',
-    height: 54,
-    minHeight: 54,
-    borderRadius: 14,
-    backgroundColor: '#FDEF4B',
-    marginTop: 18,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#FDEF4B',
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  sendResetBtnPressable: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#FDEF4B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendResetBtnText: {
-    color: '#1F242E',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  ghostBtn: {
-    width: '100%',
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: DARK_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-  },
-  ghostBtnText: {
-    color: MUTED,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // ── Footer ──
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 22,
-    flexWrap: 'wrap',
-  },
-  footerText: {
-    color: MUTED,
-    fontSize: 11,
-  },
-  footerLink: {
-    color: YELLOW,
-    fontSize: 11,
-    fontWeight: '800',
-    textDecorationLine: 'underline',
-  },
-
-  // ── Success block ──
-  successBlock: {
-    width: '100%',
-    alignItems: 'center',
-  },
-});
+  return (
+    <View
+      className="mb-4 h-[52px] w-[52px] items-center justify-center rounded-2xl border"
+      style={{ borderColor: `${theme.colors.accent}66`, backgroundColor: theme.colors.accentSoft }}
+    >
+      {children}
+    </View>
+  );
+}

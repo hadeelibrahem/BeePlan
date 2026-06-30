@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { envSchema } from './config/env';
 import { DatabaseModule } from './db/database.module';
+import { RemindersModule } from './reminders/reminders.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { DatabaseModule } from './db/database.module';
     }),
     DatabaseModule,
     AuthModule,
+    RemindersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

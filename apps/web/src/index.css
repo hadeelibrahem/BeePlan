@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-yellow: #fdef4b;
+  --color-primary-yellow: #f9e547;
   --color-dark-gray-blue: #2b323f;
 }
 
 :root {
   --bp-brand-dark: #2b323f;
-  --bp-accent: #fdef4b;
-  --bp-bg: #2b323f;
-  --bp-surface: rgba(255, 255, 255, 0.06);
-  --bp-surface-elevated: #343d4c;
-  --bp-input: rgba(255, 255, 255, 0.08);
-  --bp-border: rgba(255, 255, 255, 0.13);
+  --bp-accent: #f9e547;
+  --bp-bg: #252c3a;
+  --bp-surface: #313848;
+  --bp-surface-elevated: #313848;
+  --bp-input: #313848;
+  --bp-border: #46506a;
   --bp-text: #ffffff;
-  --bp-muted: #d6dbe3;
+  --bp-muted: #94a3b8;
   --bp-subtle: #aeb7c4;
   --bp-placeholder: rgba(255, 255, 255, 0.45);
-  --bp-accent-soft: rgba(253, 239, 75, 0.16);
+  --bp-accent-soft: rgba(249, 229, 71, 0.16);
   --bp-accent-text: #2b323f;
   --bp-disabled: rgba(255, 255, 255, 0.14);
   --bp-disabled-text: rgba(255, 255, 255, 0.42);
@@ -34,7 +34,7 @@
   --bp-muted: #515b6b;
   --bp-subtle: #6f7887;
   --bp-placeholder: rgba(43, 50, 63, 0.42);
-  --bp-accent-soft: rgba(253, 239, 75, 0.28);
+  --bp-accent-soft: rgba(249, 229, 71, 0.28);
   --bp-disabled: #e5e7eb;
   --bp-disabled-text: #9ca3af;
   --bp-shadow: rgba(43, 50, 63, 0.12);

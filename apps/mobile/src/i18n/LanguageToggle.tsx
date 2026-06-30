@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
-import { useTheme } from '../theme/ThemeContext';
+import { Pressable, Text } from 'react-native';
+import { useTheme } from '../theme/useTheme';
 import { useLanguage } from './LanguageContext';
 
 export function LanguageToggle() {
@@ -11,30 +11,10 @@ export function LanguageToggle() {
       onPress={toggleLanguage}
       accessibilityRole="button"
       accessibilityLabel={t('actions.switchLanguage')}
-      style={[
-        styles.button,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-        },
-      ]}
+      className="h-10 items-center justify-center rounded-full border px-3 active:opacity-80"
+      style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }}
     >
-      <Text style={[styles.text, { color: theme.colors.text }]}>{t('common.languageToggle')}</Text>
+      <Text className="text-xs font-black" style={{ color: theme.colors.text }}>{t('common.languageToggle')}</Text>
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  text: {
-    fontSize: 12,
-    fontWeight: '900',
-  },
-});

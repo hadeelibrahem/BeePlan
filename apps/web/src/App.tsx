@@ -13,9 +13,12 @@ import { useAuth } from './hooks/useAuth'
 import { LanguageProvider } from './i18n/LanguageContext'
 import AuthScreen from './screens/AuthScreen'
 import AllTasksScreen from './screens/AllTasksScreen'
+import AnalyticsScreen from './screens/AnalyticsScreen'
+import CalendarScreen from './screens/CalendarScreen'
 import CreateTaskScreen from './screens/CreateTaskScreen'
 import EditTaskScreen from './screens/EditTaskScreen'
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
+import NotesScreen from './screens/NotesScreen'
 import ResetPasswordScreen from './screens/ResetPasswordScreen'
 import TaskDetailsScreen from './screens/TaskDetailsScreen'
 import TasksDashboardScreen from './screens/TasksDashboardScreen'
@@ -32,6 +35,9 @@ type AppScreen =
   | 'create'
   | 'details'
   | 'edit'
+  | 'calendar'
+  | 'notes'
+  | 'analytics'
 
 function getAuthScreenFromPath(): AuthScreenState {
   if (window.location.pathname === '/reset-password') return 'reset'
@@ -93,6 +99,15 @@ function ThemedApp() {
     navigateAuth('auth')
   }
 
+  const sidebarNav = {
+    onNavigateDashboard: () => setScreen('dashboard'),
+    onNavigateTasks: () => setScreen('tasks'),
+    onNavigateReminders: () => setScreen('list'),
+    onNavigateCalendar: () => setScreen('calendar'),
+    onNavigateNotes: () => setScreen('notes'),
+    onNavigateAnalytics: () => setScreen('analytics'),
+  }
+
   const signOutButton = (
     <button
       type="button"
@@ -124,25 +139,44 @@ function ThemedApp() {
   }
 
   if (screen === 'dashboard') {
-    return renderShell(
+    return (
       <TasksDashboardScreen
         reminders={reminders}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
-      />,
-      signOutButton,
+        onNavigateCalendar={sidebarNav.onNavigateCalendar}
+        onNavigateNotes={sidebarNav.onNavigateNotes}
+        onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+        onSignOut={() => void handleSignOut()}
+      />
     )
   }
 
   if (screen === 'tasks') {
-    return renderShell(
+    return (
       <AllTasksScreen
         onBackDashboard={() => setScreen('dashboard')}
         onCreateTask={() => setScreen('createTask')}
         onViewTaskDetails={() => setScreen('taskDetails')}
-      />,
-      signOutButton,
+        onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigateCalendar={sidebarNav.onNavigateCalendar}
+        onNavigateNotes={sidebarNav.onNavigateNotes}
+        onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+        onSignOut={() => void handleSignOut()}
+      />
     )
+  }
+
+  if (screen === 'calendar') {
+    return <CalendarScreen {...sidebarNav} onSignOut={() => void handleSignOut()} />
+  }
+
+  if (screen === 'notes') {
+    return <NotesScreen {...sidebarNav} onSignOut={() => void handleSignOut()} />
+  }
+
+  if (screen === 'analytics') {
+    return <AnalyticsScreen {...sidebarNav} onSignOut={() => void handleSignOut()} />
   }
 
   if (screen === 'createTask') {
@@ -212,7 +246,7 @@ function ThemedApp() {
     )
   }
 
-  return renderShell(
+  return (
     <RemindersListScreen
       reminders={reminders}
       onCreate={() => setScreen('create')}
@@ -221,8 +255,13 @@ function ThemedApp() {
         setScreen('details')
       }}
       onToggle={handleToggle}
-    />,
-    signOutButton,
+      onBack={() => setScreen('dashboard')}
+      onSignOut={() => void handleSignOut()}
+      onNavigateTasks={sidebarNav.onNavigateTasks}
+      onNavigateCalendar={sidebarNav.onNavigateCalendar}
+      onNavigateNotes={sidebarNav.onNavigateNotes}
+      onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+    />
   )
 }
 
