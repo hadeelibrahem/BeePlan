@@ -23,6 +23,7 @@ import { googleLoginApprovals, passwordResetCodes, users } from '../db/schema';
 import {
   getGoogleClientId,
   getGoogleClientSecret,
+  getGoogleRedirectUri,
   isGoogleOAuthConfigured,
 } from './google-oauth.config';
 
@@ -463,12 +464,40 @@ export class AuthService {
         where: eq(googleLoginApprovals.tokenHash, tokenHash),
       });
 
-    if (!approval || approval.usedAt) {
+    if (!approval) {
+      return this.htmlOutcome(
+        this.buildApprovalResultPage({
+          title: 'Invalid link',
+          message: 'This login approval link is invalid.',
+          isError: true,
+        }),
+      );
+    }
+
+    if (approval.usedAt) {
+      if (
+        approval.decision === 'allow' &&
+        normalizedDecision === 'allow' &&
+        approval.expiresAt.getTime() >= Date.now()
+      ) {
+        return this.getGoogleApprovalSuccessOutcome(approval);
+      }
+
+      if (approval.decision === 'deny') {
+        return this.htmlOutcome(
+          this.buildApprovalResultPage({
+            title: 'Login denied',
+            message: 'This login request was denied.',
+            isError: true,
+          }),
+        );
+      }
+
       return this.htmlOutcome(
         this.buildApprovalResultPage({
           title: 'Link already used',
           message:
-            'This login approval link has already been used or is invalid.',
+            'This login approval link has already been used. Please start Google sign-in again.',
           isError: true,
         }),
       );
@@ -498,6 +527,18 @@ export class AuthService {
       );
     }
 
+    return this.getGoogleApprovalSuccessOutcome(approval);
+  }
+
+  private htmlOutcome(html: string): { kind: 'html'; html: string } {
+    return { kind: 'html', html };
+  }
+
+  private async getGoogleApprovalSuccessOutcome(
+    approval: typeof googleLoginApprovals.$inferSelect,
+  ): Promise<
+    { kind: 'redirect'; url: string } | { kind: 'html'; html: string }
+  > {
     const authResponse = await this.claimGoogleApprovalSession(approval);
     const oauthState = this.decodeOAuthState(approval.oauthState ?? undefined);
 
@@ -513,10 +554,6 @@ export class AuthService {
       kind: 'redirect',
       url: this.buildWebDashboardRedirect(authResponse),
     };
-  }
-
-  private htmlOutcome(html: string): { kind: 'html'; html: string } {
-    return { kind: 'html', html };
   }
 
   /**
@@ -1304,15 +1341,21 @@ export class AuthService {
       throw new BadRequestException('Google redirect URI is invalid.');
     }
 
-    if (this.isPrivateLanHostname(url.hostname)) {
-      throw new BadRequestException(
-        'Google OAuth cannot use a private LAN IP callback. Use http://127.0.0.1:3000/auth/google/callback for local web development, or a public HTTPS tunnel URL for mobile.',
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+
+    if (isProduction && !this.isPublicHttpsUrl(url)) {
+      console.info(
+        '[Google OAuth] Production should use a public HTTPS callback URL. Set GOOGLE_CALLBACK_URL or PUBLIC_BASE_URL to your production HTTPS API URL.',
       );
     }
 
-    if (returnTo?.startsWith('beeplan://') && !this.isPublicHttpsUrl(url)) {
-      throw new BadRequestException(
-        'Mobile Google sign-in requires a public HTTPS API URL. Set API_PUBLIC_URL and GOOGLE_REDIRECT_URI to an ngrok, Cloudflare Tunnel, Railway, or production URL.',
+    if (
+      !isProduction &&
+      returnTo?.startsWith('beeplan://') &&
+      !this.isPublicHttpsUrl(url)
+    ) {
+      console.info(
+        '[Google OAuth] Mobile sign-in should use a public HTTPS callback URL. Set GOOGLE_CALLBACK_URL, GOOGLE_REDIRECT_URI, or PUBLIC_BASE_URL to an ngrok, Cloudflare Tunnel, Railway, or production URL.',
       );
     }
   }
@@ -1365,18 +1408,23 @@ export class AuthService {
   }
 
   private getGoogleRedirectUri() {
-    return (
-      this.configService.get<string>('GOOGLE_CALLBACK_URL') ??
-      this.configService.get<string>('GOOGLE_REDIRECT_URI') ??
-      `${this.getApiPublicUrl()}/auth/google/callback`
-    );
+    return getGoogleRedirectUri(this.configService);
   }
 
   private getApiPublicUrl() {
-    return (
-      this.configService.get<string>('API_PUBLIC_URL') ??
-      `http://127.0.0.1:${this.configService.get<number>('PORT') ?? 3000}`
-    );
+    const configuredBaseUrl =
+      this.configService.get<string>('PUBLIC_BASE_URL') ??
+      this.configService.get<string>('API_PUBLIC_URL');
+
+    if (configuredBaseUrl) {
+      return configuredBaseUrl.replace(/\/+$/, '');
+    }
+
+    try {
+      return new URL(this.getGoogleRedirectUri()).origin;
+    } catch {
+      return `http://127.0.0.1:${this.configService.get<number>('PORT') ?? 3000}`;
+    }
   }
 
   private getWebAppUrl() {

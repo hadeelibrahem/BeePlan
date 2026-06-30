@@ -36,6 +36,33 @@ export function getGoogleClientSecret(configService: ConfigService) {
   ]);
 }
 
+function normalizeBaseUrl(value: string) {
+  return value.replace(/\/+$/, '');
+}
+
+export function getGoogleRedirectUri(configService: ConfigService) {
+  const configuredRedirectUri = readConfiguredValue(configService, [
+    'GOOGLE_CALLBACK_URL',
+    'GOOGLE_REDIRECT_URI',
+  ]);
+
+  if (configuredRedirectUri) {
+    return configuredRedirectUri;
+  }
+
+  const publicBaseUrl = readConfiguredValue(configService, [
+    'PUBLIC_BASE_URL',
+    'API_PUBLIC_URL',
+  ]);
+
+  if (publicBaseUrl) {
+    return `${normalizeBaseUrl(publicBaseUrl)}/auth/google/callback`;
+  }
+
+  const port = configService.get<number>('PORT') ?? 3000;
+  return `http://127.0.0.1:${port}/auth/google/callback`;
+}
+
 export function isGoogleOAuthConfigured(configService: ConfigService) {
   return Boolean(
     getGoogleClientId(configService) && getGoogleClientSecret(configService),
