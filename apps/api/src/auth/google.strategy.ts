@@ -10,6 +10,7 @@ import { AuthService } from './auth.service';
 import {
   getGoogleClientId,
   getGoogleClientSecret,
+  getGoogleRedirectUri,
 } from './google-oauth.config';
 
 type GoogleProfile = Profile & {
@@ -26,10 +27,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   ) {
     const clientID = getGoogleClientId(configService);
     const clientSecret = getGoogleClientSecret(configService);
-    const callbackURL =
-      configService.get<string>('GOOGLE_CALLBACK_URL') ??
-      configService.get<string>('GOOGLE_REDIRECT_URI') ??
-      `${configService.get<string>('API_PUBLIC_URL') ?? 'http://127.0.0.1:3000'}/auth/google/callback`;
+    const callbackURL = getGoogleRedirectUri(configService);
 
     super({
       clientID: clientID ?? 'google-client-id-not-configured',

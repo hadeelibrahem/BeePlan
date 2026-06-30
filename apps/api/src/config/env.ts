@@ -17,6 +17,7 @@ export const envSchema = z.object({
   GOOGLE_WEB_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
+  PUBLIC_BASE_URL: z.string().url().optional(),
   API_PUBLIC_URL: z.string().url().optional(),
   FRONTEND_URL: z.string().url().optional(),
   WEB_APP_URL: z.string().url().optional(),
