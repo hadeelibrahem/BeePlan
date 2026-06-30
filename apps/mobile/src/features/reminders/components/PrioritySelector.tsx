@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
+import { useTheme } from '../../../theme/useTheme';
 import type { ReminderPriority } from '../types/reminders.types';
 
 const PRIORITIES: ReminderPriority[] = ['low', 'medium', 'high', 'urgent'];
@@ -11,13 +11,13 @@ type Props = {
 };
 
 export function PrioritySelector({ value, onChange }: Props) {
-  const { theme } = useTheme();
   const { t } = useLanguage();
-  const styles = createStyles(theme);
+  const { theme } = useTheme();
+  const { colors } = theme;
 
   return (
     <View>
-      <Text className="mb-3 text-xs font-black uppercase tracking-widest" style={styles.label}>
+      <Text className="mb-3 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
         {t('reminders.priority')}
       </Text>
       <View className="flex-row flex-wrap gap-2">
@@ -29,13 +29,10 @@ export function PrioritySelector({ value, onChange }: Props) {
               onPress={() => onChange(priority)}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              className="rounded-full border px-4 py-2.5"
-              style={selected ? styles.selectedPill : styles.pill}
+              className="rounded-full border px-4 py-2.5 active:opacity-80"
+              style={{ borderColor: selected ? colors.accent : colors.border, backgroundColor: selected ? colors.accentSoft : colors.input }}
             >
-              <Text
-                className="text-xs font-black capitalize"
-                style={selected ? styles.selectedText : styles.text}
-              >
+              <Text className="text-xs font-black capitalize" style={{ color: selected ? colors.accent : colors.text }}>
                 {priority}
               </Text>
             </Pressable>
@@ -44,26 +41,4 @@ export function PrioritySelector({ value, onChange }: Props) {
       </View>
     </View>
   );
-}
-
-function createStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    label: {
-      color: theme.colors.textSubtle,
-    },
-    pill: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    selectedPill: {
-      backgroundColor: theme.colors.accentSoft,
-      borderColor: theme.colors.accent,
-    },
-    text: {
-      color: theme.colors.text,
-    },
-    selectedText: {
-      color: theme.colors.accent,
-    },
-  });
 }

@@ -29,6 +29,72 @@ export type ChecklistItem = {
   isDone: boolean;
 };
 
+export type TimeTriggerType = 'none' | 'general_time' | 'specific_time';
+
+export type GeneralTimeCategory =
+  | 'morning'
+  | 'afternoon'
+  | 'evening'
+  | 'night'
+  | 'weekdays'
+  | 'weekends'
+  | 'custom';
+
+export type SpecificTimeRepeat = RepeatFrequency | 'custom';
+
+export type ReminderTimeTrigger = {
+  type: TimeTriggerType;
+  generalTime?: {
+    category: GeneralTimeCategory;
+    customLabel?: string;
+  };
+  specificTime?: {
+    date: string;
+    time: string;
+    repeat: SpecificTimeRepeat;
+  };
+};
+
+export type LocationTriggerType = 'none' | 'general_location' | 'specific_location';
+
+export type GeneralLocationCategory =
+  | 'home'
+  | 'work'
+  | 'university'
+  | 'school'
+  | 'gym'
+  | 'pharmacy'
+  | 'grocery_store'
+  | 'airport'
+  | 'hospital'
+  | 'custom';
+
+export type GeoapifyPlaceSelection = {
+  placeName: string;
+  address: string;
+  city?: string;
+  latitude: number;
+  longitude: number;
+  geoapifyPlaceId: string;
+};
+
+export type ReminderLocationTrigger = {
+  type: LocationTriggerType;
+  generalLocation?: {
+    category: GeneralLocationCategory;
+    customLabel?: string;
+  };
+  specificLocation?: GeoapifyPlaceSelection & {
+    trigger: TriggerType;
+    radius: number;
+  };
+};
+
+export type ChecklistReminderTrigger = {
+  time: ReminderTimeTrigger;
+  location: ReminderLocationTrigger;
+};
+
 export type RepeatRule = {
   frequency: RepeatFrequency;
   interval: number;
@@ -61,6 +127,7 @@ export type Reminder = {
     detail?: string;
   };
   checklistItems?: ChecklistItem[];
+  checklistReminderTrigger?: ChecklistReminderTrigger;
   createdAt: string;
   updatedAt: string;
 };

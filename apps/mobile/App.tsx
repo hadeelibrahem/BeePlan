@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   CreateReminderScreen,
   EditReminderScreen,
@@ -24,7 +25,8 @@ import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import TaskDetailsScreen, { type TaskDetailsTask } from './src/screens/TaskDetailsScreen';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
-import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { ThemeProvider } from './src/theme/ThemeContext';
+import { useTheme } from './src/theme/useTheme';
 
 const queryClient = new QueryClient();
 
@@ -44,15 +46,17 @@ type AppScreen =
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <LanguageProvider>
-          <ThemeProvider>
-            <ThemedApp />
-          </ThemeProvider>
-        </LanguageProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <LanguageProvider>
+            <ThemeProvider>
+              <ThemedApp />
+            </ThemeProvider>
+          </LanguageProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }
 

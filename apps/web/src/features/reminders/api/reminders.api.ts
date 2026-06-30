@@ -18,6 +18,8 @@ type ReminderResponse = {
   location?: Reminder['location']
   context?: { condition: string; detail?: string }
   checklistItems?: { id?: string; title: string; isDone?: boolean }[]
+  items?: { id?: string; title: string; isDone?: boolean }[]
+  reminderTrigger?: Reminder['checklistReminderTrigger']
   createdAt: string
   updatedAt: string
 }
@@ -62,6 +64,43 @@ function toLocationPayload(location: ReminderFormValues['location']) {
   return payload
 }
 
+function toChecklistRequestBody(values: ReminderFormValues) {
+  const timeTrigger = values.checklistReminderTrigger?.time
+  const timeType = timeTrigger?.type ?? 'none'
+
+  const locationTrigger = values.checklistReminderTrigger?.location
+  const locationType = locationTrigger?.type ?? 'none'
+
+  return {
+    title: values.title,
+    type: 'checklist',
+    items: values.checklistItems?.filter((item) => item.title.trim()),
+    notes: values.description || undefined,
+    reminderTrigger: {
+      time: {
+        type: timeType,
+        generalTime: timeType === 'general_time' ? timeTrigger?.generalTime : undefined,
+        specificTime:
+          timeType === 'specific_time'
+            ? {
+                date: timeTrigger?.specificTime?.date ?? '',
+                time: timeTrigger?.specificTime?.time ?? '',
+                repeat: timeTrigger?.specificTime?.repeat ?? 'none',
+              }
+            : undefined,
+      },
+      location: {
+        type: locationType,
+        generalLocation: locationType === 'general_location' ? locationTrigger?.generalLocation : undefined,
+        specificLocation:
+          locationType === 'specific_location' && locationTrigger?.specificLocation
+            ? { ...locationTrigger.specificLocation }
+            : undefined,
+      },
+    },
+  }
+}
+
 function toRequestBody(values: ReminderFormValues) {
   return {
     title: values.title,
@@ -98,11 +137,12 @@ function fromResponse(data: ReminderResponse): Reminder {
     },
     location: data.location,
     context: data.context,
-    checklistItems: data.checklistItems?.map((item, index) => ({
+    checklistItems: (data.checklistItems ?? data.items)?.map((item, index) => ({
       id: item.id ?? `item-${index}`,
       title: item.title,
       isDone: item.isDone ?? false,
     })),
+    checklistReminderTrigger: data.reminderTrigger,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   }
@@ -118,9 +158,10 @@ export async function fetchReminders() {
 }
 
 export async function createReminder(values: ReminderFormValues): Promise<Reminder> {
+  const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values)
   const data = (await apiRequest('/reminders', {
     method: 'POST',
-    body: JSON.stringify(toRequestBody(values)),
+    body: JSON.stringify(body),
   })) as ReminderResponse
 
   return fromResponse(data)
@@ -132,9 +173,10 @@ export async function getReminder(id: string): Promise<Reminder> {
 }
 
 export async function updateReminder(id: string, values: ReminderFormValues): Promise<Reminder | null> {
+  const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values)
   const data = (await apiRequest(`/reminders/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(toRequestBody(values)),
+    body: JSON.stringify(body),
   })) as ReminderResponse
 
   return fromResponse(data)

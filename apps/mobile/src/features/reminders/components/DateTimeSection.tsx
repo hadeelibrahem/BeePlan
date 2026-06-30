@@ -2,10 +2,10 @@ import DateTimePicker, {
   DateTimePickerAndroid,
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { useMemo, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
+import { useTheme } from '../../../theme/useTheme';
 import type { RepeatRule } from '../types/reminders.types';
 import { RepeatSelector } from './RepeatSelector';
 
@@ -54,9 +54,9 @@ export function DateTimeSection({
   onReminderBeforeChange,
   onRepeatRuleChange,
 }: Props) {
-  const { theme } = useTheme();
   const { language, t } = useLanguage();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme } = useTheme();
+  const { colors } = theme;
 
   const [pastDateError, setPastDateError] = useState(false);
   const [iosModalVisible, setIosModalVisible] = useState(false);
@@ -132,49 +132,49 @@ export function DateTimeSection({
           onPress={openPicker}
           accessibilityRole="button"
           accessibilityLabel={t('reminders.dateTime')}
-          className="rounded-2xl border px-4 py-3"
-          style={styles.field}
+          className="rounded-2xl border px-4 py-3 active:opacity-80"
+          style={{ borderColor: colors.border, backgroundColor: colors.input }}
         >
-          <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
+          <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
             {t('reminders.dateTime')}
           </Text>
           <TextInput
             editable={false}
             pointerEvents="none"
             placeholder={t('reminders.selectDateTimePlaceholder')}
-            placeholderTextColor={theme.colors.textSubtle}
+            placeholderTextColor={colors.placeholder}
             value={displayValue ?? ''}
             className="py-2 text-base font-semibold"
-            style={styles.input}
+            style={{ color: colors.text }}
           />
         </Pressable>
         {pastDateError && (
-          <Text className="mt-1 px-1 text-xs font-semibold" style={styles.errorText}>
+          <Text className="mt-1 px-1 text-xs font-semibold" style={{ color: colors.error }}>
             {t('reminders.pastDateTimeError')}
           </Text>
         )}
       </View>
 
-      <View className="rounded-2xl border px-4 py-3" style={styles.field}>
-        <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
+      <View className="rounded-2xl border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.input }}>
+        <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
           {t('reminders.reminderBefore')}
         </Text>
         <TextInput
           keyboardType="numeric"
           placeholder="30 minutes"
-          placeholderTextColor={theme.colors.textSubtle}
+          placeholderTextColor={colors.placeholder}
           value={reminderBeforeMinutes ? String(reminderBeforeMinutes) : ''}
           onChangeText={(text) => onReminderBeforeChange(Number(text) || 0)}
           className="py-2 text-base font-semibold"
-          style={styles.input}
+          style={{ color: colors.text }}
         />
       </View>
       <RepeatSelector value={repeatRule} onChange={onRepeatRuleChange} />
 
       {Platform.OS !== 'android' && (
         <Modal visible={iosModalVisible} transparent animationType="fade" onRequestClose={cancelIosPicker}>
-          <View className="flex-1 items-center justify-center px-6" style={styles.modalOverlay}>
-            <View className="w-full rounded-3xl border p-4" style={styles.modalCard}>
+          <View className="flex-1 items-center justify-center bg-black/50 px-6">
+            <View className="w-full rounded-3xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
               {iosStep === 'date' ? (
                 <DateTimePicker
                   value={iosPendingDate}
@@ -182,7 +182,7 @@ export function DateTimeSection({
                   display="inline"
                   minimumDate={new Date()}
                   themeVariant={theme.mode}
-                  accentColor={theme.colors.accent}
+                  accentColor={colors.accent}
                   onChange={handleIosDateChange}
                 />
               ) : (
@@ -192,17 +192,23 @@ export function DateTimeSection({
                     mode="time"
                     display="spinner"
                     themeVariant={theme.mode}
-                    accentColor={theme.colors.accent}
+                    accentColor={colors.accent}
                     onChange={handleIosTimeChange}
                   />
                   <View className="mt-2 flex-row justify-end gap-2">
-                    <Pressable onPress={cancelIosPicker} className="rounded-full px-4 py-2.5" style={styles.modalSecondaryButton}>
-                      <Text className="text-sm font-black" style={styles.text}>{t('reminders.pickerCancel')}</Text>
+                    <Pressable
+                      onPress={cancelIosPicker}
+                      className="rounded-full border px-4 py-2.5 active:opacity-80"
+                      style={{ borderColor: colors.border, backgroundColor: colors.background }}
+                    >
+                      <Text className="text-sm font-black" style={{ color: colors.text }}>{t('reminders.pickerCancel')}</Text>
                     </Pressable>
-                    <Pressable onPress={confirmIosTime} className="rounded-full px-4 py-2.5" style={styles.modalPrimaryButton}>
-                      <Text className="text-sm font-black" style={styles.modalPrimaryButtonText}>
-                        {t('reminders.pickerDone')}
-                      </Text>
+                    <Pressable
+                      onPress={confirmIosTime}
+                      className="rounded-full px-4 py-2.5 active:opacity-90"
+                      style={{ backgroundColor: colors.accent }}
+                    >
+                      <Text className="text-sm font-black" style={{ color: colors.accentText }}>{t('reminders.pickerDone')}</Text>
                     </Pressable>
                   </View>
                 </>
@@ -213,43 +219,4 @@ export function DateTimeSection({
       )}
     </View>
   );
-}
-
-function createStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    field: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    label: {
-      color: theme.colors.textSubtle,
-    },
-    input: {
-      color: theme.colors.text,
-    },
-    text: {
-      color: theme.colors.text,
-    },
-    errorText: {
-      color: theme.colors.danger,
-    },
-    modalOverlay: {
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    modalCard: {
-      backgroundColor: theme.colors.surfaceElevated,
-      borderColor: theme.colors.border,
-    },
-    modalSecondaryButton: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-      borderWidth: 1,
-    },
-    modalPrimaryButton: {
-      backgroundColor: theme.colors.accent,
-    },
-    modalPrimaryButtonText: {
-      color: theme.colors.accentText,
-    },
-  });
 }

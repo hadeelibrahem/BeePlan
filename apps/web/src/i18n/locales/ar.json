@@ -10,7 +10,17 @@
     "noResults": "لا توجد نتائج",
     "noReminders": "لا توجد تذكيرات بعد",
     "tryDifferentSearch": "جرّب عبارة بحث مختلفة",
-    "createFirstReminder": "اضغط + لإنشاء أول تذكير"
+    "createFirstReminder": "اضغط + لإنشاء أول تذكير",
+    "remindersTitle": "التذكيرات",
+    "remindersSubtitle": "إدارة تذكيراتك الذكية",
+    "statTotal": "إجمالي التذكيرات",
+    "statTotalDesc": "كل التذكيرات التي أنشأتها",
+    "statActive": "التذكيرات النشطة",
+    "statActiveDesc": "التذكيرات المعلّقة",
+    "statCompleted": "المكتملة",
+    "statCompletedDesc": "التذكيرات التي أنهيتها",
+    "statHighPriority": "أولوية عالية",
+    "statHighPriorityDesc": "تذكيرات تحتاج إلى تركيز"
   },
   "filters": {
     "all": "الكل",
@@ -34,6 +44,10 @@
     "switchLanguage": "تغيير اللغة",
     "back": "رجوع",
     "edit": "تعديل",
+    "signOut": "تسجيل الخروج",
+    "search": "بحث",
+    "darkMode": "ليلي",
+    "lightMode": "نهاري",
     "show": "إظهار",
     "hide": "إخفاء"
   },
@@ -156,6 +170,40 @@
     "reminderBefore": "التذكير قبل",
     "priority": "الأولوية",
     "addItem": "إضافة عنصر",
-    "checklistItem": "عنصر في القائمة"
+    "checklistItem": "عنصر في القائمة",
+    "date": "التاريخ",
+    "time": "الوقت",
+    "timeTrigger": "محفّز الوقت",
+    "noTimeReminder": "بدون تذكير وقت",
+    "generalTimeReminder": "وقت عام",
+    "specificDateTime": "تاريخ ووقت محدد",
+    "locationTrigger": "محفّز الموقع",
+    "noLocationReminder": "بدون تذكير موقع",
+    "generalLocationReminder": "موقع عام",
+    "specificLocationReminder": "موقع محدد",
+    "repeatCustom": "مخصص",
+    "customLabelPlaceholder": "صف ذلك...",
+    "searchPlaceManualHint": "اختر مكانًا من نتائج البحث.",
+    "generalTimeCategory": {
+      "morning": "الصباح",
+      "afternoon": "بعد الظهر",
+      "evening": "المساء",
+      "night": "الليل",
+      "weekdays": "أيام الأسبوع",
+      "weekends": "عطلة نهاية الأسبوع",
+      "custom": "فترة متكررة مخصصة"
+    },
+    "generalLocationCategory": {
+      "home": "المنزل",
+      "work": "العمل",
+      "university": "الجامعة",
+      "school": "المدرسة",
+      "gym": "النادي الرياضي",
+      "pharmacy": "الصيدلية",
+      "grocery_store": "متجر البقالة",
+      "airport": "المطار",
+      "hospital": "المستشفى",
+      "custom": "فئة مخصصة"
+    }
   }
 }

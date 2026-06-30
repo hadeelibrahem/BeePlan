@@ -1,4 +1,16 @@
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import {
+  BottomNavBar,
+  FilterTabs,
+  FloatingActionButton,
+  PageHeader,
+  ScreenLayout,
+  SearchInput,
+  StatsCard,
+} from '../components/layout';
+import { useTheme } from '../theme/useTheme';
+import type { AppTheme } from '../theme/colors';
 import type { TaskDetailsTask } from './TaskDetailsScreen';
 
 type Props = {
@@ -7,6 +19,16 @@ type Props = {
   onCreateTask: () => void;
   onViewTaskDetails: (task: TaskDetailsTask) => void;
 };
+
+type TaskFilter = 'all' | 'todo' | 'inProgress' | 'done' | 'missed';
+
+const FILTERS: { value: TaskFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'todo', label: 'To Do' },
+  { value: 'inProgress', label: 'In Progress' },
+  { value: 'done', label: 'Done' },
+  { value: 'missed', label: 'Missed' },
+];
 
 const tasks: TaskDetailsTask[] = [
   { title: 'Design new landing page hero section', category: 'Design', due: 'Today', priority: 'High', status: 'In Progress', progress: 65 },
@@ -22,90 +44,46 @@ export default function AllTasksScreen({
   onCreateTask,
   onViewTaskDetails,
 }: Props) {
+  const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState<TaskFilter>('all');
+
   return (
-    <View className="flex-1 bg-[#1f2937]">
-      <ScrollView className="px-5 pt-12" contentContainerStyle={{ paddingBottom: 120 }}>
-        <View className="mb-5 flex-row items-center justify-between">
-          <View className="flex-row items-center gap-3">
-            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-[#fde64b]">
-              <Text className="text-base font-black text-[#1f2937]">BP</Text>
-            </View>
-            <Text className="text-2xl font-black text-white">All Tasks</Text>
-          </View>
+    <ScreenLayout
+      fab={<FloatingActionButton onPress={onCreateTask} aboveNavBar />}
+      footer={<BottomNavBar active="tasks" onNavigateDashboard={onBackDashboard} onNavigateReminders={onViewReminders} />}
+    >
+      <PageHeader title="All Tasks" subtitle="Manage, filter, and track all your tasks" />
 
-          <View className="flex-row gap-2">
-            <TopButton label="S" />
-            <TopButton label="G" />
-            <TopButton label="F" active />
-          </View>
-        </View>
+      <SearchInput value={search} onChangeText={setSearch} placeholder="Search tasks..." />
 
-        <View className="mb-4 rounded-2xl bg-white/10 px-5 py-4">
-          <Text className="text-slate-400">Search tasks...</Text>
-        </View>
+      <FilterTabs tabs={FILTERS} active={activeFilter} onChange={setActiveFilter} />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-5">
-          <Chip active label="All" count="24" />
-          <Chip label="To Do" count="8" />
-          <Chip label="In Progress" count="5" />
-          <Chip label="Done" count="7" />
-          <Chip label="Missed" count="4" />
-        </ScrollView>
-
-        <View className="mb-5 flex-row justify-between">
-          <MiniStat icon="ALL" label="All Tasks" />
-          <MiniStat icon="TO" label="To Do" />
-          <MiniStat icon="UP" label="Progress" />
-          <MiniStat icon="OK" label="Done" />
-          <MiniStat icon="LATE" label="Missed" />
-        </View>
-
-        <TaskSection title="Today" tasks={tasks.slice(0, 3)} onViewTaskDetails={onViewTaskDetails} />
-        <TaskSection title="Tomorrow" tasks={tasks.slice(3, 4)} onViewTaskDetails={onViewTaskDetails} />
-        <TaskSection title="This Week" tasks={tasks.slice(4)} onViewTaskDetails={onViewTaskDetails} />
-      </ScrollView>
-
-      <TouchableOpacity
-        onPress={onCreateTask}
-        className="absolute bottom-24 right-6 h-16 w-16 items-center justify-center rounded-3xl bg-[#fde64b] shadow-xl"
-      >
-        <Text className="text-3xl font-black text-black">+</Text>
-      </TouchableOpacity>
-
-      <View className="absolute bottom-4 left-4 right-4 flex-row items-center justify-around rounded-3xl bg-[#111827] py-4">
-        <NavItem icon="D" label="Dashboard" onPress={onBackDashboard} />
-        <NavItem active icon="T" label="Tasks" />
-        <NavItem icon="R" label="Reminders" onPress={onViewReminders} />
-        <NavItem icon="C" label="Calendar" />
-        <NavItem icon="P" label="Profile" />
+      <View className="mb-5 flex-row justify-between">
+        <StatsCard icon="ALL" value="24" title="All Tasks" width="full" />
       </View>
-    </View>
+      <View className="mb-5 flex-row flex-wrap justify-between gap-y-3">
+        <MiniStat icon="📋" label="To Do" value="8" />
+        <MiniStat icon="⏳" label="Progress" value="5" />
+        <MiniStat icon="✅" label="Done" value="7" />
+        <MiniStat icon="⏰" label="Missed" value="4" />
+      </View>
+
+      <TaskSection title="Today" tasks={tasks.slice(0, 3)} onViewTaskDetails={onViewTaskDetails} />
+      <TaskSection title="Tomorrow" tasks={tasks.slice(3, 4)} onViewTaskDetails={onViewTaskDetails} />
+      <TaskSection title="This Week" tasks={tasks.slice(4)} onViewTaskDetails={onViewTaskDetails} />
+    </ScreenLayout>
   );
 }
 
-function TopButton({ label, active }: { label: string; active?: boolean }) {
-  return (
-    <TouchableOpacity className={`h-11 w-11 items-center justify-center rounded-2xl ${active ? 'bg-[#fde64b]' : 'bg-white/10'}`}>
-      <Text className={active ? 'font-black text-black' : 'font-black text-white'}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
+function MiniStat({ icon, label, value }: { icon: string; label: string; value: string }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
 
-function Chip({ label, count, active }: { label: string; count: string; active?: boolean }) {
   return (
-    <TouchableOpacity className={`mr-2 rounded-full px-4 py-3 ${active ? 'bg-[#fde64b]' : 'bg-white/10'}`}>
-      <Text className={`text-xs font-bold ${active ? 'text-black' : 'text-white'}`}>
-        {label} <Text className="opacity-60">{count}</Text>
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-function MiniStat({ icon, label }: { icon: string; label: string }) {
-  return (
-    <View className="w-[18%] items-center rounded-2xl bg-white/10 py-4">
-      <Text className="text-[10px] font-black text-[#fde64b]">{icon}</Text>
-      <Text className="mt-2 text-center text-[10px] font-bold text-white">{label}</Text>
+    <View className="w-[23%] items-center rounded-2xl border py-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+      <Text className="text-base">{icon}</Text>
+      <Text className="mt-1 text-sm font-black" style={{ color: colors.text }}>{value}</Text>
+      <Text className="mt-0.5 text-center text-[10px] font-bold" style={{ color: colors.secondaryText }}>{label}</Text>
     </View>
   );
 }
@@ -119,9 +97,11 @@ function TaskSection({
   tasks: TaskDetailsTask[];
   onViewTaskDetails: (task: TaskDetailsTask) => void;
 }) {
+  const { theme } = useTheme();
+
   return (
     <View className="mb-5">
-      <Text className="mb-3 font-bold text-white">{title}</Text>
+      <Text className="mb-3 font-bold" style={{ color: theme.colors.text }}>{title}</Text>
       {tasks.map((task) => (
         <TaskCard key={task.title} task={task} onPress={() => onViewTaskDetails(task)} />
       ))}
@@ -130,96 +110,90 @@ function TaskSection({
 }
 
 function TaskCard({ task, onPress }: { task: TaskDetailsTask; onPress: () => void }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const isDone = task.status === 'Done';
+
   return (
-    <TouchableOpacity onPress={onPress} className="mb-4 rounded-3xl bg-white/10 p-5">
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={task.title}
+      className="mb-4 rounded-3xl border p-4 active:opacity-80"
+      style={{ borderColor: colors.border, backgroundColor: colors.card }}
+    >
       <View className="flex-row items-start gap-4">
-        <View className={`mt-1 h-6 w-6 rounded-lg border ${task.status === 'Done' ? 'border-green-400 bg-green-400' : 'border-slate-500'}`} />
+        <View
+          className="mt-1 h-6 w-6 rounded-lg border"
+          style={{ borderColor: isDone ? colors.success : colors.border, backgroundColor: isDone ? colors.success : 'transparent' }}
+        />
 
         <View className="flex-1">
-          <Text className={`font-bold ${task.status === 'Done' ? 'text-slate-500 line-through' : 'text-white'}`}>
+          <Text
+            className={`font-bold ${isDone ? 'line-through' : ''}`}
+            style={{ color: isDone ? colors.secondaryText : colors.text }}
+          >
             {task.title}
           </Text>
 
           <View className="mt-2 flex-row gap-2">
             <SmallBadge label={task.category} />
-            <Text className="text-xs text-slate-400">{task.due}</Text>
+            <Text className="text-xs" style={{ color: colors.secondaryText }}>{task.due}</Text>
           </View>
 
-          <View className="mt-4 h-2 rounded-full bg-slate-700">
+          <View className="mt-4 h-2 rounded-full" style={{ backgroundColor: colors.progressTrack }}>
             <View
-              className={`${task.progress === 100 ? 'bg-green-400' : task.progress === 0 ? 'bg-slate-600' : 'bg-[#fde64b]'} h-2 rounded-full`}
-              style={{ width: `${task.progress}%` }}
+              className="h-2 rounded-full"
+              style={{
+                width: `${task.progress}%`,
+                backgroundColor: task.progress === 100 ? colors.success : task.progress === 0 ? colors.border : colors.accent,
+              }}
             />
           </View>
 
           <View className="mt-3 flex-row items-center gap-2">
-            <PriorityBadge label={task.priority} />
-            <StatusBadge label={task.status} />
-            <Text className="ml-auto text-xs text-slate-400">{task.progress}%</Text>
+            <PriorityBadge label={task.priority} theme={theme} />
+            <StatusBadge label={task.status} theme={theme} />
+            <Text className="ml-auto text-xs" style={{ color: colors.secondaryText }}>{task.progress}%</Text>
           </View>
         </View>
 
-        <Text className="text-xl text-slate-400">&gt;</Text>
+        <Text className="text-xl" style={{ color: colors.secondaryText }}>&gt;</Text>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 function SmallBadge({ label }: { label: string }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
-    <View className="rounded-full bg-white/10 px-3 py-1">
-      <Text className="text-xs text-slate-300">{label}</Text>
+    <View className="rounded-full px-3 py-1" style={{ backgroundColor: colors.surfaceElevated }}>
+      <Text className="text-xs" style={{ color: colors.secondaryText }}>{label}</Text>
     </View>
   );
 }
 
-function PriorityBadge({ label }: { label: string }) {
+function PriorityBadge({ label, theme }: { label: string; theme: AppTheme }) {
+  const { colors } = theme;
+  const color = label === 'High' ? colors.error : label === 'Medium' ? colors.warning : colors.success;
+
+  return (
+    <View className="rounded-full px-3 py-1" style={{ backgroundColor: `${color}33` }}>
+      <Text className="text-xs font-bold" style={{ color }}>{label}</Text>
+    </View>
+  );
+}
+
+function StatusBadge({ label, theme }: { label: string; theme: AppTheme }) {
+  const { colors } = theme;
   const color =
-    label === 'High'
-      ? 'bg-red-500/20 text-red-300'
-      : label === 'Medium'
-        ? 'bg-orange-500/20 text-orange-300'
-        : 'bg-green-500/20 text-green-300';
+    label === 'Done' ? colors.success : label === 'In Progress' ? colors.primary : label === 'Missed' ? colors.error : colors.secondaryText;
 
   return (
-    <View className={['rounded-full px-3 py-1', color.split(' ')[0]].join(' ')}>
-      <Text className={['text-xs font-bold', color.split(' ')[1]].join(' ')}>{label}</Text>
+    <View className="rounded-full px-3 py-1" style={{ backgroundColor: `${color}33` }}>
+      <Text className="text-xs font-bold" style={{ color }}>{label}</Text>
     </View>
-  );
-}
-
-function StatusBadge({ label }: { label: string }) {
-  const color =
-    label === 'Done'
-      ? 'bg-green-500/20 text-green-300'
-      : label === 'In Progress'
-        ? 'bg-blue-500/20 text-blue-300'
-        : label === 'Missed'
-          ? 'bg-red-500/20 text-red-300'
-          : 'bg-slate-500/20 text-slate-300';
-
-  return (
-    <View className={['rounded-full px-3 py-1', color.split(' ')[0]].join(' ')}>
-      <Text className={['text-xs font-bold', color.split(' ')[1]].join(' ')}>{label}</Text>
-    </View>
-  );
-}
-
-function NavItem({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: string;
-  label: string;
-  active?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <TouchableOpacity onPress={onPress} className="items-center">
-      <Text className={`text-sm font-black ${active ? 'text-[#fde64b]' : 'text-slate-400'}`}>{icon}</Text>
-      <Text className={`text-xs font-bold ${active ? 'text-[#fde64b]' : 'text-slate-400'}`}>{label}</Text>
-    </TouchableOpacity>
   );
 }

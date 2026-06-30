@@ -159,6 +159,40 @@
     "reminderBefore": "Reminder before",
     "priority": "Priority",
     "addItem": "Add item",
-    "checklistItem": "Checklist item"
+    "checklistItem": "Checklist item",
+    "date": "Date",
+    "time": "Time",
+    "timeTrigger": "Time Trigger",
+    "noTimeReminder": "No time reminder",
+    "generalTimeReminder": "General time",
+    "specificDateTime": "Specific date & time",
+    "locationTrigger": "Location Trigger",
+    "noLocationReminder": "No location reminder",
+    "generalLocationReminder": "General location",
+    "specificLocationReminder": "Specific location",
+    "repeatCustom": "Custom",
+    "customLabelPlaceholder": "Describe it...",
+    "searchPlaceManualHint": "Pick a place from the search results.",
+    "generalTimeCategory": {
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening",
+      "night": "Night",
+      "weekdays": "Weekdays",
+      "weekends": "Weekends",
+      "custom": "Custom recurring period"
+    },
+    "generalLocationCategory": {
+      "home": "Home",
+      "work": "Work",
+      "university": "University",
+      "school": "School",
+      "gym": "Gym",
+      "pharmacy": "Pharmacy",
+      "grocery_store": "Grocery Store",
+      "airport": "Airport",
+      "hospital": "Hospital",
+      "custom": "Custom category"
+    }
   }
 }

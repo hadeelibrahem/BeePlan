@@ -1,5 +1,15 @@
 import type { ReactNode } from 'react';
-import { ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
+import {
+  AppScreen,
+  BottomActionBar,
+  DangerButton,
+  PageHeader,
+  PrimaryButton,
+  SecondaryButton,
+  SectionCard,
+} from '../components/layout';
+import { useTheme } from '../theme/useTheme';
 
 export type TaskDetailsTask = {
   title: string;
@@ -46,12 +56,14 @@ const attachments = [
   { name: 'Brand notes.docx', size: '640 KB', type: 'DOC' },
 ];
 
-const timeline = [
-  { title: 'Attachment Uploaded', detail: 'Q3 strategy outline.pdf', time: '12 min ago', color: '#3B82F6' },
-  { title: 'Progress Updated', detail: 'Moved from 64% to 72%', time: '38 min ago', color: '#FDE64B' },
-  { title: 'Status Changed', detail: 'Task moved to In Progress', time: 'Yesterday', color: '#22C55E' },
-  { title: 'Reminder Added', detail: '30 minutes before due time', time: 'Yesterday', color: '#F97316' },
-  { title: 'Task Created', detail: 'Created by Fatima', time: 'Jun 2', color: '#94A3B8' },
+type TimelineTone = 'primary' | 'accent' | 'success' | 'warning' | 'secondary';
+
+const timeline: { title: string; detail: string; time: string; tone: TimelineTone }[] = [
+  { title: 'Attachment Uploaded', detail: 'Q3 strategy outline.pdf', time: '12 min ago', tone: 'primary' },
+  { title: 'Progress Updated', detail: 'Moved from 64% to 72%', time: '38 min ago', tone: 'accent' },
+  { title: 'Status Changed', detail: 'Task moved to In Progress', time: 'Yesterday', tone: 'success' },
+  { title: 'Reminder Added', detail: '30 minutes before due time', time: 'Yesterday', tone: 'warning' },
+  { title: 'Task Created', detail: 'Created by Fatima', time: 'Jun 2', tone: 'secondary' },
 ];
 
 const labels = ['Design', 'Marketing', 'University', 'Work'];
@@ -63,232 +75,192 @@ export default function TaskDetailsScreen({
   onDelete,
   onMarkDone,
 }: Props) {
+  const { theme } = useTheme();
+  const { colors } = theme;
   const currentTask = task ?? fallbackTask;
   const completedSubtasks = subtasks.filter((item) => item.done).length;
+  const toneColor = (tone: TimelineTone) =>
+    tone === 'primary' ? colors.primary : tone === 'accent' ? colors.accent : tone === 'success' ? colors.success : tone === 'warning' ? colors.warning : colors.secondaryText;
+  const labelTones: TimelineTone[] = ['accent', 'primary', 'success', 'warning'];
 
   return (
-    <View className="flex-1 bg-[#1F2937]">
-      <ScrollView className="px-5 pt-12" contentContainerStyle={{ paddingBottom: 120 }}>
-        <View className="mb-6 flex-row items-center justify-between">
-          <TouchableOpacity
-            accessibilityLabel="Go back"
-            onPress={onBack}
-            className="h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-[#2B3443]"
-          >
-            <Text className="text-xl font-black text-white">‹</Text>
-          </TouchableOpacity>
+    <AppScreen
+      footer={
+        <BottomActionBar>
+          <DangerButton onPress={onDelete} className="flex-1">
+            Delete
+          </DangerButton>
+          <SecondaryButton onPress={onEdit} className="flex-1">
+            Edit Task
+          </SecondaryButton>
+          <PrimaryButton onPress={onMarkDone} className="flex-1">
+            Done
+          </PrimaryButton>
+        </BottomActionBar>
+      }
+    >
+      <PageHeader title="Task Details" onBack={onBack} />
 
-          <View className="items-center">
-            <View className="mb-1 h-9 w-9 items-center justify-center rounded-2xl bg-[#FDE64B]">
-              <Text className="font-black text-[#1F2937]">BP</Text>
-            </View>
-            <Text className="text-lg font-black text-white">Task Details</Text>
+      <SectionCard className="mb-5">
+        <View className="mb-5 flex-row items-start justify-between gap-4">
+          <View className="flex-1">
+            <Text className="text-2xl font-black leading-8" style={{ color: colors.text }}>{currentTask.title}</Text>
+            <Text className="mt-3 text-sm leading-6" style={{ color: colors.secondaryText }}>
+              Build the final presentation story, confirm campaign numbers, and prepare the deck for team review.
+            </Text>
           </View>
 
-          <TouchableOpacity
-            accessibilityLabel="Open task menu"
-            className="h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-[#2B3443]"
-          >
-            <Text className="text-xl font-black text-white">...</Text>
-          </TouchableOpacity>
+          <Pressable accessibilityRole="button" accessibilityLabel="Favorite" className="h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: colors.background }}>
+            <Text className="text-xl" style={{ color: colors.accent }}>★</Text>
+          </Pressable>
         </View>
 
-        <Card>
-          <View className="mb-5 flex-row items-start justify-between gap-4">
-            <View className="flex-1">
-              <Text className="text-2xl font-black leading-8 text-white">{currentTask.title}</Text>
-              <Text className="mt-3 text-sm leading-6 text-[#94A3B8]">
-                Build the final presentation story, confirm campaign numbers, and prepare the deck for team review.
-              </Text>
-            </View>
+        <View className="mb-5 flex-row flex-wrap gap-2">
+          <Badge label={currentTask.status} color={colors.primary} />
+          <Badge label={`${currentTask.priority} Priority`} color={colors.error} />
+          <Badge label={currentTask.category} color={colors.accent} />
+        </View>
 
-            <TouchableOpacity className="h-12 w-12 items-center justify-center rounded-2xl bg-black/20">
-              <Text className="text-xl text-[#FDE64B]">★</Text>
-            </TouchableOpacity>
+        <View className="gap-3">
+          <InfoRow label="Created" value="Jun 2, 2026" />
+          <InfoRow label="Updated" value="Today, 10:42 AM" />
+          <InfoRow label="Due Date" value={currentTask.due} />
+          <InfoRow label="Due Time" value="4:30 PM" />
+        </View>
+      </SectionCard>
+
+      <Card title="Progress">
+        <View className="mb-5 flex-row items-center justify-between">
+          <View>
+            <Text className="text-4xl font-black" style={{ color: colors.text }}>{currentTask.progress}%</Text>
+            <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
+              {completedSubtasks} of {subtasks.length} subtasks completed
+            </Text>
           </View>
+          <IconTile label="↑" color={colors.primary} />
+        </View>
 
-          <View className="mb-5 flex-row flex-wrap gap-2">
-            <Badge label={currentTask.status} tone="blue" />
-            <Badge label={`${currentTask.priority} Priority`} tone="red" />
-            <Badge label={currentTask.category} tone="yellow" />
-          </View>
+        <ProgressBar value={currentTask.progress} color={colors.primary} />
 
-          <View className="gap-3">
-            <InfoRow label="Created" value="Jun 2, 2026" />
-            <InfoRow label="Updated" value="Today, 10:42 AM" />
-            <InfoRow label="Due Date" value={currentTask.due} />
-            <InfoRow label="Due Time" value="4:30 PM" />
-          </View>
-        </Card>
+        <View className="mt-5 flex-row gap-3">
+          <TimePill title="Estimated" value="6h" />
+          <TimePill title="Spent" value="4h 20m" />
+          <TimePill title="Remaining" value="1h 40m" />
+        </View>
+      </Card>
 
-        <Card title="Progress" icon="72">
-          <View className="mb-5 flex-row items-center justify-between">
-            <View>
-              <Text className="text-4xl font-black text-white">{currentTask.progress}%</Text>
-              <Text className="mt-1 text-sm text-[#94A3B8]">
-                {completedSubtasks} of {subtasks.length} subtasks completed
-              </Text>
-            </View>
-            <IconTile label="UP" color="#3B82F6" />
-          </View>
+      <Card title="Subtasks" action="+ Add Subtask">
+        {subtasks.map((item) => (
+          <SubtaskRow key={item.title} item={item} />
+        ))}
+      </Card>
 
-          <ProgressBar value={currentTask.progress} />
+      <Card title="Dependencies">
+        {dependencies.map((item, index) => (
+          <DependencyRow key={item.title} item={item} isLast={index === dependencies.length - 1} />
+        ))}
+      </Card>
 
-          <View className="mt-5 flex-row gap-3">
-            <TimePill title="Estimated" value="6h" />
-            <TimePill title="Spent" value="4h 20m" />
-            <TimePill title="Remaining" value="1h 40m" />
-          </View>
-        </Card>
-
-        <Card title="Subtasks" action="+ Add Subtask">
-          {subtasks.map((item) => (
-            <SubtaskRow key={item.title} item={item} />
-          ))}
-        </Card>
-
-        <Card title="Dependencies">
-          {dependencies.map((item, index) => (
-            <DependencyRow key={item.title} item={item} isLast={index === dependencies.length - 1} />
-          ))}
-        </Card>
-
-        <Card>
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-3">
-              <IconTile label="BL" color="#FDE64B" compact />
-              <View>
-                <Text className="font-black text-white">Reminder</Text>
-                <Text className="mt-1 text-sm text-[#94A3B8]">30 minutes before at 4:00 PM</Text>
-              </View>
-            </View>
-            <Switch
-              value
-              trackColor={{ false: '#374151', true: '#FDE64B' }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-        </Card>
-
-        <Card>
+      <SectionCard className="mb-5">
+        <View className="flex-row items-center justify-between">
           <View className="flex-row items-center gap-3">
-            <IconTile label="RE" color="#3B82F6" compact />
+            <IconTile label="🔔" color={colors.accent} compact />
             <View>
-              <Text className="font-black text-white">Recurring</Text>
-              <Text className="mt-1 text-sm text-[#94A3B8]">Every Monday</Text>
+              <Text className="font-black" style={{ color: colors.text }}>Reminder</Text>
+              <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>30 minutes before at 4:00 PM</Text>
             </View>
           </View>
-        </Card>
+          <Switch value trackColor={{ false: colors.border, true: colors.accent }} thumbColor="#FFFFFF" />
+        </View>
+      </SectionCard>
 
-        <Card title="Notes" action="Edit">
-          <Text className="rounded-3xl bg-black/20 p-4 text-sm leading-6 text-slate-300">
-            Keep the deck direct and executive-friendly. Confirm the final budget numbers before exporting.
-          </Text>
-        </Card>
+      <SectionCard className="mb-5">
+        <View className="flex-row items-center gap-3">
+          <IconTile label="🔁" color={colors.primary} compact />
+          <View>
+            <Text className="font-black" style={{ color: colors.text }}>Recurring</Text>
+            <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>Every Monday</Text>
+          </View>
+        </View>
+      </SectionCard>
 
-        <Card title="Attachments" action="Upload">
-          {attachments.map((file) => (
-            <AttachmentRow key={file.name} file={file} />
-          ))}
-        </Card>
+      <Card title="Notes" action="Edit">
+        <Text className="rounded-3xl p-4 text-sm leading-6" style={{ backgroundColor: colors.background, color: colors.secondaryText }}>
+          Keep the deck direct and executive-friendly. Confirm the final budget numbers before exporting.
+        </Text>
+      </Card>
 
-        <Card title="Activity Timeline">
-          {timeline.map((item, index) => (
-            <TimelineRow key={item.title} item={item} isLast={index === timeline.length - 1} />
-          ))}
-        </Card>
+      <Card title="Attachments" action="Upload">
+        {attachments.map((file) => (
+          <AttachmentRow key={file.name} file={file} />
+        ))}
+      </Card>
 
-        <Card title="Labels">
-          <View className="flex-row flex-wrap gap-2">
-            {labels.map((label, index) => (
-              <View
-                key={label}
-                className="rounded-full px-4 py-3"
-                style={{ backgroundColor: ['#FDE64B', '#3B82F6', '#22C55E', '#F97316'][index] + '22' }}
-              >
-                <Text
-                  className="text-xs font-black"
-                  style={{ color: ['#FDE64B', '#93C5FD', '#86EFAC', '#FDBA74'][index] }}
-                >
+      <Card title="Activity Timeline">
+        {timeline.map((item, index) => (
+          <TimelineRow key={item.title} item={item} color={toneColor(item.tone)} isLast={index === timeline.length - 1} />
+        ))}
+      </Card>
+
+      <Card title="Labels">
+        <View className="flex-row flex-wrap gap-2">
+          {labels.map((label, index) => {
+            const color = toneColor(labelTones[index]);
+            return (
+              <View key={label} className="rounded-full px-4 py-3" style={{ backgroundColor: `${color}22` }}>
+                <Text className="text-xs font-black" style={{ color }}>
                   {label}
                 </Text>
               </View>
-            ))}
-          </View>
-        </Card>
+            );
+          })}
+        </View>
+      </Card>
 
-        <Card title="Time Estimation">
-          <View className="gap-4">
-            <ChartRow label="Estimated" value="6h" percent={100} color="#94A3B8" />
-            <ChartRow label="Spent" value="4h 20m" percent={72} color="#3B82F6" />
-            <ChartRow label="Remaining" value="1h 40m" percent={28} color="#FDE64B" />
-          </View>
-        </Card>
-      </ScrollView>
-
-      <View className="absolute bottom-0 left-0 right-0 flex-row gap-3 border-t border-white/10 bg-[#111827] px-5 py-4">
-        <TouchableOpacity
-          onPress={onDelete}
-          className="flex-1 rounded-2xl border border-red-400/50 py-4"
-        >
-          <Text className="text-center text-xs font-black text-red-300">Delete</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={onEdit} className="flex-1 rounded-2xl bg-[#2B3443] py-4">
-          <Text className="text-center text-xs font-black text-white">Edit Task</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={onMarkDone} className="flex-1 rounded-2xl bg-[#FDE64B] py-4">
-          <Text className="text-center text-xs font-black text-[#1F2937]">Done</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      <Card title="Time Estimation">
+        <View className="gap-4">
+          <ChartRow label="Estimated" value="6h" percent={100} color={colors.secondaryText} />
+          <ChartRow label="Spent" value="4h 20m" percent={72} color={colors.primary} />
+          <ChartRow label="Remaining" value="1h 40m" percent={28} color={colors.accent} />
+        </View>
+      </Card>
+    </AppScreen>
   );
 }
 
 function Card({
   title,
-  icon,
   action,
   children,
 }: {
   title?: string;
-  icon?: string;
   action?: string;
   children: ReactNode;
 }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
-    <View className="mb-5 rounded-[24px] border border-white/10 bg-[#2B3443] p-5 shadow-xl">
+    <SectionCard className="mb-5">
       {(title || action) && (
         <View className="mb-5 flex-row items-center justify-between">
-          <View className="flex-row items-center gap-3">
-            {icon ? <IconTile label={icon} color="#FDE64B" compact /> : null}
-            {title ? <Text className="text-lg font-black text-white">{title}</Text> : null}
-          </View>
+          {title ? <Text className="text-lg font-black" style={{ color: colors.text }}>{title}</Text> : <View />}
           {action ? (
-            <TouchableOpacity className="rounded-full bg-black/20 px-3 py-2">
-              <Text className="text-xs font-black text-[#FDE64B]">{action}</Text>
-            </TouchableOpacity>
+            <Pressable accessibilityRole="button" accessibilityLabel={action} className="rounded-full px-3 py-2 active:opacity-70" style={{ backgroundColor: colors.background }}>
+              <Text className="text-xs font-black" style={{ color: colors.accent }}>{action}</Text>
+            </Pressable>
           ) : null}
         </View>
       )}
       {children}
-    </View>
+    </SectionCard>
   );
 }
 
-function Badge({ label, tone }: { label: string; tone: 'blue' | 'red' | 'yellow' | 'green' | 'slate' }) {
-  const colors = {
-    blue: ['#3B82F633', '#93C5FD'],
-    red: ['#EF444433', '#FCA5A5'],
-    yellow: ['#FDE64B33', '#FDE64B'],
-    green: ['#22C55E33', '#86EFAC'],
-    slate: ['#94A3B833', '#CBD5E1'],
-  }[tone];
-
+function Badge({ label, color }: { label: string; color: string }) {
   return (
-    <View className="rounded-full px-3 py-2" style={{ backgroundColor: colors[0] }}>
-      <Text className="text-xs font-black" style={{ color: colors[1] }}>
+    <View className="rounded-full px-3 py-2" style={{ backgroundColor: `${color}33` }}>
+      <Text className="text-xs font-black" style={{ color }}>
         {label}
       </Text>
     </View>
@@ -296,10 +268,13 @@ function Badge({ label, tone }: { label: string; tone: 'blue' | 'red' | 'yellow'
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
-    <View className="flex-row items-center justify-between rounded-2xl bg-black/20 px-4 py-3">
-      <Text className="text-xs font-bold uppercase tracking-wide text-[#94A3B8]">{label}</Text>
-      <Text className="font-bold text-white">{value}</Text>
+    <View className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: colors.background }}>
+      <Text className="text-xs font-bold uppercase tracking-wide" style={{ color: colors.secondaryText }}>{label}</Text>
+      <Text className="font-bold" style={{ color: colors.text }}>{value}</Text>
     </View>
   );
 }
@@ -317,19 +292,24 @@ function IconTile({ label, color, compact }: { label: string; color: string; com
   );
 }
 
-function ProgressBar({ value }: { value: number }) {
+function ProgressBar({ value, color }: { value: number; color: string }) {
+  const { theme } = useTheme();
+
   return (
-    <View className="h-3 overflow-hidden rounded-full bg-black/30">
-      <View className="h-full rounded-full bg-[#3B82F6]" style={{ width: `${value}%` }} />
+    <View className="h-3 overflow-hidden rounded-full" style={{ backgroundColor: theme.colors.progressTrack }}>
+      <View className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: color }} />
     </View>
   );
 }
 
 function TimePill({ title, value }: { title: string; value: string }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
-    <View className="flex-1 rounded-2xl bg-black/20 p-3">
-      <Text className="text-[10px] font-bold uppercase text-[#94A3B8]">{title}</Text>
-      <Text className="mt-1 text-sm font-black text-white">{value}</Text>
+    <View className="flex-1 rounded-2xl p-3" style={{ backgroundColor: colors.background }}>
+      <Text className="text-[10px] font-bold uppercase" style={{ color: colors.secondaryText }}>{title}</Text>
+      <Text className="mt-1 text-sm font-black" style={{ color: colors.text }}>{value}</Text>
     </View>
   );
 }
@@ -339,27 +319,29 @@ function SubtaskRow({
 }: {
   item: { title: string; assignee: string; due: string; status: string; done: boolean };
 }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
-    <View className="mb-3 flex-row items-center gap-3 rounded-2xl bg-black/20 p-4">
+    <View className="mb-3 flex-row items-center gap-3 rounded-2xl p-4" style={{ backgroundColor: colors.background }}>
       <View
-        className={`h-6 w-6 items-center justify-center rounded-lg border ${
-          item.done ? 'border-green-400 bg-green-400' : 'border-slate-500'
-        }`}
+        className="h-6 w-6 items-center justify-center rounded-lg border"
+        style={{ borderColor: item.done ? colors.success : colors.border, backgroundColor: item.done ? colors.success : 'transparent' }}
       >
-        {item.done ? <Text className="text-xs font-black text-[#1F2937]">✓</Text> : null}
+        {item.done ? <Text className="text-xs font-black" style={{ color: colors.accentText }}>✓</Text> : null}
       </View>
 
       <View className="flex-1">
-        <Text className={`font-bold ${item.done ? 'text-slate-500 line-through' : 'text-white'}`}>
+        <Text className={`font-bold ${item.done ? 'line-through' : ''}`} style={{ color: item.done ? colors.secondaryText : colors.text }}>
           {item.title}
         </Text>
-        <Text className="mt-1 text-xs text-[#94A3B8]">{item.due}</Text>
+        <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{item.due}</Text>
       </View>
 
-      <View className="h-9 w-9 items-center justify-center rounded-full bg-[#FDE64B]">
-        <Text className="text-[10px] font-black text-[#1F2937]">{item.assignee}</Text>
+      <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: colors.accent }}>
+        <Text className="text-[10px] font-black" style={{ color: colors.accentText }}>{item.assignee}</Text>
       </View>
-      <Badge label={item.status} tone={item.done ? 'green' : 'blue'} />
+      <Badge label={item.status} color={item.done ? colors.success : colors.primary} />
     </View>
   );
 }
@@ -371,59 +353,69 @@ function DependencyRow({
   item: { title: string; status: string };
   isLast: boolean;
 }) {
-  const tone = item.status === 'Done' ? 'green' : item.status === 'Blocked' ? 'red' : 'yellow';
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const color = item.status === 'Done' ? colors.success : item.status === 'Blocked' ? colors.error : colors.accent;
 
   return (
     <View>
       <View className="flex-row items-center gap-4">
-        <View className="h-9 w-9 items-center justify-center rounded-full bg-black/20">
-          <View className="h-3 w-3 rounded-full bg-[#FDE64B]" />
+        <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: colors.background }}>
+          <View className="h-3 w-3 rounded-full" style={{ backgroundColor: colors.accent }} />
         </View>
-        <View className="flex-1 flex-row items-center justify-between rounded-2xl bg-black/20 p-4">
-          <Text className="font-bold text-white">{item.title}</Text>
-          <Badge label={item.status} tone={tone} />
+        <View className="flex-1 flex-row items-center justify-between rounded-2xl p-4" style={{ backgroundColor: colors.background }}>
+          <Text className="font-bold" style={{ color: colors.text }}>{item.title}</Text>
+          <Badge label={item.status} color={color} />
         </View>
       </View>
-      {!isLast ? <Text className="ml-4 py-2 text-xl font-black text-[#94A3B8]">↓</Text> : null}
+      {!isLast ? <Text className="ml-4 py-2 text-xl font-black" style={{ color: colors.secondaryText }}>↓</Text> : null}
     </View>
   );
 }
 
 function AttachmentRow({ file }: { file: { name: string; size: string; type: string } }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
-    <View className="mb-3 flex-row items-center gap-3 rounded-2xl bg-black/20 p-4">
-      <IconTile label={file.type} color="#FDE64B" compact />
+    <View className="mb-3 flex-row items-center gap-3 rounded-2xl p-4" style={{ backgroundColor: colors.background }}>
+      <IconTile label={file.type} color={colors.accent} compact />
       <View className="flex-1">
-        <Text className="font-bold text-white">{file.name}</Text>
-        <Text className="mt-1 text-xs text-[#94A3B8]">{file.size}</Text>
+        <Text className="font-bold" style={{ color: colors.text }}>{file.name}</Text>
+        <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{file.size}</Text>
       </View>
-      <TouchableOpacity className="h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-        <Text className="font-black text-white">↓</Text>
-      </TouchableOpacity>
-      <TouchableOpacity className="h-9 w-9 items-center justify-center rounded-xl bg-red-500/20">
-        <Text className="font-black text-red-300">×</Text>
-      </TouchableOpacity>
+      <Pressable accessibilityRole="button" accessibilityLabel="Download" className="h-9 w-9 items-center justify-center rounded-xl active:opacity-70" style={{ backgroundColor: colors.border }}>
+        <Text className="font-black" style={{ color: colors.text }}>↓</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Remove" className="h-9 w-9 items-center justify-center rounded-xl active:opacity-70" style={{ backgroundColor: `${colors.error}33` }}>
+        <Text className="font-black" style={{ color: colors.error }}>×</Text>
+      </Pressable>
     </View>
   );
 }
 
 function TimelineRow({
   item,
+  color,
   isLast,
 }: {
-  item: { title: string; detail: string; time: string; color: string };
+  item: { title: string; detail: string; time: string };
+  color: string;
   isLast: boolean;
 }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
     <View className="flex-row gap-4">
       <View className="items-center">
-        <View className="h-4 w-4 rounded-full" style={{ backgroundColor: item.color }} />
-        {!isLast ? <View className="w-px flex-1 bg-white/10" /> : null}
+        <View className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
+        {!isLast ? <View className="w-px flex-1" style={{ backgroundColor: colors.border }} /> : null}
       </View>
       <View className="mb-5 flex-1">
-        <Text className="font-black text-white">{item.title}</Text>
-        <Text className="mt-1 text-sm text-[#94A3B8]">{item.detail}</Text>
-        <Text className="mt-2 text-xs font-bold text-[#FDE64B]">{item.time}</Text>
+        <Text className="font-black" style={{ color: colors.text }}>{item.title}</Text>
+        <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>{item.detail}</Text>
+        <Text className="mt-2 text-xs font-bold" style={{ color: colors.accent }}>{item.time}</Text>
       </View>
     </View>
   );
@@ -440,15 +432,18 @@ function ChartRow({
   percent: number;
   color: string;
 }) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
   return (
     <View>
       <View className="mb-2 flex-row items-center justify-between">
-        <Text className="font-bold text-white">{label}</Text>
+        <Text className="font-bold" style={{ color: colors.text }}>{label}</Text>
         <Text className="text-sm font-black" style={{ color }}>
           {value}
         </Text>
       </View>
-      <View className="h-3 overflow-hidden rounded-full bg-black/30">
+      <View className="h-3 overflow-hidden rounded-full" style={{ backgroundColor: colors.progressTrack }}>
         <View className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: color }} />
       </View>
     </View>

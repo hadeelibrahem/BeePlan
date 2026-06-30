@@ -1,9 +1,9 @@
 import * as Location from 'expo-location';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
 import { searchPlacesByCategory, type NearbyPlace } from '../../../lib/geoapify';
+import { useTheme } from '../../../theme/useTheme';
 import { PLACE_CATEGORIES } from '../constants/placeCategories';
 import type { LocationMode, Reminder, TriggerType } from '../types/reminders.types';
 import { PlacesAutocompleteInput, type PlaceSelection } from './PlacesAutocompleteInput';
@@ -18,9 +18,9 @@ type Props = {
 const MODES: LocationMode[] = ['specific', 'category'];
 
 export function LocationReminderFields({ value, onChange }: Props) {
-  const { theme } = useTheme();
   const { t } = useLanguage();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme } = useTheme();
+  const { colors } = theme;
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
   return (
     <View className="gap-4">
       <View>
-        <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={styles.label}>
+        <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
           {t('reminders.locationMode')}
         </Text>
         <View className="flex-row gap-2">
@@ -111,16 +111,13 @@ export function LocationReminderFields({ value, onChange }: Props) {
                 onPress={() => setMode(mode)}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                className="flex-1 rounded-xl border px-3 py-3"
-                style={selected ? styles.selectedOption : styles.option}
+                className="flex-1 rounded-xl border px-3 py-3 active:opacity-80"
+                style={{ borderColor: selected ? colors.accent : colors.border, backgroundColor: selected ? colors.accentSoft : colors.input }}
               >
-                <Text className="text-sm font-black" style={styles.text}>
+                <Text className="text-sm font-black" style={{ color: colors.text }}>
                   {t(mode === 'specific' ? 'reminders.modeSpecific' : 'reminders.modeCategory')}
                 </Text>
-                <Text
-                  className="mt-1 text-xs font-semibold"
-                  style={selected ? styles.selectedHint : styles.hint}
-                >
+                <Text className="mt-1 text-xs font-semibold" style={{ color: selected ? colors.accent : colors.secondaryText }}>
                   {t(mode === 'specific' ? 'reminders.modeSpecificHint' : 'reminders.modeCategoryHint')}
                 </Text>
               </Pressable>
@@ -131,8 +128,8 @@ export function LocationReminderFields({ value, onChange }: Props) {
 
       {value.mode === 'specific' && (
         <>
-          <View className="rounded-2xl border px-4 py-3" style={styles.field}>
-            <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
+          <View className="rounded-2xl border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.input }}>
+            <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
               {t('reminders.searchPlace')}
             </Text>
             <PlacesAutocompleteInput
@@ -143,13 +140,11 @@ export function LocationReminderFields({ value, onChange }: Props) {
             />
           </View>
           {!!value.address && (
-            <View className="rounded-2xl border px-4 py-3" style={styles.fieldMuted}>
-              <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
+            <View className="rounded-2xl border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
+              <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
                 {t('reminders.placeAddress')}
               </Text>
-              <Text className="py-2 text-base font-semibold" style={styles.text}>
-                {value.address}
-              </Text>
+              <Text className="py-2 text-base font-semibold" style={{ color: colors.text }}>{value.address}</Text>
             </View>
           )}
         </>
@@ -157,7 +152,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
 
       {value.mode === 'category' && (
         <View>
-          <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={styles.label}>
+          <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
             {t('reminders.placeCategory')}
           </Text>
           <View className="flex-row flex-wrap gap-2">
@@ -169,13 +164,10 @@ export function LocationReminderFields({ value, onChange }: Props) {
                   onPress={() => onChange({ ...value, category })}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
-                  className="rounded-full border px-4 py-2.5"
-                  style={selected ? styles.selectedPill : styles.pill}
+                  className="rounded-full border px-4 py-2.5 active:opacity-80"
+                  style={{ borderColor: selected ? colors.accent : colors.border, backgroundColor: selected ? colors.accentSoft : colors.input }}
                 >
-                  <Text
-                    className="text-xs font-black capitalize"
-                    style={selected ? styles.selectedText : styles.text}
-                  >
+                  <Text className="text-xs font-black capitalize" style={{ color: selected ? colors.accent : colors.text }}>
                     {t(`reminders.category.${category}`)}
                   </Text>
                 </Pressable>
@@ -183,13 +175,13 @@ export function LocationReminderFields({ value, onChange }: Props) {
             })}
           </View>
           {nearbyPlaces.length > 0 && (
-            <View className="mt-4 rounded-2xl border px-4 py-3" style={styles.fieldMuted}>
-              <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
+            <View className="mt-4 rounded-2xl border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
+              <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
                 {t('reminders.nearbyExamples')}
               </Text>
               <View className="gap-1 py-1">
                 {nearbyPlaces.map((place, index) => (
-                  <Text key={`${place.name}-${index}`} className="text-sm font-semibold" style={styles.text}>
+                  <Text key={`${place.name}-${index}`} className="text-sm font-semibold" style={{ color: colors.text }}>
                     {place.name}
                   </Text>
                 ))}
@@ -199,8 +191,8 @@ export function LocationReminderFields({ value, onChange }: Props) {
         </View>
       )}
 
-      <View className="rounded-2xl border px-4 py-3" style={styles.field}>
-        <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
+      <View className="rounded-2xl border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.input }}>
+        <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
           {t('reminders.radiusMeters')}
         </Text>
         <TextInput
@@ -208,7 +200,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
           value={String(value.radiusMeters)}
           onChangeText={(text) => setRadius(Number(text) || 0)}
           className="py-2 text-base font-semibold"
-          style={styles.text}
+          style={{ color: colors.text }}
         />
       </View>
 
@@ -221,13 +213,10 @@ export function LocationReminderFields({ value, onChange }: Props) {
               onPress={() => setTriggerType(triggerType)}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              className="flex-1 rounded-full border px-4 py-3"
-              style={selected ? styles.selectedPill : styles.pill}
+              className="flex-1 rounded-full border px-4 py-3 active:opacity-80"
+              style={{ borderColor: selected ? colors.accent : colors.border, backgroundColor: selected ? colors.accentSoft : colors.input }}
             >
-              <Text
-                className="text-center text-xs font-black capitalize"
-                style={selected ? styles.selectedText : styles.text}
-              >
+              <Text className="text-center text-xs font-black capitalize" style={{ color: selected ? colors.accent : colors.text }}>
                 {t(`reminders.${triggerType}`)}
               </Text>
             </Pressable>
@@ -236,49 +225,4 @@ export function LocationReminderFields({ value, onChange }: Props) {
       </View>
     </View>
   );
-}
-
-function createStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    label: {
-      color: theme.colors.textSubtle,
-    },
-    hint: {
-      color: theme.colors.textSubtle,
-    },
-    selectedHint: {
-      color: theme.colors.accent,
-    },
-    field: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    fieldMuted: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-      opacity: 0.8,
-    },
-    option: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    selectedOption: {
-      backgroundColor: theme.colors.accentSoft,
-      borderColor: theme.colors.accent,
-    },
-    pill: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    selectedPill: {
-      backgroundColor: theme.colors.accentSoft,
-      borderColor: theme.colors.accent,
-    },
-    text: {
-      color: theme.colors.text,
-    },
-    selectedText: {
-      color: theme.colors.accent,
-    },
-  });
 }

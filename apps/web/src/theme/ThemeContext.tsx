@@ -4,13 +4,28 @@ export type ThemeMode = 'dark' | 'light'
 
 type ThemeContextValue = {
   mode: ThemeMode
+  isDark: boolean
   toggleTheme: () => void
+  setThemeMode: (mode: ThemeMode) => void
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
+const STORAGE_KEY = 'beeplan-web-theme'
+
+function getInitialMode(): ThemeMode {
+  if (typeof window === 'undefined') return 'dark'
+
+  const stored = window.localStorage.getItem(STORAGE_KEY)
+  if (stored === 'dark' || stored === 'light') return stored
+
+  if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light'
+
+  return 'dark'
+}
+
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [mode, setMode] = useState<ThemeMode>('dark')
+  const [mode, setMode] = useState<ThemeMode>(getInitialMode)
 
   useEffect(() => {
     document.documentElement.dataset.theme = mode
@@ -25,10 +40,22 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     metaThemeColor.content = mode === 'dark' ? '#2b323f' : '#ffffff'
   }, [mode])
 
-  const value = useMemo(
+  const setThemeMode = (next: ThemeMode) => {
+    setMode(next)
+    window.localStorage.setItem(STORAGE_KEY, next)
+  }
+
+  const value = useMemo<ThemeContextValue>(
     () => ({
       mode,
-      toggleTheme: () => setMode((current) => (current === 'dark' ? 'light' : 'dark')),
+      isDark: mode === 'dark',
+      toggleTheme: () =>
+        setMode((current) => {
+          const next = current === 'dark' ? 'light' : 'dark'
+          window.localStorage.setItem(STORAGE_KEY, next)
+          return next
+        }),
+      setThemeMode,
     }),
     [mode],
   )

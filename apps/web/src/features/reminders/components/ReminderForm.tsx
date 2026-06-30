@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import type {
   ChecklistItem,
+  ChecklistReminderTrigger,
   Reminder,
   ReminderFormValues,
   ReminderPriority,
@@ -9,6 +10,7 @@ import type {
   RepeatRule,
 } from '../types/reminders.types'
 import { ChecklistInput } from './ChecklistInput'
+import { ChecklistReminderSection } from './ChecklistReminderSection'
 import { DateTimeSection } from './DateTimeSection'
 import { LocationReminderFields } from './LocationReminderFields'
 import { PrioritySelector } from './PrioritySelector'
@@ -27,6 +29,10 @@ const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
   location: reminder?.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' },
   context: reminder?.context ?? { condition: '', detail: '' },
   checklistItems: reminder?.checklistItems ?? [{ id: 'item-1', title: '', isDone: false }],
+  checklistReminderTrigger: reminder?.checklistReminderTrigger ?? {
+    time: { type: 'none' },
+    location: { type: 'none' },
+  },
 })
 
 type Props = {
@@ -63,7 +69,27 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
       return false
     }
     if (values.type === 'context') return Boolean(values.context?.condition.trim())
-    if (values.type === 'checklist') return Boolean(values.checklistItems?.some((item) => item.title.trim()))
+    if (values.type === 'checklist') {
+      if (!values.checklistItems?.some((item) => item.title.trim())) return false
+
+      const timeTrigger = values.checklistReminderTrigger?.time
+      if (timeTrigger?.type === 'general_time' && !timeTrigger.generalTime?.category) return false
+      if (timeTrigger?.type === 'specific_time') {
+        if (!timeTrigger.specificTime?.date?.trim() || !timeTrigger.specificTime?.time?.trim()) return false
+      }
+
+      const locationTrigger = values.checklistReminderTrigger?.location
+      if (locationTrigger?.type === 'general_location' && !locationTrigger.generalLocation?.category) return false
+      if (locationTrigger?.type === 'specific_location') {
+        const place = locationTrigger.specificLocation
+        if (!place?.geoapifyPlaceId || !place.placeName?.trim() || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+          return false
+        }
+        if (!place.trigger) return false
+      }
+
+      return true
+    }
     return true
   }, [values])
 
@@ -72,6 +98,8 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
   const setRepeatRule = (repeatRule: RepeatRule) => setValues((current) => ({ ...current, repeatRule }))
   const setChecklistItems = (checklistItems: ChecklistItem[]) =>
     setValues((current) => ({ ...current, checklistItems }))
+  const setChecklistReminderTrigger = (checklistReminderTrigger: ChecklistReminderTrigger) =>
+    setValues((current) => ({ ...current, checklistReminderTrigger }))
   const setLocation = (location: NonNullable<ReminderFormValues['location']>) =>
     setValues((current) => ({ ...current, location }))
 
@@ -178,7 +206,15 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
           </section>
         )}
 
-        {values.type === 'checklist' && <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />}
+        {values.type === 'checklist' && (
+          <section className="grid gap-4">
+            <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />
+            <ChecklistReminderSection
+              value={values.checklistReminderTrigger ?? { time: { type: 'none' }, location: { type: 'none' } }}
+              onChange={setChecklistReminderTrigger}
+            />
+          </section>
+        )}
       </section>
 
       <label>

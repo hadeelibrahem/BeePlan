@@ -11,7 +11,7 @@ export function BrandHeader({ tagline = 'SMART PRODUCTIVITY' }: { tagline?: stri
 
 export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: string }) {
   return (
-    <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-r border-[#3B465B] bg-[#1F2937] p-16 lg:flex lg:w-1/2">
+    <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-r border-[var(--bp-border)] bg-[var(--bp-bg)] p-16 lg:flex lg:w-1/2">
       <div className="relative z-10">
         <BeePlanLogo showTagline size={56} />
       </div>
@@ -20,13 +20,13 @@ export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: s
         <div className="animate-float">
           <BeePlanLogo showTagline size={56} />
         </div>
-        <h2 className="text-4xl font-extrabold leading-[1.15] tracking-tight text-white">
+        <h2 className="text-4xl font-extrabold leading-[1.15] tracking-tight text-[var(--bp-text)]">
           {headline}
         </h2>
-        <p className="text-sm leading-relaxed text-[#94A3B8]">{sub}</p>
+        <p className="text-sm leading-relaxed text-[var(--bp-muted)]">{sub}</p>
       </div>
 
-      <div className="relative z-10 text-xs text-[#7F8794]">
+      <div className="relative z-10 text-xs text-[var(--bp-subtle)]">
         &copy; {new Date().getFullYear()} BeePlan Inc. All rights reserved.
       </div>
     </div>
@@ -52,14 +52,14 @@ export function AuthInput({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#7F8794]">
+      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[var(--bp-subtle)]">
         {label}
       </label>
       <div
-        className={`flex items-center rounded-xl border bg-[#2B3443] px-4 py-3 transition-all duration-200 ${
+        className={`flex items-center rounded-xl border bg-[var(--bp-surface)] px-4 py-3 transition-all duration-200 ${
           error
             ? 'border-red-500'
-            : 'border-[#3B465B] focus-within:border-[#FDE64B]/70'
+            : 'border-[var(--bp-border)] focus-within:border-[var(--bp-accent)]/70'
         }`}
       >
         <input
@@ -67,7 +67,7 @@ export function AuthInput({
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="flex-grow border-none bg-transparent p-0 text-sm text-white placeholder:text-[#5F6876] focus:outline-none focus:ring-0"
+          className="flex-grow border-none bg-transparent p-0 text-sm text-[var(--bp-text)] placeholder:text-[var(--bp-placeholder)] focus:outline-none focus:ring-0"
         />
         {rightSlot}
       </div>
@@ -94,10 +94,10 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={loading || disabled}
-      className="flex h-12 w-full items-center justify-center rounded-xl bg-[#FDE64B] text-xs font-bold uppercase tracking-wider text-[#1F2937] shadow-lg shadow-[#FDE64B]/10 transition-all hover:bg-[#FDE64B] active:scale-95 disabled:bg-[#3B465B] disabled:text-[#727A86]"
+      className="flex h-12 w-full items-center justify-center rounded-xl bg-[var(--bp-accent)] text-xs font-bold uppercase tracking-wider text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/10 transition-all hover:bg-[var(--bp-accent)] active:scale-95 disabled:bg-[var(--bp-border)] disabled:text-[var(--bp-disabled-text)]"
     >
       {loading ? (
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#1F2937]/30 border-t-[#1F2937]" />
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--bp-accent-text)]/30 border-t-[var(--bp-accent-text)]" />
       ) : (
         children
       )}
@@ -115,12 +115,12 @@ export function AuthFooterLink({
   onClick: () => void
 }) {
   return (
-    <div className="mt-6 flex items-center justify-center text-xs text-[#94A3B8]">
+    <div className="mt-6 flex items-center justify-center text-xs text-[var(--bp-muted)]">
       <span>{prefix}</span>
       <button
         type="button"
         onClick={onClick}
-        className="pl-1.5 font-bold text-[#FDE64B] underline transition-colors hover:text-white focus:outline-none"
+        className="pl-1.5 font-bold text-[var(--bp-accent)] underline transition-colors hover:text-[var(--bp-text)] focus:outline-none"
       >
         {label}
       </button>
@@ -131,7 +131,7 @@ export function AuthFooterLink({
 export function AuthCard({ shake, children }: { shake: boolean; children: React.ReactNode }) {
   return (
     <div
-      className={`relative w-full max-w-md rounded-3xl border border-[#3B465B] bg-[#2B3443]/95 p-8 shadow-2xl shadow-black/30 backdrop-blur-md transition-all duration-300 sm:p-10 ${
+      className={`relative w-full max-w-md rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/95 p-8 shadow-2xl shadow-black/30 backdrop-blur-md transition-all duration-300 sm:p-10 ${
         shake ? 'animate-shake' : ''
       }`}
     >
@@ -150,7 +150,7 @@ export function AuthShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="relative flex min-h-screen items-stretch overflow-hidden bg-[#1F2937] font-sans text-white">
+    <div className="relative flex min-h-screen items-stretch overflow-hidden bg-[var(--bp-bg)] font-sans text-[var(--bp-text)]">
       <div className="honeycomb-bg" />
 
       <LeftPanel headline={headline} sub={sub} />

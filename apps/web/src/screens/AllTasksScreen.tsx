@@ -1,10 +1,23 @@
-﻿import type { ReactNode } from 'react'
-import { BeePlanLogo } from '../components/BeePlanLogo'
+import { useState, type ReactNode } from 'react'
+import {
+  AppLayout,
+  FilterTabs,
+  FloatingActionButton,
+  PageHeader,
+  SecondaryButton,
+  SectionCard,
+  StatsCard,
+  TopActionBar,
+  type SidebarNavHandlers,
+} from '../components/layout'
+import { useLanguage } from '../i18n/LanguageContext'
+import { useTheme } from '../theme/ThemeContext'
 
-type AllTasksScreenProps = {
+type AllTasksScreenProps = SidebarNavHandlers & {
   onBackDashboard?: () => void
   onCreateTask?: () => void
   onViewTaskDetails?: () => void
+  onSignOut?: () => void
 }
 
 type Task = {
@@ -16,6 +29,16 @@ type Task = {
   progress: number
   done?: boolean
 }
+
+type TaskFilter = 'all' | 'todo' | 'inProgress' | 'done' | 'missed'
+
+const FILTERS: { value: TaskFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'todo', label: 'To Do' },
+  { value: 'inProgress', label: 'In Progress' },
+  { value: 'done', label: 'Done' },
+  { value: 'missed', label: 'Missed' },
+]
 
 const tasks: Task[] = [
   {
@@ -89,174 +112,84 @@ export default function AllTasksScreen({
   onBackDashboard,
   onCreateTask,
   onViewTaskDetails,
+  onSignOut,
+  ...nav
 }: AllTasksScreenProps) {
+  const [search, setSearch] = useState('')
+  const { t, toggleLanguage } = useLanguage()
+  const { mode, toggleTheme } = useTheme()
+
   return (
-    <div className="min-h-screen bg-[#1F2937] text-white">
-      <div className="mx-auto flex max-w-7xl gap-6 px-6 py-6">
-        <aside className="sticky top-6 hidden max-h-[calc(100vh-3rem)] w-64 shrink-0 self-start overflow-y-auto rounded-3xl border border-[#3B465B] bg-[#2B3443]/80 p-5 lg:block">
-          <div className="mb-8 flex items-center gap-3">
-            <BeePlanLogo showTagline size={48} />
-          </div>
+    <AppLayout
+      active="tasks"
+      onNavigateDashboard={onBackDashboard}
+      onNavigateReminders={nav.onNavigateReminders}
+      onNavigateCalendar={nav.onNavigateCalendar}
+      onNavigateNotes={nav.onNavigateNotes}
+      onNavigateAnalytics={nav.onNavigateAnalytics}
+      panelTitle="Keep going!"
+      panelCaption="You're doing great today."
+      panelPercent={64}
+      fab={<FloatingActionButton onClick={onCreateTask} />}
+    >
+      <PageHeader
+        title="All Tasks"
+        subtitle="Manage, filter, and track all your tasks"
+        toolbar={
+          <TopActionBar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search tasks..."
+            themeMode={mode}
+            onToggleTheme={toggleTheme}
+            languageLabel={t('common.languageToggle')}
+            onToggleLanguage={toggleLanguage}
+            onProfileClick={onSignOut}
+          />
+        }
+        pageActions={<SecondaryButton>Sort: Due Date</SecondaryButton>}
+      />
 
-          <nav className="space-y-2 text-sm">
-            <SideItem label="Dashboard" icon="DB" onClick={onBackDashboard} />
-            <SideItem active label="Tasks" icon="TS" />
-            <SideItem label="Reminders" icon="RM" />
-            <SideItem label="Calendar" icon="CA" />
-            <SideItem label="Notes" icon="NO" />
-            <SideItem label="Analytics" icon="AN" />
-          </nav>
-
-          <div className="mt-10">
-            <p className="mb-3 text-xs font-bold uppercase text-slate-400">Categories</p>
-            <CategoryDot label="Work" color="bg-blue-400" />
-            <CategoryDot label="Personal" color="bg-purple-400" />
-            <CategoryDot label="Study" color="bg-green-400" />
-            <CategoryDot label="Health" color="bg-red-400" />
-            <CategoryDot label="Finance" color="bg-[#FDE64B]" />
-          </div>
-
-          <div className="mt-20 rounded-3xl bg-[#2B3443] p-5">
-            <p className="font-bold">Keep going!</p>
-            <p className="mt-1 text-xs text-slate-400">You're doing great today.</p>
-            <div className="mt-5 flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#FDE64B] font-black text-[#FDE64B]">
-              64%
-            </div>
-          </div>
-        </aside>
-
-        <main className="flex-1 rounded-3xl border border-[#3B465B] bg-[#2B3443]/40 p-6">
-          <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-3xl font-black">All Tasks</h2>
-              <p className="text-sm text-slate-400">Manage, filter, and track all your tasks</p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button type="button" className="rounded-xl bg-[#3B465B] px-4 py-3 text-sm">Search</button>
-              <button type="button" className="rounded-xl bg-[#3B465B] px-4 py-3 text-sm">Filter</button>
-              <button type="button" className="rounded-xl bg-[#3B465B] px-4 py-3 text-sm">Sort: Due Date</button>
-              <button
-                type="button"
-                onClick={onCreateTask}
-                className="rounded-xl bg-[#FDE64B] px-5 py-3 text-sm font-black text-black"
-              >
-                + New Task
-              </button>
-            </div>
-          </header>
-
-          <div className="mb-6 flex flex-wrap gap-3">
-            <Chip active label="All" count="24" />
-            <Chip label="To Do" count="8" />
-            <Chip label="In Progress" count="5" />
-            <Chip label="Done" count="7" />
-            <Chip label="Missed" count="4" />
-          </div>
-
-          <section className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
-            <Summary value="24" label="All Tasks" icon="ALL" />
-            <Summary value="8" label="To Do" icon="TODO" />
-            <Summary value="5" label="In Progress" icon="MOVE" />
-            <Summary value="7" label="Done" icon="DONE" />
-            <Summary value="4" label="Missed" icon="LATE" />
-          </section>
-
-          <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
-            <section className="space-y-6">
-              <TaskGroup title="Today" count="5 tasks" tasks={tasks.slice(0, 3)} onViewTaskDetails={onViewTaskDetails} />
-              <TaskGroup title="Tomorrow" count="3 tasks" tasks={tasks.slice(3, 5)} onViewTaskDetails={onViewTaskDetails} />
-              <TaskGroup title="This Week" count="4 tasks" tasks={tasks.slice(5)} onViewTaskDetails={onViewTaskDetails} />
-            </section>
-
-            <aside className="space-y-5">
-              <Panel title="Quick Filters">
-                <FilterRow label="Overdue" count="3" color="bg-red-400" />
-                <FilterRow label="Due Today" count="5" color="bg-[#FDE64B]" />
-                <FilterRow label="Due This Week" count="9" color="bg-blue-400" />
-              </Panel>
-
-              <Panel title="My Filters">
-                <FilterRow label="Important" count="6" color="bg-[#FDE64B]" />
-                <FilterRow label="Personal Tasks" count="4" color="bg-purple-400" />
-              </Panel>
-
-              <Panel title="Categories">
-                <FilterRow label="Work" count="12" color="bg-blue-400" />
-                <FilterRow label="Personal" count="6" color="bg-purple-400" />
-                <FilterRow label="Study" count="3" color="bg-green-400" />
-                <FilterRow label="Health" count="2" color="bg-red-400" />
-              </Panel>
-            </aside>
-          </div>
-        </main>
+      <div className="mb-6">
+        <FilterTabs tabs={FILTERS} active="all" onChange={() => {}} />
       </div>
 
-      <button
-        type="button"
-        onClick={onCreateTask}
-        className="fixed bottom-8 right-8 flex h-16 w-16 items-center justify-center rounded-3xl bg-[#FDE64B] text-3xl font-black text-black shadow-2xl shadow-[#FDE64B]/30"
-      >
-        +
-      </button>
-    </div>
-  )
-}
+      <section className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
+        <StatsCard icon="ALL" value="24" title="All Tasks" desc="Every task you've created" />
+        <StatsCard icon="TODO" value="8" title="To Do" desc="Not started yet" />
+        <StatsCard icon="MOVE" value="5" title="In Progress" desc="Currently working on" />
+        <StatsCard icon="DONE" value="7" title="Done" desc="Completed tasks" />
+        <StatsCard icon="LATE" value="4" title="Missed" desc="Past their due date" />
+      </section>
 
-function SideItem({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: string
-  label: string
-  active?: boolean
-  onClick?: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left ${
-        active ? 'bg-[#FDE64B]/15 text-[#FDE64B]' : 'text-slate-300 hover:bg-[#2B3443]'
-      }`}
-    >
-      <span>{icon}</span>
-      <span>{label}</span>
-    </button>
-  )
-}
+      <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
+        <section className="space-y-4">
+          <TaskGroup title="Today" count="5 tasks" tasks={tasks.slice(0, 3)} onViewTaskDetails={onViewTaskDetails} />
+          <TaskGroup title="Tomorrow" count="3 tasks" tasks={tasks.slice(3, 5)} onViewTaskDetails={onViewTaskDetails} />
+          <TaskGroup title="This Week" count="4 tasks" tasks={tasks.slice(5)} onViewTaskDetails={onViewTaskDetails} />
+        </section>
 
-function CategoryDot({ label, color }: { label: string; color: string }) {
-  return (
-    <div className="mb-3 flex items-center gap-3 text-sm text-slate-300">
-      <span className={`h-3 w-3 rounded-full ${color}`} />
-      {label}
-    </div>
-  )
-}
+        <aside className="space-y-4">
+          <Panel title="Quick Filters">
+            <FilterRow label="Overdue" count="3" color="bg-red-400" />
+            <FilterRow label="Due Today" count="5" color="bg-[var(--bp-accent)]" />
+            <FilterRow label="Due This Week" count="9" color="bg-blue-400" />
+          </Panel>
 
-function Chip({ label, count, active }: { label: string; count: string; active?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={`rounded-full px-5 py-2 text-sm font-bold ${
-        active ? 'bg-[#FDE64B] text-black' : 'bg-[#3B465B] text-slate-200'
-      }`}
-    >
-      {label} <span className="opacity-70">{count}</span>
-    </button>
-  )
-}
+          <Panel title="My Filters">
+            <FilterRow label="Important" count="6" color="bg-[var(--bp-accent)]" />
+            <FilterRow label="Personal Tasks" count="4" color="bg-purple-400" />
+          </Panel>
 
-function Summary({ value, label, icon }: { value: string; label: string; icon: string }) {
-  return (
-    <div className="rounded-2xl border border-[#3B465B] bg-[#2B3443] p-5">
-      <div className="mb-3 text-2xl">{icon}</div>
-      <div className="text-3xl font-black">{value}</div>
-      <p className="text-sm text-slate-400">{label}</p>
-    </div>
+          <Panel title="Categories">
+            <FilterRow label="Work" count="12" color="bg-blue-400" />
+            <FilterRow label="Personal" count="6" color="bg-purple-400" />
+            <FilterRow label="Study" count="3" color="bg-green-400" />
+            <FilterRow label="Health" count="2" color="bg-red-400" />
+          </Panel>
+        </aside>
+      </div>
+    </AppLayout>
   )
 }
 
@@ -277,7 +210,7 @@ function TaskGroup({
         {title} <span className="text-sm text-slate-400">- {count}</span>
       </h3>
 
-      <div className="overflow-hidden rounded-2xl border border-[#3B465B] bg-[#2B3443]">
+      <div className="overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]">
         {tasks.map((task) => (
           <TaskRow key={task.title} task={task} onViewTaskDetails={onViewTaskDetails} />
         ))}
@@ -297,12 +230,12 @@ function TaskRow({
     <button
       type="button"
       onClick={onViewTaskDetails}
-      className="grid w-full cursor-pointer grid-cols-[28px_1fr_120px_120px_160px_24px] items-center gap-4 border-b border-[#3B465B] px-5 py-4 text-left transition hover:bg-[#2B3443] last:border-b-0"
+      className="grid w-full cursor-pointer grid-cols-[28px_1fr_120px_120px_160px_24px] items-center gap-4 border-b border-[var(--bp-border)] px-5 py-4 text-left transition hover:bg-[var(--bp-bg)] last:border-b-0"
     >
       <div className={`h-5 w-5 rounded-md border ${task.done ? 'border-green-400 bg-green-400' : 'border-slate-500'}`} />
 
       <div>
-        <p className={`font-semibold text-white ${task.done ? 'text-slate-500 line-through' : ''}`}>{task.title}</p>
+        <p className={`font-semibold text-[var(--bp-text)] ${task.done ? 'text-slate-500 line-through' : ''}`}>{task.title}</p>
         <p className="text-xs text-slate-400">{task.category} - {task.due}</p>
       </div>
 
@@ -310,10 +243,10 @@ function TaskRow({
       <Badge label={task.status} type={task.status} />
 
       <div>
-        <div className="h-2 rounded-full bg-slate-700">
+        <div className="h-2 rounded-full bg-[var(--bp-bg)]">
           <div
             className={`h-2 rounded-full ${
-              task.progress === 100 ? 'bg-green-400' : task.progress === 0 ? 'bg-slate-600' : 'bg-[#FDE64B]'
+              task.progress === 100 ? 'bg-green-400' : task.progress === 0 ? 'bg-slate-600' : 'bg-[var(--bp-accent)]'
             }`}
             style={{ width: `${task.progress}%` }}
           />
@@ -343,10 +276,10 @@ function Badge({ label, type }: { label: string; type: string }) {
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#3B465B] bg-[#2B3443] p-5">
+    <SectionCard className="p-5">
       <h3 className="mb-4 font-bold">{title}</h3>
       {children}
-    </div>
+    </SectionCard>
   )
 }
 
@@ -357,11 +290,7 @@ function FilterRow({ label, count, color }: { label: string; count: string; colo
         <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
         <span className="text-slate-300">{label}</span>
       </div>
-      <span className="rounded-full bg-[#3B465B] px-2 py-1 text-xs">{count}</span>
+      <span className="rounded-full bg-[var(--bp-border)] px-2 py-1 text-xs">{count}</span>
     </div>
   )
 }
-
-
-
-

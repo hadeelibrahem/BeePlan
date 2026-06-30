@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { InputField, PrimaryButton } from '../../../components/layout';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { useTheme, type AppTheme } from '../../../theme/ThemeContext';
+import { useTheme } from '../../../theme/useTheme';
 import type {
   ChecklistItem,
+  ChecklistReminderTrigger,
   Reminder,
   ReminderFormValues,
   ReminderPriority,
@@ -11,6 +13,7 @@ import type {
   RepeatRule,
 } from '../types/reminders.types';
 import { ChecklistInput } from './ChecklistInput';
+import { ChecklistReminderSection } from './ChecklistReminderSection';
 import { DateTimeSection } from './DateTimeSection';
 import { LocationReminderFields } from './LocationReminderFields';
 import { PrioritySelector } from './PrioritySelector';
@@ -29,6 +32,10 @@ const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
   location: reminder?.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' },
   context: reminder?.context ?? { condition: '', detail: '' },
   checklistItems: reminder?.checklistItems ?? [{ id: 'item-1', title: '', isDone: false }],
+  checklistReminderTrigger: reminder?.checklistReminderTrigger ?? {
+    time: { type: 'none' },
+    location: { type: 'none' },
+  },
 });
 
 type Props = {
@@ -39,9 +46,9 @@ type Props = {
 
 export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) {
   const [values, setValues] = useState<ReminderFormValues>(() => createInitialValues(initialReminder));
-  const { theme } = useTheme();
   const { t } = useLanguage();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { theme } = useTheme();
+  const { colors } = theme;
   const submitInFlightRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -68,7 +75,25 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
     }
     if (values.type === 'context') return Boolean(values.context?.condition.trim());
     if (values.type === 'checklist') {
-      return Boolean(values.checklistItems?.some((item) => item.title.trim()));
+      if (!values.checklistItems?.some((item) => item.title.trim())) return false;
+
+      const timeTrigger = values.checklistReminderTrigger?.time;
+      if (timeTrigger?.type === 'general_time' && !timeTrigger.generalTime?.category) return false;
+      if (timeTrigger?.type === 'specific_time') {
+        if (!timeTrigger.specificTime?.date?.trim() || !timeTrigger.specificTime?.time?.trim()) return false;
+      }
+
+      const locationTrigger = values.checklistReminderTrigger?.location;
+      if (locationTrigger?.type === 'general_location' && !locationTrigger.generalLocation?.category) return false;
+      if (locationTrigger?.type === 'specific_location') {
+        const place = locationTrigger.specificLocation;
+        if (!place?.geoapifyPlaceId || !place.placeName?.trim() || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+          return false;
+        }
+        if (!place.trigger) return false;
+      }
+
+      return true;
     }
     return true;
   }, [values]);
@@ -80,6 +105,8 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
     setValues((current) => ({ ...current, repeatRule }));
   const setChecklistItems = (checklistItems: ChecklistItem[]) =>
     setValues((current) => ({ ...current, checklistItems }));
+  const setChecklistReminderTrigger = (checklistReminderTrigger: ChecklistReminderTrigger) =>
+    setValues((current) => ({ ...current, checklistReminderTrigger }));
   const setLocation = (location: NonNullable<ReminderFormValues['location']>) =>
     setValues((current) => ({ ...current, location }));
 
@@ -113,28 +140,21 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
   return (
     <View className="gap-6">
-      <View className="rounded-2xl border px-4 py-3" style={styles.field}>
-        <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={styles.label}>
-          {t('reminders.title')}
-        </Text>
-        <TextInput
-          placeholder={t('reminders.titlePlaceholder', { brand_name: t('common.brand_name') })}
-          placeholderTextColor={theme.colors.textSubtle}
-          value={values.title}
-          onChangeText={(title) => setValues((current) => ({ ...current, title }))}
-          className="py-2 text-2xl font-black leading-8"
-          style={styles.input}
-        />
-      </View>
+      <InputField
+        label={t('reminders.title')}
+        placeholder={t('reminders.titlePlaceholder', { brand_name: t('common.brand_name') })}
+        value={values.title}
+        onChangeText={(title) => setValues((current) => ({ ...current, title }))}
+      />
 
       <ReminderTypeSelector value={values.type} onChange={setType} />
 
       <View className="gap-4">
         <View>
-          <Text className="text-xs font-black uppercase tracking-widest" style={styles.label}>
+          <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
             {t('reminders.trigger')}
           </Text>
-          <Text className="mt-1 text-sm" style={styles.helpText}>{triggerHelp}</Text>
+          <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>{triggerHelp}</Text>
         </View>
 
         {values.type === 'time' && (
@@ -159,123 +179,55 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
         {values.type === 'context' && (
           <View className="gap-4">
-            <TextInput
+            <InputField
               placeholder={t('reminders.contextPlaceholder')}
-              placeholderTextColor={theme.colors.textSubtle}
-              value={values.context?.condition}
+              value={values.context?.condition ?? ''}
               onChangeText={(condition) =>
                 setValues((current) => ({
                   ...current,
                   context: { ...(current.context ?? {}), condition },
                 }))
               }
-              className="rounded-2xl border px-4 py-4"
-              style={styles.textField}
             />
-            <TextInput
+            <InputField
               placeholder={t('reminders.contextDetailPlaceholder')}
-              placeholderTextColor={theme.colors.textSubtle}
-              value={values.context?.detail}
+              value={values.context?.detail ?? ''}
               onChangeText={(detail) =>
                 setValues((current) => ({
                   ...current,
                   context: { ...(current.context ?? { condition: '' }), detail },
                 }))
               }
-              className="rounded-2xl border px-4 py-4"
-              style={styles.textField}
             />
           </View>
         )}
 
         {values.type === 'checklist' && (
-          <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />
+          <View className="gap-4">
+            <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />
+            <ChecklistReminderSection
+              value={values.checklistReminderTrigger ?? { time: { type: 'none' }, location: { type: 'none' } }}
+              onChange={setChecklistReminderTrigger}
+            />
+          </View>
         )}
       </View>
 
-      <View>
-        <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={styles.label}>
-          {t('reminders.notes')}
-        </Text>
-        <TextInput
-          multiline
-          textAlignVertical="top"
-          placeholder={t('reminders.notesPlaceholder')}
-          placeholderTextColor={theme.colors.textSubtle}
-          value={values.description}
-          onChangeText={(description) => setValues((current) => ({ ...current, description }))}
-          className="min-h-24 rounded-2xl border px-4 py-4 text-base leading-6"
-          style={styles.textField}
-        />
-      </View>
+      <InputField
+        label={t('reminders.notes')}
+        placeholder={t('reminders.notesPlaceholder')}
+        value={values.description ?? ''}
+        onChangeText={(description) => setValues((current) => ({ ...current, description }))}
+        multiline
+      />
 
       <PrioritySelector value={values.priority} onChange={setPriority} />
 
-      {!!submitError && (
-        <Text className="px-1 text-xs font-semibold" style={styles.errorText}>
-          {submitError}
-        </Text>
-      )}
+      {!!submitError && <Text className="px-1 text-xs font-semibold" style={{ color: colors.error }}>{submitError}</Text>}
 
-      <View className="rounded-3xl border p-2" style={styles.submitShell}>
-        <Pressable
-          disabled={!isValid || isSubmitting}
-          onPress={() => void submit()}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !isValid || isSubmitting }}
-          className="rounded-2xl py-4"
-          style={isValid && !isSubmitting ? styles.submitButton : styles.submitButtonDisabled}
-        >
-          <Text
-            className="text-center text-base font-black"
-            style={isValid && !isSubmitting ? styles.submitText : styles.submitTextDisabled}
-          >
-            {isSubmitting ? t('reminders.saving') : submitLabel}
-          </Text>
-        </Pressable>
-      </View>
+      <PrimaryButton onPress={() => void submit()} disabled={!isValid} loading={isSubmitting} fullWidth>
+        {submitLabel}
+      </PrimaryButton>
     </View>
   );
-}
-
-function createStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    field: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-    },
-    label: {
-      color: theme.colors.textSubtle,
-    },
-    helpText: {
-      color: theme.colors.textMuted,
-    },
-    input: {
-      color: theme.colors.text,
-    },
-    textField: {
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-      color: theme.colors.text,
-    },
-    errorText: {
-      color: theme.colors.danger,
-    },
-    submitShell: {
-      backgroundColor: theme.colors.surfaceElevated,
-      borderColor: theme.colors.border,
-    },
-    submitButton: {
-      backgroundColor: theme.colors.accent,
-    },
-    submitButtonDisabled: {
-      backgroundColor: theme.colors.disabled,
-    },
-    submitText: {
-      color: theme.colors.accentText,
-    },
-    submitTextDisabled: {
-      color: theme.colors.disabledText,
-    },
-  });
 }
