@@ -1,12 +1,6 @@
-import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
-import { GoogleAuthGuard, GoogleCallbackGuard } from './google-auth.guard';
-
-type RequestWithAuth = Request & {
-  user?: ReturnType<AuthService['createAuthResponse']>;
-  authError?: unknown;
-};
 
 @Controller('auth')
 export class AuthController {
@@ -33,28 +27,57 @@ export class AuthController {
   }
 
   @Get('google')
-  @UseGuards(GoogleAuthGuard)
-  googleSignIn() {
-    return;
+  googleSignIn(
+    @Query('redirectPath') redirectPath: string | undefined,
+    @Query('returnTo') returnTo: string | undefined,
+    @Res() response: { redirect: (url: string) => void },
+  ) {
+    return response.redirect(
+      this.authService.getGoogleAuthUrl(redirectPath, returnTo),
+    );
   }
 
   @Get('google/callback')
-  @UseGuards(GoogleCallbackGuard)
   async googleCallback(
-    @Req() request: RequestWithAuth,
+    @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,
     @Query('error') error: string | undefined,
     @Res() response: { redirect: (url: string) => void },
   ) {
-    if (error) {
-      return response.redirect(this.authService.getOAuthErrorRedirect(new Error('Google login was cancelled.'), state));
+    try {
+      return response.redirect(
+        await this.authService.handleGoogleCallback({ code, state, error }),
+      );
+    } catch (callbackError) {
+      console.error('[Google OAuth] Callback failed', callbackError);
+      return response.redirect(
+        this.authService.getOAuthErrorRedirect(callbackError, state),
+      );
+    }
+  }
+
+  @Get('google/approval')
+  async googleApproval(
+    @Query('token') token: string | undefined,
+    @Query('decision') decision: string | undefined,
+    @Res() response: Response,
+  ) {
+    const outcome = await this.authService.handleGoogleApproval(
+      token,
+      decision,
+    );
+
+    if (outcome.kind === 'redirect') {
+      return response.redirect(outcome.url);
     }
 
-    if (request.authError || !request.user) {
-      return response.redirect(this.authService.getOAuthErrorRedirect(request.authError, state));
-    }
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.send(outcome.html);
+  }
 
-    return response.redirect(this.authService.getOAuthSuccessRedirect(request.user, state));
+  @Get('google/approval/status')
+  googleApprovalStatus(@Query('token') token: string | undefined) {
+    return this.authService.getGoogleApprovalStatus(token);
   }
 
   @Post('forgot-password')

@@ -3,6 +3,11 @@ import type { AuthResponse, AuthUser } from '../lib/api';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 const mobileOAuthCallbackUrl = 'beeplan://auth/callback';
+const mobileOAuthScheme = 'beeplan://auth/';
+
+type GoogleApprovalStatus =
+  | { status: 'pending' | 'denied' | 'expired' }
+  | ({ status: 'approved' } & AuthResponse);
 
 function base64UrlDecode(value: string) {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -24,7 +29,7 @@ function parseOAuthUser(value: string): AuthUser {
 }
 
 export function parseGoogleOAuthUrl(url: string): AuthResponse | null {
-  if (!url.startsWith(mobileOAuthCallbackUrl)) {
+  if (!url.startsWith(mobileOAuthScheme)) {
     return null;
   }
 
@@ -49,6 +54,42 @@ export function parseGoogleOAuthUrl(url: string): AuthResponse | null {
     accessToken,
     user: parseOAuthUser(encodedUser),
   };
+}
+
+function getOAuthParams(url: string) {
+  if (!url.startsWith(mobileOAuthScheme)) {
+    return null;
+  }
+
+  const hash = url.split('#')[1] ?? '';
+  const query = url.includes('?') ? (url.split('?')[1] ?? '').split('#')[0] : '';
+  const hashParams = new URLSearchParams(hash);
+  const queryParams = new URLSearchParams(query);
+
+  return queryParams.size > 0 ? queryParams : hashParams;
+}
+
+export function parseGoogleOAuthMessage(url: string) {
+  return getOAuthParams(url)?.get('message') ?? '';
+}
+
+export function parseApprovalToken(url: string) {
+  return getOAuthParams(url)?.get('approval_token') ?? '';
+}
+
+export async function getGoogleApprovalStatus(token: string): Promise<GoogleApprovalStatus> {
+  const response = await fetch(`${apiUrl}/auth/google/approval/status?${new URLSearchParams({ token })}`);
+  const data = (await response.json().catch(() => null)) as GoogleApprovalStatus | { message?: string } | null;
+
+  if (!response.ok) {
+    throw new Error((data && 'message' in data && data.message) || 'Unable to check login approval.');
+  }
+
+  if (!data || !('status' in data)) {
+    throw new Error('Unable to check login approval.');
+  }
+
+  return data;
 }
 
 export async function startGoogleSignIn() {

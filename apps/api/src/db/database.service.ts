@@ -22,6 +22,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureUsersAuthColumns();
     await this.ensurePasswordResetCodesTable();
     await this.ensureRemindersTable();
+    await this.ensureGoogleLoginApprovalsTable();
   }
 
   async healthCheck() {
@@ -107,6 +108,54 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         drop column if exists reminder_type,
         drop column if exists remind_at,
         drop column if exists task_id
+    `);
+  }
+
+  private async ensureGoogleLoginApprovalsTable() {
+    await this.getPool().query(`
+      create table if not exists google_login_approvals (
+        id uuid primary key default gen_random_uuid() not null,
+        token_hash text not null unique,
+        poll_token_hash text,
+        google_id varchar(255) not null,
+        email varchar(255) not null,
+        full_name varchar(255) not null,
+        avatar_url text,
+        email_verified boolean default true not null,
+        oauth_state text,
+        decision varchar(20) default 'pending' not null,
+        expires_at timestamp not null,
+        used_at timestamp,
+        session_claimed_at timestamp,
+        created_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      alter table google_login_approvals
+        add column if not exists poll_token_hash text,
+        add column if not exists session_claimed_at timestamp
+    `);
+
+    await this.getPool().query(`
+      update google_login_approvals
+        set poll_token_hash = token_hash
+        where poll_token_hash is null
+    `);
+
+    await this.getPool().query(`
+      alter table google_login_approvals
+        alter column poll_token_hash set not null
+    `);
+
+    await this.getPool().query(`
+      create unique index if not exists google_login_approvals_poll_token_hash_unique
+        on google_login_approvals (poll_token_hash)
+    `);
+
+    await this.getPool().query(`
+      create index if not exists google_login_approvals_email_created_at_idx
+        on google_login_approvals (email, created_at desc)
     `);
   }
 

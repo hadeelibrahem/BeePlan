@@ -18,7 +18,7 @@ import {
 } from '../lib/authValidation'
 
 export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
-  const { clearOAuthError, oauthError, signIn, signUp } = useAuth()
+  const { clearOAuthError, oauthError, oauthMessage, signIn, signUp } = useAuth()
   const submitInFlightRef = useRef(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [name, setName] = useState('')
@@ -248,7 +248,9 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
               {(oauthError || submitError) && (
                 <p className="text-red-400 text-xs pl-1">{oauthError || submitError}</p>
               )}
-              {successMessage && <p className="text-emerald-400 text-xs pl-1">{successMessage}</p>}
+              {(oauthMessage || successMessage) && (
+                <p className="text-emerald-400 text-xs pl-1">{oauthMessage || successMessage}</p>
+              )}
               <div className="pt-1">
                 <PrimaryButton loading={isLoading} disabled={isSubmitDisabled}>
                   {isSignUp ? 'Create Account' : 'Sign In'}

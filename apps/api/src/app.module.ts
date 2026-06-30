@@ -11,6 +11,7 @@ import { RemindersModule } from './reminders/reminders.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['apps/api/.env', '.env'],
       validate: (config) => envSchema.parse(config),
     }),
     DatabaseModule,
