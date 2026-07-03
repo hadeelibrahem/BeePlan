@@ -137,7 +137,7 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
         })}
       </div>
       {errorMessage && (
-        <p role="alert" className="text-red-400 text-xs pl-1">
+        <p role="alert" className="text-red-400 text-xs ps-1">
           {errorMessage}
         </p>
       )}

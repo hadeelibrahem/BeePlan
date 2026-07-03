@@ -10,6 +10,7 @@ import {
 import {
   forgotPassword,
   login,
+  logout as logoutRequest,
   register,
   resetPassword,
   verifyResetCode,
@@ -234,13 +235,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    if (session?.accessToken) {
+      try {
+        await logoutRequest(session.accessToken);
+      } catch (error) {
+        // Best-effort: even if the revoke call fails (e.g. offline), still
+        // clear the local session below so the user isn't stuck signed in.
+        console.error('[BeePlan Auth] Server logout failed:', error);
+      }
+    }
+
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     await authService.signOutSocial();
     setOauthError('');
     setOauthMessage('');
     setPendingApprovalToken('');
     setSession(null);
-  }, []);
+  }, [session]);
 
   const clearOAuthError = useCallback(() => {
     setOauthError('');

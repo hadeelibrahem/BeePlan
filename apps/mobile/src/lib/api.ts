@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { API_BASE_URL, ApiRequestError, apiFetch, checkApiHealth, readJsonOrThrow } from './apiClient';
 
 const healthSchema = z.object({
   ok: z.boolean(),
@@ -53,21 +52,16 @@ export type LoginRequest = {
   password: string;
 };
 
-async function apiRequest(path: string, init?: RequestInit) {
-  const response = await fetch(`${apiUrl}${path}`, {
+async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await apiFetch(path, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...init?.headers,
     },
   });
-  const data = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    throw new Error(data?.message ?? 'Something went wrong. Please try again.');
-  }
-
-  return data;
+  return readJsonOrThrow<T>(response, `${API_BASE_URL}${path}`);
 }
 
 export function getAuthHeaders(accessToken: string) {
@@ -76,11 +70,20 @@ export function getAuthHeaders(accessToken: string) {
   };
 }
 
+export async function logout(accessToken: string): Promise<void> {
+  await apiRequest('/auth/logout', {
+    method: 'POST',
+    headers: getAuthHeaders(accessToken),
+  });
+}
+
 export async function fetchHealth(): Promise<HealthResponse> {
   return healthSchema.parse(await apiRequest('/health'));
 }
 
 export async function register(payload: RegisterRequest): Promise<AuthResponse> {
+  console.log('[BeePlan Auth] Attempting sign up against', API_BASE_URL);
+
   return authResponseSchema.parse(
     await apiRequest('/auth/register', {
       method: 'POST',
@@ -90,6 +93,19 @@ export async function register(payload: RegisterRequest): Promise<AuthResponse> 
 }
 
 export async function login(payload: LoginRequest): Promise<AuthResponse> {
+  console.log('[BeePlan Auth] Attempting login against', API_BASE_URL);
+
+  const isHealthy = await checkApiHealth();
+  console.log('[BeePlan Auth] Pre-login health check:', isHealthy ? 'reachable' : 'unreachable');
+
+  if (!isHealthy) {
+    throw new ApiRequestError(
+      `Cannot reach the BeePlan server at ${API_BASE_URL || '(no URL configured)'} right now. Check that the ` +
+        'backend is running, your phone is on the same network, and EXPO_PUBLIC_API_URL is correct.',
+      'server',
+    );
+  }
+
   return authResponseSchema.parse(
     await apiRequest('/auth/login', {
       method: 'POST',
@@ -128,7 +144,7 @@ export async function resetPassword(email: string, code: string, password: strin
 }
 
 export async function userExists(email: string): Promise<boolean> {
-  const data = await apiRequest(`/auth/exists?email=${encodeURIComponent(email)}`);
+  const data = await apiRequest<{ exists: boolean }>(`/auth/exists?email=${encodeURIComponent(email)}`);
 
   return userExistsResponseSchema.parse(data).exists;
 }

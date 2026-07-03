@@ -5,50 +5,73 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { eq } from 'drizzle-orm';
 import type { Request } from 'express';
+import { DatabaseService } from '../db/database.service';
+import { users } from '../db/schema';
 
-export type AuthenticatedRequest = Request & { userId: string };
+export type AuthenticatedRequest = Request & {
+  user: {
+    id: string;
+    email?: string;
+  };
+};
 
-type AccessTokenPayload = {
+type JwtPayload = {
   sub?: string;
+  email?: string;
+  tokenVersion?: number;
 };
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly databaseService: DatabaseService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const token = this.extractToken(request);
+    const authHeader = request.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length)
+      : undefined;
 
     if (!token) {
-      throw new UnauthorizedException('Missing access token.');
+      throw new UnauthorizedException('Please sign in to continue.');
     }
 
-    let payload: AccessTokenPayload;
+    let payload: JwtPayload;
 
     try {
-      payload = this.jwtService.verify<AccessTokenPayload>(token);
+      payload = this.jwtService.verify<JwtPayload>(token);
     } catch {
-      throw new UnauthorizedException('Invalid or expired access token.');
+      throw new UnauthorizedException('Your session has expired. Please sign in again.');
     }
 
     if (!payload.sub) {
-      throw new UnauthorizedException('Invalid access token.');
+      throw new UnauthorizedException('Please sign in to continue.');
     }
 
-    request.userId = payload.sub;
+    // Tokens signed before this field existed have no `tokenVersion` claim;
+    // treat that the same as version 0 so already-issued tokens keep working
+    // until the user's version is first bumped (logout/password reset).
+    const claimedVersion = payload.tokenVersion ?? 0;
+
+    const [currentUser] = await this.databaseService.db
+      .select({ tokenVersion: users.tokenVersion })
+      .from(users)
+      .where(eq(users.id, payload.sub));
+
+    if (!currentUser || currentUser.tokenVersion !== claimedVersion) {
+      throw new UnauthorizedException('Your session has expired. Please sign in again.');
+    }
+
+    request.user = {
+      id: payload.sub,
+      email: payload.email,
+    };
+
     return true;
-  }
-
-  private extractToken(request: Request): string | undefined {
-    const header = request.headers.authorization;
-
-    if (!header) {
-      return undefined;
-    }
-
-    const [scheme, token] = header.split(' ');
-    return scheme === 'Bearer' && token ? token : undefined;
   }
 }

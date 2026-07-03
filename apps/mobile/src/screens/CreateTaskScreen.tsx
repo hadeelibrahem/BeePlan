@@ -1,5 +1,11 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Pressable, Text, TextInput, View } from 'react-native'
+import {
+  TaskRecurrenceSheet,
+  createRecurrenceSummary,
+  type RecurrenceSettings,
+} from '../components/TaskRecurrenceSheet'
+import { recurrenceToApi, type TaskPayload } from '../lib/tasksApi'
 import {
   AppScreen,
   BottomActionBar,
@@ -12,12 +18,48 @@ import { useTheme } from '../theme/useTheme'
 
 type Props = {
   onCancel: () => void
-  onSave: () => void
+  onSave: (payload: TaskPayload) => Promise<void> | void
 }
 
 export default function CreateTaskScreen({ onCancel, onSave }: Props) {
   const { theme } = useTheme()
   const { colors } = theme
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [notes, setNotes] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(null)
+  const [isRecurrenceSheetVisible, setIsRecurrenceSheetVisible] = useState(false)
+  const recurrenceSummary = createRecurrenceSummary(recurrence)
+
+  async function handleSave() {
+    if (!title.trim()) {
+      setError('Task title is required.')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      await onSave({
+        title: title.trim(),
+        description: description.trim(),
+        notes: notes.trim(),
+        priority: 'medium',
+        status: 'todo',
+        category: 'General',
+        reminderEnabled: true,
+        reminderBeforeMinutes: 30,
+        recurrence: recurrenceToApi(recurrence),
+      })
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to create task.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <AppScreen
@@ -27,8 +69,8 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
           <SecondaryButton onPress={onCancel} className="flex-1">
             Cancel
           </SecondaryButton>
-          <PrimaryButton onPress={onSave} className="flex-1">
-            Save Task
+          <PrimaryButton onPress={() => void handleSave()} className="flex-1" disabled={saving}>
+            {saving ? 'Saving...' : 'Save Task'}
           </PrimaryButton>
         </BottomActionBar>
       }
@@ -39,6 +81,8 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
         <Label text="Task Title *" />
         <TextInput
           placeholder="Enter task title..."
+          value={title}
+          onChangeText={setTitle}
           placeholderTextColor={colors.placeholder}
           className="mb-5 rounded-2xl border px-4 py-4 text-sm"
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
@@ -48,6 +92,8 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
         <TextInput
           multiline
           placeholder="Describe your task..."
+          value={description}
+          onChangeText={setDescription}
           placeholderTextColor={colors.placeholder}
           textAlignVertical="top"
           className="mb-5 h-32 rounded-2xl border px-4 py-4 text-sm"
@@ -68,11 +114,14 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
         <TextInput
           multiline
           placeholder="Additional notes..."
+          value={notes}
+          onChangeText={setNotes}
           placeholderTextColor={colors.placeholder}
           textAlignVertical="top"
           className="h-24 rounded-2xl border px-4 py-4 text-sm"
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
+        {error ? <Text className="mt-3 text-sm font-bold text-red-300">{error}</Text> : null}
       </Card>
 
       <Card title="Task Settings" icon="⚙️">
@@ -124,7 +173,7 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
 
       <Card title="Recurring & Dependencies" icon="🔁">
         <Label text="Recurring Task" />
-        <Select label="None" />
+        <Select label={recurrenceSummary} onPress={() => setIsRecurrenceSheetVisible(true)} />
 
         <View className="mt-5">
           <Label text="Dependencies" />
@@ -151,6 +200,14 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
           <Text className="text-xs" style={{ color: colors.secondaryText }}>Images, PDF, Documents</Text>
         </Pressable>
       </Card>
+      <TaskRecurrenceSheet
+        visible={isRecurrenceSheetVisible}
+        mode={recurrence ? 'edit' : 'create'}
+        recurrence={recurrence}
+        onClose={() => setIsRecurrenceSheetVisible(false)}
+        onSave={setRecurrence}
+        onRemove={() => setRecurrence(null)}
+      />
     </AppScreen>
   )
 }
@@ -215,12 +272,13 @@ function Chip({ label, active }: { label: string; active?: boolean }) {
   )
 }
 
-function Select({ label }: { label: string }) {
+function Select({ label, onPress }: { label: string; onPress?: () => void }) {
   const { theme } = useTheme()
   const { colors } = theme
 
   return (
     <Pressable
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       className="rounded-2xl border px-4 py-4 active:opacity-80"

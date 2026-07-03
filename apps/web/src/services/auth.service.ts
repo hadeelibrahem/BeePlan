@@ -1,6 +1,6 @@
 import type { AuthResponse, AuthUser } from '../lib/api';
 
-const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const socialRedirectStorageKey = 'beeplan_social_redirect_path';
 
 export type SocialAuthProvider = 'google' | 'apple';
@@ -126,10 +126,24 @@ export const authService = {
   },
 
   async getGoogleApprovalStatus(token: string): Promise<GoogleApprovalStatus> {
-    const response = await fetch(`${apiUrl}/auth/google/approval/status?${new URLSearchParams({ token })}`);
+    const url = `${apiUrl}/auth/google/approval/status?${new URLSearchParams({ token })}`;
+    let response: Response;
+
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      console.error('[BeePlan Auth] Approval status request failed', { url, error });
+      throw new Error(`Unable to reach BeePlan API at ${apiUrl}. Make sure the backend is running on port 3000.`);
+    }
+
     const data = (await response.json().catch(() => null)) as GoogleApprovalStatus | { message?: string } | null;
 
     if (!response.ok) {
+      console.error('[BeePlan Auth] Approval status request failed', {
+        url,
+        status: response.status,
+        data,
+      });
       throw new Error((data && 'message' in data && data.message) || 'Unable to check login approval.');
     }
 

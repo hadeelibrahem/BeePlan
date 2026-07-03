@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   date,
   decimal,
@@ -29,6 +30,10 @@ export const users = pgTable('users', {
   googleId: varchar('google_id', { length: 255 }).unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
   timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
+  // Bumped on logout and password reset so previously-issued JWTs (which
+  // carry the version they were signed with) stop being accepted —
+  // see JwtAuthGuard and AuthService.logout/resetPassword.
+  tokenVersion: integer('token_version').notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -59,6 +64,17 @@ export const googleLoginApprovals = pgTable('google_login_approvals', {
   usedAt: timestamp('used_at'),
   sessionClaimedAt: timestamp('session_claimed_at'),
   createdAt: createdAt(),
+});
+
+export const standaloneNotes = pgTable('standalone_notes', {
+  id: id(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 255 }).notNull(),
+  content: text('content'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const categories = pgTable('categories', {
@@ -92,12 +108,45 @@ export const tasks = pgTable('tasks', {
   description: text('description'),
   priority: varchar('priority', { length: 20 }).notNull().default('medium'),
   status: varchar('status', { length: 20 }).notNull().default('todo'),
+  progress: integer('progress').notNull().default(0),
   dueDate: timestamp('due_date'),
+  dueTime: varchar('due_time', { length: 20 }),
   categoryId: uuid('category_id').references(() => categories.id, {
     onDelete: 'set null',
   }),
+  category: varchar('category', { length: 120 }),
+  notes: text('notes'),
+  estimatedTimeMinutes: integer('estimated_time_minutes').notNull().default(0),
+  spentTimeMinutes: integer('spent_time_minutes').notNull().default(0),
+  remainingTimeMinutes: integer('remaining_time_minutes')
+    .notNull()
+    .default(0),
+  reminderEnabled: boolean('reminder_enabled').notNull().default(false),
+  reminderBeforeMinutes: integer('reminder_before_minutes'),
+  labels: jsonb('labels'),
+  attachments: jsonb('attachments'),
+  isFavorite: boolean('is_favorite').notNull().default(false),
+  recurrenceRootId: uuid('recurrence_root_id').references(
+    (): AnyPgColumn => tasks.id,
+    { onDelete: 'set null' },
+  ),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+export const taskAttachments = pgTable('task_attachments', {
+  id: id(),
+  taskId: uuid('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  storageKey: text('storage_key').notNull(),
+  mimeType: varchar('mime_type', { length: 120 }).notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  createdAt: createdAt(),
 });
 
 export const subtasks = pgTable('subtasks', {
@@ -108,6 +157,59 @@ export const subtasks = pgTable('subtasks', {
   title: varchar('title', { length: 255 }).notNull(),
   isDone: boolean('is_done').notNull().default(false),
   orderIndex: integer('order_index').notNull().default(0),
+  assignee: varchar('assignee', { length: 80 }),
+  dueDate: timestamp('due_date'),
+  status: varchar('status', { length: 30 }).notNull().default('todo'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const taskDependencies = pgTable(
+  'task_dependencies',
+  {
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    dependencyTaskId: uuid('dependency_task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.taskId, table.dependencyTaskId] }),
+  ],
+);
+
+export const taskRecurrenceRules = pgTable('task_recurrence_rules', {
+  id: id(),
+  taskId: uuid('task_id')
+    .notNull()
+    .unique()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  frequency: varchar('frequency', { length: 20 }).notNull().default('Never'),
+  weekdays: jsonb('weekdays'),
+  monthlyMode: varchar('monthly_mode', { length: 30 }),
+  customInterval: integer('custom_interval').notNull().default(1),
+  customUnit: varchar('custom_unit', { length: 20 }).notNull().default('weeks'),
+  endType: varchar('end_type', { length: 20 }).notNull().default('never'),
+  endDate: date('end_date'),
+  occurrences: integer('occurrences'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const taskActivities = pgTable('task_activities', {
+  id: id(),
+  taskId: uuid('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  action: varchar('action', { length: 80 }).notNull(),
+  description: text('description').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: createdAt(),
 });
 
 export const reminders = pgTable('reminders', {
@@ -129,6 +231,10 @@ export const reminders = pgTable('reminders', {
   location: jsonb('location'),
   context: jsonb('context'),
   checklistItems: jsonb('checklist_items'),
+  // True when `userId` is null - i.e. this row predates auth being
+  // required on reminder creation and has no determinable owner. Kept
+  // instead of deleted so the data isn't lost; see DatabaseService.
+  isOrphaned: boolean('is_orphaned').notNull().default(false),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

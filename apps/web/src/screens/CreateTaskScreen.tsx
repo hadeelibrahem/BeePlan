@@ -1,108 +1,192 @@
-﻿import { BeePlanLogo } from '../components/BeePlanLogo'
-type CreateTaskScreenProps = {
+﻿import { useState } from 'react'
+import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
+import {
+  TaskRecurrenceModal,
+  createRecurrenceSummary,
+  type RecurrenceSettings,
+} from '../components/TaskRecurrenceModal'
+import {
+  TaskDependenciesWorkflowModal,
+  type DependencyTask,
+} from '../components/TaskDependenciesWorkflowModal'
+import SubtaskFormModal, { type SubtaskFormValues } from '../components/SubtaskFormModal'
+import { useLanguage } from '../i18n/LanguageContext'
+import { useTheme } from '../theme/ThemeContext'
+import {
+  recurrenceToApi,
+  toApiPriority,
+  toApiStatus,
+  toUiPriority,
+  toUiStatus,
+  type ApiTask,
+  type TaskPayload,
+} from '../lib/tasksApi'
+
+type CreateTaskScreenProps = SidebarNavHandlers & {
+  tasks?: ApiTask[]
   onCancel?: () => void
-  onSave?: () => void
+  onSave?: (payload: TaskPayload) => Promise<void> | void
+  onSignOut?: () => void
 }
 
-export default function CreateTaskScreen({ onCancel, onSave }: CreateTaskScreenProps) {
+export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignOut, ...nav }: CreateTaskScreenProps) {
+  const { t, toggleLanguage } = useLanguage()
+  const { mode, toggleTheme } = useTheme()
+  const [search, setSearch] = useState('')
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [notes, setNotes] = useState('')
+  const [priority, setPriority] = useState('Medium')
+  const [status, setStatus] = useState('To Do')
+  const [category, setCategory] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [dueTime, setDueTime] = useState('')
+  const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30)
+  const [subtasks, setSubtasks] = useState<{ title: string; isDone?: boolean }[]>([])
+  const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false)
+  const [dependencyModalOpen, setDependencyModalOpen] = useState(false)
+  const [dependencies, setDependencies] = useState<DependencyTask[]>([])
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(null)
+  const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
+  const recurrenceSummary = createRecurrenceSummary(recurrence)
+  const availableDependencies = tasks.map(toDependencyTask)
+
+  async function handleSave() {
+    if (!title.trim()) {
+      setError('Task title is required.')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      await onSave?.({
+        title: title.trim(),
+        description,
+        notes,
+        priority: toApiPriority(priority),
+        status: toApiStatus(status),
+        category,
+        dueDate: dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : undefined,
+        dueTime,
+        reminderEnabled: true,
+        reminderBeforeMinutes,
+        recurrence: recurrenceToApi(recurrence),
+        subtasks,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save task.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-[#1F2937] text-white">
-      <div className="mx-auto flex max-w-7xl gap-6 px-6 py-6">
-        <aside className="sticky top-6 hidden max-h-[calc(100vh-3rem)] w-64 shrink-0 self-start overflow-y-auto rounded-3xl border border-[#3B465B] bg-[#2B3443]/80 p-5 lg:block">
-          <div className="mb-8 flex items-center gap-3">
-            <BeePlanLogo showTagline size={48} />
+    <>
+      <AppLayout
+        active="tasks"
+        onNavigateDashboard={nav.onNavigateDashboard}
+        onNavigateTasks={onCancel}
+        onNavigateReminders={nav.onNavigateReminders}
+        onNavigateCalendar={nav.onNavigateCalendar}
+        onNavigateNotes={nav.onNavigateNotes}
+        onNavigateAnalytics={nav.onNavigateAnalytics}
+        panelTitle="Keep going!"
+        panelCaption="You're doing great today."
+        panelPercent={64}
+      >
+          <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
+            <button type="button" onClick={onCancel} className="hover:text-[var(--bp-text)]">
+              Back
+            </button>
+            <span>Tasks</span>
+            <span>/</span>
+            <span className="text-[var(--bp-text)]">Create New Task</span>
           </div>
 
-          <nav className="space-y-2">
-            <SideItem icon="DB" label="Dashboard" />
-            <SideItem active icon="TS" label="Tasks" />
-            <SideItem icon="RM" label="Reminders" />
-            <SideItem icon="CA" label="Calendar" />
-            <SideItem icon="NO" label="Notes" />
-            <SideItem icon="AN" label="Analytics" />
-          </nav>
-
-          <div className="mt-12">
-            <p className="mb-4 text-xs font-bold uppercase text-slate-400">Categories</p>
-            <CategoryDot label="Work" color="bg-blue-400" />
-            <CategoryDot label="Personal" color="bg-purple-400" />
-            <CategoryDot label="Study" color="bg-green-400" />
-            <CategoryDot label="Health" color="bg-red-400" />
-            <CategoryDot label="Finance" color="bg-[#FDE64B]" />
-            <CategoryDot label="Shopping" color="bg-pink-400" />
-            <CategoryDot label="Travel" color="bg-cyan-400" />
-          </div>
-
-          <div className="mt-12 rounded-3xl border border-[#3B465B] bg-[#2B3443] p-5">
-            <p className="font-bold">Keep going!</p>
-            <p className="mt-1 text-xs text-slate-400">You're doing great today.</p>
-            <div className="mt-6 flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#FDE64B] font-black text-[#FDE64B]">
-              64%
-            </div>
-            <p className="mt-3 text-xs text-slate-400">24 of 32 tasks completed</p>
-          </div>
-        </aside>
-
-        <main className="flex-1 rounded-3xl border border-[#3B465B] bg-[#2B3443]/40 p-6">
-          <header className="mb-8 flex items-center justify-between">
-            <div>
-              <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
-                <button type="button" onClick={onCancel} className="hover:text-white">
-                  Back
-                </button>
-                <span>Tasks</span>
-                <span>/</span>
-                <span className="text-white">Create New Task</span>
-              </div>
-
-              <h2 className="text-3xl font-black">Create New Task</h2>
-              <p className="mt-2 text-sm text-slate-400">Organize your work and stay productive.</p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button className="rounded-xl border border-[#3B465B] bg-[#2B3443] px-4 py-3">Dark</button>
-              <button className="rounded-xl border border-[#3B465B] bg-[#2B3443] px-4 py-3 text-sm">EN</button>
-              <button className="rounded-full bg-[#FDE64B] px-4 py-3 font-black text-black">A</button>
-            </div>
-          </header>
+          <PageHeader
+            title="Create New Task"
+            subtitle="Organize your work and stay productive."
+            toolbar={
+              <TopActionBar
+                searchValue={search}
+                onSearchChange={setSearch}
+                searchPlaceholder="Search tasks..."
+                themeMode={mode}
+                onToggleTheme={toggleTheme}
+                languageLabel={t('common.languageToggle')}
+                onToggleLanguage={toggleLanguage}
+                onProfileClick={onSignOut}
+              />
+            }
+          />
 
           <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-            <section className="rounded-3xl border border-[#3B465B] bg-[#2B3443]/50 p-6 shadow-2xl">
+            <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6 shadow-2xl">
               <SectionTitle icon="INFO" title="Task Information" />
 
               <FieldLabel label="Task Title" required />
               <input
-                className="mb-6 w-full rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-white outline-none placeholder:text-slate-500 focus:border-[#FDE64B]"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                className="mb-6 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                 placeholder="Enter task title..."
               />
 
               <FieldLabel label="Description" />
               <textarea
-                className="mb-2 min-h-40 w-full resize-none rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-white outline-none placeholder:text-slate-500 focus:border-[#FDE64B]"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                className="mb-2 min-h-40 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                 placeholder="Describe your task..."
               />
-              <p className="mb-6 text-right text-xs text-slate-500">0/500</p>
+              <p className="mb-6 text-end text-xs text-slate-500">{description.length}/500</p>
 
-              <div className="mb-6 border-t border-[#3B465B] pt-6">
+              <div className="mb-6 border-t border-[var(--bp-border)] pt-6">
                 <FieldLabel label="Subtasks" />
                 <p className="mb-3 text-sm text-slate-400">Break down your task into smaller steps</p>
-                <button className="w-full rounded-xl border border-dashed border-white/15 bg-black/20 px-4 py-4 font-bold text-[#FDE64B]">
+                <button
+                  type="button"
+                  onClick={() => setIsSubtaskModalOpen(true)}
+                  className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-4 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60"
+                >
                   + Add Subtask
                 </button>
+                {subtasks.length ? (
+                  <div className="mt-3 space-y-2">
+                    {subtasks.map((subtask, index) => (
+                      <div key={`${subtask.title}-${index}`} className="flex items-center justify-between rounded-xl bg-[var(--bp-bg)] px-4 py-3 text-sm text-[var(--bp-text)]">
+                        <span>{subtask.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSubtasks((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                          className="text-xs font-black text-red-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
-              <div className="mb-6 border-t border-[#3B465B] pt-6">
+              <div className="mb-6 border-t border-[var(--bp-border)] pt-6">
                 <FieldLabel label="Notes" />
-                <textarea
-                  className="min-h-24 w-full resize-none rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-white outline-none placeholder:text-slate-500 focus:border-[#FDE64B]"
+              <textarea
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  className="min-h-24 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                   placeholder="Additional notes (optional)..."
                 />
               </div>
 
-              <div className="border-t border-[#3B465B] pt-6">
+              <div className="border-t border-[var(--bp-border)] pt-6">
                 <FieldLabel label="Attachments" />
-                <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-white/15 bg-black/20 text-center">
-                  <div className="text-sm font-black text-[#FDE64B]">UPLOAD</div>
+                <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] text-center">
+                  <div className="text-sm font-black text-[var(--bp-accent)]">UPLOAD</div>
                   <p className="mt-3 text-sm text-slate-300">Drag & drop files here, or click to browse</p>
                   <p className="mt-1 text-xs text-slate-500">Supports: Images, PDF, Documents</p>
                 </div>
@@ -110,26 +194,25 @@ export default function CreateTaskScreen({ onCancel, onSave }: CreateTaskScreenP
             </section>
 
             <section className="space-y-5">
-              <div className="rounded-3xl border border-[#3B465B] bg-[#2B3443]/50 p-6">
+              <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
                 <SectionTitle icon="SET" title="Task Settings" />
 
                 <FieldLabel label="Priority" />
                 <div className="mb-6 grid grid-cols-3 gap-3">
-                  <Segment label="Low" color="text-green-400" />
-                  <Segment active label="= Medium" color="text-orange-400" />
-                  <Segment label="High" color="text-red-400" />
+                  {['Low', 'Medium', 'High'].map((item) => (
+                    <Segment key={item} active={priority === item} label={item} color={item === 'Low' ? 'text-green-400' : item === 'High' ? 'text-red-400' : 'text-orange-400'} onClick={() => setPriority(item)} />
+                  ))}
                 </div>
 
                 <FieldLabel label="Task Status" />
                 <div className="mb-6 grid grid-cols-4 gap-3">
-                  <Segment active label="To Do" color="text-[#FDE64B]" />
-                  <Segment label="In Progress" color="text-blue-400" />
-                  <Segment label="Done" color="text-green-400" />
-                  <Segment label="Missed" color="text-red-400" />
+                  {['To Do', 'In Progress', 'Done', 'Missed'].map((item) => (
+                    <Segment key={item} active={status === item} label={item} color={item === 'Done' ? 'text-green-400' : item === 'Missed' ? 'text-red-400' : item === 'In Progress' ? 'text-blue-400' : 'text-[var(--bp-accent)]'} onClick={() => setStatus(item)} />
+                  ))}
                 </div>
 
                 <FieldLabel label="Category" />
-                <select className="mb-6 w-full rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-slate-300 outline-none focus:border-[#FDE64B]">
+                <select value={category} onChange={(event) => setCategory(event.target.value)} className="mb-6 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
                   <option>Select category...</option>
                   <option>Work</option>
                   <option>Personal</option>
@@ -142,60 +225,86 @@ export default function CreateTaskScreen({ onCancel, onSave }: CreateTaskScreenP
                     <FieldLabel label="Due Date" />
                     <input
                       type="date"
-                      className="w-full rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-slate-300 outline-none focus:border-[#FDE64B]"
+                      value={dueDate}
+                      onChange={(event) => setDueDate(event.target.value)}
+                      className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
                     />
                   </div>
                   <div>
                     <FieldLabel label="Due Time" />
                     <input
                       type="time"
-                      className="w-full rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-slate-300 outline-none focus:border-[#FDE64B]"
+                      value={dueTime}
+                      onChange={(event) => setDueTime(event.target.value)}
+                      className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
                     />
                   </div>
                 </div>
               </div>
 
               <div className="grid gap-5 lg:grid-cols-2">
-                <div className="rounded-3xl border border-[#3B465B] bg-[#2B3443]/50 p-6">
+                <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
                   <FieldLabel label="Recurring Task" />
-                  <select className="w-full rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-slate-300 outline-none focus:border-[#FDE64B]">
-                    <option>None</option>
-                    <option>Daily</option>
-                    <option>Weekly</option>
-                    <option>Monthly</option>
-                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setIsRecurrenceModalOpen(true)}
+                    className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-start font-bold text-[var(--bp-text)] outline-none transition hover:border-[var(--bp-accent)]"
+                  >
+                    {recurrenceSummary}
+                  </button>
                 </div>
 
-                <div className="rounded-3xl border border-[#3B465B] bg-[#2B3443]/50 p-6">
+                <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
                   <FieldLabel label="Dependencies" />
                   <p className="mb-4 text-sm text-slate-400">Task depends on another task</p>
-                  <button className="w-full rounded-xl border border-dashed border-white/15 bg-black/20 px-4 py-4 font-bold text-[#FDE64B]">
+                  <button
+                    type="button"
+                    onClick={() => setDependencyModalOpen(true)}
+                    className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-4 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!availableDependencies.length}
+                  >
                     + Add Dependency
                   </button>
+                  {dependencies.length ? (
+                    <div className="mt-4 space-y-2">
+                      {dependencies.map((dependency) => (
+                        <div key={dependency.id} className="rounded-xl bg-[var(--bp-bg)] px-4 py-3">
+                          <p className="font-bold text-[var(--bp-text)]">{dependency.title}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {dependency.category} - {dependency.status}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-500">
+                      {availableDependencies.length ? 'No dependencies selected yet.' : 'Create another task first to add dependencies.'}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-[#3B465B] bg-[#2B3443]/50 p-6">
+              <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
                     <FieldLabel label="Reminder" />
                     <p className="text-sm text-slate-400">BeePlan will remind you before the due date.</p>
                   </div>
-                  <div className="flex h-7 w-12 items-center justify-end rounded-full bg-[#FDE64B] p-1">
+                  <div className="flex h-7 w-12 items-center justify-end rounded-full bg-[var(--bp-accent)] p-1">
                     <div className="h-5 w-5 rounded-full bg-white" />
                   </div>
                 </div>
 
                 <FieldLabel label="Reminder Time" />
-                <select className="w-full rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-slate-300 outline-none focus:border-[#FDE64B]">
-                  <option>30 minutes before</option>
-                  <option>10 minutes before</option>
-                  <option>1 hour before</option>
-                  <option>1 day before</option>
+                <select value={reminderBeforeMinutes} onChange={(event) => setReminderBeforeMinutes(Number(event.target.value))} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
+                  <option value={30}>30 minutes before</option>
+                  <option value={10}>10 minutes before</option>
+                  <option value={60}>1 hour before</option>
+                  <option value={1440}>1 day before</option>
                 </select>
               </div>
 
-              <div className="rounded-3xl border border-[#3B465B] bg-[#2B3443]/50 p-6">
+              <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
                 <FieldLabel label="Quick Tip" />
                 <p className="text-sm leading-6 text-slate-400">
                   Break large tasks into subtasks to make them easier to manage.
@@ -204,56 +313,69 @@ export default function CreateTaskScreen({ onCancel, onSave }: CreateTaskScreenP
             </section>
           </div>
 
-          <div className="mt-8 flex justify-end gap-4 border-t border-[#3B465B] pt-6">
+          <div className="mt-8 flex justify-end gap-4 border-t border-[var(--bp-border)] pt-6">
+            {error ? <p className="me-auto self-center text-sm font-semibold text-red-300">{error}</p> : null}
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-xl border border-[#3B465B] bg-[#2B3443] px-12 py-4 font-bold text-slate-300 hover:bg-[#3B465B]"
+              className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-12 py-4 font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
             >
               Cancel
             </button>
 
             <button
               type="button"
-              onClick={onSave}
-              className="rounded-xl bg-[#FDE64B] px-12 py-4 font-black text-black shadow-lg shadow-[#FDE64B]/20"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className="rounded-xl bg-[var(--bp-accent)] px-12 py-4 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
             >
-              Save Task
+              {saving ? 'Saving...' : 'Save Task'}
             </button>
           </div>
-        </main>
-      </div>
-    </div>
-  )
-}
-
-function SideItem({ icon, label, active }: { icon: string; label: string; active?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left ${
-        active ? 'bg-[#FDE64B]/15 text-[#FDE64B]' : 'text-slate-300 hover:bg-[#2B3443]'
-      }`}
-    >
-      <span>{icon}</span>
-      <span>{label}</span>
-    </button>
-  )
-}
-
-function CategoryDot({ label, color }: { label: string; color: string }) {
-  return (
-    <div className="mb-4 flex items-center gap-3 text-sm text-slate-300">
-      <span className={`h-3 w-3 rounded-full ${color}`} />
-      {label}
-    </div>
+      </AppLayout>
+      <TaskRecurrenceModal
+        open={isRecurrenceModalOpen}
+        mode={recurrence ? 'edit' : 'create'}
+        recurrence={recurrence}
+        onClose={() => setIsRecurrenceModalOpen(false)}
+        onSave={setRecurrence}
+        onRemove={() => setRecurrence(null)}
+      />
+      <TaskDependenciesWorkflowModal
+        open={dependencyModalOpen}
+        mode="add"
+        currentTaskId="new-task-draft"
+        availableTasks={availableDependencies}
+        dependencies={dependencies}
+        onClose={() => setDependencyModalOpen(false)}
+        onAdd={(selectedTasks) => {
+          setDependencies((current) => {
+            const currentIds = new Set(current.map((item) => item.id))
+            return [...current, ...selectedTasks.filter((item) => !currentIds.has(item.id))]
+          })
+        }}
+        onSaveReplacement={() => undefined}
+        onRemove={(dependencyId) => setDependencies((current) => current.filter((item) => item.id !== dependencyId))}
+      />
+      {isSubtaskModalOpen ? (
+        <SubtaskFormModal
+          mode="add"
+          onBack={() => setIsSubtaskModalOpen(false)}
+          onCancel={() => setIsSubtaskModalOpen(false)}
+          onSubmit={(values: SubtaskFormValues) => {
+            setSubtasks((current) => [...current, { title: values.title.trim(), isDone: false }])
+            setIsSubtaskModalOpen(false)
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 
 function SectionTitle({ icon, title }: { icon: string; title: string }) {
   return (
     <h3 className="mb-6 flex items-center gap-3 text-lg font-black">
-      <span className="text-[#FDE64B]">{icon}</span>
+      <span className="text-[var(--bp-accent)]">{icon}</span>
       {title}
     </h3>
   )
@@ -271,23 +393,53 @@ function Segment({
   label,
   active,
   color,
+  onClick,
 }: {
   label: string
   active?: boolean
   color: string
+  onClick?: () => void
 }) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
         active
-          ? 'border-[#FDE64B] bg-[#FDE64B]/10 text-[#FDE64B]'
-          : `border-[#3B465B] bg-[#2B3443] ${color}`
+          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
+          : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`
       }`}
     >
       {label}
     </button>
   )
+}
+
+function toDependencyTask(task: ApiTask): DependencyTask {
+  return {
+    id: task.id,
+    title: task.title,
+    category: task.category || 'General',
+    status: toUiStatus(task.status) as DependencyTask['status'],
+    dueDate: formatDate(task.dueDate) || 'No due date',
+    priority: normalizePriority(toUiPriority(task.priority)),
+  }
+}
+
+function normalizePriority(priority: string): DependencyTask['priority'] {
+  if (priority === 'Low' || priority === 'High') return priority
+  return 'Medium'
+}
+
+function formatDate(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
 }
 
 

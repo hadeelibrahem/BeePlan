@@ -5,12 +5,13 @@ import type { Reminder } from '../types/reminders.types'
 
 type Props = {
   reminder: Reminder
+  accessToken: string
   onCancel: () => void
   onSaved: (reminder: Reminder) => void
 }
 
-export function EditReminderScreen({ reminder, onCancel, onSaved }: Props) {
-  const { t } = useLanguage()
+export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }: Props) {
+  const { t, isRTL } = useLanguage()
 
   return (
     <main className="min-h-screen bg-[var(--bp-bg)] px-4 pb-8 pt-5 text-[var(--bp-text)]">
@@ -22,7 +23,7 @@ export function EditReminderScreen({ reminder, onCancel, onSaved }: Props) {
             aria-label={t('actions.back')}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-lg font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)] hover:bg-[var(--bp-input)]"
           >
-            &lt;
+            {isRTL ? '>' : '<'}
           </button>
           <span className="text-sm font-bold text-[var(--bp-muted)]">{t('actions.back')}</span>
         </div>
@@ -34,7 +35,7 @@ export function EditReminderScreen({ reminder, onCancel, onSaved }: Props) {
           initialReminder={reminder}
           submitLabel={t('reminders.saveChanges')}
           onSubmit={async (values) => {
-            const updated = await updateReminder(reminder.id, values)
+            const updated = await updateReminder(reminder.id, values, accessToken)
             if (updated) onSaved(updated)
           }}
         />

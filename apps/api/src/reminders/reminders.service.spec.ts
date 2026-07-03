@@ -79,7 +79,7 @@ describe('RemindersService (per-user ownership)', () => {
     const builder = createQueryBuilder([]);
     db.select.mockReturnValue(builder);
 
-    await expect(service.findOne(REMINDER_ID, USER_B)).rejects.toBeInstanceOf(
+    await expect(service.findOne(USER_B, REMINDER_ID)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
@@ -88,15 +88,12 @@ describe('RemindersService (per-user ownership)', () => {
     const builder = createQueryBuilder([baseRow]);
     db.insert.mockReturnValue(builder);
 
-    await service.create(
-      {
-        title: 'Buy milk',
-        type: 'time',
-        repeat: 'none',
-        priority: 'medium',
-      } as never,
-      USER_A,
-    );
+    await service.create(USER_A, {
+      title: 'Buy milk',
+      type: 'time',
+      repeat: 'none',
+      priority: 'medium',
+    } as never);
 
     expect(builder.values).toHaveBeenCalledWith(
       expect.objectContaining({ userId: USER_A }),
@@ -108,7 +105,7 @@ describe('RemindersService (per-user ownership)', () => {
     db.select.mockReturnValue(emptyBuilder);
 
     await expect(
-      service.update(REMINDER_ID, { title: 'hijacked' } as never, USER_B),
+      service.update(USER_B, REMINDER_ID, { title: 'hijacked' } as never),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(db.update).not.toHaveBeenCalled();
   });
@@ -117,7 +114,7 @@ describe('RemindersService (per-user ownership)', () => {
     const emptyBuilder = createQueryBuilder([]);
     db.select.mockReturnValue(emptyBuilder);
 
-    await expect(service.remove(REMINDER_ID, USER_B)).rejects.toBeInstanceOf(
+    await expect(service.remove(USER_B, REMINDER_ID)).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(db.delete).not.toHaveBeenCalled();

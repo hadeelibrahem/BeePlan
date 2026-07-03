@@ -5,7 +5,7 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
   DB_SSL: z.coerce.boolean().default(false),
   NODE_ENV: z.string().optional(),
-  JWT_SECRET: z.string().min(16).optional(),
+  JWT_SECRET: z.string().min(16),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   RESET_EMAIL_FROM: z.string().optional(),

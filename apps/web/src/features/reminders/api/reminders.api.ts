@@ -1,5 +1,3 @@
-import { getAuthHeaders } from '../../../lib/api'
-import { getAuthToken } from '../../../lib/authToken'
 import type { ReminderDraft, VoiceReminderDraftResponse } from '../types/aiAssistant.types'
 import type { GeneralLocationCategory, Reminder, ReminderFormValues } from '../types/reminders.types'
 
@@ -41,17 +39,12 @@ type ReminderResponse = {
   updatedAt: string
 }
 
-function authHeaders() {
-  const token = getAuthToken()
-  return token ? getAuthHeaders(token) : {}
-}
-
-async function apiRequest(path: string, init?: RequestInit) {
+async function apiRequest(path: string, accessToken: string, init?: RequestInit) {
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
+      Authorization: `Bearer ${accessToken}`,
       ...init?.headers,
     },
   })
@@ -240,19 +233,19 @@ function fromResponse(data: ReminderResponse): Reminder {
   }
 }
 
-export async function getReminders(): Promise<Reminder[]> {
-  const data = (await apiRequest('/reminders')) as ReminderResponse[]
+export async function getReminders(accessToken: string): Promise<Reminder[]> {
+  const data = (await apiRequest('/reminders', accessToken)) as ReminderResponse[]
   return data.map(fromResponse)
 }
 
-export async function fetchReminders() {
-  return getReminders()
+export async function fetchReminders(accessToken: string) {
+  return getReminders(accessToken)
 }
 
-export async function createReminder(values: ReminderFormValues): Promise<Reminder> {
+export async function createReminder(values: ReminderFormValues, accessToken: string): Promise<Reminder> {
   const body = toRequestBodyFor(values)
   console.log('[reminders.api] final request body for createReminder:', body)
-  const data = (await apiRequest('/reminders', {
+  const data = (await apiRequest('/reminders', accessToken, {
     method: 'POST',
     body: JSON.stringify(body),
   })) as ReminderResponse
@@ -260,15 +253,19 @@ export async function createReminder(values: ReminderFormValues): Promise<Remind
   return fromResponse(data)
 }
 
-export async function getReminder(id: string): Promise<Reminder> {
-  const data = (await apiRequest(`/reminders/${id}`)) as ReminderResponse
+export async function getReminder(id: string, accessToken: string): Promise<Reminder> {
+  const data = (await apiRequest(`/reminders/${id}`, accessToken)) as ReminderResponse
   return fromResponse(data)
 }
 
-export async function updateReminder(id: string, values: ReminderFormValues): Promise<Reminder | null> {
+export async function updateReminder(
+  id: string,
+  values: ReminderFormValues,
+  accessToken: string,
+): Promise<Reminder | null> {
   const body = toRequestBodyFor(values)
   console.log('[reminders.api] final request body for updateReminder:', id, body)
-  const data = (await apiRequest(`/reminders/${id}`, {
+  const data = (await apiRequest(`/reminders/${id}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify(body),
   })) as ReminderResponse
@@ -276,13 +273,13 @@ export async function updateReminder(id: string, values: ReminderFormValues): Pr
   return fromResponse(data)
 }
 
-export async function deleteReminder(id: string): Promise<void> {
-  await apiRequest(`/reminders/${id}`, { method: 'DELETE' })
+export async function deleteReminder(id: string, accessToken: string): Promise<void> {
+  await apiRequest(`/reminders/${id}`, accessToken, { method: 'DELETE' })
 }
 
-export async function toggleReminderStatus(id: string): Promise<Reminder | null> {
-  const current = await getReminder(id)
-  const data = (await apiRequest(`/reminders/${id}`, {
+export async function toggleReminderStatus(id: string, accessToken: string): Promise<Reminder | null> {
+  const current = await getReminder(id, accessToken)
+  const data = (await apiRequest(`/reminders/${id}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify({ status: current.status === 'done' ? 'active' : 'done' }),
   })) as ReminderResponse
@@ -294,7 +291,6 @@ async function apiFormRequest(path: string, formData: FormData) {
   const response = await fetch(`${apiUrl}${path}`, {
     method: 'POST',
     body: formData,
-    headers: authHeaders(),
   })
   const data = await response.json().catch(() => null)
 
@@ -307,10 +303,19 @@ async function apiFormRequest(path: string, formData: FormData) {
 }
 
 export async function parseReminderText(text: string): Promise<ReminderDraft> {
-  return apiRequest('/ai/parse-reminder', {
+  const response = await fetch(`${apiUrl}/ai/parse-reminder`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
-  }) as Promise<ReminderDraft>
+  })
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
+    throw new Error(message ?? 'Something went wrong. Please try again.')
+  }
+
+  return data as ReminderDraft
 }
 
 export async function createVoiceReminderDraft(

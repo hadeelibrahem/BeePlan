@@ -44,7 +44,7 @@ export class RemindersService {
     };
   }
 
-  async create(dto: CreateReminderDto, userId: string): Promise<Reminder> {
+  async create(userId: string, dto: CreateReminderDto): Promise<Reminder> {
     const [row] = await this.db
       .insert(remindersTable)
       .values({
@@ -82,13 +82,11 @@ export class RemindersService {
     return rows.map((row) => this.toEntity(row));
   }
 
-  async findOne(id: string, userId: string): Promise<Reminder> {
+  async findOne(userId: string, id: string): Promise<Reminder> {
     const [row] = await this.db
       .select()
       .from(remindersTable)
-      .where(
-        and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)),
-      );
+      .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)));
 
     if (!row) {
       throw new NotFoundException(`Reminder with id ${id} not found`);
@@ -97,12 +95,8 @@ export class RemindersService {
     return this.toEntity(row);
   }
 
-  async update(
-    id: string,
-    dto: UpdateReminderDto,
-    userId: string,
-  ): Promise<Reminder> {
-    await this.findOne(id, userId);
+  async update(userId: string, id: string, dto: UpdateReminderDto): Promise<Reminder> {
+    await this.findOne(userId, id);
 
     const [row] = await this.db
       .update(remindersTable)
@@ -116,9 +110,7 @@ export class RemindersService {
           : undefined,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)),
-      )
+      .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)))
       .returning();
 
     if (!row) {
@@ -128,12 +120,10 @@ export class RemindersService {
     return this.toEntity(row);
   }
 
-  async remove(id: string, userId: string): Promise<void> {
-    await this.findOne(id, userId);
+  async remove(userId: string, id: string): Promise<void> {
+    await this.findOne(userId, id);
     await this.db
       .delete(remindersTable)
-      .where(
-        and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)),
-      );
+      .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)));
   }
 }

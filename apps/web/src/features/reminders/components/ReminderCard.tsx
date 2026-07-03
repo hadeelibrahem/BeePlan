@@ -30,7 +30,7 @@ type Props = {
 }
 
 export function ReminderCard({ reminder, onPress, onToggle }: Props) {
-  const { formatPercent, t } = useLanguage()
+  const { formatPercent, t, isRTL } = useLanguage()
   const meta = TYPE_META[reminder.type]
   const completed = reminder.status === 'done'
 
@@ -100,7 +100,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
             </span>
           </span>
 
-          <span className="mt-1 shrink-0 text-slate-500">&gt;</span>
+          <span className="mt-1 shrink-0 text-slate-500">{isRTL ? '<' : '>'}</span>
         </button>
       </div>
     </article>

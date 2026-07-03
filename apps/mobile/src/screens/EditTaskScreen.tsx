@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import {
   AppScreen,
   BottomActionBar,
@@ -9,54 +10,162 @@ import {
   SecondaryButton,
   SectionCard,
 } from '../components/layout';
-import DeleteSubtaskModal from '../components/DeleteSubtaskModal';
-import SubtaskFormModal, { type SubtaskFormValues } from '../components/SubtaskFormModal';
+import {
+  TaskRecurrenceSheet,
+  createRecurrenceSummary,
+  type RecurrenceSettings,
+} from '../components/TaskRecurrenceSheet';
 import { useTheme } from '../theme/useTheme';
+import {
+  recurrenceToApi,
+  recurrenceToUi,
+  toApiPriority,
+  toApiStatus,
+  toUiPriority,
+  toUiStatus,
+  type ApiTask,
+  type TaskPayload,
+} from '../lib/tasksApi';
 
 type Props = {
+  task: ApiTask | null;
   onBack: () => void;
   onCancel: () => void;
   onDelete: () => void;
-  onSave: () => void;
+  onSave: (payload: TaskPayload) => Promise<void> | void;
 };
 
-const initialSubtasks = [
-  { title: 'Executive summary slide', done: true },
-  { title: 'Q2 performance review data', done: true },
-  { title: 'Channel allocation strategy', done: true },
-  { title: 'Executive presentation rehearsal', done: false },
-];
+const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const;
+const STATUSES = ['To Do', 'In Progress', 'Done', 'Missed'] as const;
+const CATEGORIES = ['Work', 'Personal', 'Study', 'Health', 'Finance', 'General'];
 
-const dependencies = ['Finish market research report', 'Approve creative assets'];
-const attachments = ['Q3_Marketing_Strategy_v3.pdf', 'competitor_analysis_2026.xlsx'];
+function toDateInput(value?: string) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
-export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: Props) {
+function formatDateLabel(date: Date | undefined) {
+  if (!date) return 'Select date...';
+  return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+}
+
+function formatTimeLabel(time: string) {
+  if (!time) return '--:--';
+  const [hoursStr, minutesStr] = time.split(':');
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return time;
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+  return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
+}
+
+export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSave }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
 
-  const [subtasks, setSubtasks] = useState(initialSubtasks);
-  const [addingSubtask, setAddingSubtask] = useState(false);
-  const [editingSubtaskIndex, setEditingSubtaskIndex] = useState<number | null>(null);
-  const [deletingSubtaskIndex, setDeletingSubtaskIndex] = useState<number | null>(null);
+  const [title, setTitle] = useState(task?.title ?? '');
+  const [description, setDescription] = useState(task?.description ?? '');
+  const [category, setCategory] = useState(task?.category || 'General');
+  const [status, setStatus] = useState(task ? toUiStatus(task.status) : 'To Do');
+  const [priority, setPriority] = useState(task ? toUiPriority(task.priority) : 'Medium');
+  const [dueDate, setDueDate] = useState<Date | undefined>(toDateInput(task?.dueDate));
+  const [dueTime, setDueTime] = useState(task?.dueTime ?? '');
+  const [notes, setNotes] = useState(task?.notes ?? '');
+  const [estimatedHours, setEstimatedHours] = useState(String(task?.estimatedHours ?? 0));
+  const [spentHours, setSpentHours] = useState(String(task?.spentHours ?? 0));
+  const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(
+    task ? recurrenceToUi(task.recurrence) : null,
+  );
+  const [isRecurrenceSheetVisible, setIsRecurrenceSheetVisible] = useState(false);
+  const [iosPicker, setIosPicker] = useState<'date' | 'time' | null>(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const recurrenceSummary = createRecurrenceSummary(recurrence);
 
-  const handleAddSubtask = (values: SubtaskFormValues) => {
-    setSubtasks((current) => [...current, { title: values.title, done: false }]);
-    setAddingSubtask(false);
+  const openDatePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: dueDate ?? new Date(),
+        mode: 'date',
+        onChange: (event: DateTimePickerEvent, selected?: Date) => {
+          if (event.type === 'set' && selected) setDueDate(selected);
+        },
+      });
+      return;
+    }
+    setIosPicker('date');
   };
 
-  const handleEditSubtask = (values: SubtaskFormValues) => {
-    if (editingSubtaskIndex === null) return;
-    setSubtasks((current) =>
-      current.map((item, index) => (index === editingSubtaskIndex ? { ...item, title: values.title } : item)),
+  const openTimePicker = () => {
+    const initial = new Date();
+    if (dueTime) {
+      const [h, m] = dueTime.split(':').map(Number);
+      if (!Number.isNaN(h)) initial.setHours(h, m || 0, 0, 0);
+    }
+
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: initial,
+        mode: 'time',
+        is24Hour: false,
+        onChange: (event: DateTimePickerEvent, selected?: Date) => {
+          if (event.type === 'set' && selected) {
+            setDueTime(`${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`);
+          }
+        },
+      });
+      return;
+    }
+    setIosPicker('time');
+  };
+
+  async function handleSave() {
+    if (!task) return;
+    if (!title.trim()) {
+      setError('Task title is required.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60);
+    const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60);
+
+    try {
+      await onSave({
+        title: title.trim(),
+        description: description.trim(),
+        category: category.trim(),
+        status: toApiStatus(status),
+        priority: toApiPriority(priority),
+        dueDate: dueDate ? dueDate.toISOString() : undefined,
+        dueTime,
+        notes: notes.trim(),
+        estimatedTimeMinutes,
+        spentTimeMinutes,
+        remainingTimeMinutes: Math.max(estimatedTimeMinutes - spentTimeMinutes, 0),
+        recurrence: recurrenceToApi(recurrence),
+      });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save task changes.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!task) {
+    return (
+      <AppScreen>
+        <PageHeader title="Edit Task" subtitle="No task selected" onBack={onBack} />
+        <SectionCard className="mb-5">
+          <Text style={{ color: colors.secondaryText }}>This task could not be loaded. Go back and try again.</Text>
+        </SectionCard>
+      </AppScreen>
     );
-    setEditingSubtaskIndex(null);
-  };
-
-  const handleConfirmDelete = () => {
-    if (deletingSubtaskIndex === null) return;
-    setSubtasks((current) => current.filter((_, index) => index !== deletingSubtaskIndex));
-    setDeletingSubtaskIndex(null);
-  };
+  }
 
   return (
     <AppScreen
@@ -72,8 +181,8 @@ export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: P
                 Cancel Changes
               </SecondaryButton>
             </View>
-            <PrimaryButton onPress={onSave} fullWidth>
-              Save Changes
+            <PrimaryButton onPress={() => void handleSave()} fullWidth disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
             </PrimaryButton>
           </View>
         </BottomActionBar>
@@ -83,179 +192,181 @@ export default function EditTaskScreen({ onBack, onCancel, onDelete, onSave }: P
 
       <Card title="Task Information">
         <Label text="Task Title" />
-        <Input defaultValue="Finalize Q3 Marketing Strategy Deck" />
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholderTextColor={colors.placeholder}
+          className="mb-5 rounded-2xl border px-4 py-4 text-sm"
+          style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
+        />
 
         <Label text="Description" />
-        <Input
+        <TextInput
           multiline
-          heightClass="h-32"
-          defaultValue="Create a comprehensive marketing strategy presentation covering Q3 goals, channel allocation, budget breakdown, competitor analysis, and KPIs."
+          value={description}
+          onChangeText={setDescription}
+          placeholderTextColor={colors.placeholder}
+          textAlignVertical="top"
+          className="mb-5 h-32 rounded-2xl border px-4 py-4 text-sm"
+          style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
 
         <Label text="Category" />
-        <Select label="Marketing" />
+        <View className="flex-row flex-wrap gap-2">
+          {CATEGORIES.map((item) => (
+            <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />
+          ))}
+        </View>
+        {error ? <Text className="mt-3 text-sm font-bold text-red-300">{error}</Text> : null}
       </Card>
 
       <Card title="Task Settings">
         <Label text="Priority" />
-        <View className="mb-5 flex-row gap-2">
-          <Segment label="Low" color={colors.success} />
-          <Segment label="Medium" color={colors.warning} />
-          <Segment active label="High" color={colors.error} />
+        <View className="mb-5 flex-row flex-wrap gap-2">
+          {PRIORITIES.map((item) => (
+            <Segment
+              key={item}
+              label={item}
+              active={priority === item}
+              color={item === 'Low' ? colors.success : item === 'High' || item === 'Urgent' ? colors.error : colors.warning}
+              onPress={() => setPriority(item)}
+            />
+          ))}
         </View>
 
         <Label text="Status" />
         <View className="mb-5 flex-row flex-wrap gap-2">
-          <Chip label="To Do" />
-          <Chip active label="In Progress" />
-          <Chip label="Done" />
-          <Chip label="Missed" />
+          {STATUSES.map((item) => (
+            <Chip key={item} label={item} active={status === item} onPress={() => setStatus(item)} />
+          ))}
         </View>
 
         <View className="flex-row gap-3">
           <View className="flex-1">
             <Label text="Due Date" />
-            <Select label="2026-07-03" />
+            <Select label={formatDateLabel(dueDate)} onPress={openDatePicker} />
           </View>
           <View className="flex-1">
             <Label text="Due Time" />
-            <Select label="5:00 PM" />
+            <Select label={formatTimeLabel(dueTime)} onPress={openTimePicker} />
           </View>
         </View>
       </Card>
 
-      <Card title="Progress Overview">
-        <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-sm" style={{ color: colors.secondaryText }}>13 of 18 subtasks completed</Text>
-          <Text className="text-3xl font-black" style={{ color: colors.accent }}>72%</Text>
-        </View>
-        <View className="h-3 overflow-hidden rounded-full" style={{ backgroundColor: colors.progressTrack }}>
-          <View className="h-full w-[72%] rounded-full" style={{ backgroundColor: colors.accent }} />
-        </View>
-      </Card>
-
-      <Card title="Editable Subtasks" action="+ Add" onAction={() => setAddingSubtask(true)}>
-        {subtasks.map((item, index) => (
-          <View
-            key={item.title}
-            className="mb-3 flex-row items-center gap-3 rounded-2xl border p-3"
-            style={{ borderColor: colors.border, backgroundColor: colors.background }}
-          >
-            <View
-              className="h-6 w-6 items-center justify-center rounded-lg border"
-              style={{ borderColor: item.done ? colors.success : colors.border, backgroundColor: item.done ? colors.success : 'transparent' }}
-            >
-              {item.done ? <Text className="text-[9px] font-black" style={{ color: colors.accentText }}>✓</Text> : null}
-            </View>
+      <Card title="Progress & Time Estimation">
+        <View className="flex-row gap-3">
+          <View className="flex-1">
+            <Label text="Estimated Hours" />
             <TextInput
-              defaultValue={item.title}
-              className="flex-1 rounded-xl px-3 py-2 text-sm"
-              style={{ backgroundColor: colors.input, color: colors.text }}
+              value={estimatedHours}
+              onChangeText={setEstimatedHours}
+              keyboardType="numeric"
+              placeholderTextColor={colors.placeholder}
+              className="mb-5 rounded-2xl border px-4 py-4 text-sm"
+              style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
             />
-            <Pressable onPress={() => setEditingSubtaskIndex(index)} accessibilityRole="button" accessibilityLabel="Edit subtask">
-              <Text className="text-xs font-black" style={{ color: colors.secondaryText }}>EDIT</Text>
-            </Pressable>
-            <Pressable onPress={() => setDeletingSubtaskIndex(index)} accessibilityRole="button" accessibilityLabel="Delete subtask">
-              <Text className="text-xs font-black" style={{ color: colors.error }}>DEL</Text>
-            </Pressable>
           </View>
-        ))}
-      </Card>
-
-      <Card title="Reminder & Recurring">
-        <Label text="Reminder" />
-        <Select label="30 minutes before" />
-
-        <Label text="Recurring Task" />
-        <Select label="Every Monday" />
-      </Card>
-
-      <Card title="Dependencies" action="+ Add">
-        {dependencies.map((item) => (
-          <View key={item} className="mb-3 rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
-            <Text className="font-bold" style={{ color: colors.text }}>{item}</Text>
-            <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>Connected task dependency</Text>
+          <View className="flex-1">
+            <Label text="Spent Hours" />
+            <TextInput
+              value={spentHours}
+              onChangeText={setSpentHours}
+              keyboardType="numeric"
+              placeholderTextColor={colors.placeholder}
+              className="mb-5 rounded-2xl border px-4 py-4 text-sm"
+              style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
+            />
           </View>
-        ))}
+        </View>
+        <Text className="text-xs" style={{ color: colors.secondaryText }}>
+          Remaining time is recalculated automatically from estimated minus spent.
+        </Text>
       </Card>
 
       <Card title="Notes">
-        <Input multiline heightClass="h-28" defaultValue="Confirm the final budget numbers before exporting. Keep the deck direct and executive-friendly." />
+        <TextInput
+          multiline
+          value={notes}
+          onChangeText={setNotes}
+          placeholderTextColor={colors.placeholder}
+          textAlignVertical="top"
+          className="h-28 rounded-2xl border px-4 py-4 text-sm"
+          style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
+        />
       </Card>
 
-      <Card title="Attachments" action="Upload">
-        {attachments.map((item) => (
-          <View
-            key={item}
-            className="mb-3 flex-row items-center gap-3 rounded-2xl border p-4"
-            style={{ borderColor: colors.border, backgroundColor: colors.background }}
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: colors.accent }}>
-              <Text className="text-[9px] font-black" style={{ color: colors.accentText }}>FILE</Text>
+      <Card title="Recurring Task">
+        <Label text="Repeat" />
+        <Select label={recurrenceSummary} onPress={() => setIsRecurrenceSheetVisible(true)} />
+      </Card>
+
+      <TaskRecurrenceSheet
+        visible={isRecurrenceSheetVisible}
+        mode={recurrence ? 'edit' : 'create'}
+        recurrence={recurrence}
+        onClose={() => setIsRecurrenceSheetVisible(false)}
+        onSave={setRecurrence}
+        onRemove={() => setRecurrence(null)}
+      />
+
+      {Platform.OS !== 'android' && (
+        <Modal visible={iosPicker !== null} transparent animationType="fade" onRequestClose={() => setIosPicker(null)}>
+          <View className="flex-1 items-center justify-center bg-black/50 px-6">
+            <View className="w-full rounded-3xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+              {iosPicker === 'date' ? (
+                <DateTimePicker
+                  value={dueDate ?? new Date()}
+                  mode="date"
+                  display="inline"
+                  themeVariant={theme.mode}
+                  accentColor={colors.accent}
+                  onChange={(_event, selected) => selected && setDueDate(selected)}
+                />
+              ) : (
+                <DateTimePicker
+                  value={(() => {
+                    const initial = new Date();
+                    if (dueTime) {
+                      const [h, m] = dueTime.split(':').map(Number);
+                      if (!Number.isNaN(h)) initial.setHours(h, m || 0, 0, 0);
+                    }
+                    return initial;
+                  })()}
+                  mode="time"
+                  display="spinner"
+                  themeVariant={theme.mode}
+                  accentColor={colors.accent}
+                  onChange={(_event, selected) => {
+                    if (selected) {
+                      setDueTime(`${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`);
+                    }
+                  }}
+                />
+              )}
+              <View className="mt-2 flex-row justify-end">
+                <Pressable
+                  onPress={() => setIosPicker(null)}
+                  className="rounded-full px-4 py-2.5 active:opacity-90"
+                  style={{ backgroundColor: colors.accent }}
+                >
+                  <Text className="text-sm font-black" style={{ color: colors.accentText }}>Done</Text>
+                </Pressable>
+              </View>
             </View>
-            <View className="flex-1">
-              <Text className="font-bold" style={{ color: colors.text }}>{item}</Text>
-              <Text className="text-xs" style={{ color: colors.secondaryText }}>Uploaded today</Text>
-            </View>
-            <Text className="text-xs font-black" style={{ color: colors.error }}>DEL</Text>
           </View>
-        ))}
-      </Card>
-
-      <Card title="Activity Information">
-        <InfoRow label="Created Date" value="2026-06-20" />
-        <InfoRow label="Last Updated" value="2026-06-28" />
-      </Card>
-
-      <Card title="Time Tracking">
-        <InfoRow label="Estimated Time" value="24h" />
-        <InfoRow label="Time Spent" value="16h" />
-        <InfoRow label="Remaining Time" value="8h" />
-      </Card>
-
-      <SubtaskFormModal
-        visible={addingSubtask}
-        mode="add"
-        onCancel={() => setAddingSubtask(false)}
-        onSubmit={handleAddSubtask}
-      />
-
-      <SubtaskFormModal
-        visible={editingSubtaskIndex !== null}
-        mode="edit"
-        initialValues={editingSubtaskIndex !== null ? { title: subtasks[editingSubtaskIndex]?.title } : undefined}
-        onCancel={() => setEditingSubtaskIndex(null)}
-        onDelete={() => {
-          setDeletingSubtaskIndex(editingSubtaskIndex);
-          setEditingSubtaskIndex(null);
-        }}
-        onSubmit={handleEditSubtask}
-      />
-
-      <DeleteSubtaskModal
-        visible={deletingSubtaskIndex !== null}
-        subtaskTitle={deletingSubtaskIndex !== null ? subtasks[deletingSubtaskIndex]?.title : undefined}
-        onCancel={() => setDeletingSubtaskIndex(null)}
-        onConfirm={handleConfirmDelete}
-      />
+        </Modal>
+      )}
     </AppScreen>
   );
 }
 
-function Card({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) {
+function Card({ title, children }: { title: string; children: ReactNode }) {
   const { theme } = useTheme();
   const { colors } = theme;
 
   return (
     <SectionCard className="mb-5">
-      <View className="mb-5 flex-row items-center justify-between">
-        <Text className="text-lg font-black" style={{ color: colors.text }}>{title}</Text>
-        {action ? (
-          <Pressable onPress={onAction} accessibilityRole="button" accessibilityLabel={action} className="active:opacity-70">
-            <Text className="text-sm font-black" style={{ color: colors.accent }}>{action}</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      <Text className="mb-5 text-lg font-black" style={{ color: colors.text }}>{title}</Text>
       {children}
     </SectionCard>
   );
@@ -271,80 +382,56 @@ function Label({ text }: { text: string }) {
   );
 }
 
-function Input({ defaultValue, multiline, heightClass = '' }: { defaultValue: string; multiline?: boolean; heightClass?: string }) {
-  const { theme } = useTheme();
-  const { colors } = theme;
-
-  return (
-    <TextInput
-      defaultValue={defaultValue}
-      multiline={multiline}
-      textAlignVertical={multiline ? 'top' : undefined}
-      className={`mb-5 rounded-2xl border px-4 py-4 text-sm ${heightClass}`}
-      style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
-    />
-  );
-}
-
-function Select({ label }: { label: string }) {
+function Segment({ label, active, color, onPress }: { label: string; active?: boolean; color: string; onPress?: () => void }) {
   const { theme } = useTheme();
   const { colors } = theme;
 
   return (
     <Pressable
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="mb-5 rounded-2xl border px-4 py-4 active:opacity-80"
-      style={{ borderColor: colors.border, backgroundColor: colors.input }}
-    >
-      <Text className="font-bold" style={{ color: colors.text }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function Segment({ label, active, color }: { label: string; active?: boolean; color: string }) {
-  const { theme } = useTheme();
-  const { colors } = theme;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      className="flex-1 rounded-2xl border px-3 py-3 active:opacity-80"
+      className="rounded-2xl border px-3 py-3 active:opacity-80"
       style={{
         borderColor: active ? colors.accent : colors.border,
         backgroundColor: active ? colors.accentSoft : colors.input,
       }}
     >
-      <Text className="text-center text-xs font-black" style={{ color }}>{label}</Text>
+      <Text className="text-center text-xs font-bold" style={{ color: active ? colors.accent : color }}>{label}</Text>
     </Pressable>
   );
 }
 
-function Chip({ label, active }: { label: string; active?: boolean }) {
+function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
   const { theme } = useTheme();
   const { colors } = theme;
 
   return (
     <Pressable
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="rounded-full border px-4 py-3 active:opacity-80"
-      style={{ borderColor: active ? colors.accent : colors.border, backgroundColor: active ? colors.accent : colors.input }}
+      className="rounded-full px-4 py-3 active:opacity-80"
+      style={{ backgroundColor: active ? colors.accent : colors.input }}
     >
-      <Text className="text-xs font-black" style={{ color: active ? colors.accentText : colors.text }}>{label}</Text>
+      <Text className="text-xs font-bold" style={{ color: active ? colors.accentText : colors.text }}>{label}</Text>
     </Pressable>
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function Select({ label, onPress }: { label: string; onPress?: () => void }) {
   const { theme } = useTheme();
   const { colors } = theme;
 
   return (
-    <View className="mb-3 flex-row items-center justify-between rounded-2xl p-4" style={{ backgroundColor: colors.background }}>
-      <Text className="text-xs font-black uppercase" style={{ color: colors.secondaryText }}>{label}</Text>
-      <Text className="font-black" style={{ color: colors.text }}>{value}</Text>
-    </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className="rounded-2xl border px-4 py-4 active:opacity-80"
+      style={{ borderColor: colors.border, backgroundColor: colors.input }}
+    >
+      <Text style={{ color: colors.text }}>{label}</Text>
+    </Pressable>
   );
 }

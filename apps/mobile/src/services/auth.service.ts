@@ -1,7 +1,7 @@
 import { Linking } from 'react-native';
 import type { AuthResponse, AuthUser } from '../lib/api';
+import { API_BASE_URL, apiFetch, readJsonOrThrow } from '../lib/apiClient';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 const mobileOAuthCallbackUrl = 'beeplan://auth/callback';
 const mobileOAuthScheme = 'beeplan://auth/';
 
@@ -78,12 +78,9 @@ export function parseApprovalToken(url: string) {
 }
 
 export async function getGoogleApprovalStatus(token: string): Promise<GoogleApprovalStatus> {
-  const response = await fetch(`${apiUrl}/auth/google/approval/status?${new URLSearchParams({ token })}`);
-  const data = (await response.json().catch(() => null)) as GoogleApprovalStatus | { message?: string } | null;
-
-  if (!response.ok) {
-    throw new Error((data && 'message' in data && data.message) || 'Unable to check login approval.');
-  }
+  const path = `/auth/google/approval/status?${new URLSearchParams({ token })}`;
+  const response = await apiFetch(path);
+  const data = await readJsonOrThrow<GoogleApprovalStatus | { message?: string }>(response, `${API_BASE_URL}${path}`);
 
   if (!data || !('status' in data)) {
     throw new Error('Unable to check login approval.');
@@ -93,15 +90,17 @@ export async function getGoogleApprovalStatus(token: string): Promise<GoogleAppr
 }
 
 export async function startGoogleSignIn() {
+  console.log('[BeePlan Auth] Starting Google sign-in against', API_BASE_URL);
+
   const params = new URLSearchParams({
     returnTo: mobileOAuthCallbackUrl,
   });
 
-  const canOpen = await Linking.canOpenURL(`${apiUrl}/auth/google`);
+  const canOpen = await Linking.canOpenURL(`${API_BASE_URL}/auth/google`);
 
   if (!canOpen) {
     throw new Error('Unable to open Google sign-in. Please try again.');
   }
 
-  await Linking.openURL(`${apiUrl}/auth/google?${params.toString()}`);
+  await Linking.openURL(`${API_BASE_URL}/auth/google?${params.toString()}`);
 }

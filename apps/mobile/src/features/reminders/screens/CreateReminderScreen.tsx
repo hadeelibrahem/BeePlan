@@ -10,11 +10,12 @@ import { scheduleTimeReminderNotification } from '../utils/reminderNotificationS
 import { mapDraftToReminder } from '../utils/aiDraftMapping';
 
 type Props = {
+  accessToken: string;
   onCancel: () => void;
   onCreated: (reminder: Reminder) => void;
 };
 
-export function CreateReminderScreen({ onCancel, onCreated }: Props) {
+export function CreateReminderScreen({ accessToken, onCancel, onCreated }: Props) {
   const { t } = useLanguage();
   const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(undefined);
   const [formKey, setFormKey] = useState(0);
@@ -37,7 +38,7 @@ export function CreateReminderScreen({ onCancel, onCreated }: Props) {
         initialReminder={draftReminder}
         submitLabel={t('reminders.saveReminder')}
         onSubmit={async (values) => {
-          const reminder = await createReminder(values);
+          const reminder = await createReminder(values, accessToken);
           await scheduleTimeReminderNotification(reminder);
           onCreated(reminder);
         }}

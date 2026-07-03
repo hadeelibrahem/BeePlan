@@ -9,9 +9,10 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
-import { CurrentUserId } from '../auth/current-user.decorator';
+import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
@@ -24,38 +25,32 @@ export class RemindersController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateReminderDto, @CurrentUserId() userId: string) {
-    return this.remindersService.create(dto, userId);
+  create(@Req() request: AuthenticatedRequest, @Body() dto: CreateReminderDto) {
+    return this.remindersService.create(request.user.id, dto);
   }
 
   @Get()
-  findAll(@CurrentUserId() userId: string) {
-    return this.remindersService.findAll(userId);
+  findAll(@Req() request: AuthenticatedRequest) {
+    return this.remindersService.findAll(request.user.id);
   }
 
   @Get(':id')
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUserId() userId: string,
-  ) {
-    return this.remindersService.findOne(id, userId);
+  findOne(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.remindersService.findOne(request.user.id, id);
   }
 
   @Patch(':id')
   update(
+    @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReminderDto,
-    @CurrentUserId() userId: string,
   ) {
-    return this.remindersService.update(id, dto, userId);
+    return this.remindersService.update(request.user.id, id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUserId() userId: string,
-  ) {
-    await this.remindersService.remove(id, userId);
+  async remove(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await this.remindersService.remove(request.user.id, id);
   }
 }

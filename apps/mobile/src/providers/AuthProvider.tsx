@@ -12,6 +12,7 @@ import { Linking } from 'react-native';
 import {
   forgotPassword,
   login,
+  logout as logoutRequest,
   register,
   resetPassword,
   verifyResetCode,
@@ -251,12 +252,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    if (session?.accessToken) {
+      try {
+        await logoutRequest(session.accessToken);
+      } catch (error) {
+        // Best-effort: still clear the local session even if the revoke
+        // call fails (e.g. the device is offline).
+        console.error('[BeePlan Auth] Server logout failed:', error);
+      }
+    }
+
     await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
     setOauthError('');
     setOauthMessage('');
     setPendingApprovalToken('');
     setSession(null);
-  }, []);
+  }, [session]);
 
   const clearOAuthError = useCallback(() => {
     setOauthError('');

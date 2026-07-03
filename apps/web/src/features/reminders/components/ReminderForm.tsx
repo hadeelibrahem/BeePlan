@@ -241,8 +241,8 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
       <PrioritySelector value={values.priority} onChange={setPriority} />
 
-      {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
-      {successMessage && <p className="text-emerald-400 text-xs pl-1">{successMessage}</p>}
+      {submitError && <p className="text-red-400 text-xs ps-1">{submitError}</p>}
+      {successMessage && <p className="text-emerald-400 text-xs ps-1">{successMessage}</p>}
 
       <button
         type="submit"
