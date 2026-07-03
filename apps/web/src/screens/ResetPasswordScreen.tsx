@@ -219,7 +219,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                     {isLoading ? 'Updating...' : 'Update Password'}
                   </PrimaryButton>
                 </div>
-                {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
+                {submitError && <p className="text-red-400 text-xs ps-1">{submitError}</p>}
               </form>
             ) : (
               <form onSubmit={handleVerifyCode} className="space-y-4">
@@ -247,7 +247,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                   error={errors.code}
                 />
                 {devResetCode && (
-                  <p className="text-[var(--bp-accent)] text-xs pl-1">
+                  <p className="text-[var(--bp-accent)] text-xs ps-1">
                     Development code: <span className="font-bold tracking-widest">{devResetCode}</span>
                   </p>
                 )}
@@ -257,7 +257,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                     {isLoading ? 'Checking...' : 'Verify Code'}
                   </PrimaryButton>
                 </div>
-                {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
+                {submitError && <p className="text-red-400 text-xs ps-1">{submitError}</p>}
               </form>
             )}
 

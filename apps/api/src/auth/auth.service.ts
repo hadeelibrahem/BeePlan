@@ -16,7 +16,7 @@ import {
 } from 'node:crypto';
 import { promisify } from 'node:util';
 import bcrypt from 'bcrypt';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service';
 import { googleLoginApprovals, passwordResetCodes, users } from '../db/schema';
@@ -783,10 +783,13 @@ export class AuthService {
     const user = await this.assertValidResetCode(email, parsed.data.code);
     const passwordHash = await bcrypt.hash(parsed.data.password, 12);
     const updatedAt = new Date();
+    // Invalidate any session issued before this reset — a leaked or stolen
+    // token from before the password change should stop working.
+    const nextTokenVersion = user.tokenVersion + 1;
 
     await this.databaseService.db
       .update(users)
-      .set({ passwordHash, updatedAt })
+      .set({ passwordHash, updatedAt, tokenVersion: nextTokenVersion })
       .where(eq(users.id, user.id));
 
     await this.invalidateResetCodes(user.id);
@@ -795,6 +798,7 @@ export class AuthService {
       ...user,
       passwordHash,
       updatedAt,
+      tokenVersion: nextTokenVersion,
     });
   }
 
@@ -895,9 +899,26 @@ export class AuthService {
       accessToken: this.jwtService.sign({
         sub: user.id,
         email: user.email,
+        tokenVersion: user.tokenVersion,
       }),
       user: this.toPublicUser(user),
     };
+  }
+
+  /**
+   * Revokes every previously-issued JWT for this user by bumping their
+   * token version — JwtAuthGuard rejects any token whose `tokenVersion`
+   * claim no longer matches the user's current one. There's no per-device
+   * session table, so this is "log out everywhere" rather than a single
+   * session; that matches what the frontend logout buttons call.
+   */
+  async logout(userId: string) {
+    await this.databaseService.db
+      .update(users)
+      .set({ tokenVersion: sql`${users.tokenVersion} + 1` })
+      .where(eq(users.id, userId));
+
+    return { ok: true };
   }
 
   private toPublicUser(user: AuthUser) {

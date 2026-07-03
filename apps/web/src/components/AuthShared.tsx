@@ -11,7 +11,7 @@ export function BrandHeader({ tagline = 'SMART PRODUCTIVITY' }: { tagline?: stri
 
 export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: string }) {
   return (
-    <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-r border-[var(--bp-border)] bg-[var(--bp-bg)] p-16 lg:flex lg:w-1/2">
+    <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-e border-[var(--bp-border)] bg-[var(--bp-bg)] p-16 lg:flex lg:w-1/2">
       <div className="relative z-10">
         <BeePlanLogo showTagline size={56} />
       </div>
@@ -71,7 +71,7 @@ export function AuthInput({
         />
         {rightSlot}
       </div>
-      {error && <span className="mt-1.5 block pl-1 text-xs text-red-400">{error}</span>}
+      {error && <span className="mt-1.5 block ps-1 text-xs text-red-400">{error}</span>}
     </div>
   )
 }
@@ -120,7 +120,7 @@ export function AuthFooterLink({
       <button
         type="button"
         onClick={onClick}
-        className="pl-1.5 font-bold text-[var(--bp-accent)] underline transition-colors hover:text-[var(--bp-text)] focus:outline-none"
+        className="ps-1.5 font-bold text-[var(--bp-accent)] underline transition-colors hover:text-[var(--bp-text)] focus:outline-none"
       >
         {label}
       </button>

@@ -12,19 +12,24 @@ import {
 } from '../components/layout'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
+import { toUiPriority, toUiStatus, type ApiTask } from '../lib/tasksApi'
 
 type AllTasksScreenProps = SidebarNavHandlers & {
   onBackDashboard?: () => void
   onCreateTask?: () => void
-  onViewTaskDetails?: () => void
+  onViewTaskDetails?: (taskId: string) => void
   onSignOut?: () => void
+  tasks?: ApiTask[]
+  loading?: boolean
+  error?: string
 }
 
 type Task = {
+  id: string
   title: string
   category: string
   due: string
-  priority: 'High' | 'Medium' | 'Low'
+  priority: 'High' | 'Medium' | 'Low' | 'Urgent'
   status: 'To Do' | 'In Progress' | 'Done' | 'Missed'
   progress: number
   done?: boolean
@@ -40,84 +45,37 @@ const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: 'missed', label: 'Missed' },
 ]
 
-const tasks: Task[] = [
-  {
-    title: 'Design new landing page hero section',
-    category: 'Design',
-    due: 'Today',
-    priority: 'High',
-    status: 'In Progress',
-    progress: 65,
-  },
-  {
-    title: 'Review mobile app design mockups',
-    category: 'Design',
-    due: 'Today',
-    priority: 'Medium',
-    status: 'To Do',
-    progress: 0,
-  },
-  {
-    title: 'Team sync - weekly standup notes',
-    category: 'Meeting',
-    due: 'Today',
-    priority: 'Low',
-    status: 'Done',
-    progress: 100,
-    done: true,
-  },
-  {
-    title: 'Code review for payment module PR',
-    category: 'Development',
-    due: 'Tomorrow',
-    priority: 'High',
-    status: 'To Do',
-    progress: 0,
-  },
-  {
-    title: 'Bug fix - login page validation',
-    category: 'Development',
-    due: 'Tomorrow',
-    priority: 'High',
-    status: 'In Progress',
-    progress: 30,
-  },
-  {
-    title: 'Finalize Q3 marketing strategy deck',
-    category: 'Marketing',
-    due: 'Jun 7',
-    priority: 'High',
-    status: 'In Progress',
-    progress: 72,
-  },
-  {
-    title: 'Set up CI/CD pipeline for staging',
-    category: 'Development',
-    due: 'Jun 8',
-    priority: 'High',
-    status: 'In Progress',
-    progress: 90,
-  },
-  {
-    title: 'Research competitor pricing models',
-    category: 'Research',
-    due: 'Jul 1',
-    priority: 'Medium',
-    status: 'In Progress',
-    progress: 60,
-  },
-]
-
 export default function AllTasksScreen({
   onBackDashboard,
   onCreateTask,
   onViewTaskDetails,
   onSignOut,
+  tasks: apiTasks = [],
+  loading = false,
+  error = '',
   ...nav
 }: AllTasksScreenProps) {
   const [search, setSearch] = useState('')
+  const [activeFilter, setActiveFilter] = useState<TaskFilter>('all')
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
+  const mappedTasks = apiTasks.map(fromApiTask)
+  const filteredTasks = mappedTasks.filter((task) => {
+    const matchesSearch = task.title.toLowerCase().includes(search.toLowerCase())
+    const matchesFilter =
+      activeFilter === 'all' ||
+      (activeFilter === 'todo' && task.status === 'To Do') ||
+      (activeFilter === 'inProgress' && task.status === 'In Progress') ||
+      (activeFilter === 'done' && task.status === 'Done') ||
+      (activeFilter === 'missed' && task.status === 'Missed')
+
+    return matchesSearch && matchesFilter
+  })
+  const allCount = mappedTasks.length
+  const todoCount = mappedTasks.filter((task) => task.status === 'To Do').length
+  const inProgressCount = mappedTasks.filter((task) => task.status === 'In Progress').length
+  const doneCount = mappedTasks.filter((task) => task.status === 'Done').length
+  const missedCount = mappedTasks.filter((task) => task.status === 'Missed').length
 
   return (
     <AppLayout
@@ -151,22 +109,23 @@ export default function AllTasksScreen({
       />
 
       <div className="mb-6">
-        <FilterTabs tabs={FILTERS} active="all" onChange={() => {}} />
+        <FilterTabs tabs={FILTERS} active={activeFilter} onChange={setActiveFilter} />
       </div>
 
       <section className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
-        <StatsCard icon="ALL" value="24" title="All Tasks" desc="Every task you've created" />
-        <StatsCard icon="TODO" value="8" title="To Do" desc="Not started yet" />
-        <StatsCard icon="MOVE" value="5" title="In Progress" desc="Currently working on" />
-        <StatsCard icon="DONE" value="7" title="Done" desc="Completed tasks" />
-        <StatsCard icon="LATE" value="4" title="Missed" desc="Past their due date" />
+        <StatsCard icon="ALL" value={String(allCount)} title="All Tasks" desc="Every task you've created" />
+        <StatsCard icon="TODO" value={String(todoCount)} title="To Do" desc="Not started yet" />
+        <StatsCard icon="MOVE" value={String(inProgressCount)} title="In Progress" desc="Currently working on" />
+        <StatsCard icon="DONE" value={String(doneCount)} title="Done" desc="Completed tasks" />
+        <StatsCard icon="LATE" value={String(missedCount)} title="Missed" desc="Past their due date" />
       </section>
+
+      {error ? <p className="mb-4 text-sm font-semibold text-red-300">{error}</p> : null}
+      {loading ? <p className="mb-4 text-sm text-slate-400">Loading tasks...</p> : null}
 
       <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
         <section className="space-y-4">
-          <TaskGroup title="Today" count="5 tasks" tasks={tasks.slice(0, 3)} onViewTaskDetails={onViewTaskDetails} />
-          <TaskGroup title="Tomorrow" count="3 tasks" tasks={tasks.slice(3, 5)} onViewTaskDetails={onViewTaskDetails} />
-          <TaskGroup title="This Week" count="4 tasks" tasks={tasks.slice(5)} onViewTaskDetails={onViewTaskDetails} />
+          <TaskGroup title="Tasks" count={`${filteredTasks.length} tasks`} tasks={filteredTasks} onViewTaskDetails={onViewTaskDetails} />
         </section>
 
         <aside className="space-y-4">
@@ -202,7 +161,7 @@ function TaskGroup({
   title: string
   count: string
   tasks: Task[]
-  onViewTaskDetails?: () => void
+  onViewTaskDetails?: (taskId: string) => void
 }) {
   return (
     <div>
@@ -212,7 +171,7 @@ function TaskGroup({
 
       <div className="overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]">
         {tasks.map((task) => (
-          <TaskRow key={task.title} task={task} onViewTaskDetails={onViewTaskDetails} />
+          <TaskRow key={task.id} task={task} onViewTaskDetails={onViewTaskDetails} />
         ))}
       </div>
     </div>
@@ -224,13 +183,15 @@ function TaskRow({
   onViewTaskDetails,
 }: {
   task: Task
-  onViewTaskDetails?: () => void
+  onViewTaskDetails?: (taskId: string) => void
 }) {
+  const { isRTL } = useLanguage()
+
   return (
     <button
       type="button"
-      onClick={onViewTaskDetails}
-      className="grid w-full cursor-pointer grid-cols-[28px_1fr_120px_120px_160px_24px] items-center gap-4 border-b border-[var(--bp-border)] px-5 py-4 text-left transition hover:bg-[var(--bp-bg)] last:border-b-0"
+      onClick={() => onViewTaskDetails?.(task.id)}
+      className="grid w-full cursor-pointer grid-cols-[28px_1fr_120px_120px_160px_24px] items-center gap-4 border-b border-[var(--bp-border)] px-5 py-4 text-start transition hover:bg-[var(--bp-bg)] last:border-b-0"
     >
       <div className={`h-5 w-5 rounded-md border ${task.done ? 'border-green-400 bg-green-400' : 'border-slate-500'}`} />
 
@@ -251,12 +212,30 @@ function TaskRow({
             style={{ width: `${task.progress}%` }}
           />
         </div>
-        <p className="mt-1 text-right text-xs text-slate-400">{task.progress}%</p>
+        <p className="mt-1 text-end text-xs text-slate-400">{task.progress}%</p>
       </div>
 
-      <span className="text-slate-400">&gt;</span>
+      <span className="text-slate-400">{isRTL ? '<' : '>'}</span>
     </button>
   )
+}
+
+function fromApiTask(task: ApiTask): Task {
+  return {
+    id: task.id,
+    title: task.title,
+    category: task.category || 'General',
+    due: formatDue(task.dueDate),
+    priority: toUiPriority(task.priority) as Task['priority'],
+    status: toUiStatus(task.status) as Task['status'],
+    progress: task.progress,
+    done: task.status === 'done',
+  }
+}
+
+function formatDue(value?: string) {
+  if (!value) return 'No due date'
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
 }
 
 function Badge({ label, type }: { label: string; type: string }) {

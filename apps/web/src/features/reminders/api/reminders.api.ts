@@ -24,11 +24,12 @@ type ReminderResponse = {
   updatedAt: string
 }
 
-async function apiRequest(path: string, init?: RequestInit) {
+async function apiRequest(path: string, accessToken: string, init?: RequestInit) {
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
       ...init?.headers,
     },
   })
@@ -148,18 +149,18 @@ function fromResponse(data: ReminderResponse): Reminder {
   }
 }
 
-export async function getReminders(): Promise<Reminder[]> {
-  const data = (await apiRequest('/reminders')) as ReminderResponse[]
+export async function getReminders(accessToken: string): Promise<Reminder[]> {
+  const data = (await apiRequest('/reminders', accessToken)) as ReminderResponse[]
   return data.map(fromResponse)
 }
 
-export async function fetchReminders() {
-  return getReminders()
+export async function fetchReminders(accessToken: string) {
+  return getReminders(accessToken)
 }
 
-export async function createReminder(values: ReminderFormValues): Promise<Reminder> {
+export async function createReminder(values: ReminderFormValues, accessToken: string): Promise<Reminder> {
   const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values)
-  const data = (await apiRequest('/reminders', {
+  const data = (await apiRequest('/reminders', accessToken, {
     method: 'POST',
     body: JSON.stringify(body),
   })) as ReminderResponse
@@ -167,14 +168,14 @@ export async function createReminder(values: ReminderFormValues): Promise<Remind
   return fromResponse(data)
 }
 
-export async function getReminder(id: string): Promise<Reminder> {
-  const data = (await apiRequest(`/reminders/${id}`)) as ReminderResponse
+export async function getReminder(id: string, accessToken: string): Promise<Reminder> {
+  const data = (await apiRequest(`/reminders/${id}`, accessToken)) as ReminderResponse
   return fromResponse(data)
 }
 
-export async function updateReminder(id: string, values: ReminderFormValues): Promise<Reminder | null> {
+export async function updateReminder(id: string, values: ReminderFormValues, accessToken: string): Promise<Reminder | null> {
   const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values)
-  const data = (await apiRequest(`/reminders/${id}`, {
+  const data = (await apiRequest(`/reminders/${id}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify(body),
   })) as ReminderResponse
@@ -182,13 +183,13 @@ export async function updateReminder(id: string, values: ReminderFormValues): Pr
   return fromResponse(data)
 }
 
-export async function deleteReminder(id: string): Promise<void> {
-  await apiRequest(`/reminders/${id}`, { method: 'DELETE' })
+export async function deleteReminder(id: string, accessToken: string): Promise<void> {
+  await apiRequest(`/reminders/${id}`, accessToken, { method: 'DELETE' })
 }
 
-export async function toggleReminderStatus(id: string): Promise<Reminder | null> {
-  const current = await getReminder(id)
-  const data = (await apiRequest(`/reminders/${id}`, {
+export async function toggleReminderStatus(id: string, accessToken: string): Promise<Reminder | null> {
+  const current = await getReminder(id, accessToken)
+  const data = (await apiRequest(`/reminders/${id}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify({ status: current.status === 'done' ? 'active' : 'done' }),
   })) as ReminderResponse

@@ -28,11 +28,12 @@ async function scheduleTimeReminderNotification(reminder: Reminder) {
 }
 
 type Props = {
+  accessToken: string;
   onCancel: () => void;
   onCreated: (reminder: Reminder) => void;
 };
 
-export function CreateReminderScreen({ onCancel, onCreated }: Props) {
+export function CreateReminderScreen({ accessToken, onCancel, onCreated }: Props) {
   const { t } = useLanguage();
 
   return (
@@ -45,7 +46,7 @@ export function CreateReminderScreen({ onCancel, onCreated }: Props) {
       <ReminderForm
         submitLabel={t('reminders.saveReminder')}
         onSubmit={async (values) => {
-          const reminder = await createReminder(values);
+          const reminder = await createReminder(values, accessToken);
           await scheduleTimeReminderNotification(reminder);
           onCreated(reminder);
         }}

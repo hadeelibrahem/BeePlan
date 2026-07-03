@@ -23,10 +23,19 @@ import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import EditTaskScreen from './src/screens/EditTaskScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
-import TaskDetailsScreen, { type TaskDetailsTask } from './src/screens/TaskDetailsScreen';
+import TaskDetailsScreen from './src/screens/TaskDetailsScreen';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { useTheme } from './src/theme/useTheme';
+import {
+  changeTaskStatus,
+  createTask,
+  deleteTask,
+  getTasks,
+  updateTask,
+  type ApiTask,
+  type TaskPayload,
+} from './src/lib/tasksApi';
 
 const queryClient = new QueryClient();
 
@@ -60,14 +69,18 @@ export default function App() {
   );
 }
 
+
 function ThemedApp() {
   const [screen, setScreen] = useState<AppScreen>('auth');
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [tasks, setTasks] = useState<ApiTask[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState<TaskDetailsTask | null>(null);
-  const { loading, user, signOut } = useAuth();
+  const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
+  const { accessToken, loading, user, signOut } = useAuth();
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -86,10 +99,10 @@ function ThemedApp() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !accessToken) return;
 
     console.log('[App] reminders screen mounted for user — calling GET /reminders');
-    fetchReminders()
+    fetchReminders(accessToken)
       .then((fetched) => {
         console.log('[App] fetchReminders resolved with', fetched.length, 'reminder(s)');
         setReminders(fetched);
@@ -99,13 +112,28 @@ function ThemedApp() {
         const message = error instanceof Error ? error.message : 'Could not load reminders.';
         Alert.alert('Failed to load reminders', message);
       });
-  }, [user]);
+  }, [user, accessToken]);
+
+  useEffect(() => {
+    if (!user || !accessToken) return;
+
+    setTasksLoading(true);
+    setTasksError('');
+    getTasks(accessToken)
+      .then(setTasks)
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Could not load tasks.';
+        setTasksError(message);
+      })
+      .finally(() => setTasksLoading(false));
+  }, [accessToken, user]);
 
   const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null;
 
   async function handleToggle(id: string) {
+    if (!accessToken) return;
     try {
-      const updated = await toggleReminderStatus(id);
+      const updated = await toggleReminderStatus(id, accessToken);
       if (!updated) return;
       setReminders((current) => current.map((reminder) => (reminder.id === id ? updated : reminder)));
     } catch (error) {
@@ -119,7 +147,64 @@ function ThemedApp() {
     await signOut();
     setScreen('auth');
     setSelectedId(null);
+    setSelectedTask(null);
     setReminders([]);
+    setTasks([]);
+  }
+
+  async function handleCreateTask(payload: TaskPayload) {
+    if (!accessToken) return;
+    try {
+      const createdTask = await createTask(accessToken, payload);
+      setTasks((current) => [createdTask, ...current]);
+      setSelectedTask(createdTask);
+      setScreen('taskDetails');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not create task.';
+      Alert.alert('Failed to create task', message);
+    }
+  }
+
+  async function handleUpdateTask(taskId: string, payload: TaskPayload) {
+    if (!accessToken) return;
+    const updatedTask = await updateTask(accessToken, taskId, payload);
+    setTasks((current) => current.map((item) => (item.id === taskId ? updatedTask : item)));
+    setSelectedTask(updatedTask);
+    setScreen('taskDetails');
+  }
+
+  async function handleDeleteTask() {
+    if (!accessToken || !selectedTask?.id) {
+      setScreen('tasks');
+      return;
+    }
+
+    try {
+      await deleteTask(accessToken, selectedTask.id);
+      setTasks((current) => current.filter((task) => task.id !== selectedTask.id));
+      setSelectedTask(null);
+      setScreen('tasks');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not delete task.';
+      Alert.alert('Failed to delete task', message);
+    }
+  }
+
+  async function handleMarkTaskDone() {
+    if (!accessToken || !selectedTask?.id) {
+      setScreen('tasks');
+      return;
+    }
+
+    try {
+      const updatedTask = await changeTaskStatus(accessToken, selectedTask.id, { status: 'done' });
+      setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
+      setSelectedTask(updatedTask);
+      setScreen('tasks');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update task.';
+      Alert.alert('Failed to update task', message);
+    }
   }
 
   if (loading) {
@@ -173,32 +258,42 @@ function ThemedApp() {
           onViewReminders={() => setScreen('reminders')}
           onCreateTask={() => setScreen('createTask')}
           onViewTaskDetails={(task) => {
-            setSelectedTask(task);
+            setSelectedTask(tasks.find((item) => item.id === task.id) ?? null);
             setScreen('taskDetails');
           }}
+          tasks={tasks}
+          loading={tasksLoading}
+          error={tasksError}
         />
       ) : screen === 'createTask' ? (
         <CreateTaskScreen
           onCancel={() => setScreen('tasks')}
-          onSave={() => setScreen('tasks')}
+          onSave={(payload) => void handleCreateTask(payload)}
         />
       ) : screen === 'taskDetails' ? (
         <TaskDetailsScreen
           task={selectedTask}
+          accessToken={accessToken ?? ''}
           onBack={() => setScreen('tasks')}
           onEdit={() => setScreen('editTask')}
-          onDelete={() => setScreen('tasks')}
-          onMarkDone={() => setScreen('tasks')}
+          onDelete={() => void handleDeleteTask()}
+          onMarkDone={() => void handleMarkTaskDone()}
+          onTaskUpdated={(updated) => {
+            setTasks((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+            setSelectedTask(updated);
+          }}
         />
       ) : screen === 'editTask' ? (
         <EditTaskScreen
+          task={selectedTask}
           onBack={() => setScreen('taskDetails')}
           onCancel={() => setScreen('taskDetails')}
-          onDelete={() => setScreen('tasks')}
-          onSave={() => setScreen('taskDetails')}
+          onDelete={() => void handleDeleteTask()}
+          onSave={(payload) => (selectedTask ? handleUpdateTask(selectedTask.id, payload) : undefined)}
         />
       ) : screen === 'create' ? (
         <CreateReminderScreen
+          accessToken={accessToken ?? ''}
           onCancel={() => setScreen('reminders')}
           onCreated={(reminder) => {
             setReminders((current) => [reminder, ...current]);
@@ -215,6 +310,7 @@ function ThemedApp() {
       ) : screen === 'edit' && selectedReminder ? (
         <EditReminderScreen
           reminder={selectedReminder}
+          accessToken={accessToken ?? ''}
           onCancel={() => setScreen('details')}
           onSaved={(reminder) => {
             setReminders((current) => current.map((item) => (item.id === reminder.id ? reminder : item)));

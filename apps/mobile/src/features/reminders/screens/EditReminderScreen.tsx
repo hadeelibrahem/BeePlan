@@ -6,11 +6,12 @@ import type { Reminder } from '../types/reminders.types';
 
 type Props = {
   reminder: Reminder;
+  accessToken: string;
   onCancel: () => void;
   onSaved: (reminder: Reminder) => void;
 };
 
-export function EditReminderScreen({ reminder, onCancel, onSaved }: Props) {
+export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }: Props) {
   const { t } = useLanguage();
 
   return (
@@ -20,7 +21,7 @@ export function EditReminderScreen({ reminder, onCancel, onSaved }: Props) {
         initialReminder={reminder}
         submitLabel={t('reminders.saveChanges')}
         onSubmit={async (values) => {
-          const updated = await updateReminder(reminder.id, values);
+          const updated = await updateReminder(reminder.id, values, accessToken);
           if (updated) onSaved(updated);
         }}
       />

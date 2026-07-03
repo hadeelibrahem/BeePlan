@@ -7,7 +7,7 @@ type DeleteSubtaskModalProps = {
 export default function DeleteSubtaskModal({ subtaskTitle, onCancel, onConfirm }: DeleteSubtaskModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-[#3B465B] bg-[#2B3443] p-7 text-center shadow-2xl">
+      <div className="w-full max-w-md rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7 text-center shadow-2xl">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-red-500/40 bg-red-500/15 text-3xl font-black text-red-400">
           !
         </div>
@@ -22,7 +22,7 @@ export default function DeleteSubtaskModal({ subtaskTitle, onCancel, onConfirm }
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 rounded-xl border border-[#3B465B] bg-[#2B3443] px-8 py-4 font-bold text-slate-300 hover:bg-[#3B465B]"
+            className="flex-1 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-8 py-4 font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
           >
             Cancel
           </button>

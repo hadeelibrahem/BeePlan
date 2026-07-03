@@ -153,7 +153,7 @@ export default function ForgotPasswordScreen({
                   {isLoading ? 'Sending...' : 'Send Reset Code'}
                 </PrimaryButton>
               </div>
-              {submitError && <p className="text-red-400 text-xs pl-1">{submitError}</p>}
+              {submitError && <p className="text-red-400 text-xs ps-1">{submitError}</p>}
             </form>
 
             <AuthFooterLink prefix="Remember your password?" label="Back to Sign In" onClick={onBack} />

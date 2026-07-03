@@ -9,7 +9,7 @@ type Props = {
 }
 
 export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
-  const { t } = useLanguage()
+  const { t, isRTL } = useLanguage()
 
   return (
     <main className="min-h-screen bg-[var(--bp-bg)] px-4 pb-8 pt-5 text-[var(--bp-text)]">
@@ -22,7 +22,7 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
               aria-label={t('actions.back')}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-lg font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]"
             >
-              &lt;
+              {isRTL ? '>' : '<'}
             </button>
             <span className="text-sm font-bold text-[var(--bp-muted)]">{t('actions.back')}</span>
           </div>

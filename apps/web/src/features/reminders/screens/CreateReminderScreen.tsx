@@ -4,12 +4,13 @@ import { ReminderForm } from '../components/ReminderForm'
 import type { Reminder } from '../types/reminders.types'
 
 type Props = {
+  accessToken: string
   onCancel: () => void
   onCreated: (reminder: Reminder) => void
 }
 
-export function CreateReminderScreen({ onCancel, onCreated }: Props) {
-  const { t } = useLanguage()
+export function CreateReminderScreen({ accessToken, onCancel, onCreated }: Props) {
+  const { t, isRTL } = useLanguage()
 
   return (
     <main className="min-h-screen bg-[var(--bp-bg)] px-4 pb-8 pt-5 text-[var(--bp-text)]">
@@ -21,7 +22,7 @@ export function CreateReminderScreen({ onCancel, onCreated }: Props) {
             aria-label={t('actions.back')}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-lg font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)] hover:bg-[var(--bp-input)]"
           >
-            &lt;
+            {isRTL ? '>' : '<'}
           </button>
           <span className="text-sm font-bold text-[var(--bp-muted)]">{t('actions.back')}</span>
         </div>
@@ -32,7 +33,7 @@ export function CreateReminderScreen({ onCancel, onCreated }: Props) {
         <ReminderForm
           submitLabel={t('reminders.saveReminder')}
           onSubmit={async (values) => {
-            const reminder = await createReminder(values)
+            const reminder = await createReminder(values, accessToken)
             onCreated(reminder)
           }}
         />

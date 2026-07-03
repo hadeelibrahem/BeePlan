@@ -1,24 +1,5 @@
 import type { Reminder, ReminderFormValues } from '../types/reminders.types';
-
-const rawApiUrl = process.env.EXPO_PUBLIC_API_URL;
-const apiUrl = rawApiUrl ?? 'http://localhost:3000';
-
-if (!rawApiUrl) {
-  console.warn(
-    '[reminders.api] EXPO_PUBLIC_API_URL is not set in the running bundle — falling back to http://localhost:3000, ' +
-      'which is NOT reachable from a physical device or most emulators. Set EXPO_PUBLIC_API_URL in apps/mobile/.env ' +
-      'and restart Metro with "npx expo start -c" (env vars are inlined at bundle time, so a plain reload will not pick up changes).',
-  );
-} else if (/localhost|127\.0\.0\.1/.test(rawApiUrl)) {
-  console.warn(
-    `[reminders.api] EXPO_PUBLIC_API_URL is set to "${rawApiUrl}". "localhost"/"127.0.0.1" refers to the device ` +
-      'itself, not your development machine — a physical phone (and most emulators) cannot reach your computer this way. ' +
-      'Use your computer\'s LAN IP (e.g. http://192.168.x.x:3000) if testing against a local backend, or a publicly ' +
-      'reachable URL (like the deployed Railway URL) otherwise. The phone and the LAN-IP backend must be on the same network.',
-  );
-}
-
-console.log('[reminders.api] resolved API base URL:', apiUrl);
+import { API_BASE_URL, apiFetch, readJsonOrThrow } from '../../../lib/apiClient';
 
 type ReminderResponse = {
   id: string;
@@ -42,50 +23,17 @@ type ReminderResponse = {
   updatedAt: string;
 };
 
-async function apiRequest(path: string, init?: RequestInit) {
-  const url = `${apiUrl}${path}`;
-  const method = init?.method ?? 'GET';
-  const headers = {
-    'Content-Type': 'application/json',
-    ...init?.headers,
-  };
-
-  console.log('[reminders.api] request:', {
-    url,
-    method,
-    headers,
-    body: init?.body,
+async function apiRequest<T>(path: string, accessToken: string, init?: RequestInit): Promise<T> {
+  const response = await apiFetch(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      ...init?.headers,
+    },
   });
 
-  let response: Response;
-  try {
-    response = await fetch(url, { ...init, headers });
-  } catch (error) {
-    console.error('[reminders.api] network error — request never reached the server:', {
-      url,
-      method,
-      error,
-    });
-    throw new Error(
-      `Could not reach the server at ${apiUrl}. Check that the backend is running and reachable from this device, ` +
-        'and that EXPO_PUBLIC_API_URL is correct.',
-    );
-  }
-
-  const data = await response.json().catch(() => null);
-
-  console.log('[reminders.api] response:', {
-    url,
-    status: response.status,
-    body: data,
-  });
-
-  if (!response.ok) {
-    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message;
-    throw new Error(message ?? `Request failed with status ${response.status}.`);
-  }
-
-  return data;
+  return readJsonOrThrow<T>(response, `${API_BASE_URL}${path}`);
 }
 
 function toLocationPayload(location: ReminderFormValues['location']) {
@@ -205,27 +153,27 @@ function fromResponse(data: ReminderResponse): Reminder {
   };
 }
 
-export async function getReminders(): Promise<Reminder[]> {
-  const data = (await apiRequest('/reminders')) as ReminderResponse[];
+export async function getReminders(accessToken: string): Promise<Reminder[]> {
+  const data = (await apiRequest('/reminders', accessToken)) as ReminderResponse[];
   return data.map(fromResponse);
 }
 
-export async function fetchReminders() {
-  return getReminders();
+export async function fetchReminders(accessToken: string) {
+  return getReminders(accessToken);
 }
 
-export async function getReminderById(id: string): Promise<Reminder | null> {
+export async function getReminderById(id: string, accessToken: string): Promise<Reminder | null> {
   try {
-    const data = (await apiRequest(`/reminders/${id}`)) as ReminderResponse;
+    const data = (await apiRequest(`/reminders/${id}`, accessToken)) as ReminderResponse;
     return fromResponse(data);
   } catch {
     return null;
   }
 }
 
-export async function createReminder(values: ReminderFormValues): Promise<Reminder> {
+export async function createReminder(values: ReminderFormValues, accessToken: string): Promise<Reminder> {
   const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values);
-  const data = (await apiRequest('/reminders', {
+  const data = (await apiRequest('/reminders', accessToken, {
     method: 'POST',
     body: JSON.stringify(body),
   })) as ReminderResponse;
@@ -233,9 +181,9 @@ export async function createReminder(values: ReminderFormValues): Promise<Remind
   return fromResponse(data);
 }
 
-export async function updateReminder(id: string, values: ReminderFormValues): Promise<Reminder | null> {
+export async function updateReminder(id: string, values: ReminderFormValues, accessToken: string): Promise<Reminder | null> {
   const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values);
-  const data = (await apiRequest(`/reminders/${id}`, {
+  const data = (await apiRequest(`/reminders/${id}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify(body),
   })) as ReminderResponse;
@@ -243,15 +191,15 @@ export async function updateReminder(id: string, values: ReminderFormValues): Pr
   return fromResponse(data);
 }
 
-export async function deleteReminder(id: string): Promise<void> {
-  await apiRequest(`/reminders/${id}`, { method: 'DELETE' });
+export async function deleteReminder(id: string, accessToken: string): Promise<void> {
+  await apiRequest(`/reminders/${id}`, accessToken, { method: 'DELETE' });
 }
 
-export async function toggleReminderStatus(id: string): Promise<Reminder | null> {
-  const current = await getReminderById(id);
+export async function toggleReminderStatus(id: string, accessToken: string): Promise<Reminder | null> {
+  const current = await getReminderById(id, accessToken);
   if (!current) return null;
 
-  const data = (await apiRequest(`/reminders/${id}`, {
+  const data = (await apiRequest(`/reminders/${id}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify({ status: current.status === 'done' ? 'active' : 'done' }),
   })) as ReminderResponse;
