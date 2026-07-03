@@ -7,18 +7,17 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleStrategy } from './google.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { getJwtSecret } from './jwt-config';
 
 @Module({
   imports: [
     DatabaseModule,
     PassportModule,
     JwtModule.registerAsync({
+      global: true,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('JWT_SECRET') ??
-          configService.get<string>('DATABASE_URL') ??
-          'beeplan-dev-jwt-secret-change-me',
+        secret: getJwtSecret(configService),
         signOptions: {
           expiresIn: '7d',
         },

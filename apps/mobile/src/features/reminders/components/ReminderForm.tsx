@@ -29,7 +29,7 @@ const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
   remindAt: reminder?.remindAt ?? '',
   reminderBeforeMinutes: reminder?.reminderBeforeMinutes ?? 30,
   repeatRule: reminder?.repeatRule ?? defaultRepeatRule,
-  location: reminder?.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' },
+  location: reminder?.location ?? { mode: 'specific_place', radiusMeters: 100, trigger: 'arrive' },
   context: reminder?.context ?? { condition: '', detail: '' },
   checklistItems: reminder?.checklistItems ?? [{ id: 'item-1', title: '', isDone: false }],
   checklistReminderTrigger: reminder?.checklistReminderTrigger ?? {
@@ -59,17 +59,19 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
     if (values.type === 'location') {
       const location = values.location;
       if (!location) return false;
-      if (!location.triggerType) return false;
+      if (!location.trigger) return false;
       if (!(location.radiusMeters > 0)) return false;
-      if (location.mode === 'specific') {
-        return Boolean(
-          location.placeName?.trim() &&
-            Number.isFinite(location.latitude) &&
-            Number.isFinite(location.longitude),
-        );
+      if (location.mode === 'specific_place') {
+        const place = location.specificPlace;
+        // A search result or a resolved map/current-location pin is valid;
+        // raw manual text without geocoding never produces a `selectedBy`.
+        return Boolean(place?.selectedBy && Number.isFinite(place.latitude) && Number.isFinite(place.longitude));
       }
-      if (location.mode === 'category') {
-        return Boolean(location.category);
+      if (location.mode === 'general_category') {
+        const category = location.generalCategory?.category;
+        if (!category) return false;
+        if (category === 'custom') return Boolean(location.generalCategory?.customLabel?.trim());
+        return true;
       }
       return false;
     }
@@ -84,10 +86,16 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
       }
 
       const locationTrigger = values.checklistReminderTrigger?.location;
-      if (locationTrigger?.type === 'general_location' && !locationTrigger.generalLocation?.category) return false;
+      if (locationTrigger?.type === 'general_location') {
+        const category = locationTrigger.generalLocation?.category;
+        if (!category) return false;
+        if (category === 'custom' && !locationTrigger.generalLocation?.customLabel?.trim()) return false;
+      }
       if (locationTrigger?.type === 'specific_location') {
         const place = locationTrigger.specificLocation;
-        if (!place?.geoapifyPlaceId || !place.placeName?.trim() || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+        // A search result or a resolved map/current-location pin is valid;
+        // raw manual text without geocoding never produces a `selectedBy`.
+        if (!place?.selectedBy || !Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
           return false;
         }
         if (!place.trigger) return false;
@@ -172,7 +180,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
         {values.type === 'location' && (
           <LocationReminderFields
-            value={values.location ?? { mode: 'specific', radiusMeters: 100, triggerType: 'arrive' }}
+            value={values.location ?? { mode: 'specific_place', radiusMeters: 100, trigger: 'arrive' }}
             onChange={setLocation}
           />
         )}

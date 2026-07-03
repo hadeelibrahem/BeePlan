@@ -11,6 +11,7 @@ import { getPermissionsAsync, requestPermissionsAsync } from 'expo-notifications
 import { setNotificationHandler } from 'expo-notifications/build/NotificationsHandler';
 import { SchedulableTriggerInputTypes } from 'expo-notifications/build/Notifications.types';
 import { AndroidImportance } from 'expo-notifications/build/NotificationChannelManager.types';
+import cancelScheduledNotificationAsync from 'expo-notifications/build/cancelScheduledNotificationAsync';
 import scheduleNotificationAsync from 'expo-notifications/build/scheduleNotificationAsync';
 import setNotificationChannelAsync from 'expo-notifications/build/setNotificationChannelAsync';
 import { Platform } from 'react-native';
@@ -120,4 +121,16 @@ export async function scheduleReminderNotification({
       channelId: Platform.OS === 'android' ? 'reminders' : undefined,
     },
   });
+}
+
+/**
+ * Cancels a previously scheduled local notification. Resolves without throwing even if the
+ * identifier no longer refers to a pending notification (already fired, or never existed).
+ */
+export async function cancelScheduledNotification(notificationId: string): Promise<void> {
+  try {
+    await cancelScheduledNotificationAsync(notificationId);
+  } catch (error) {
+    console.error('[notifications] failed to cancel scheduled notification:', notificationId, error);
+  }
 }

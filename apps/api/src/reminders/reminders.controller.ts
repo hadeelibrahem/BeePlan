@@ -18,8 +18,8 @@ import { CreateReminderDto } from './dto/create-reminder.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { RemindersService } from './reminders.service';
 
-@UseGuards(JwtAuthGuard)
 @Controller('reminders')
+@UseGuards(JwtAuthGuard)
 export class RemindersController {
   constructor(private readonly remindersService: RemindersService) {}
 
@@ -35,7 +35,10 @@ export class RemindersController {
   }
 
   @Get(':id')
-  findOne(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+  findOne(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.remindersService.findOne(request.user.id, id);
   }
 
@@ -50,7 +53,10 @@ export class RemindersController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+  async remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     await this.remindersService.remove(request.user.id, id);
   }
 }

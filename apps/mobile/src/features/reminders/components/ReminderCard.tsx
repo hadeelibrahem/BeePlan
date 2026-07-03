@@ -126,7 +126,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
 function getSubtitle(reminder: Reminder) {
   if (reminder.type === 'time' && reminder.remindAt) return reminder.remindAt;
   if (reminder.type === 'location' && reminder.location) {
-    return `${reminder.location.triggerType === 'arrive' ? 'Arriving at' : 'Leaving'} ${getLocationLabel(reminder.location)}`;
+    return `${reminder.location.trigger === 'arrive' ? 'Arriving at' : 'Leaving'} ${getLocationLabel(reminder.location)}`;
   }
   if (reminder.type === 'checklist' && reminder.checklistItems) {
     const done = reminder.checklistItems.filter((item) => item.isDone).length;

@@ -1,74 +1,81 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLanguage } from '../../../i18n/LanguageContext'
-import { searchPlacesByCategory, type NearbyPlace } from '../../../lib/geoapify'
-import { PLACE_CATEGORIES } from '../constants/placeCategories'
-import type { LocationMode, Reminder, TriggerType } from '../types/reminders.types'
-import { PlacesAutocompleteInput, type PlaceSelection } from './PlacesAutocompleteInput'
+import { reverseGeocode, type GeoapifyPlaceSuggestion } from '../services/geoapifyPlacesService'
+import type { GeneralLocationCategory, LocationReminderConfig, LocationReminderMode, TriggerType } from '../types/reminders.types'
+import { LocationMapPicker } from './LocationMapPicker'
+import { PlaceAutocomplete } from './PlaceAutocomplete'
+import { PlaceTypeAutocomplete } from './PlaceTypeAutocomplete'
 
-type LocationValue = NonNullable<Reminder['location']>
+const MODES: LocationReminderMode[] = ['specific_place', 'general_category']
+const RADIUS_OPTIONS = [100, 250, 500]
 
 type Props = {
-  value: LocationValue
-  onChange: (value: LocationValue) => void
+  value: LocationReminderConfig
+  onChange: (value: LocationReminderConfig) => void
 }
-
-const MODES: LocationMode[] = ['specific', 'category']
 
 export function LocationReminderFields({ value, onChange }: Props) {
   const { t } = useLanguage()
-  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([])
+  const [searchText, setSearchText] = useState(value.specificPlace?.placeName ?? value.pendingPlaceName ?? '')
+  const [isLocating, setIsLocating] = useState(false)
+  const [locationError, setLocationError] = useState('')
 
-  useEffect(() => {
-    if (value.mode !== 'category' || !value.category || !navigator.geolocation) {
-      setNearbyPlaces([])
+  const setMode = (mode: LocationReminderMode) => onChange({ ...value, mode })
+  const setTrigger = (trigger: TriggerType) => onChange({ ...value, trigger })
+  const setRadius = (radiusMeters: number) => onChange({ ...value, radiusMeters })
+
+  const setGeneralCategory = (category: GeneralLocationCategory) =>
+    onChange({ ...value, generalCategory: { category, customLabel: value.generalCategory?.customLabel } })
+
+  const setGeneralCustomLabel = (customLabel: string) =>
+    onChange({ ...value, generalCategory: { category: value.generalCategory?.category ?? 'custom', customLabel } })
+
+  const handlePlaceSelected = (place: GeoapifyPlaceSuggestion) => {
+    setLocationError('')
+    setSearchText(place.placeName)
+    onChange({ ...value, specificPlace: { ...place, selectedBy: 'search' } })
+  }
+
+  const applyResolvedPoint = (place: GeoapifyPlaceSuggestion, selectedBy: 'map' | 'current_location') => {
+    setSearchText(place.placeName)
+    onChange({ ...value, specificPlace: { ...place, selectedBy } })
+  }
+
+  const handleMapPick = (coords: { latitude: number; longitude: number }) => {
+    setLocationError('')
+    reverseGeocode(coords.latitude, coords.longitude)
+      .then((place) => applyResolvedPoint(place, 'map'))
+      .catch((error: unknown) => {
+        console.error(error)
+        setLocationError(error instanceof Error ? error.message : 'Failed to resolve the selected point.')
+      })
+  }
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser.')
       return
     }
 
-    let cancelled = false
-    const category = value.category
-    const radiusMeters = value.radiusMeters
-
+    setLocationError('')
+    setIsLocating(true)
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        searchPlacesByCategory(category, position.coords.latitude, position.coords.longitude, radiusMeters)
-          .then((places) => {
-            if (!cancelled) setNearbyPlaces(places)
-          })
+        reverseGeocode(position.coords.latitude, position.coords.longitude)
+          .then((place) => applyResolvedPoint(place, 'current_location'))
           .catch((error: unknown) => {
             console.error(error)
-            if (!cancelled) setNearbyPlaces([])
+            setLocationError(error instanceof Error ? error.message : 'Failed to resolve your location.')
           })
+          .finally(() => setIsLocating(false))
       },
-      () => setNearbyPlaces([]),
-      { timeout: 5000 },
+      (error) => {
+        console.error(error)
+        setLocationError('Could not access your location. Please check permissions.')
+        setIsLocating(false)
+      },
     )
-
-    return () => {
-      cancelled = true
-    }
-  }, [value.mode, value.category, value.radiusMeters])
-
-  const setMode = (mode: LocationMode) => onChange({ ...value, mode })
-  const setRadius = (radiusMeters: number) => onChange({ ...value, radiusMeters })
-  const setTriggerType = (triggerType: TriggerType) => onChange({ ...value, triggerType })
-
-  const setPlaceText = (placeName: string) =>
-    onChange({
-      ...value,
-      placeName,
-      address: undefined,
-      latitude: undefined,
-      longitude: undefined,
-    })
-
-  const setPlaceSelection = (place: PlaceSelection) =>
-    onChange({
-      ...value,
-      placeName: place.placeName,
-      address: place.address,
-      latitude: Number(place.latitude),
-      longitude: Number(place.longitude),
-    })
+  }
 
   return (
     <section className="grid gap-4">
@@ -92,10 +99,10 @@ export function LocationReminderFields({ value, onChange }: Props) {
                 }`}
               >
                 <span className="block text-sm font-black">
-                  {t(mode === 'specific' ? 'reminders.modeSpecific' : 'reminders.modeCategory')}
+                  {t(mode === 'specific_place' ? 'reminders.modeSpecific' : 'reminders.modeCategory')}
                 </span>
                 <span className={`mt-1 block text-xs font-semibold ${selected ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-subtle)]'}`}>
-                  {t(mode === 'specific' ? 'reminders.modeSpecificHint' : 'reminders.modeCategoryHint')}
+                  {t(mode === 'specific_place' ? 'reminders.modeSpecificHint' : 'reminders.modeCategoryHint')}
                 </span>
               </button>
             )
@@ -103,94 +110,96 @@ export function LocationReminderFields({ value, onChange }: Props) {
         </div>
       </div>
 
-      {value.mode === 'specific' && (
+      {value.mode === 'specific_place' && (
         <>
-          <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)]">
-            <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
+          <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3">
+            <p className="mb-1 text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
               {t('reminders.searchPlace')}
-            </span>
-            <PlacesAutocompleteInput
-              value={value.placeName ?? ''}
+            </p>
+            <PlaceAutocomplete
+              value={searchText}
               placeholder={t('reminders.searchPlacePlaceholder')}
-              onTextChange={setPlaceText}
-              onPlaceSelected={setPlaceSelection}
-              className="w-full bg-transparent py-2 text-base font-semibold text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)]"
+              onTextChange={(text) => {
+                setSearchText(text)
+                // Typing without picking a suggestion must not leave a stale
+                // valid selection in place — manual text entry is not allowed.
+                if (value.specificPlace && text !== value.specificPlace.placeName) {
+                  onChange({ ...value, specificPlace: undefined })
+                }
+              }}
+              onPlaceSelected={handlePlaceSelected}
             />
-          </label>
-          {value.address && (
-            <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 opacity-80">
-              <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
+            <p className="mt-1 text-xs text-[var(--bp-subtle)]">{t('reminders.searchPlaceManualHint')}</p>
+            {!value.specificPlace && !!value.pendingPlaceName && (
+              <p className="mt-1 text-xs font-semibold text-[var(--bp-accent)]">{t('reminders.pendingPlaceHelp')}</p>
+            )}
+          </div>
+
+          <LocationMapPicker
+            latitude={value.specificPlace?.latitude}
+            longitude={value.specificPlace?.longitude}
+            isLocating={isLocating}
+            onMapPick={handleMapPick}
+            onUseCurrentLocation={handleUseCurrentLocation}
+          />
+
+          {!!locationError && <p className="text-xs font-semibold text-red-400">{locationError}</p>}
+
+          {value.specificPlace && (
+            <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3">
+              <p className="mb-1 text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
                 {t('reminders.placeAddress')}
-              </span>
-              <span className="block py-2 text-base font-semibold text-[var(--bp-text)]">{value.address}</span>
-            </label>
+              </p>
+              <p className="py-1 text-base font-semibold text-[var(--bp-text)]">{value.specificPlace.address}</p>
+              {value.specificPlace.city && <p className="text-xs text-[var(--bp-subtle)]">{value.specificPlace.city}</p>}
+            </div>
           )}
         </>
       )}
 
-      {value.mode === 'category' && (
-        <div>
-          <p className="mb-2 text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
-            {t('reminders.placeCategory')}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {PLACE_CATEGORIES.map((category) => {
-              const selected = value.category === category
-              return (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => onChange({ ...value, category })}
-                  aria-pressed={selected}
-                  className={`rounded-full border px-4 py-2.5 text-xs font-black capitalize transition ${
-                    selected
-                      ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
-                      : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]'
-                  }`}
-                >
-                  {t(`reminders.category.${category}`)}
-                </button>
-              )
-            })}
-          </div>
-          {nearbyPlaces.length > 0 && (
-            <label className="mt-4 block rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 opacity-80">
-              <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
-                {t('reminders.nearbyExamples')}
-              </span>
-              <div className="grid gap-1 py-1">
-                {nearbyPlaces.map((place, index) => (
-                  <span key={`${place.name}-${index}`} className="block text-sm font-semibold text-[var(--bp-text)]">
-                    {place.name}
-                  </span>
-                ))}
-              </div>
-            </label>
-          )}
-        </div>
+      {value.mode === 'general_category' && (
+        <PlaceTypeAutocomplete
+          value={value.generalCategory?.category}
+          customLabel={value.generalCategory?.customLabel}
+          onChange={setGeneralCategory}
+          onCustomLabelChange={setGeneralCustomLabel}
+        />
       )}
 
       <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)]">
         <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
           {t('reminders.radiusMeters')}
         </span>
-        <input
-          type="number"
-          min={1}
-          value={value.radiusMeters}
-          onChange={(event) => setRadius(Number(event.target.value) || 0)}
-          className="w-full bg-transparent py-2 text-base font-semibold text-[var(--bp-text)] outline-none"
-        />
+        <div className="flex gap-2 pt-1">
+          {RADIUS_OPTIONS.map((radius) => {
+            const selected = value.radiusMeters === radius
+            return (
+              <button
+                key={radius}
+                type="button"
+                onClick={() => setRadius(radius)}
+                aria-pressed={selected}
+                className={`flex-1 rounded-full border px-4 py-2.5 text-center text-xs font-black transition ${
+                  selected
+                    ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
+                    : 'border-[var(--bp-border)] bg-[var(--bp-bg)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]'
+                }`}
+              >
+                {radius}m
+              </button>
+            )
+          })}
+        </div>
       </label>
 
       <div className="grid grid-cols-2 gap-2">
         {(['arrive', 'leave'] as TriggerType[]).map((triggerType) => {
-          const selected = value.triggerType === triggerType
+          const selected = value.trigger === triggerType
           return (
             <button
               key={triggerType}
               type="button"
-              onClick={() => setTriggerType(triggerType)}
+              onClick={() => setTrigger(triggerType)}
               aria-pressed={selected}
               className={`rounded-full border px-4 py-3 text-xs font-black capitalize transition ${
                 selected

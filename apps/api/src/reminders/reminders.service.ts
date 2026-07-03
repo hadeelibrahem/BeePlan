@@ -113,6 +113,10 @@ export class RemindersService {
       .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)))
       .returning();
 
+    if (!row) {
+      throw new NotFoundException(`Reminder with id ${id} not found`);
+    }
+
     return this.toEntity(row);
   }
 

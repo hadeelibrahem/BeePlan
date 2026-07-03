@@ -40,7 +40,7 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
           {reminder.location && (
             <Detail
               label={t('reminders.detailLocation')}
-              value={`${reminder.location.triggerType} ${getLocationLabel(reminder.location)}, ${reminder.location.radiusMeters}m`}
+              value={`${reminder.location.trigger} ${getLocationLabel(reminder.location)}, ${reminder.location.radiusMeters}m`}
             />
           )}
           {reminder.context && <Detail label={t('reminders.detailCondition')} value={reminder.context.condition} />}
