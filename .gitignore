@@ -6,3 +6,7 @@ build/
 .env.local
 npm-debug.log*
 coverage/
+
+# Local dev-only file storage for task attachments (see
+# apps/api/src/tasks/task-attachments.service.ts) — not for production use.
+apps/api/uploads/

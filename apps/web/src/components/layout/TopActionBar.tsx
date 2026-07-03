@@ -89,7 +89,7 @@ export function TopActionBar({
       <button type="button" aria-label="Notifications" className={`relative ${ICON_BUTTON}`}>
         <BellIcon className="h-4 w-4" />
         {notificationCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--bp-accent)] text-[10px] font-black text-[var(--bp-accent-text)]">
+          <span className="absolute -end-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--bp-accent)] text-[10px] font-black text-[var(--bp-accent-text)]">
             {notificationCount > 9 ? '9+' : notificationCount}
           </span>
         )}

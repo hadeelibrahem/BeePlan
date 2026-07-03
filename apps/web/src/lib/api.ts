@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '');
+
+if (import.meta.env.DEV) {
+  console.log('[BeePlan API] Base URL:', apiUrl);
+}
 
 const healthSchema = z.object({
   ok: z.boolean(),
@@ -62,16 +66,45 @@ export type SocialLoginRequest = {
 };
 
 async function apiRequest(path: string, init?: RequestInit) {
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-  });
+  const url = `${apiUrl}${path}`;
+  const method = init?.method ?? 'GET';
+
+  if (import.meta.env.DEV) {
+    console.log('[BeePlan API] ->', method, path);
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...init?.headers,
+      },
+    });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error('[BeePlan API] Network request failed', {
+        url,
+        method,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}. Make sure the backend is running on port 3000.`);
+  }
+
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (import.meta.env.DEV) {
+      console.error('[BeePlan API] Request failed', {
+        url,
+        method,
+        status: response.status,
+        data,
+      });
+    }
     throw new Error(data?.message ?? 'Something went wrong. Please try again.');
   }
 
@@ -82,6 +115,13 @@ export function getAuthHeaders(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
   };
+}
+
+export async function logout(accessToken: string): Promise<void> {
+  await apiRequest('/auth/logout', {
+    method: 'POST',
+    headers: getAuthHeaders(accessToken),
+  });
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {

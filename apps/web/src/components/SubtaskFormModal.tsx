@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export type SubtaskFormValues = {
   title: string
@@ -39,6 +40,7 @@ export default function SubtaskFormModal({
   onDelete,
   onSubmit,
 }: SubtaskFormModalProps) {
+  const { isRTL } = useLanguage()
   const [values, setValues] = useState<SubtaskFormValues>({ ...emptyValues, ...initialValues })
 
   const isEdit = mode === 'edit'
@@ -47,11 +49,11 @@ export default function SubtaskFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-[#3B465B] bg-[#2B3443] p-7 shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7 shadow-2xl">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <button type="button" onClick={onBack ?? onCancel} className="mb-4 flex items-center gap-2 text-sm text-slate-400 hover:text-white">
-              <span aria-hidden>←</span>
+            <button type="button" onClick={onBack ?? onCancel} className="mb-4 flex items-center gap-2 text-sm text-slate-400 hover:text-[var(--bp-text)]">
+              <span aria-hidden>{isRTL ? '→' : '←'}</span>
               Back
             </button>
             <h2 className="text-2xl font-black">{isEdit ? 'Edit Subtask' : 'Add Subtask'}</h2>
@@ -170,18 +172,18 @@ export default function SubtaskFormModal({
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 border-t border-[#3B465B] pt-6 sm:flex-row sm:justify-end">
+        <div className="mt-8 flex flex-col gap-3 border-t border-[var(--bp-border)] pt-6 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border border-[#3B465B] bg-[#2B3443] px-10 py-4 font-bold text-slate-300 hover:bg-[#3B465B]"
+            className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-10 py-4 font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => onSubmit?.(values)}
-            className="rounded-xl bg-[#FDE64B] px-10 py-4 font-black text-black shadow-lg shadow-[#FDE64B]/20"
+            className="rounded-xl bg-[var(--bp-accent)] px-10 py-4 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20"
           >
             {isEdit ? 'Save Changes' : 'Add Subtask'}
           </button>
@@ -192,11 +194,11 @@ export default function SubtaskFormModal({
 }
 
 const inputClass =
-  'w-full rounded-xl border border-[#3B465B] bg-black/30 px-4 py-4 text-white outline-none placeholder:text-slate-500 focus:border-[#FDE64B]'
+  'w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]'
 
 function FieldLabel({ label, required }: { label: string; required?: boolean }) {
   return (
-    <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
+    <label className="mb-2 block text-xs font-black uppercase tracking-wide text-[var(--bp-text)]">
       {label} {required ? <span className="text-red-400">*</span> : null}
     </label>
   )
@@ -219,8 +221,8 @@ function Segment({
       onClick={onClick}
       className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
         active
-          ? 'border-[#FDE64B] bg-[#FDE64B]/10 text-[#FDE64B]'
-          : `border-[#3B465B] bg-[#2B3443] ${color}`
+          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
+          : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`
       }`}
     >
       {label}

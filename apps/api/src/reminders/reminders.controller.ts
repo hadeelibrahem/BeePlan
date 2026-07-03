@@ -9,42 +9,48 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { RemindersService } from './reminders.service';
 
+@UseGuards(JwtAuthGuard)
 @Controller('reminders')
 export class RemindersController {
   constructor(private readonly remindersService: RemindersService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateReminderDto) {
-    return this.remindersService.create(dto);
+  create(@Req() request: AuthenticatedRequest, @Body() dto: CreateReminderDto) {
+    return this.remindersService.create(request.user.id, dto);
   }
 
   @Get()
-  findAll() {
-    return this.remindersService.findAll();
+  findAll(@Req() request: AuthenticatedRequest) {
+    return this.remindersService.findAll(request.user.id);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.remindersService.findOne(id);
+  findOne(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.remindersService.findOne(request.user.id, id);
   }
 
   @Patch(':id')
   update(
+    @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReminderDto,
   ) {
-    return this.remindersService.update(id, dto);
+    return this.remindersService.update(request.user.id, id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    await this.remindersService.remove(id);
+  async remove(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await this.remindersService.remove(request.user.id, id);
   }
 }

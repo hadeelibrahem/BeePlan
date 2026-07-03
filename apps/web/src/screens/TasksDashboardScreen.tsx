@@ -15,9 +15,14 @@ import {
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import type { Reminder } from '../features/reminders'
+import type { DashboardSummary } from '../lib/tasksApi'
 
 type TasksDashboardScreenProps = SidebarNavHandlers & {
   reminders: Reminder[]
+  summary?: DashboardSummary | null
+  summaryLoading?: boolean
+  summaryError?: string
+  onRetrySummary?: () => void
   onViewReminders: () => void
   onViewTasks: () => void
   onSignOut?: () => void
@@ -25,13 +30,26 @@ type TasksDashboardScreenProps = SidebarNavHandlers & {
 
 export default function TasksDashboardScreen({
   reminders,
+  summary = null,
+  summaryLoading = false,
+  summaryError = '',
+  onRetrySummary,
   onViewReminders,
   onViewTasks,
   onSignOut,
   ...nav
 }: TasksDashboardScreenProps) {
-  const { t, toggleLanguage } = useLanguage()
+  const { t, toggleLanguage, isRTL } = useLanguage()
   const { mode, toggleTheme } = useTheme()
+  const isLoading = summaryLoading && !summary
+  const loadingLabel = '…'
+  const todayTasksValue = isLoading ? loadingLabel : String(summary?.todayTasks ?? 0)
+  const completedValue = isLoading ? loadingLabel : String(summary?.completedTasks ?? 0)
+  const highPriorityValue = isLoading ? loadingLabel : String(summary?.highPriorityTasks ?? 0)
+  const remindersValue = isLoading ? loadingLabel : String(summary?.reminders ?? reminders.length)
+  const totalTasks = summary?.totalTasks ?? 0
+  const completedTasks = summary?.completedTasks ?? 0
+  const overallProgress = summary?.overallProgress ?? 0
 
   return (
     <AppLayout
@@ -62,13 +80,29 @@ export default function TasksDashboardScreen({
         }
       />
 
+      {summaryError ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+          <p className="text-sm font-semibold text-red-300">{summaryError}</p>
+          {onRetrySummary ? (
+            <button
+              type="button"
+              onClick={onRetrySummary}
+              disabled={summaryLoading}
+              className="text-sm font-bold text-[var(--bp-accent)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {summaryLoading ? 'Retrying…' : 'Retry'}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value="8" title="Today's Tasks" desc="Tasks planned for today" />
-        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value="24" title="Completed" desc="Tasks you've completed" />
-        <StatsCard icon={<AnalyticsIcon className="h-5 w-5" />} value="3" title="High Priority" desc="Important tasks to focus on" />
+        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value={todayTasksValue} title="Today's Tasks" desc="Tasks planned for today" />
+        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value={completedValue} title="Completed" desc="Tasks you've completed" />
+        <StatsCard icon={<AnalyticsIcon className="h-5 w-5" />} value={highPriorityValue} title="High Priority" desc="Important tasks to focus on" />
         <StatsCard
           icon={<RemindersIcon className="h-5 w-5" />}
-          value={String(reminders.length)}
+          value={remindersValue}
           title="Reminders"
           desc="Smart reminders synced"
         />
@@ -81,17 +115,17 @@ export default function TasksDashboardScreen({
             <p className="text-sm text-slate-400">You're doing great! Keep it up.</p>
           </div>
           <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[var(--bp-accent)] text-xl font-black text-[var(--bp-accent)]">
-            64%
+            {isLoading ? loadingLabel : `${overallProgress}%`}
           </div>
         </div>
 
         <div className="mt-6 h-3 rounded-full bg-[var(--bp-bg)]">
-          <div className="h-3 w-[64%] rounded-full bg-[var(--bp-accent)]" />
+          <div className="h-3 rounded-full bg-[var(--bp-accent)]" style={{ width: `${overallProgress}%` }} />
         </div>
 
         <div className="mt-3 flex justify-between text-sm text-slate-400">
-          <span>24 completed</span>
-          <span>32 total tasks</span>
+          <span>{completedTasks} completed</span>
+          <span>{totalTasks} total tasks</span>
         </div>
       </SectionCard>
 
@@ -100,7 +134,7 @@ export default function TasksDashboardScreen({
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-bold">Today's Focus</h2>
             <button type="button" onClick={onViewTasks} className="text-sm font-bold text-[var(--bp-accent)]">
-              View All &gt;
+              View All {isRTL ? '<' : '>'}
             </button>
           </div>
 
@@ -163,7 +197,7 @@ function ActionCard({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-bg)] p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--bp-accent)]/40"
+      className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-bg)] p-5 text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--bp-accent)]/40"
     >
       <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">{icon}</div>
       <h3 className="font-bold">{title}</h3>

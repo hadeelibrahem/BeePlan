@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import { reminders as remindersTable } from '../db/schema';
 import { CreateReminderDto } from './dto/create-reminder.dto';
@@ -44,10 +44,11 @@ export class RemindersService {
     };
   }
 
-  async create(dto: CreateReminderDto): Promise<Reminder> {
+  async create(userId: string, dto: CreateReminderDto): Promise<Reminder> {
     const [row] = await this.db
       .insert(remindersTable)
       .values({
+        userId,
         title: dto.title,
         type: dto.type,
         triggerDateTime: dto.triggerDateTime
@@ -72,16 +73,20 @@ export class RemindersService {
     return this.toEntity(row);
   }
 
-  async findAll(): Promise<Reminder[]> {
-    const rows = await this.db.select().from(remindersTable);
+  async findAll(userId: string): Promise<Reminder[]> {
+    const rows = await this.db
+      .select()
+      .from(remindersTable)
+      .where(eq(remindersTable.userId, userId));
+
     return rows.map((row) => this.toEntity(row));
   }
 
-  async findOne(id: string): Promise<Reminder> {
+  async findOne(userId: string, id: string): Promise<Reminder> {
     const [row] = await this.db
       .select()
       .from(remindersTable)
-      .where(eq(remindersTable.id, id));
+      .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)));
 
     if (!row) {
       throw new NotFoundException(`Reminder with id ${id} not found`);
@@ -90,8 +95,8 @@ export class RemindersService {
     return this.toEntity(row);
   }
 
-  async update(id: string, dto: UpdateReminderDto): Promise<Reminder> {
-    await this.findOne(id);
+  async update(userId: string, id: string, dto: UpdateReminderDto): Promise<Reminder> {
+    await this.findOne(userId, id);
 
     const [row] = await this.db
       .update(remindersTable)
@@ -105,14 +110,16 @@ export class RemindersService {
           : undefined,
         updatedAt: new Date(),
       })
-      .where(eq(remindersTable.id, id))
+      .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)))
       .returning();
 
     return this.toEntity(row);
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findOne(id);
-    await this.db.delete(remindersTable).where(eq(remindersTable.id, id));
+  async remove(userId: string, id: string): Promise<void> {
+    await this.findOne(userId, id);
+    await this.db
+      .delete(remindersTable)
+      .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)));
   }
 }

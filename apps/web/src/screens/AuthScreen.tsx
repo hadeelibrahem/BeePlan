@@ -222,7 +222,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 }
               />
               {isSignUp && password && (
-                <p className="text-xs text-[var(--bp-muted)] pl-1 -mt-2">
+                <p className="text-xs text-[var(--bp-muted)] ps-1 -mt-2">
                   Password strength: <span className="font-bold text-[var(--bp-text)]">{passwordStrength}</span>
                 </p>
               )}
@@ -246,10 +246,10 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 />
               )}
               {(oauthError || submitError) && (
-                <p className="text-red-400 text-xs pl-1">{oauthError || submitError}</p>
+                <p className="text-red-400 text-xs ps-1">{oauthError || submitError}</p>
               )}
               {(oauthMessage || successMessage) && (
-                <p className="text-emerald-400 text-xs pl-1">{oauthMessage || successMessage}</p>
+                <p className="text-emerald-400 text-xs ps-1">{oauthMessage || successMessage}</p>
               )}
               <div className="pt-1">
                 <PrimaryButton loading={isLoading} disabled={isSubmitDisabled}>

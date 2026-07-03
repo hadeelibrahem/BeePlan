@@ -3,6 +3,7 @@ import { BeePlanLogo } from '../BeePlanLogo'
 import {
   AnalyticsIcon,
   CalendarIcon,
+  CloseIcon,
   DashboardIcon,
   NotesIcon,
   RemindersIcon,
@@ -25,6 +26,8 @@ type SidebarProps = SidebarNavHandlers & {
   panelTitle: string
   panelCaption: string
   panelPercent: number
+  mobileOpen?: boolean
+  onCloseMobile?: () => void
 }
 
 const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon; handler: keyof SidebarNavHandlers }[] = [
@@ -36,16 +39,75 @@ const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon;
   { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
 ]
 
-export function Sidebar({ active, panelTitle, panelCaption, panelPercent, ...nav }: SidebarProps) {
+export function Sidebar({ active, panelTitle, panelCaption, panelPercent, mobileOpen, onCloseMobile, ...nav }: SidebarProps) {
   return (
-    <aside className="hidden w-64 shrink-0 rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 p-4 lg:block">
+    <>
+      <aside className="hidden w-64 shrink-0 rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 p-4 lg:block">
+        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} />
+      </aside>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={onCloseMobile} />
+          <aside className="absolute inset-y-0 start-0 w-72 max-w-[85vw] animate-[beeplanFadeIn_200ms_ease-out] overflow-y-auto border-e border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
+            <div className="mb-4 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                aria-label="Close menu"
+                className="rounded-lg p-2 text-slate-300 hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]"
+              >
+                <CloseIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <SidebarContent
+              active={active}
+              panelTitle={panelTitle}
+              panelCaption={panelCaption}
+              panelPercent={panelPercent}
+              nav={nav}
+              onNavigate={onCloseMobile}
+            />
+          </aside>
+        </div>
+      )}
+    </>
+  )
+}
+
+function SidebarContent({
+  active,
+  panelTitle,
+  panelCaption,
+  panelPercent,
+  nav,
+  onNavigate,
+}: {
+  active: SidebarPage
+  panelTitle: string
+  panelCaption: string
+  panelPercent: number
+  nav: SidebarNavHandlers
+  onNavigate?: () => void
+}) {
+  return (
+    <>
       <div className="mb-8 flex items-center gap-3 px-2">
         <BeePlanLogo showTagline size={48} />
       </div>
 
       <nav className="space-y-1 text-sm">
         {NAV_ITEMS.map(({ page, label, Icon, handler }) => (
-          <SideItem key={page} active={active === page} icon={<Icon />} label={label} onClick={nav[handler]} />
+          <SideItem
+            key={page}
+            active={active === page}
+            icon={<Icon />}
+            label={label}
+            onClick={() => {
+              nav[handler]?.()
+              onNavigate?.()
+            }}
+          />
         ))}
       </nav>
 
@@ -65,7 +127,7 @@ export function Sidebar({ active, panelTitle, panelCaption, panelPercent, ...nav
           {panelPercent}%
         </div>
       </div>
-    </aside>
+    </>
   )
 }
 
@@ -85,11 +147,11 @@ function SideItem({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-150 ${
+      className={`group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start transition-all duration-150 ${
         active ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'text-slate-300 hover:translate-x-0.5 hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]'
       }`}
     >
-      {active && <span className="absolute inset-y-1 left-0 w-1 rounded-full bg-[var(--bp-accent)]" />}
+      {active && <span className="absolute inset-y-1 start-0 w-1 rounded-full bg-[var(--bp-accent)]" />}
       <span className={active ? 'text-[var(--bp-accent)]' : 'text-slate-400 transition-colors group-hover:text-[var(--bp-text)]'}>{icon}</span>
       <span className="font-semibold">{label}</span>
     </button>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import './App.css'
 import {
   CreateReminderScreen,
@@ -11,6 +11,19 @@ import {
 } from './features/reminders'
 import { useAuth } from './hooks/useAuth'
 import { LanguageProvider } from './i18n/LanguageContext'
+import {
+  changeTaskStatus,
+  createTask,
+  deleteTask,
+  getDashboardSummary,
+  getTask,
+  getTasks,
+  isValidTaskId,
+  updateTask,
+  type ApiTask,
+  type DashboardSummary,
+  type TaskPayload,
+} from './lib/tasksApi'
 import AuthScreen from './screens/AuthScreen'
 import AllTasksScreen from './screens/AllTasksScreen'
 import AnalyticsScreen from './screens/AnalyticsScreen'
@@ -59,8 +72,15 @@ function ThemedApp() {
   const [authScreen, setAuthScreen] = useState<AuthScreenState>(() => getAuthScreenFromPath())
   const [screen, setScreen] = useState<AppScreen>('dashboard')
   const [reminders, setReminders] = useState<Reminder[]>([])
+  const [tasks, setTasks] = useState<ApiTask[]>([])
+  const [tasksLoading, setTasksLoading] = useState(false)
+  const [tasksError, setTasksError] = useState('')
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const { loading, user, signOut } = useAuth()
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const { accessToken, loading, user, signOut } = useAuth()
 
   useEffect(() => {
     const syncPath = () => setAuthScreen(getAuthScreenFromPath())
@@ -69,9 +89,40 @@ function ThemedApp() {
   }, [])
 
   useEffect(() => {
-    if (!user) return
-    fetchReminders().then(setReminders)
-  }, [user])
+    if (!user || !accessToken) return
+    fetchReminders(accessToken).then(setReminders)
+  }, [user, accessToken])
+
+  useEffect(() => {
+    if (!user || !accessToken) return
+
+    setTasksLoading(true)
+    setTasksError('')
+    getTasks(accessToken)
+      .then(setTasks)
+      .catch((error) => {
+        setTasksError(error instanceof Error ? error.message : 'Unable to load tasks.')
+      })
+      .finally(() => setTasksLoading(false))
+  }, [accessToken, user])
+
+  const refreshSummary = useCallback(() => {
+    if (!accessToken) return
+
+    setSummaryLoading(true)
+    setSummaryError('')
+    getDashboardSummary(accessToken)
+      .then(setSummary)
+      .catch((error) => {
+        setSummaryError(error instanceof Error ? error.message : 'Unable to load dashboard summary.')
+      })
+      .finally(() => setSummaryLoading(false))
+  }, [accessToken])
+
+  useEffect(() => {
+    if (!user || !accessToken) return
+    refreshSummary()
+  }, [accessToken, user, refreshSummary])
 
   function navigateAuth(nextScreen: AuthScreenState) {
     const path =
@@ -88,16 +139,114 @@ function ThemedApp() {
   const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null
 
   async function handleToggle(id: string) {
-    const updated = await toggleReminderStatus(id)
+    if (!accessToken) return
+    const updated = await toggleReminderStatus(id, accessToken)
     if (!updated) return
     setReminders((current) => current.map((reminder) => (reminder.id === id ? updated : reminder)))
+    refreshSummary()
   }
 
   async function handleSignOut() {
     await signOut()
     setScreen('dashboard')
+    setTasks([])
+    setSelectedTaskId(null)
     navigateAuth('auth')
   }
+
+  async function handleCreateTask(payload: TaskPayload) {
+    if (!accessToken) return
+    const createdTask = await createTask(accessToken, payload)
+    setTasks((current) => [createdTask, ...current])
+    setSelectedTaskId(createdTask.id)
+    setScreen('taskDetails')
+    refreshSummary()
+  }
+
+  function showInvalidTaskIdError(action: string) {
+    setTasksError(`Cannot ${action} because this task is missing a valid database id. Please refresh tasks and try again.`)
+  }
+
+  function openTaskDetails(taskId: string) {
+    if (!isValidTaskId(taskId)) {
+      showInvalidTaskIdError('open this task')
+      setScreen('tasks')
+      return
+    }
+
+    setTasksError('')
+    setSelectedTaskId(taskId)
+    setScreen('taskDetails')
+  }
+
+  async function openEditTask(taskId: string) {
+    if (!isValidTaskId(taskId)) {
+      showInvalidTaskIdError('edit this task')
+      setScreen('tasks')
+      return
+    }
+
+    setTasksError('')
+    try {
+      await refreshSelectedTask(taskId)
+      setSelectedTaskId(taskId)
+      setScreen('editTask')
+    } catch (error) {
+      setTasksError(error instanceof Error ? error.message : 'Unable to load this task for editing.')
+      setScreen('tasks')
+    }
+  }
+
+  async function handleUpdateTask(taskId: string, payload: TaskPayload) {
+    if (!accessToken) return
+    if (!isValidTaskId(taskId)) {
+      showInvalidTaskIdError('save this task')
+      return
+    }
+
+    const updatedTask = await updateTask(accessToken, taskId, payload)
+    setTasks((current) => current.map((task) => (task.id === taskId ? updatedTask : task)))
+    setSelectedTaskId(updatedTask.id)
+    setScreen('taskDetails')
+    refreshSummary()
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    if (!accessToken) return
+    if (!isValidTaskId(taskId)) {
+      showInvalidTaskIdError('delete this task')
+      setScreen('tasks')
+      return
+    }
+
+    await deleteTask(accessToken, taskId)
+    setTasks((current) => current.filter((task) => task.id !== taskId))
+    setSelectedTaskId(null)
+    setScreen('tasks')
+    refreshSummary()
+  }
+
+  async function refreshSelectedTask(taskId: string) {
+    if (!accessToken) return
+    if (!isValidTaskId(taskId)) {
+      showInvalidTaskIdError('load this task')
+      setScreen('tasks')
+      return
+    }
+
+    const refreshedTask = await getTask(accessToken, taskId)
+    setTasks((current) => current.map((task) => (task.id === taskId ? refreshedTask : task)))
+  }
+
+  useEffect(() => {
+    if (screen !== 'taskDetails' || !selectedTaskId || !accessToken) return
+
+    refreshSelectedTask(selectedTaskId).catch((error) => {
+      setTasksError(error instanceof Error ? error.message : 'Unable to refresh task details.')
+    })
+  }, [accessToken, screen, selectedTaskId])
+
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null
 
   const sidebarNav = {
     onNavigateDashboard: () => setScreen('dashboard'),
@@ -107,16 +256,6 @@ function ThemedApp() {
     onNavigateNotes: () => setScreen('notes'),
     onNavigateAnalytics: () => setScreen('analytics'),
   }
-
-  const signOutButton = (
-    <button
-      type="button"
-      onClick={() => void handleSignOut()}
-      className="fixed end-6 top-6 z-10 rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-2 text-xs font-bold text-[var(--bp-text)] shadow-lg transition hover:border-[var(--bp-accent)]"
-    >
-      Sign out
-    </button>
-  )
 
   if (loading) {
     return (
@@ -142,6 +281,10 @@ function ThemedApp() {
     return (
       <TasksDashboardScreen
         reminders={reminders}
+        summary={summary}
+        summaryLoading={summaryLoading}
+        summaryError={summaryError}
+        onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
@@ -157,7 +300,10 @@ function ThemedApp() {
       <AllTasksScreen
         onBackDashboard={() => setScreen('dashboard')}
         onCreateTask={() => setScreen('createTask')}
-        onViewTaskDetails={() => setScreen('taskDetails')}
+        onViewTaskDetails={openTaskDetails}
+        tasks={tasks}
+        loading={tasksLoading}
+        error={tasksError}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -168,55 +314,97 @@ function ThemedApp() {
   }
 
   if (screen === 'calendar') {
-    return <CalendarScreen {...sidebarNav} onSignOut={() => void handleSignOut()} />
+    return <CalendarScreen {...sidebarNav} tasks={tasks} reminders={reminders} onSignOut={() => void handleSignOut()} />
   }
 
   if (screen === 'notes') {
-    return <NotesScreen {...sidebarNav} onSignOut={() => void handleSignOut()} />
+    return <NotesScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
   }
 
   if (screen === 'analytics') {
-    return <AnalyticsScreen {...sidebarNav} onSignOut={() => void handleSignOut()} />
+    return <AnalyticsScreen {...sidebarNav} tasks={tasks} reminders={reminders} onSignOut={() => void handleSignOut()} />
   }
 
   if (screen === 'createTask') {
-    return renderShell(
-      <CreateTaskScreen onCancel={() => setScreen('tasks')} onSave={() => setScreen('tasks')} />,
-      signOutButton,
+    return (
+      <CreateTaskScreen
+        tasks={tasks}
+        onCancel={() => setScreen('tasks')}
+        onSave={handleCreateTask}
+        onSignOut={() => void handleSignOut()}
+        onNavigateDashboard={sidebarNav.onNavigateDashboard}
+        onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigateCalendar={sidebarNav.onNavigateCalendar}
+        onNavigateNotes={sidebarNav.onNavigateNotes}
+        onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+      />
     )
   }
 
-  if (screen === 'taskDetails') {
-    return renderShell(
+  if (screen === 'taskDetails' && selectedTask) {
+    return (
       <TaskDetailsScreen
+        task={selectedTask}
+        tasks={tasks}
+        accessToken={accessToken ?? ''}
+        onTaskUpdated={(task) => {
+          setTasks((current) => current.map((item) => (item.id === task.id ? task : item)))
+        }}
+        onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('tasks')}
-        onEdit={() => setScreen('editTask')}
-        onDelete={() => setScreen('tasks')}
-      />,
-      signOutButton,
+        onEdit={() => void openEditTask(selectedTask.id)}
+        onDelete={() => void handleDeleteTask(selectedTask.id)}
+        onMarkDone={async () => {
+          if (!accessToken) return
+          if (!isValidTaskId(selectedTask.id)) {
+            showInvalidTaskIdError('update this task')
+            setScreen('tasks')
+            return
+          }
+
+          const updatedTask = await changeTaskStatus(accessToken, selectedTask.id, { status: 'done' })
+          setTasks((current) => current.map((task) => (task.id === selectedTask.id ? updatedTask : task)))
+          setScreen('tasks')
+          refreshSummary()
+        }}
+        onSignOut={() => void handleSignOut()}
+        onNavigateDashboard={sidebarNav.onNavigateDashboard}
+        onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigateCalendar={sidebarNav.onNavigateCalendar}
+        onNavigateNotes={sidebarNav.onNavigateNotes}
+        onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+      />
     )
   }
 
-  if (screen === 'editTask') {
-    return renderShell(
+  if (screen === 'editTask' && selectedTask) {
+    return (
       <EditTaskScreen
+        task={selectedTask}
         onBack={() => setScreen('taskDetails')}
         onCancel={() => setScreen('taskDetails')}
-        onDelete={() => setScreen('tasks')}
-        onSave={() => setScreen('taskDetails')}
-      />,
-      signOutButton,
+        onDelete={() => void handleDeleteTask(selectedTask.id)}
+        onSave={(payload) => void handleUpdateTask(selectedTask.id, payload)}
+        onSignOut={() => void handleSignOut()}
+        onNavigateDashboard={sidebarNav.onNavigateDashboard}
+        onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigateCalendar={sidebarNav.onNavigateCalendar}
+        onNavigateNotes={sidebarNav.onNavigateNotes}
+        onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+      />
     )
   }
 
   if (screen === 'create') {
     return renderShell(
       <CreateReminderScreen
+        accessToken={accessToken ?? ''}
         onCancel={() => setScreen('list')}
         onCreated={(reminder) => {
           setReminders((current) => [reminder, ...current])
           setSelectedId(reminder.id)
           setScreen('details')
+          refreshSummary()
         }}
       />,
     )
@@ -236,11 +424,13 @@ function ThemedApp() {
     return renderShell(
       <EditReminderScreen
         reminder={selectedReminder}
+        accessToken={accessToken ?? ''}
         onCancel={() => setScreen('details')}
         onSaved={(reminder) => {
           setReminders((current) => current.map((item) => (item.id === reminder.id ? reminder : item)))
           setSelectedId(reminder.id)
           setScreen('details')
+          refreshSummary()
         }}
       />,
     )
