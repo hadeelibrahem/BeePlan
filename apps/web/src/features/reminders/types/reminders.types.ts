@@ -6,21 +6,6 @@ export type ReminderPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export type TriggerType = 'arrive' | 'leave'
 
-export type LocationMode = 'specific' | 'category'
-
-export type PlaceCategory =
-  | 'pharmacy'
-  | 'supermarket'
-  | 'hospital'
-  | 'gym'
-  | 'gas_station'
-  | 'restaurant'
-  | 'cafe'
-  | 'university'
-  | 'school'
-  | 'bank'
-  | 'atm'
-
 export type RepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly'
 
 export type ChecklistItem = {
@@ -65,8 +50,16 @@ export type GeneralLocationCategory =
   | 'gym'
   | 'pharmacy'
   | 'grocery_store'
-  | 'airport'
+  | 'coffee_shop'
+  | 'restaurant'
   | 'hospital'
+  | 'airport'
+  | 'bank'
+  | 'atm'
+  | 'parking'
+  | 'gas_station'
+  | 'mosque'
+  | 'library'
   | 'custom'
 
 export type GeoapifyPlaceSelection = {
@@ -75,8 +68,10 @@ export type GeoapifyPlaceSelection = {
   city?: string
   latitude: number
   longitude: number
-  geoapifyPlaceId: string
+  geoapifyPlaceId?: string
 }
+
+export type LocationSelectionSource = 'search' | 'map' | 'current_location'
 
 export type ReminderLocationTrigger = {
   type: LocationTriggerType
@@ -85,14 +80,32 @@ export type ReminderLocationTrigger = {
     customLabel?: string
   }
   specificLocation?: GeoapifyPlaceSelection & {
+    selectedBy: LocationSelectionSource
     trigger: TriggerType
     radius: number
   }
+  /** An unresolved place name (e.g. from AI parsing) to seed the search field with — never used as a saved selection. */
+  pendingPlaceName?: string
 }
 
 export type ChecklistReminderTrigger = {
   time: ReminderTimeTrigger
   location: ReminderLocationTrigger
+}
+
+export type LocationReminderMode = 'specific_place' | 'general_category'
+
+export type LocationReminderConfig = {
+  mode: LocationReminderMode
+  specificPlace?: GeoapifyPlaceSelection & { selectedBy: LocationSelectionSource }
+  generalCategory?: {
+    category: GeneralLocationCategory
+    customLabel?: string
+  }
+  trigger: TriggerType
+  radiusMeters: number
+  /** An unresolved place name (e.g. from AI parsing) to seed the search field with — never used as a saved selection. */
+  pendingPlaceName?: string
 }
 
 export type RepeatRule = {
@@ -112,16 +125,7 @@ export type Reminder = {
   remindAt?: string
   reminderBeforeMinutes?: number
   repeatRule?: RepeatRule
-  location?: {
-    mode: LocationMode
-    placeName?: string
-    address?: string
-    latitude?: number
-    longitude?: number
-    category?: PlaceCategory
-    radiusMeters: number
-    triggerType: TriggerType
-  }
+  location?: LocationReminderConfig
   context?: {
     condition: string
     detail?: string

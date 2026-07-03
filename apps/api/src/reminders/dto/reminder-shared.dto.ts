@@ -36,18 +36,26 @@ export type ReminderStatus = (typeof REMINDER_STATUSES)[number];
 export const REMINDER_LOCATION_MODES = ['specific', 'category'] as const;
 export type ReminderLocationMode = (typeof REMINDER_LOCATION_MODES)[number];
 
+// Mirrors GeneralLocationCategory in the web/mobile clients (features/reminders/types/reminders.types.ts).
 export const REMINDER_PLACE_CATEGORIES = [
-  'pharmacy',
-  'supermarket',
-  'hospital',
-  'gym',
-  'gas_station',
-  'restaurant',
-  'cafe',
+  'home',
+  'work',
   'university',
   'school',
+  'gym',
+  'pharmacy',
+  'grocery_store',
+  'coffee_shop',
+  'restaurant',
+  'hospital',
+  'airport',
   'bank',
   'atm',
+  'parking',
+  'gas_station',
+  'mosque',
+  'library',
+  'custom',
 ] as const;
 export type ReminderPlaceCategory = (typeof REMINDER_PLACE_CATEGORIES)[number];
 

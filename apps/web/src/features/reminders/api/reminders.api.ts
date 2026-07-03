@@ -1,6 +1,23 @@
-import type { Reminder, ReminderFormValues } from '../types/reminders.types'
+import { getAuthHeaders } from '../../../lib/api'
+import { getAuthToken } from '../../../lib/authToken'
+import type { ReminderDraft, VoiceReminderDraftResponse } from '../types/aiAssistant.types'
+import type { GeneralLocationCategory, Reminder, ReminderFormValues } from '../types/reminders.types'
 
 const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+
+// Matches ReminderLocationDto in apps/api/src/reminders/dto/reminder-shared.dto.ts — the
+// flat shape the backend actually validates and stores, distinct from the richer
+// mode-specific LocationReminderConfig shape the reminder form/UI works with.
+type BackendLocationDto = {
+  mode: 'specific' | 'category'
+  placeName?: string
+  address?: string
+  latitude?: number
+  longitude?: number
+  category?: string
+  radiusMeters: number
+  triggerType: 'arrive' | 'leave'
+}
 
 type ReminderResponse = {
   id: string
@@ -15,7 +32,7 @@ type ReminderResponse = {
   notes?: string
   priority: Reminder['priority']
   status: Reminder['status']
-  location?: Reminder['location']
+  location?: BackendLocationDto
   context?: { condition: string; detail?: string }
   checklistItems?: { id?: string; title: string; isDone?: boolean }[]
   items?: { id?: string; title: string; isDone?: boolean }[]
@@ -24,11 +41,17 @@ type ReminderResponse = {
   updatedAt: string
 }
 
+function authHeaders() {
+  const token = getAuthToken()
+  return token ? getAuthHeaders(token) : {}
+}
+
 async function apiRequest(path: string, init?: RequestInit) {
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
       ...init?.headers,
     },
   })
@@ -42,26 +65,88 @@ async function apiRequest(path: string, init?: RequestInit) {
   return data
 }
 
-function toLocationPayload(location: ReminderFormValues['location']) {
-  if (!location) return undefined
+const VALID_REPEATS = ['none', 'daily', 'weekly', 'monthly'] as const
+const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
 
-  const latitude = location.latitude !== undefined ? Number(location.latitude) : undefined
-  const longitude = location.longitude !== undefined ? Number(location.longitude) : undefined
+// The backend requires `repeat`/`priority` on every reminder type (time, location,
+// checklist) and rejects anything outside these enums — including undefined/null/''. Route
+// every payload builder through these so a missing selection, a UI-only label, or a form
+// that simply never collects repeat/priority (location, checklist) can never reach the API
+// as anything other than a valid enum value.
+function normalizeRepeat(value: unknown): (typeof VALID_REPEATS)[number] {
+  return (VALID_REPEATS as readonly unknown[]).includes(value) ? (value as (typeof VALID_REPEATS)[number]) : 'none'
+}
 
-  const payload = {
-    ...location,
-    latitude: Number.isFinite(latitude) ? latitude : undefined,
-    longitude: Number.isFinite(longitude) ? longitude : undefined,
+function normalizePriority(value: unknown): (typeof VALID_PRIORITIES)[number] {
+  return (VALID_PRIORITIES as readonly unknown[]).includes(value)
+    ? (value as (typeof VALID_PRIORITIES)[number])
+    : 'medium'
+}
+
+function toBackendLocation(location: ReminderFormValues['location']): BackendLocationDto {
+  const radiusMeters = location?.radiusMeters ?? 100
+  const triggerType = location?.trigger ?? 'arrive'
+
+  if (location?.mode === 'general_category') {
+    return {
+      mode: 'category',
+      category: location.generalCategory?.category ?? 'custom',
+      radiusMeters,
+      triggerType,
+    }
   }
 
-  console.log('Submitting reminder location:', {
-    placeName: payload.placeName,
-    address: payload.address,
-    latitude: payload.latitude,
-    longitude: payload.longitude,
-  })
+  const place = location?.specificPlace
 
-  return payload
+  return {
+    mode: 'specific',
+    placeName: place?.placeName,
+    address: place?.address,
+    latitude: place?.latitude,
+    longitude: place?.longitude,
+    radiusMeters,
+    triggerType,
+  }
+}
+
+function fromBackendLocation(location?: BackendLocationDto): Reminder['location'] {
+  if (!location) return undefined
+
+  if (location.mode === 'category') {
+    return {
+      mode: 'general_category',
+      generalCategory: { category: (location.category ?? 'custom') as GeneralLocationCategory },
+      trigger: location.triggerType,
+      radiusMeters: location.radiusMeters,
+    }
+  }
+
+  return {
+    mode: 'specific_place',
+    specificPlace: {
+      placeName: location.placeName ?? '',
+      address: location.address ?? '',
+      latitude: location.latitude ?? 0,
+      longitude: location.longitude ?? 0,
+      // The backend only stores place name/address/coordinates — "how the place was
+      // selected" is a UI-only concept, so re-hydrating from a saved reminder defaults to
+      // 'search' (the form's isValid check just requires this to be truthy).
+      selectedBy: 'search',
+    },
+    trigger: location.triggerType,
+    radiusMeters: location.radiusMeters,
+  }
+}
+
+function toLocationRequestBody(values: ReminderFormValues) {
+  return {
+    title: values.title,
+    type: 'location',
+    repeat: normalizeRepeat(values.repeatRule?.frequency),
+    priority: normalizePriority(values.priority),
+    notes: values.description || undefined,
+    location: toBackendLocation(values.location),
+  }
 }
 
 function toChecklistRequestBody(values: ReminderFormValues) {
@@ -74,6 +159,8 @@ function toChecklistRequestBody(values: ReminderFormValues) {
   return {
     title: values.title,
     type: 'checklist',
+    repeat: normalizeRepeat(values.repeatRule?.frequency),
+    priority: normalizePriority(values.priority),
     items: values.checklistItems?.filter((item) => item.title.trim()),
     notes: values.description || undefined,
     reminderTrigger: {
@@ -107,16 +194,21 @@ function toRequestBody(values: ReminderFormValues) {
     type: values.type,
     triggerDateTime: values.remindAt || undefined,
     reminderBefore: values.reminderBeforeMinutes,
-    repeat: values.repeatRule?.frequency ?? 'none',
+    repeat: normalizeRepeat(values.repeatRule?.frequency),
     repeatInterval: values.repeatRule?.interval,
     repeatDaysOfWeek: values.repeatRule?.daysOfWeek,
     repeatEndDate: values.repeatRule?.endDate,
     notes: values.description || undefined,
-    priority: values.priority,
-    location: values.type === 'location' ? toLocationPayload(values.location) : undefined,
+    priority: normalizePriority(values.priority),
     context: values.context?.condition ? values.context : undefined,
     checklistItems: values.checklistItems?.filter((item) => item.title.trim()),
   }
+}
+
+function toRequestBodyFor(values: ReminderFormValues) {
+  if (values.type === 'checklist') return toChecklistRequestBody(values)
+  if (values.type === 'location') return toLocationRequestBody(values)
+  return toRequestBody(values)
 }
 
 function fromResponse(data: ReminderResponse): Reminder {
@@ -135,7 +227,7 @@ function fromResponse(data: ReminderResponse): Reminder {
       daysOfWeek: data.repeatDaysOfWeek,
       endDate: data.repeatEndDate,
     },
-    location: data.location,
+    location: fromBackendLocation(data.location),
     context: data.context,
     checklistItems: (data.checklistItems ?? data.items)?.map((item, index) => ({
       id: item.id ?? `item-${index}`,
@@ -158,7 +250,8 @@ export async function fetchReminders() {
 }
 
 export async function createReminder(values: ReminderFormValues): Promise<Reminder> {
-  const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values)
+  const body = toRequestBodyFor(values)
+  console.log('[reminders.api] final request body for createReminder:', body)
   const data = (await apiRequest('/reminders', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -173,7 +266,8 @@ export async function getReminder(id: string): Promise<Reminder> {
 }
 
 export async function updateReminder(id: string, values: ReminderFormValues): Promise<Reminder | null> {
-  const body = values.type === 'checklist' ? toChecklistRequestBody(values) : toRequestBody(values)
+  const body = toRequestBodyFor(values)
+  console.log('[reminders.api] final request body for updateReminder:', id, body)
   const data = (await apiRequest(`/reminders/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
@@ -194,4 +288,36 @@ export async function toggleReminderStatus(id: string): Promise<Reminder | null>
   })) as ReminderResponse
 
   return fromResponse(data)
+}
+
+async function apiFormRequest(path: string, formData: FormData) {
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: 'POST',
+    body: formData,
+    headers: authHeaders(),
+  })
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
+    throw new Error(message ?? 'Something went wrong. Please try again.')
+  }
+
+  return data
+}
+
+export async function parseReminderText(text: string): Promise<ReminderDraft> {
+  return apiRequest('/ai/parse-reminder', {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  }) as Promise<ReminderDraft>
+}
+
+export async function createVoiceReminderDraft(
+  audio: Blob,
+  fileName = 'recording.webm',
+): Promise<VoiceReminderDraftResponse> {
+  const formData = new FormData()
+  formData.append('audio', audio, fileName)
+  return apiFormRequest('/ai/voice-reminder-draft', formData) as Promise<VoiceReminderDraftResponse>
 }

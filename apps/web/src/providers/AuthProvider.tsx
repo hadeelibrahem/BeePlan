@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -14,6 +15,7 @@ import {
   verifyResetCode,
   type AuthUser,
 } from '../lib/api';
+import { setAuthToken } from '../lib/authToken';
 import { authService } from '../services/auth.service';
 
 const AUTH_STORAGE_KEY = 'beeplan_auth_session';
@@ -53,6 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
   }, []);
+
+  // Sync the token holder in a layout effect, not a plain render-body call (impure — could
+  // fire for renders React discards under Strict Mode/concurrent rendering) and not a
+  // passive `useEffect` (those fire child-before-parent, so a consumer's own
+  // `useEffect(() => fetchReminders(), [user])` could run before this provider's effect
+  // and send a request with no token). All layout effects in the tree run synchronously,
+  // before ANY passive effect anywhere fires, so this ordering guarantee holds regardless
+  // of how deep the consumer is.
+  useLayoutEffect(() => {
+    setAuthToken(session?.accessToken ?? null);
+  }, [session]);
 
   useEffect(() => {
     let active = true;

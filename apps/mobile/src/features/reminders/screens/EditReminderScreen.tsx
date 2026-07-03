@@ -3,6 +3,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { updateReminder } from '../api/reminders.api';
 import { ReminderForm } from '../components/ReminderForm';
 import type { Reminder } from '../types/reminders.types';
+import { scheduleTimeReminderNotification } from '../utils/reminderNotificationSync';
 
 type Props = {
   reminder: Reminder;
@@ -21,7 +22,11 @@ export function EditReminderScreen({ reminder, onCancel, onSaved }: Props) {
         submitLabel={t('reminders.saveChanges')}
         onSubmit={async (values) => {
           const updated = await updateReminder(reminder.id, values);
-          if (updated) onSaved(updated);
+          if (!updated) return;
+
+          console.log('[EditReminderScreen] updateReminder succeeded', updated.id);
+          await scheduleTimeReminderNotification(updated);
+          onSaved(updated);
         }}
       />
     </AppScreen>

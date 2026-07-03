@@ -112,7 +112,9 @@ export const subtasks = pgTable('subtasks', {
 
 export const reminders = pgTable('reminders', {
   id: id(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
   title: varchar('title', { length: 255 }).notNull(),
   type: varchar('type', { length: 30 }).notNull().default('time'),
   triggerDateTime: timestamp('trigger_date_time'),

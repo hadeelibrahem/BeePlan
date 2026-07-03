@@ -47,7 +47,13 @@
           "color": "#fdef4b"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "BeePlan uses your microphone to record voice reminders for the AI assistant."
+        }
+      ]
     ]
   }
 }

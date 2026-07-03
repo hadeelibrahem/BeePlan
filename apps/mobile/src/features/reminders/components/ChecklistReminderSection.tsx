@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
@@ -13,8 +14,10 @@ import type {
   TimeTriggerType,
   TriggerType,
 } from '../types/reminders.types';
-import { ChecklistPlaceAutocomplete } from './ChecklistPlaceAutocomplete';
-import type { GeoapifyPlaceSuggestion } from '../services/geoapifyPlacesService';
+import { reverseGeocode, type GeoapifyPlaceSuggestion } from '../services/geoapifyPlacesService';
+import { LocationMapPicker } from './LocationMapPicker';
+import { PlaceAutocomplete } from './PlaceAutocomplete';
+import { PlaceTypeAutocomplete } from './PlaceTypeAutocomplete';
 
 const TIME_TRIGGER_TYPES: TimeTriggerType[] = ['none', 'general_time', 'specific_time'];
 const GENERAL_TIME_CATEGORIES: GeneralTimeCategory[] = [
@@ -29,18 +32,6 @@ const GENERAL_TIME_CATEGORIES: GeneralTimeCategory[] = [
 const SPECIFIC_TIME_REPEATS: SpecificTimeRepeat[] = ['none', 'daily', 'weekly', 'monthly', 'custom'];
 
 const LOCATION_TRIGGER_TYPES: LocationTriggerType[] = ['none', 'general_location', 'specific_location'];
-const GENERAL_LOCATION_CATEGORIES: GeneralLocationCategory[] = [
-  'home',
-  'work',
-  'university',
-  'school',
-  'gym',
-  'pharmacy',
-  'grocery_store',
-  'airport',
-  'hospital',
-  'custom',
-];
 const RADIUS_OPTIONS = [100, 250, 500];
 
 const TIME_TRIGGER_LABEL_KEYS: Record<TimeTriggerType, string> = {
@@ -224,18 +215,67 @@ function LocationTriggerSection({ value, onChange }: LocationProps) {
       generalLocation: { category: value.generalLocation?.category ?? 'custom', customLabel },
     });
 
-  const [searchText, setSearchText] = useState(value.specificLocation?.placeName ?? '');
+  const [searchText, setSearchText] = useState(value.specificLocation?.placeName ?? value.pendingPlaceName ?? '');
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState('');
 
   const handlePlaceSelected = (place: GeoapifyPlaceSuggestion) => {
+    setLocationError('');
     setSearchText(place.placeName);
     onChange({
       ...value,
       specificLocation: {
         ...place,
+        selectedBy: 'search',
         trigger: value.specificLocation?.trigger ?? 'arrive',
         radius: value.specificLocation?.radius ?? 100,
       },
     });
+  };
+
+  const applyResolvedPoint = (place: GeoapifyPlaceSuggestion, selectedBy: 'map' | 'current_location') => {
+    setSearchText(place.placeName);
+    onChange({
+      ...value,
+      specificLocation: {
+        ...place,
+        selectedBy,
+        trigger: value.specificLocation?.trigger ?? 'arrive',
+        radius: value.specificLocation?.radius ?? 100,
+      },
+    });
+  };
+
+  const handleMapPick = (coords: { latitude: number; longitude: number }) => {
+    setLocationError('');
+    reverseGeocode(coords.latitude, coords.longitude)
+      .then((place) => applyResolvedPoint(place, 'map'))
+      .catch((error: unknown) => {
+        console.error(error);
+        setLocationError(error instanceof Error ? error.message : 'Failed to resolve the selected point.');
+      });
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setLocationError('');
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        setLocationError('Location permission was denied.');
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({});
+      const place = await reverseGeocode(position.coords.latitude, position.coords.longitude);
+      applyResolvedPoint(place, 'current_location');
+    } catch (error) {
+      console.error(error);
+      setLocationError(error instanceof Error ? error.message : 'Failed to resolve your location.');
+    } finally {
+      setIsLocating(false);
+    }
   };
 
   const setSpecificTrigger = (trigger: TriggerType) =>
@@ -258,30 +298,12 @@ function LocationTriggerSection({ value, onChange }: LocationProps) {
       </View>
 
       {value.type === 'general_location' && (
-        <View className="gap-3">
-          <View className="flex-row flex-wrap gap-2">
-            {GENERAL_LOCATION_CATEGORIES.map((category) => (
-              <Chip
-                key={category}
-                label={t(`reminders.generalLocationCategory.${category}`)}
-                selected={value.generalLocation?.category === category}
-                onPress={() => setGeneralCategory(category)}
-              />
-            ))}
-          </View>
-          {value.generalLocation?.category === 'custom' && (
-            <View className="rounded-2xl border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.input }}>
-              <TextInput
-                placeholder={t('reminders.customLabelPlaceholder')}
-                placeholderTextColor={colors.placeholder}
-                value={value.generalLocation?.customLabel ?? ''}
-                onChangeText={setGeneralCustomLabel}
-                className="py-2 text-base font-semibold"
-                style={{ color: colors.text }}
-              />
-            </View>
-          )}
-        </View>
+        <PlaceTypeAutocomplete
+          value={value.generalLocation?.category}
+          customLabel={value.generalLocation?.customLabel}
+          onChange={setGeneralCategory}
+          onCustomLabelChange={setGeneralCustomLabel}
+        />
       )}
 
       {value.type === 'specific_location' && (
@@ -290,7 +312,7 @@ function LocationTriggerSection({ value, onChange }: LocationProps) {
             <Text className="mb-1 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
               {t('reminders.searchPlace')}
             </Text>
-            <ChecklistPlaceAutocomplete
+            <PlaceAutocomplete
               value={searchText}
               placeholder={t('reminders.searchPlacePlaceholder')}
               onTextChange={(text) => {
@@ -306,7 +328,24 @@ function LocationTriggerSection({ value, onChange }: LocationProps) {
             <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
               {t('reminders.searchPlaceManualHint')}
             </Text>
+            {!value.specificLocation && !!value.pendingPlaceName && (
+              <Text className="mt-1 text-xs font-semibold" style={{ color: colors.accent }}>
+                {t('reminders.pendingPlaceHelp')}
+              </Text>
+            )}
           </View>
+
+          <LocationMapPicker
+            latitude={value.specificLocation?.latitude}
+            longitude={value.specificLocation?.longitude}
+            isLocating={isLocating}
+            onMapPick={handleMapPick}
+            onUseCurrentLocation={() => void handleUseCurrentLocation()}
+          />
+
+          {!!locationError && (
+            <Text className="text-xs font-semibold" style={{ color: colors.error }}>{locationError}</Text>
+          )}
 
           {!!value.specificLocation && (
             <View className="rounded-2xl border px-4 py-3" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>

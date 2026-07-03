@@ -11,8 +11,10 @@ import type {
   TimeTriggerType,
   TriggerType,
 } from '../types/reminders.types'
-import type { GeoapifyPlaceSuggestion } from '../services/geoapifyPlacesService'
-import { ChecklistPlaceAutocomplete } from './ChecklistPlaceAutocomplete'
+import { reverseGeocode, type GeoapifyPlaceSuggestion } from '../services/geoapifyPlacesService'
+import { LocationMapPicker } from './LocationMapPicker'
+import { PlaceAutocomplete } from './PlaceAutocomplete'
+import { PlaceTypeAutocomplete } from './PlaceTypeAutocomplete'
 
 const TIME_TRIGGER_TYPES: TimeTriggerType[] = ['none', 'general_time', 'specific_time']
 const GENERAL_TIME_CATEGORIES: GeneralTimeCategory[] = [
@@ -27,18 +29,6 @@ const GENERAL_TIME_CATEGORIES: GeneralTimeCategory[] = [
 const SPECIFIC_TIME_REPEATS: SpecificTimeRepeat[] = ['none', 'daily', 'weekly', 'monthly', 'custom']
 
 const LOCATION_TRIGGER_TYPES: LocationTriggerType[] = ['none', 'general_location', 'specific_location']
-const GENERAL_LOCATION_CATEGORIES: GeneralLocationCategory[] = [
-  'home',
-  'work',
-  'university',
-  'school',
-  'gym',
-  'pharmacy',
-  'grocery_store',
-  'airport',
-  'hospital',
-  'custom',
-]
 const RADIUS_OPTIONS = [100, 250, 500]
 
 const TIME_TRIGGER_LABEL_KEYS: Record<TimeTriggerType, string> = {
@@ -195,7 +185,9 @@ type LocationProps = {
 
 function LocationTriggerSection({ value, onChange }: LocationProps) {
   const { t } = useLanguage()
-  const [searchText, setSearchText] = useState(value.specificLocation?.placeName ?? '')
+  const [searchText, setSearchText] = useState(value.specificLocation?.placeName ?? value.pendingPlaceName ?? '')
+  const [isLocating, setIsLocating] = useState(false)
+  const [locationError, setLocationError] = useState('')
 
   const setType = (type: LocationTriggerType) => onChange({ ...value, type })
 
@@ -206,15 +198,66 @@ function LocationTriggerSection({ value, onChange }: LocationProps) {
     onChange({ ...value, generalLocation: { category: value.generalLocation?.category ?? 'custom', customLabel } })
 
   const handlePlaceSelected = (place: GeoapifyPlaceSuggestion) => {
+    setLocationError('')
     setSearchText(place.placeName)
     onChange({
       ...value,
       specificLocation: {
         ...place,
+        selectedBy: 'search',
         trigger: value.specificLocation?.trigger ?? 'arrive',
         radius: value.specificLocation?.radius ?? 100,
       },
     })
+  }
+
+  const applyResolvedPoint = (place: GeoapifyPlaceSuggestion, selectedBy: 'map' | 'current_location') => {
+    setSearchText(place.placeName)
+    onChange({
+      ...value,
+      specificLocation: {
+        ...place,
+        selectedBy,
+        trigger: value.specificLocation?.trigger ?? 'arrive',
+        radius: value.specificLocation?.radius ?? 100,
+      },
+    })
+  }
+
+  const handleMapPick = (coords: { latitude: number; longitude: number }) => {
+    setLocationError('')
+    reverseGeocode(coords.latitude, coords.longitude)
+      .then((place) => applyResolvedPoint(place, 'map'))
+      .catch((error: unknown) => {
+        console.error(error)
+        setLocationError(error instanceof Error ? error.message : 'Failed to resolve the selected point.')
+      })
+  }
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser.')
+      return
+    }
+
+    setLocationError('')
+    setIsLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        reverseGeocode(position.coords.latitude, position.coords.longitude)
+          .then((place) => applyResolvedPoint(place, 'current_location'))
+          .catch((error: unknown) => {
+            console.error(error)
+            setLocationError(error instanceof Error ? error.message : 'Failed to resolve your location.')
+          })
+          .finally(() => setIsLocating(false))
+      },
+      (error) => {
+        console.error(error)
+        setLocationError('Could not access your location. Please check permissions.')
+        setIsLocating(false)
+      },
+    )
   }
 
   const setSpecificTrigger = (trigger: TriggerType) =>
@@ -233,35 +276,19 @@ function LocationTriggerSection({ value, onChange }: LocationProps) {
       </div>
 
       {value.type === 'general_location' && (
-        <div className="grid gap-3">
-          <div className="flex flex-wrap gap-2">
-            {GENERAL_LOCATION_CATEGORIES.map((category) => (
-              <Chip
-                key={category}
-                label={t(`reminders.generalLocationCategory.${category}`)}
-                selected={value.generalLocation?.category === category}
-                onClick={() => setGeneralCategory(category)}
-              />
-            ))}
-          </div>
-          {value.generalLocation?.category === 'custom' && (
-            <label className="block rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)]">
-              <input
-                value={value.generalLocation?.customLabel ?? ''}
-                onChange={(event) => setGeneralCustomLabel(event.target.value)}
-                placeholder={t('reminders.customLabelPlaceholder')}
-                className="w-full bg-transparent py-2 text-base font-semibold text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)]"
-              />
-            </label>
-          )}
-        </div>
+        <PlaceTypeAutocomplete
+          value={value.generalLocation?.category}
+          customLabel={value.generalLocation?.customLabel}
+          onChange={setGeneralCategory}
+          onCustomLabelChange={setGeneralCustomLabel}
+        />
       )}
 
       {value.type === 'specific_location' && (
         <div className="grid gap-4">
           <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3">
             <p className="mb-1 text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">{t('reminders.searchPlace')}</p>
-            <ChecklistPlaceAutocomplete
+            <PlaceAutocomplete
               value={searchText}
               placeholder={t('reminders.searchPlacePlaceholder')}
               onTextChange={(text) => {
@@ -275,7 +302,20 @@ function LocationTriggerSection({ value, onChange }: LocationProps) {
               onPlaceSelected={handlePlaceSelected}
             />
             <p className="mt-1 text-xs text-[var(--bp-subtle)]">{t('reminders.searchPlaceManualHint')}</p>
+            {!value.specificLocation && !!value.pendingPlaceName && (
+              <p className="mt-1 text-xs font-semibold text-[var(--bp-accent)]">{t('reminders.pendingPlaceHelp')}</p>
+            )}
           </div>
+
+          <LocationMapPicker
+            latitude={value.specificLocation?.latitude}
+            longitude={value.specificLocation?.longitude}
+            isLocating={isLocating}
+            onMapPick={handleMapPick}
+            onUseCurrentLocation={handleUseCurrentLocation}
+          />
+
+          {!!locationError && <p className="text-xs font-semibold text-red-400">{locationError}</p>}
 
           {value.specificLocation && (
             <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3">

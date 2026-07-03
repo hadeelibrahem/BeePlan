@@ -1,7 +1,11 @@
+import { useState } from 'react'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import { createReminder } from '../api/reminders.api'
+import { AiAssistantSection } from '../components/AiAssistantSection'
 import { ReminderForm } from '../components/ReminderForm'
+import type { ReminderDraft } from '../types/aiAssistant.types'
 import type { Reminder } from '../types/reminders.types'
+import { mapDraftToReminder } from '../utils/aiDraftMapping'
 
 type Props = {
   onCancel: () => void
@@ -10,6 +14,13 @@ type Props = {
 
 export function CreateReminderScreen({ onCancel, onCreated }: Props) {
   const { t } = useLanguage()
+  const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(undefined)
+  const [formKey, setFormKey] = useState(0)
+
+  const applyDraft = (draft: ReminderDraft) => {
+    setDraftReminder(mapDraftToReminder(draft))
+    setFormKey((key) => key + 1)
+  }
 
   return (
     <main className="min-h-screen bg-[var(--bp-bg)] px-4 pb-8 pt-5 text-[var(--bp-text)]">
@@ -29,7 +40,10 @@ export function CreateReminderScreen({ onCancel, onCreated }: Props) {
         <p className="mb-8 mt-2 max-w-xl text-sm leading-6 text-[var(--bp-muted)]">
           {t('reminders.createSubtitle', { brand_name: t('common.brand_name') })}
         </p>
+        <AiAssistantSection onApplyDraft={applyDraft} />
         <ReminderForm
+          key={formKey}
+          initialReminder={draftReminder}
           submitLabel={t('reminders.saveReminder')}
           onSubmit={async (values) => {
             const reminder = await createReminder(values)

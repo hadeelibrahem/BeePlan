@@ -10,7 +10,7 @@ type Props = {
 
 const DEBOUNCE_MS = 300
 
-export function ChecklistPlaceAutocomplete({ value, placeholder, onTextChange, onPlaceSelected }: Props) {
+export function PlaceAutocomplete({ value, placeholder, onTextChange, onPlaceSelected }: Props) {
   const [suggestions, setSuggestions] = useState<GeoapifyPlaceSuggestion[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)

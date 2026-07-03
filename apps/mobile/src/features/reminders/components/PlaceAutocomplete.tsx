@@ -1,28 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { autocompletePlaces, getPlaceDetails, type PlaceSuggestion } from '../../../lib/geoapify';
 import { useTheme } from '../../../theme/useTheme';
-
-export type PlaceSelection = {
-  placeName: string;
-  address?: string;
-  latitude: number;
-  longitude: number;
-};
+import { searchPlaces, type GeoapifyPlaceSuggestion } from '../services/geoapifyPlacesService';
 
 type Props = {
   value: string;
   placeholder?: string;
   onTextChange: (value: string) => void;
-  onPlaceSelected: (place: PlaceSelection) => void;
+  onPlaceSelected: (place: GeoapifyPlaceSuggestion) => void;
 };
 
-const DEBOUNCE_MS = 350;
+const DEBOUNCE_MS = 300;
 
-export function PlacesAutocompleteInput({ value, placeholder, onTextChange, onPlaceSelected }: Props) {
+export function PlaceAutocomplete({ value, placeholder, onTextChange, onPlaceSelected }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
-  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<GeoapifyPlaceSuggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -44,9 +37,8 @@ export function PlacesAutocompleteInput({ value, placeholder, onTextChange, onPl
     }
 
     debounceRef.current = setTimeout(() => {
-      autocompletePlaces(text)
+      searchPlaces(text)
         .then((results) => {
-          console.log('[PlacesAutocompleteInput] suggestions returned:', results);
           setSuggestions(results);
           setIsOpen(results.length > 0);
         })
@@ -58,17 +50,10 @@ export function PlacesAutocompleteInput({ value, placeholder, onTextChange, onPl
     }, DEBOUNCE_MS);
   };
 
-  const handleSelect = (suggestion: PlaceSuggestion) => {
-    console.log('[PlacesAutocompleteInput] suggestion tapped:', suggestion);
+  const handleSelect = (suggestion: GeoapifyPlaceSuggestion) => {
     setIsOpen(false);
     onTextChange(suggestion.label);
-
-    getPlaceDetails(suggestion.placeId)
-      .then((details) => {
-        console.log('[PlacesAutocompleteInput] place details resolved:', details);
-        onPlaceSelected(details);
-      })
-      .catch((error: unknown) => console.error(error));
+    onPlaceSelected(suggestion);
   };
 
   const handleFocus = () => {
@@ -101,21 +86,20 @@ export function PlacesAutocompleteInput({ value, placeholder, onTextChange, onPl
             elevation: 4,
           }}
         >
-          <ScrollView
-            style={{ maxHeight: 220 }}
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator
-          >
+          <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
             {suggestions.map((suggestion, index) => (
               <Pressable
-                key={suggestion.placeId}
+                key={suggestion.geoapifyPlaceId}
                 onPress={() => handleSelect(suggestion)}
                 accessibilityRole="button"
                 className="px-4 py-3 active:opacity-70"
                 style={index > 0 ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
               >
-                <Text className="text-sm font-semibold" style={{ color: colors.text }}>{suggestion.label}</Text>
+                <Text className="text-sm font-semibold" style={{ color: colors.text }}>{suggestion.placeName}</Text>
+                <Text className="text-xs" style={{ color: colors.secondaryText }}>
+                  {suggestion.address}
+                  {suggestion.city ? ` • ${suggestion.city}` : ''}
+                </Text>
               </Pressable>
             ))}
           </ScrollView>

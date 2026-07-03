@@ -1,31 +1,13 @@
-import { Alert } from 'react-native';
+import { useState } from 'react';
 import { AppScreen, PageHeader } from '../../../components/layout';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { NotificationPermissionDeniedError, scheduleReminderNotification } from '../../../lib/notifications';
 import { createReminder } from '../api/reminders.api';
+import { AiAssistantSection } from '../components/AiAssistantSection';
 import { ReminderForm } from '../components/ReminderForm';
+import type { ReminderDraft } from '../types/aiAssistant.types';
 import type { Reminder } from '../types/reminders.types';
-
-async function scheduleTimeReminderNotification(reminder: Reminder) {
-  if (reminder.type !== 'time' || !reminder.remindAt) return;
-
-  try {
-    await scheduleReminderNotification({
-      title: reminder.title,
-      body: reminder.description,
-      triggerDateTime: reminder.remindAt,
-      priority: reminder.priority,
-    });
-  } catch (error) {
-    if (error instanceof NotificationPermissionDeniedError) {
-      console.warn('[CreateReminderScreen] notification permission denied:', error.message);
-      Alert.alert('Notifications disabled', error.message);
-      return;
-    }
-
-    console.error('[CreateReminderScreen] failed to schedule notification:', error);
-  }
-}
+import { scheduleTimeReminderNotification } from '../utils/reminderNotificationSync';
+import { mapDraftToReminder } from '../utils/aiDraftMapping';
 
 type Props = {
   onCancel: () => void;
@@ -34,6 +16,13 @@ type Props = {
 
 export function CreateReminderScreen({ onCancel, onCreated }: Props) {
   const { t } = useLanguage();
+  const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(undefined);
+  const [formKey, setFormKey] = useState(0);
+
+  const applyDraft = (draft: ReminderDraft) => {
+    setDraftReminder(mapDraftToReminder(draft));
+    setFormKey((key) => key + 1);
+  };
 
   return (
     <AppScreen keyboardAvoiding>
@@ -42,7 +31,10 @@ export function CreateReminderScreen({ onCancel, onCreated }: Props) {
         subtitle={t('reminders.createSubtitle', { brand_name: t('common.brand_name') })}
         onBack={onCancel}
       />
+      <AiAssistantSection onApplyDraft={applyDraft} />
       <ReminderForm
+        key={formKey}
+        initialReminder={draftReminder}
         submitLabel={t('reminders.saveReminder')}
         onSubmit={async (values) => {
           const reminder = await createReminder(values);
