@@ -124,12 +124,11 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
       where is_orphaned is distinct from (user_id is null)
     `);
 
-    const { rows: orphanedCountRows } = await this.getPool().query<{ count: string }>(
-      'select count(*) from reminders where user_id is null',
-    );
+    const { rows: orphanedCountRows } = await this.getPool().query<{
+      count: string;
+    }>('select count(*) from reminders where user_id is null');
     const orphanedCount = Number(orphanedCountRows[0]?.count ?? 0);
     if (orphanedCount > 0) {
-      // eslint-disable-next-line no-console
       console.warn(
         `[DatabaseService] ${orphanedCount} reminder(s) have no owning user (user_id IS NULL). ` +
           'They are flagged via is_orphaned and hidden from all user-facing queries, but not deleted. ' +
@@ -161,6 +160,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         labels jsonb,
         attachments jsonb,
         is_favorite boolean not null default false,
+        is_focus_task boolean not null default false,
         created_at timestamp default now() not null,
         updated_at timestamp default now() not null
       )
@@ -180,6 +180,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists labels jsonb,
         add column if not exists attachments jsonb,
         add column if not exists is_favorite boolean not null default false,
+        add column if not exists is_focus_task boolean not null default false,
         add column if not exists updated_at timestamp default now() not null,
         add column if not exists recurrence_root_id uuid references tasks(id) on delete set null
     `);
@@ -272,6 +273,22 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists tasks_user_id_updated_at_idx
         on tasks (user_id, updated_at desc)
+    `);
+
+    // Powers the task filtering sidebar: priority ("High Priority" quick
+    // filter), category (Categories panel + counts), is_focus_task ("Focus
+    // Tasks" quick filter), and reminder_enabled ("Has Reminder" filter).
+    await this.getPool().query(`
+      create index if not exists idx_tasks_priority on tasks (priority)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_tasks_category on tasks (category)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_tasks_focus on tasks (is_focus_task)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_tasks_reminder_enabled on tasks (reminder_enabled)
     `);
 
     await this.getPool().query(`

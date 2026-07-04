@@ -59,7 +59,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
       }}
     >
       <View className="absolute bottom-4 top-4 w-[3px] rounded-full" style={{ backgroundColor: colors.accent, opacity: 0.7 }} />
-      <View className="flex-row items-start gap-3 px-4 py-4">
+      <View className="flex-row items-start gap-3 px-3 py-3">
         {onToggle && (
           <Pressable
             onPress={onToggle}

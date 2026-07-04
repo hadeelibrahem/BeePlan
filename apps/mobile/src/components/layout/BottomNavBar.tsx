@@ -5,11 +5,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../theme/useTheme'
 import type { AppTheme } from '../../theme/colors'
 
-export type BottomNavPage = 'dashboard' | 'tasks' | 'reminders'
+export type BottomNavPage = 'dashboard' | 'tasks' | 'focus' | 'reminders'
 
 export type BottomNavHandlers = {
   onNavigateDashboard?: () => void
   onNavigateTasks?: () => void
+  onNavigateFocus?: () => void
   onNavigateReminders?: () => void
 }
 
@@ -20,6 +21,7 @@ type BottomNavBarProps = BottomNavHandlers & {
 const TABS: { page: BottomNavPage; icon: string; label: string }[] = [
   { page: 'dashboard', icon: '▦', label: 'Dashboard' },
   { page: 'tasks', icon: '☑', label: 'Tasks' },
+  { page: 'focus', icon: '🎯', label: 'Focus' },
   { page: 'reminders', icon: '🔔', label: 'Reminders' },
 ]
 
@@ -27,6 +29,7 @@ export const BottomNavBar = memo(function BottomNavBar({
   active,
   onNavigateDashboard,
   onNavigateTasks,
+  onNavigateFocus,
   onNavigateReminders,
 }: BottomNavBarProps) {
   const insets = useSafeAreaInsets()
@@ -34,6 +37,7 @@ export const BottomNavBar = memo(function BottomNavBar({
   const handlers: Record<BottomNavPage, (() => void) | undefined> = {
     dashboard: onNavigateDashboard,
     tasks: onNavigateTasks,
+    focus: onNavigateFocus,
     reminders: onNavigateReminders,
   }
 

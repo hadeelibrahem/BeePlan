@@ -75,6 +75,7 @@ export type ApiTask = {
   labels: string[];
   labelDetails?: ApiTaskLabel[];
   isFavorite: boolean;
+  isFocusTask: boolean;
   isBlocked: boolean;
   dependenciesComplete: boolean;
   subtasks: ApiSubtask[];
@@ -104,6 +105,7 @@ export type TaskPayload = Partial<
     | 'reminderBeforeMinutes'
     | 'labels'
     | 'isFavorite'
+    | 'isFocusTask'
     | 'recurrence'
   >
 >;
@@ -123,8 +125,54 @@ async function request<T>(accessToken: string, path: string, init?: RequestInit)
   return readJsonOrThrow<T>(response, `${API_BASE_URL}${path}`);
 }
 
-export function getTasks(accessToken: string) {
-  return request<ApiTask[]>(accessToken, '/tasks');
+export type TaskDueFilter = 'today' | 'upcoming' | 'overdue';
+
+export type TaskFilters = {
+  status?: ApiTaskStatus;
+  priority?: ApiTaskPriority;
+  category?: string;
+  due?: TaskDueFilter;
+  focus?: boolean;
+  completed?: boolean;
+  hasReminder?: boolean;
+  search?: string;
+};
+
+export type TaskFilterSummary = {
+  counts: {
+    today: number;
+    upcoming: number;
+    overdue: number;
+    focus: number;
+    completed: number;
+    highPriority: number;
+  };
+  categories: { name: string; count: number }[];
+};
+
+function buildTaskQuery(filters?: TaskFilters) {
+  if (!filters) return '';
+
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.priority) params.set('priority', filters.priority);
+  if (filters.category) params.set('category', filters.category);
+  if (filters.due) params.set('due', filters.due);
+  if (filters.focus) params.set('focus', 'true');
+  if (filters.completed) params.set('completed', 'true');
+  if (filters.hasReminder) params.set('hasReminder', 'true');
+  if (filters.search) params.set('search', filters.search);
+
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export function getTasks(accessToken: string, filters?: TaskFilters) {
+  return request<ApiTask[]>(accessToken, `/tasks${buildTaskQuery(filters)}`);
+}
+
+export function getTaskFilterSummary(accessToken: string) {
+  return request<TaskFilterSummary>(accessToken, '/tasks/filters/summary');
 }
 
 export function createTask(accessToken: string, payload: TaskPayload) {
@@ -193,10 +241,21 @@ export function getSubtasks(accessToken: string, taskId: string) {
   return request<ApiSubtask[]>(accessToken, `/tasks/${taskId}/subtasks`);
 }
 
-export function addSubtask(accessToken: string, taskId: string, payload: { title: string; isDone?: boolean }) {
+export function addSubtask(
+  accessToken: string,
+  taskId: string,
+  payload: { title: string; isDone?: boolean; dueDate?: string; assignee?: string },
+) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks`, {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export function reorderSubtasks(accessToken: string, taskId: string, subtaskIds: string[]) {
+  return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/reorder`, {
+    method: 'POST',
+    body: JSON.stringify({ subtaskIds }),
   });
 }
 

@@ -34,7 +34,10 @@ export class NotesController {
   }
 
   @Get(':id')
-  findOne(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+  findOne(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.notesService.findOne(request.user.id, id);
   }
 
@@ -49,7 +52,10 @@ export class NotesController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Req() request: AuthenticatedRequest, @Param('id', ParseUUIDPipe) id: string) {
+  async remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     await this.notesService.remove(request.user.id, id);
   }
 }

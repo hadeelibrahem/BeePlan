@@ -4,7 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lt,
+  ne,
+  sql,
+} from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import {
   subtasks,
@@ -14,10 +26,12 @@ import {
   tasks,
 } from '../db/schema';
 import type { CreateTaskDto } from './dto/create-task.dto';
+import type { TaskQueryDto } from './dto/task-query.dto';
 import {
   type DependencyTaskIdsDto,
   type ReplaceDependencyDto,
   type SubtaskDto,
+  type SubtaskReorderDto,
   type TaskLabelDto,
   type TaskProgressDto,
   type TaskRecurrenceDto,
@@ -27,11 +41,38 @@ import {
 } from './dto/task-shared.dto';
 import type { UpdateTaskDto } from './dto/update-task.dto';
 
+export type TaskFilterSummary = {
+  counts: {
+    today: number;
+    upcoming: number;
+    overdue: number;
+    focus: number;
+    completed: number;
+    highPriority: number;
+  };
+  categories: { name: string; count: number }[];
+};
+
 type TaskRow = typeof tasks.$inferSelect;
 type SubtaskRow = typeof subtasks.$inferSelect;
 type RecurrenceRow = typeof taskRecurrenceRules.$inferSelect;
 type ActivityRow = typeof taskActivities.$inferSelect;
 type TaskLabel = { id: string; name: string };
+type DependencyEntity = {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  dueDate?: string;
+  priority: string;
+  progress: number;
+};
+type TaskRelatedRows = {
+  subtaskRows: SubtaskRow[];
+  dependencies: DependencyEntity[];
+  recurrence: RecurrenceRow | undefined;
+  activities: ActivityRow[];
+};
 
 @Injectable()
 export class TasksService {
@@ -46,7 +87,7 @@ export class TasksService {
     this.validateRecurrence(dto.recurrence ?? undefined);
 
     const status = dto.status ?? 'todo';
-    const progress = status === 'done' ? 100 : dto.progress ?? 0;
+    const progress = status === 'done' ? 100 : (dto.progress ?? 0);
     const estimatedTimeMinutes = dto.estimatedTimeMinutes ?? 0;
     const spentTimeMinutes = dto.spentTimeMinutes ?? 0;
     const [task] = await this.db
@@ -66,21 +107,27 @@ export class TasksService {
         spentTimeMinutes,
         remainingTimeMinutes:
           dto.remainingTimeMinutes ??
-          this.calculateRemainingMinutes(estimatedTimeMinutes, spentTimeMinutes),
+          this.calculateRemainingMinutes(
+            estimatedTimeMinutes,
+            spentTimeMinutes,
+          ),
         reminderEnabled: dto.reminderEnabled ?? false,
         reminderBeforeMinutes: dto.reminderBeforeMinutes ?? null,
         labels: this.normalizeLabelNames(dto.labels),
         attachments: dto.attachments ?? null,
         isFavorite: dto.isFavorite ?? false,
+        isFocusTask: dto.isFocusTask ?? false,
       })
       .returning();
 
     if (dto.subtasks?.length) {
-      await this.db.insert(subtasks).values(
-        dto.subtasks.map((subtask, index) =>
-          this.toSubtaskInsert(task.id, subtask, index),
-        ),
-      );
+      await this.db
+        .insert(subtasks)
+        .values(
+          dto.subtasks.map((subtask, index) =>
+            this.toSubtaskInsert(task.id, subtask, index),
+          ),
+        );
     }
 
     if (dto.recurrence && dto.recurrence.frequency !== 'Never') {
@@ -93,14 +140,189 @@ export class TasksService {
     return this.findOne(userId, task.id);
   }
 
-  async findAll(userId: string) {
+  async findAll(userId: string, query?: TaskQueryDto) {
+    const conditions = [eq(tasks.userId, userId)];
+
+    if (query?.status) conditions.push(eq(tasks.status, query.status));
+    if (query?.priority) conditions.push(eq(tasks.priority, query.priority));
+    if (query?.category) conditions.push(eq(tasks.category, query.category));
+    if (query?.focus) conditions.push(eq(tasks.isFocusTask, true));
+    if (query?.completed) conditions.push(eq(tasks.status, 'done'));
+    if (query?.hasReminder) conditions.push(eq(tasks.reminderEnabled, true));
+    if (query?.search) {
+      conditions.push(ilike(tasks.title, `%${query.search}%`));
+    }
+
+    if (query?.due) {
+      const { startOfToday, startOfTomorrow, startOfNextWeek } =
+        this.getDayBoundaries();
+
+      if (query.due === 'today') {
+        conditions.push(
+          gte(tasks.dueDate, startOfToday),
+          lt(tasks.dueDate, startOfTomorrow),
+        );
+      } else if (query.due === 'upcoming') {
+        conditions.push(
+          gte(tasks.dueDate, startOfTomorrow),
+          lt(tasks.dueDate, startOfNextWeek),
+        );
+      } else if (query.due === 'overdue') {
+        conditions.push(lt(tasks.dueDate, startOfToday), ne(tasks.status, 'done'));
+      }
+    }
+
     const rows = await this.db
       .select()
       .from(tasks)
-      .where(eq(tasks.userId, userId))
+      .where(and(...conditions))
       .orderBy(desc(tasks.updatedAt));
 
-    return Promise.all(rows.map((row) => this.toEntity(row)));
+    if (!rows.length) return [];
+
+    // Batch-fetch every related table once for the whole list instead of
+    // once per task (the old per-task `toEntity` call here was a classic
+    // N+1: 4-5 extra queries per task, so 50 tasks meant 200+ round trips).
+    const taskIds = rows.map((row) => row.id);
+
+    const [allSubtasks, dependencyLinks, allRecurrences, allActivities] =
+      await Promise.all([
+        this.db
+          .select()
+          .from(subtasks)
+          .where(inArray(subtasks.taskId, taskIds))
+          .orderBy(asc(subtasks.orderIndex), asc(subtasks.createdAt)),
+        this.db
+          .select()
+          .from(taskDependencies)
+          .where(inArray(taskDependencies.taskId, taskIds)),
+        this.db
+          .select()
+          .from(taskRecurrenceRules)
+          .where(inArray(taskRecurrenceRules.taskId, taskIds)),
+        this.db
+          .select()
+          .from(taskActivities)
+          .where(inArray(taskActivities.taskId, taskIds))
+          .orderBy(desc(taskActivities.createdAt)),
+      ]);
+
+    const dependencyTaskIds = [
+      ...new Set(dependencyLinks.map((link) => link.dependencyTaskId)),
+    ];
+    const dependencyTaskRows = dependencyTaskIds.length
+      ? await this.db
+          .select()
+          .from(tasks)
+          .where(
+            and(eq(tasks.userId, userId), inArray(tasks.id, dependencyTaskIds)),
+          )
+      : [];
+    const dependencyTaskById = new Map(
+      dependencyTaskRows.map((row) => [row.id, row]),
+    );
+
+    const subtasksByTaskId = this.groupByTaskId(allSubtasks);
+    const dependencyLinksByTaskId = this.groupByTaskId(dependencyLinks);
+    const recurrenceByTaskId = new Map(
+      allRecurrences.map((row) => [row.taskId, row]),
+    );
+    const activitiesByTaskId = this.groupByTaskId(allActivities);
+
+    return Promise.all(
+      rows.map((row) =>
+        this.assembleEntity(row, {
+          subtaskRows: subtasksByTaskId.get(row.id) ?? [],
+          dependencies: (dependencyLinksByTaskId.get(row.id) ?? [])
+            .map((link) => dependencyTaskById.get(link.dependencyTaskId))
+            .filter((depTask): depTask is TaskRow => Boolean(depTask))
+            .map((depTask) => this.toDependencyEntity(depTask)),
+          recurrence: recurrenceByTaskId.get(row.id),
+          activities: activitiesByTaskId.get(row.id) ?? [],
+        }),
+      ),
+    );
+  }
+
+  async getFilterSummary(userId: string): Promise<TaskFilterSummary> {
+    const { startOfToday, startOfTomorrow, startOfNextWeek } =
+      this.getDayBoundaries();
+
+    // Single aggregate query using FILTER (WHERE ...) so every quick-filter
+    // count comes from one table scan instead of six separate ones.
+    const [countsRow] = await this.db
+      .select({
+        today: sql<string>`count(*) filter (where ${tasks.dueDate} >= ${startOfToday} and ${tasks.dueDate} < ${startOfTomorrow})`,
+        upcoming: sql<string>`count(*) filter (where ${tasks.dueDate} >= ${startOfTomorrow} and ${tasks.dueDate} < ${startOfNextWeek})`,
+        overdue: sql<string>`count(*) filter (where ${tasks.dueDate} < ${startOfToday} and ${tasks.status} != 'done')`,
+        focus: sql<string>`count(*) filter (where ${tasks.isFocusTask} = true)`,
+        completed: sql<string>`count(*) filter (where ${tasks.status} = 'done')`,
+        highPriority: sql<string>`count(*) filter (where ${tasks.priority} = 'high')`,
+      })
+      .from(tasks)
+      .where(eq(tasks.userId, userId));
+
+    const categoryRows = await this.db
+      .select({
+        name: tasks.category,
+        count: sql<string>`count(*)`,
+      })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          isNotNull(tasks.category),
+          ne(tasks.category, ''),
+        ),
+      )
+      .groupBy(tasks.category)
+      .orderBy(desc(sql`count(*)`));
+
+    return {
+      counts: {
+        today: Number(countsRow?.today ?? 0),
+        upcoming: Number(countsRow?.upcoming ?? 0),
+        overdue: Number(countsRow?.overdue ?? 0),
+        focus: Number(countsRow?.focus ?? 0),
+        completed: Number(countsRow?.completed ?? 0),
+        highPriority: Number(countsRow?.highPriority ?? 0),
+      },
+      categories: categoryRows.map((row) => ({
+        name: row.name ?? '',
+        count: Number(row.count),
+      })),
+    };
+  }
+
+  private getDayBoundaries() {
+    // Compare in UTC rather than the server process's local time zone (same
+    // approach as DashboardService.getSummary) — the `due_date` column is a
+    // timezone-less `timestamp`, and local `setHours()` math would miscount
+    // tasks whenever the server's UTC offset is positive.
+    const now = new Date();
+    const startOfToday = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const startOfTomorrow = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+    );
+    const startOfNextWeek = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 8),
+    );
+
+    return { startOfToday, startOfTomorrow, startOfNextWeek };
+  }
+
+  private groupByTaskId<T extends { taskId: string }>(
+    rows: T[],
+  ): Map<string, T[]> {
+    const map = new Map<string, T[]>();
+    for (const row of rows) {
+      const list = map.get(row.taskId);
+      if (list) list.push(row);
+      else map.set(row.taskId, [row]);
+    }
+    return map;
   }
 
   async findOne(userId: string, taskId: string) {
@@ -112,6 +334,18 @@ export class TasksService {
     const existingTask = await this.getTaskForUser(userId, taskId);
     this.validateTaskPayload(dto, true);
     this.validateRecurrence(dto.recurrence ?? undefined);
+
+    if (
+      dto.status !== undefined &&
+      (dto.status === 'in_progress' || dto.status === 'done') &&
+      existingTask.status !== dto.status
+    ) {
+      await this.assertDependenciesComplete(userId, taskId);
+    }
+
+    if (dto.status === 'done') {
+      await this.assertSubtasksComplete(taskId);
+    }
 
     const updateData: Partial<typeof tasks.$inferInsert> = {
       updatedAt: new Date(),
@@ -147,10 +381,14 @@ export class TasksService {
     if (dto.reminderBeforeMinutes !== undefined) {
       updateData.reminderBeforeMinutes = dto.reminderBeforeMinutes;
     }
-    if (dto.estimatedTimeMinutes !== undefined || dto.spentTimeMinutes !== undefined) {
-      const estimatedTimeMinutes =
+    if (
+      dto.estimatedTimeMinutes !== undefined ||
+      dto.spentTimeMinutes !== undefined
+    ) {
+      const estimatedTimeMinutes: number =
         dto.estimatedTimeMinutes ?? existingTask.estimatedTimeMinutes;
-      const spentTimeMinutes = dto.spentTimeMinutes ?? existingTask.spentTimeMinutes;
+      const spentTimeMinutes: number =
+        dto.spentTimeMinutes ?? existingTask.spentTimeMinutes;
       updateData.remainingTimeMinutes = this.calculateRemainingMinutes(
         estimatedTimeMinutes,
         spentTimeMinutes,
@@ -161,6 +399,7 @@ export class TasksService {
     }
     if (dto.attachments !== undefined) updateData.attachments = dto.attachments;
     if (dto.isFavorite !== undefined) updateData.isFavorite = dto.isFavorite;
+    if (dto.isFocusTask !== undefined) updateData.isFocusTask = dto.isFocusTask;
 
     await this.db
       .update(tasks)
@@ -189,26 +428,28 @@ export class TasksService {
   }
 
   async changeStatus(userId: string, taskId: string, dto: TaskStatusDto) {
-    await this.getTaskForUser(userId, taskId);
-    const progress =
-      dto.status === 'done'
-        ? 100
-        : dto.progress !== undefined
-          ? dto.progress
-          : undefined;
+    const task = await this.getTaskForUser(userId, taskId);
+
+    if (
+      (dto.status === 'in_progress' || dto.status === 'done') &&
+      task.status !== dto.status
+    ) {
+      await this.assertDependenciesComplete(userId, taskId);
+    }
+
+    if (dto.status === 'done') {
+      await this.assertSubtasksComplete(taskId);
+    }
 
     await this.db
       .update(tasks)
       .set({
         status: dto.status,
-        progress,
         updatedAt: new Date(),
       })
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
 
-    if (dto.status !== 'done') {
-      await this.recalculateProgress(userId, taskId, { keepManual: true });
-    }
+    await this.recalculateProgress(userId, taskId);
 
     await this.addActivity(
       userId,
@@ -255,7 +496,8 @@ export class TasksService {
 
     const labels = this.toLabelEntities(task.labels);
     const exists = labels.some(
-      (label) => label.name.toLocaleLowerCase() === labelName.toLocaleLowerCase(),
+      (label) =>
+        label.name.toLocaleLowerCase() === labelName.toLocaleLowerCase(),
     );
 
     if (exists) {
@@ -272,7 +514,12 @@ export class TasksService {
       })
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
 
-    await this.addActivity(userId, taskId, 'label_added', `Label added: ${labelName}`);
+    await this.addActivity(
+      userId,
+      taskId,
+      'label_added',
+      `Label added: ${labelName}`,
+    );
 
     return updatedLabels;
   }
@@ -360,9 +607,11 @@ export class TasksService {
       .from(subtasks)
       .where(eq(subtasks.taskId, taskId));
 
-    await this.db.insert(subtasks).values(
-      this.toSubtaskInsert(taskId, dto, dto.orderIndex ?? existing.length),
-    );
+    await this.db
+      .insert(subtasks)
+      .values(
+        this.toSubtaskInsert(taskId, dto, dto.orderIndex ?? existing.length),
+      );
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(userId, taskId, 'subtask_added', 'Subtask added');
 
@@ -386,7 +635,13 @@ export class TasksService {
         orderIndex: dto.orderIndex,
         assignee: dto.assignee,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-        status: dto.status ?? (dto.isDone ? 'done' : undefined),
+        status:
+          dto.status ??
+          (dto.isDone === true
+            ? 'done'
+            : dto.isDone === false
+              ? 'todo'
+              : undefined),
         updatedAt: new Date(),
       })
       .where(and(eq(subtasks.id, subtaskId), eq(subtasks.taskId, taskId)));
@@ -402,6 +657,48 @@ export class TasksService {
     return this.findOne(userId, taskId);
   }
 
+  async reorderSubtasks(
+    userId: string,
+    taskId: string,
+    dto: SubtaskReorderDto,
+  ) {
+    await this.getTaskForUser(userId, taskId);
+    const rows = await this.db
+      .select()
+      .from(subtasks)
+      .where(eq(subtasks.taskId, taskId));
+
+    const existingIds = new Set(rows.map((row) => row.id));
+    const uniqueIds = [...new Set(dto.subtaskIds)];
+
+    if (
+      uniqueIds.length !== rows.length ||
+      uniqueIds.some((id) => !existingIds.has(id))
+    ) {
+      throw new BadRequestException(
+        'Subtask order must include every subtask of this task exactly once.',
+      );
+    }
+
+    await Promise.all(
+      uniqueIds.map((subtaskId, index) =>
+        this.db
+          .update(subtasks)
+          .set({ orderIndex: index, updatedAt: new Date() })
+          .where(and(eq(subtasks.id, subtaskId), eq(subtasks.taskId, taskId))),
+      ),
+    );
+
+    await this.addActivity(
+      userId,
+      taskId,
+      'subtasks_reordered',
+      'Subtasks reordered',
+    );
+
+    return this.findOne(userId, taskId);
+  }
+
   async deleteSubtask(userId: string, taskId: string, subtaskId: string) {
     await this.getTaskForUser(userId, taskId);
     await this.getSubtaskForTask(taskId, subtaskId);
@@ -409,7 +706,12 @@ export class TasksService {
       .delete(subtasks)
       .where(and(eq(subtasks.id, subtaskId), eq(subtasks.taskId, taskId)));
     await this.recalculateProgress(userId, taskId);
-    await this.addActivity(userId, taskId, 'subtask_deleted', 'Subtask deleted');
+    await this.addActivity(
+      userId,
+      taskId,
+      'subtask_deleted',
+      'Subtask deleted',
+    );
 
     return this.findOne(userId, taskId);
   }
@@ -507,15 +809,16 @@ export class TasksService {
     return this.findOne(userId, taskId);
   }
 
-  async saveRecurrence(
-    userId: string,
-    taskId: string,
-    dto: TaskRecurrenceDto,
-  ) {
+  async saveRecurrence(userId: string, taskId: string, dto: TaskRecurrenceDto) {
     await this.getTaskForUser(userId, taskId);
     this.validateRecurrence(dto);
     await this.upsertRecurrence(taskId, dto);
-    await this.addActivity(userId, taskId, 'recurrence_saved', 'Recurrence saved');
+    await this.addActivity(
+      userId,
+      taskId,
+      'recurrence_saved',
+      'Recurrence saved',
+    );
 
     return this.findOne(userId, taskId);
   }
@@ -549,7 +852,12 @@ export class TasksService {
     const activities = await this.db
       .select()
       .from(taskActivities)
-      .where(and(eq(taskActivities.taskId, taskId), eq(taskActivities.userId, userId)))
+      .where(
+        and(
+          eq(taskActivities.taskId, taskId),
+          eq(taskActivities.userId, userId),
+        ),
+      )
       .orderBy(desc(taskActivities.createdAt));
 
     return activities.map((row) => this.toActivityEntity(row));
@@ -600,9 +908,37 @@ export class TasksService {
           .orderBy(desc(taskActivities.createdAt)),
       ]);
 
+    return this.assembleEntity(task, {
+      subtaskRows,
+      dependencies,
+      recurrence,
+      activities,
+    });
+  }
+
+  private async assembleEntity(task: TaskRow, related: TaskRelatedRows) {
+    const { subtaskRows, dependencies, recurrence, activities } = related;
+
     const dependenciesComplete =
       dependencies.length > 0 &&
       dependencies.every((dependency) => dependency.status === 'done');
+
+    // Self-heals any task whose stored "done" status has fallen out of sync
+    // with its subtasks (e.g. a legacy row from before subtask completion
+    // demoted status), so a plain GET/refresh never resurfaces a stale
+    // "done" status even if some write path failed to call
+    // recalculateProgress.
+    let status = task.status;
+    if (subtaskRows.length && task.status === 'done') {
+      const completed = subtaskRows.filter((row) => row.isDone).length;
+      if (completed < subtaskRows.length) {
+        status = completed > 0 ? 'in_progress' : 'todo';
+        await this.db
+          .update(tasks)
+          .set({ status, updatedAt: new Date() })
+          .where(eq(tasks.id, task.id));
+      }
+    }
 
     return {
       id: task.id,
@@ -610,7 +946,7 @@ export class TasksService {
       title: task.title,
       description: task.description ?? '',
       priority: task.priority,
-      status: task.status,
+      status,
       progress: task.progress,
       dueDate: task.dueDate?.toISOString(),
       dueTime: task.dueTime ?? '',
@@ -621,11 +957,14 @@ export class TasksService {
       remainingTimeMinutes: task.remainingTimeMinutes,
       reminderEnabled: task.reminderEnabled,
       reminderBeforeMinutes: task.reminderBeforeMinutes ?? undefined,
-      labels: this.normalizeLabelNames(this.toLabelEntities(task.labels).map((label) => label.name)),
+      labels: this.normalizeLabelNames(
+        this.toLabelEntities(task.labels).map((label) => label.name),
+      ),
       labelDetails: this.toLabelEntities(task.labels),
       attachments: (task.attachments as unknown[] | null) ?? [],
       ...this.toTimeEstimationEntity(task),
       isFavorite: task.isFavorite,
+      isFocusTask: task.isFocusTask,
       isBlocked:
         dependencies.length > 0 &&
         dependencies.some((dependency) => dependency.status !== 'done'),
@@ -719,13 +1058,9 @@ export class TasksService {
       value
         .map((item) => {
           if (typeof item === 'string') return item;
-          if (
-            item &&
-            typeof item === 'object' &&
-            'name' in item &&
-            typeof item.name === 'string'
-          ) {
-            return item.name;
+          if (item && typeof item === 'object' && 'name' in item) {
+            const name = (item as Record<string, unknown>).name;
+            if (typeof name === 'string') return name;
           }
 
           return '';
@@ -742,9 +1077,9 @@ export class TasksService {
   }
 
   private normalizeLabelNames(labels?: string[] | null): string[] {
-    const names = labels
-      ?.map((label) => this.normalizeLabelName(label))
-      .filter(Boolean) ?? [];
+    const names =
+      labels?.map((label) => this.normalizeLabelName(label)).filter(Boolean) ??
+      [];
     const seen = new Set<string>();
 
     return names.filter((name) => {
@@ -760,14 +1095,19 @@ export class TasksService {
   }
 
   private toLabelId(label: string) {
-    return label
-      .trim()
-      .toLocaleLowerCase()
-      .replace(/[^a-z0-9\u0600-\u06ff]+/gi, '-')
-      .replace(/^-+|-+$/g, '') || encodeURIComponent(label);
+    return (
+      label
+        .trim()
+        .toLocaleLowerCase()
+        .replace(/[^a-z0-9\u0600-\u06ff]+/gi, '-')
+        .replace(/^-+|-+$/g, '') || encodeURIComponent(label)
+    );
   }
 
-  private calculateRemainingMinutes(estimatedMinutes: number, spentMinutes: number) {
+  private calculateRemainingMinutes(
+    estimatedMinutes: number,
+    spentMinutes: number,
+  ) {
     return Math.max(estimatedMinutes - spentMinutes, 0);
   }
 
@@ -857,13 +1197,17 @@ export class TasksService {
     }
 
     if (recurrence.frequency === 'Monthly') next.setMonth(next.getMonth() + 1);
-    else if (recurrence.frequency === 'Yearly') next.setFullYear(next.getFullYear() + 1);
+    else if (recurrence.frequency === 'Yearly')
+      next.setFullYear(next.getFullYear() + 1);
     else next.setDate(next.getDate() + 7);
 
     return next.toISOString();
   }
 
-  private async getDependencies(userId: string, taskId: string) {
+  private async getDependencies(
+    userId: string,
+    taskId: string,
+  ): Promise<DependencyEntity[]> {
     const rows = await this.db
       .select()
       .from(taskDependencies)
@@ -878,7 +1222,11 @@ export class TasksService {
       .from(tasks)
       .where(and(eq(tasks.userId, userId), inArray(tasks.id, dependencyIds)));
 
-    return dependencyTasks.map((task) => ({
+    return dependencyTasks.map((task) => this.toDependencyEntity(task));
+  }
+
+  private toDependencyEntity(task: TaskRow): DependencyEntity {
+    return {
       id: task.id,
       title: task.title,
       category: task.category ?? '',
@@ -886,7 +1234,7 @@ export class TasksService {
       dueDate: task.dueDate?.toISOString(),
       priority: task.priority,
       progress: task.progress,
-    }));
+    };
   }
 
   private toSubtaskInsert(taskId: string, dto: SubtaskDto, index: number) {
@@ -920,64 +1268,117 @@ export class TasksService {
     if (!dto || dto.frequency === 'Never') return;
 
     if (dto.frequency === 'Weekly' && !dto.weekdays?.length) {
-      throw new BadRequestException('Weekly recurrence must include at least one weekday.');
+      throw new BadRequestException(
+        'Weekly recurrence must include at least one weekday.',
+      );
     }
 
-    if (dto.frequency === 'Custom' && (!dto.customInterval || dto.customInterval <= 0)) {
-      throw new BadRequestException('Custom recurrence interval must be greater than 0.');
+    if (
+      dto.frequency === 'Custom' &&
+      (!dto.customInterval || dto.customInterval <= 0)
+    ) {
+      throw new BadRequestException(
+        'Custom recurrence interval must be greater than 0.',
+      );
     }
 
-    if (dto.frequency === 'Custom' && dto.customUnit === 'weeks' && !dto.weekdays?.length) {
-      throw new BadRequestException('Weekly custom recurrence must include at least one weekday.');
+    if (
+      dto.frequency === 'Custom' &&
+      dto.customUnit === 'weeks' &&
+      !dto.weekdays?.length
+    ) {
+      throw new BadRequestException(
+        'Weekly custom recurrence must include at least one weekday.',
+      );
     }
 
     if (dto.endType === 'date' && !dto.endDate) {
       throw new BadRequestException('End date is required.');
     }
 
-    if (dto.endType === 'occurrences' && (!dto.occurrences || dto.occurrences <= 0)) {
+    if (
+      dto.endType === 'occurrences' &&
+      (!dto.occurrences || dto.occurrences <= 0)
+    ) {
       throw new BadRequestException('Occurrences must be greater than 0.');
     }
   }
 
-  private async recalculateProgress(
-    userId: string,
-    taskId: string,
-    options: { keepManual?: boolean } = {},
-  ) {
+  /**
+   * Subtasks are the source of truth for progress whenever they exist —
+   * even a "done" task shows less than 100% if a subtask is incomplete.
+   * Only tasks with no subtasks fall back to a status-derived percentage.
+   *
+   * A "done" status is only valid while subtasks are all complete (this is
+   * also enforced up-front by assertSubtasksComplete when a caller tries to
+   * set status = done). If a subtask is unchecked after the task was marked
+   * done, that would otherwise leave a stale "done" status paired with a
+   * <100% progress — so here we demote the stored status back to
+   * in_progress/todo whenever subtasks fall out of sync with it.
+   */
+  private async recalculateProgress(userId: string, taskId: string) {
     const task = await this.getTaskForUser(userId, taskId);
-
-    if (task.status === 'done') {
-      await this.setTaskProgress(taskId, 100);
-      return;
-    }
 
     const subtaskRows = await this.db
       .select()
       .from(subtasks)
       .where(eq(subtasks.taskId, taskId));
 
-    if (!subtaskRows.length) {
-      if (task.status === 'todo') {
-        await this.setTaskProgress(taskId, 0);
-      }
+    if (subtaskRows.length) {
+      const completed = subtaskRows.filter((row) => row.isDone).length;
+      const progress = Math.round((completed / subtaskRows.length) * 100);
+      const correctedStatus: TaskStatus | undefined =
+        task.status === 'done' && completed < subtaskRows.length
+          ? completed > 0
+            ? 'in_progress'
+            : 'todo'
+          : undefined;
+
+      await this.setTaskProgress(taskId, progress, correctedStatus);
       return;
     }
 
-    if (options.keepManual) return;
-
-    const completed = subtaskRows.filter((row) => row.isDone).length;
-    await this.setTaskProgress(
-      taskId,
-      Math.round((completed / subtaskRows.length) * 100),
-    );
+    const progress =
+      task.status === 'done' ? 100 : task.status === 'in_progress' ? 50 : 0;
+    await this.setTaskProgress(taskId, progress);
   }
 
-  private async setTaskProgress(taskId: string, progress: number) {
+  private async setTaskProgress(
+    taskId: string,
+    progress: number,
+    status?: TaskStatus,
+  ) {
     await this.db
       .update(tasks)
-      .set({ progress, updatedAt: new Date() })
+      .set({
+        progress,
+        ...(status ? { status } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(tasks.id, taskId));
+  }
+
+  private async assertDependenciesComplete(userId: string, taskId: string) {
+    const dependencies = await this.getDependencies(userId, taskId);
+
+    if (dependencies.some((dependency) => dependency.status !== 'done')) {
+      throw new ConflictException(
+        'This task cannot start until all its dependencies are completed.',
+      );
+    }
+  }
+
+  private async assertSubtasksComplete(taskId: string) {
+    const subtaskRows = await this.db
+      .select()
+      .from(subtasks)
+      .where(eq(subtasks.taskId, taskId));
+
+    if (subtaskRows.length && subtaskRows.some((row) => !row.isDone)) {
+      throw new ConflictException(
+        'Complete all subtasks before marking this task as Done.',
+      );
+    }
   }
 
   private async assertCanAddDependency(

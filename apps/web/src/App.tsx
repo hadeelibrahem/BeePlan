@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import './App.css'
 import {
   CreateReminderScreen,
@@ -30,6 +31,7 @@ import AnalyticsScreen from './screens/AnalyticsScreen'
 import CalendarScreen from './screens/CalendarScreen'
 import CreateTaskScreen from './screens/CreateTaskScreen'
 import EditTaskScreen from './screens/EditTaskScreen'
+import FocusScreen from './screens/FocusScreen'
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
 import NotesScreen from './screens/NotesScreen'
 import ResetPasswordScreen from './screens/ResetPasswordScreen'
@@ -41,6 +43,7 @@ type AuthScreenState = 'auth' | 'forgot' | 'reset'
 type AppScreen =
   | 'dashboard'
   | 'tasks'
+  | 'focus'
   | 'createTask'
   | 'taskDetails'
   | 'editTask'
@@ -81,6 +84,11 @@ function ThemedApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const { accessToken, loading, user, signOut } = useAuth()
+  const queryClient = useQueryClient()
+  const invalidateTaskFilters = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    [queryClient],
+  )
 
   useEffect(() => {
     const syncPath = () => setAuthScreen(getAuthScreenFromPath())
@@ -140,10 +148,24 @@ function ThemedApp() {
 
   async function handleToggle(id: string) {
     if (!accessToken) return
-    const updated = await toggleReminderStatus(id, accessToken)
-    if (!updated) return
-    setReminders((current) => current.map((reminder) => (reminder.id === id ? updated : reminder)))
-    refreshSummary()
+    const current = reminders.find((reminder) => reminder.id === id)
+    if (!current) return
+
+    // Optimistic update: flip the reminder's status locally right away and
+    // roll back only if the request fails.
+    const optimisticStatus = current.status === 'done' ? 'active' : 'done'
+    setReminders((currentList) =>
+      currentList.map((reminder) => (reminder.id === id ? { ...reminder, status: optimisticStatus } : reminder)),
+    )
+
+    try {
+      const updated = await toggleReminderStatus(id, accessToken, current.status)
+      if (!updated) return
+      setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? updated : reminder)))
+      refreshSummary()
+    } catch {
+      setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? current : reminder)))
+    }
   }
 
   async function handleSignOut() {
@@ -161,6 +183,7 @@ function ThemedApp() {
     setSelectedTaskId(createdTask.id)
     setScreen('taskDetails')
     refreshSummary()
+    invalidateTaskFilters()
   }
 
   function showInvalidTaskIdError(action: string) {
@@ -209,6 +232,7 @@ function ThemedApp() {
     setSelectedTaskId(updatedTask.id)
     setScreen('taskDetails')
     refreshSummary()
+    invalidateTaskFilters()
   }
 
   async function handleDeleteTask(taskId: string) {
@@ -224,6 +248,26 @@ function ThemedApp() {
     setSelectedTaskId(null)
     setScreen('tasks')
     refreshSummary()
+    invalidateTaskFilters()
+  }
+
+  function handleTaskUpdated(updatedTask: ApiTask) {
+    setTasks((current) => {
+      const previous = current.find((item) => item.id === updatedTask.id)
+      // The dashboard summary only depends on status/priority/dueDate/reminderEnabled
+      // across all tasks — skip refetching it for edits that don't touch those
+      // (e.g. a subtask toggle that doesn't flip the parent task's status).
+      const summaryRelevantChange =
+        !previous ||
+        previous.status !== updatedTask.status ||
+        previous.priority !== updatedTask.priority ||
+        previous.dueDate !== updatedTask.dueDate ||
+        previous.reminderEnabled !== updatedTask.reminderEnabled
+
+      if (summaryRelevantChange) refreshSummary()
+
+      return current.map((item) => (item.id === updatedTask.id ? updatedTask : item))
+    })
   }
 
   async function refreshSelectedTask(taskId: string) {
@@ -251,6 +295,7 @@ function ThemedApp() {
   const sidebarNav = {
     onNavigateDashboard: () => setScreen('dashboard'),
     onNavigateTasks: () => setScreen('tasks'),
+    onNavigateFocus: () => setScreen('focus'),
     onNavigateReminders: () => setScreen('list'),
     onNavigateCalendar: () => setScreen('calendar'),
     onNavigateNotes: () => setScreen('notes'),
@@ -287,6 +332,7 @@ function ThemedApp() {
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
+        onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -301,9 +347,27 @@ function ThemedApp() {
         onBackDashboard={() => setScreen('dashboard')}
         onCreateTask={() => setScreen('createTask')}
         onViewTaskDetails={openTaskDetails}
+        accessToken={accessToken}
         tasks={tasks}
         loading={tasksLoading}
         error={tasksError}
+        onNavigateFocus={sidebarNav.onNavigateFocus}
+        onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigateCalendar={sidebarNav.onNavigateCalendar}
+        onNavigateNotes={sidebarNav.onNavigateNotes}
+        onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+        onSignOut={() => void handleSignOut()}
+      />
+    )
+  }
+
+  if (screen === 'focus') {
+    return (
+      <FocusScreen
+        onBackDashboard={() => setScreen('dashboard')}
+        onViewTaskDetails={openTaskDetails}
+        tasks={tasks}
+        onNavigateTasks={sidebarNav.onNavigateTasks}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -333,6 +397,7 @@ function ThemedApp() {
         onSave={handleCreateTask}
         onSignOut={() => void handleSignOut()}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
+        onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -347,9 +412,7 @@ function ThemedApp() {
         task={selectedTask}
         tasks={tasks}
         accessToken={accessToken ?? ''}
-        onTaskUpdated={(task) => {
-          setTasks((current) => current.map((item) => (item.id === task.id ? task : item)))
-        }}
+        onTaskUpdated={handleTaskUpdated}
         onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('tasks')}
         onEdit={() => void openEditTask(selectedTask.id)}
@@ -366,9 +429,11 @@ function ThemedApp() {
           setTasks((current) => current.map((task) => (task.id === selectedTask.id ? updatedTask : task)))
           setScreen('tasks')
           refreshSummary()
+          invalidateTaskFilters()
         }}
         onSignOut={() => void handleSignOut()}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
+        onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -381,12 +446,16 @@ function ThemedApp() {
     return (
       <EditTaskScreen
         task={selectedTask}
+        tasks={tasks}
+        accessToken={accessToken ?? ''}
         onBack={() => setScreen('taskDetails')}
         onCancel={() => setScreen('taskDetails')}
         onDelete={() => void handleDeleteTask(selectedTask.id)}
         onSave={(payload) => void handleUpdateTask(selectedTask.id, payload)}
+        onTaskUpdated={handleTaskUpdated}
         onSignOut={() => void handleSignOut()}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
+        onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -448,6 +517,7 @@ function ThemedApp() {
       onBack={() => setScreen('dashboard')}
       onSignOut={() => void handleSignOut()}
       onNavigateTasks={sidebarNav.onNavigateTasks}
+      onNavigateFocus={sidebarNav.onNavigateFocus}
       onNavigateCalendar={sidebarNav.onNavigateCalendar}
       onNavigateNotes={sidebarNav.onNavigateNotes}
       onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -465,3 +535,7 @@ function renderShell(content: ReactNode, overlay?: ReactNode) {
     </div>
   )
 }
+
+
+
+

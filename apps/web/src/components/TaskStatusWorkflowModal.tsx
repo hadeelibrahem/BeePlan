@@ -7,6 +7,11 @@ type TaskStatusWorkflowModalProps = {
   open: boolean
   status: TaskStatus
   progress: number
+  hasSubtasks?: boolean
+  subtasksComplete?: boolean
+  subtaskProgress?: number
+  completedSubtasksCount?: number
+  totalSubtasksCount?: number
   onClose: () => void
   onSave: (next: {
     status: TaskStatus
@@ -15,6 +20,8 @@ type TaskStatusWorkflowModalProps = {
     missedReason?: string
   }) => void
 }
+
+const SUBTASKS_INCOMPLETE_MESSAGE = 'Complete all subtasks before marking this task as Done.'
 
 const statusOptions: {
   value: TaskStatus
@@ -57,6 +64,11 @@ export function TaskStatusWorkflowModal({
   open,
   status,
   progress,
+  hasSubtasks = false,
+  subtasksComplete = true,
+  subtaskProgress = 0,
+  completedSubtasksCount = 0,
+  totalSubtasksCount = 0,
   onClose,
   onSave,
 }: TaskStatusWorkflowModalProps) {
@@ -74,11 +86,17 @@ export function TaskStatusWorkflowModal({
     setMissedReason('')
   }, [open, progress, status])
 
+  const doneDisabled = hasSubtasks && !subtasksComplete
+  const saveDisabled = selectedStatus === 'Done' && doneDisabled
+
   const helperText = useMemo(() => {
+    if (hasSubtasks) {
+      return `Calculated automatically from ${completedSubtasksCount} of ${totalSubtasksCount} subtasks completed.`
+    }
     if (selectedStatus === 'Done') return 'Completion details will be saved with this status.'
     if (selectedStatus === 'Missed') return 'Add a short reason so the timeline stays useful.'
     return 'Adjust progress before saving if the task moved forward.'
-  }, [selectedStatus])
+  }, [completedSubtasksCount, hasSubtasks, selectedStatus, totalSubtasksCount])
 
   if (!open) return null
 
@@ -95,38 +113,50 @@ export function TaskStatusWorkflowModal({
         <div className="space-y-3">
           {statusOptions.map((option) => {
             const isSelected = selectedStatus === option.value
+            const isDisabled = option.value === 'Done' && doneDisabled
 
             return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setSelectedStatus(option.value)}
-                className={`flex w-full items-center gap-4 rounded-[20px] border p-4 text-start transition duration-200 active:scale-[0.99] ${
-                  isSelected
-                    ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] shadow-lg shadow-black/20'
-                    : 'border-[var(--bp-border)] bg-[var(--bp-bg)] hover:border-[var(--bp-accent)]/50'
-                }`}
-                aria-pressed={isSelected}
-              >
-                <span
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-xs font-black ${
-                    isSelected
-                      ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
-                      : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${option.tone}`
+              <div key={option.value}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isDisabled) return
+                    setSelectedStatus(option.value)
+                  }}
+                  disabled={isDisabled}
+                  className={`flex w-full items-center gap-4 rounded-[20px] border p-4 text-start transition duration-200 active:scale-[0.99] ${
+                    isDisabled
+                      ? 'cursor-not-allowed border-[var(--bp-border)] bg-[var(--bp-bg)] opacity-50'
+                      : isSelected
+                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] shadow-lg shadow-black/20'
+                        : 'border-[var(--bp-border)] bg-[var(--bp-bg)] hover:border-[var(--bp-accent)]/50'
                   }`}
+                  aria-pressed={isSelected}
+                  aria-disabled={isDisabled}
                 >
-                  {option.icon}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-black text-[var(--bp-text)]">{option.title}</span>
-                  <span className="mt-1 block text-sm leading-5 text-[var(--bp-muted)]">{option.description}</span>
-                </span>
-                <span
-                  className={`h-5 w-5 rounded-full border transition ${
-                    isSelected ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]' : 'border-[var(--bp-border)]'
-                  }`}
-                />
-              </button>
+                  <span
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-xs font-black ${
+                      isSelected && !isDisabled
+                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
+                        : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${option.tone}`
+                    }`}
+                  >
+                    {option.icon}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-black text-[var(--bp-text)]">{option.title}</span>
+                    <span className="mt-1 block text-sm leading-5 text-[var(--bp-muted)]">{option.description}</span>
+                  </span>
+                  <span
+                    className={`h-5 w-5 rounded-full border transition ${
+                      isSelected && !isDisabled ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]' : 'border-[var(--bp-border)]'
+                    }`}
+                  />
+                </button>
+                {isDisabled ? (
+                  <p className="mt-2 px-1 text-xs font-semibold text-red-400">{SUBTASKS_INCOMPLETE_MESSAGE}</p>
+                ) : null}
+              </div>
             )
           })}
         </div>
@@ -137,18 +167,27 @@ export function TaskStatusWorkflowModal({
               <p className="text-sm font-black text-[var(--bp-text)]">Progress Percentage</p>
               <p className="mt-1 text-xs text-[var(--bp-muted)]">{helperText}</p>
             </div>
-            <span className="text-2xl font-black text-[var(--bp-accent)]">{progressValue}%</span>
+            <span className="text-2xl font-black text-[var(--bp-accent)]">{hasSubtasks ? subtaskProgress : progressValue}%</span>
           </div>
 
-          <input
-            aria-label="Progress percentage"
-            type="range"
-            min="0"
-            max="100"
-            value={progressValue}
-            onChange={(event) => setProgressValue(Number(event.target.value))}
-            className="w-full accent-[var(--bp-accent)]"
-          />
+          {hasSubtasks ? (
+            <div className="h-2 rounded-full bg-[var(--bp-border)]" aria-label="Progress calculated from subtasks">
+              <div
+                className="h-2 rounded-full bg-[var(--bp-accent)] transition-all"
+                style={{ width: `${subtaskProgress}%` }}
+              />
+            </div>
+          ) : (
+            <input
+              aria-label="Progress percentage"
+              type="range"
+              min="0"
+              max="100"
+              value={progressValue}
+              onChange={(event) => setProgressValue(Number(event.target.value))}
+              className="w-full accent-[var(--bp-accent)]"
+            />
+          )}
 
           {selectedStatus === 'Done' ? (
             <label className="mt-4 block">
@@ -184,11 +223,12 @@ export function TaskStatusWorkflowModal({
             onClick={() =>
               onSave({
                 status: selectedStatus,
-                progress: progressValue,
+                progress: hasSubtasks ? subtaskProgress : progressValue,
                 completionDate,
                 missedReason,
               })
             }
+            disabled={saveDisabled}
             className="w-full"
           >
             Save Status

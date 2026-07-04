@@ -105,7 +105,7 @@ describe('RemindersService (per-user ownership)', () => {
     db.select.mockReturnValue(emptyBuilder);
 
     await expect(
-      service.update(USER_B, REMINDER_ID, { title: 'hijacked' } as never),
+      service.update(USER_B, REMINDER_ID, { title: 'hijacked' }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(db.update).not.toHaveBeenCalled();
   });

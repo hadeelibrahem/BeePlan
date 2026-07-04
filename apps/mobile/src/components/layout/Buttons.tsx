@@ -9,9 +9,19 @@ type ButtonProps = {
   loading?: boolean
   className?: string
   fullWidth?: boolean
+  size?: 'sm' | 'md'
 }
 
-export function PrimaryButton({ children, onPress, disabled, loading, className = '', fullWidth }: ButtonProps) {
+const SIZE_CLASSES = {
+  sm: 'px-3 py-2.5',
+  md: 'px-5 py-4',
+}
+const SIZE_TEXT_CLASSES = {
+  sm: 'text-xs',
+  md: 'text-sm',
+}
+
+export function PrimaryButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -20,7 +30,7 @@ export function PrimaryButton({ children, onPress, disabled, loading, className 
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
-      className={`items-center justify-center rounded-2xl px-5 py-4 active:scale-[0.98] active:opacity-90 ${
+      className={`items-center justify-center rounded-xl active:scale-[0.98] active:opacity-90 ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
       style={{ backgroundColor: theme.colors.accent }}
@@ -28,7 +38,7 @@ export function PrimaryButton({ children, onPress, disabled, loading, className 
       {loading ? (
         <ActivityIndicator color={theme.colors.accentText} />
       ) : (
-        <Text className="text-sm font-black" style={{ color: theme.colors.accentText }}>
+        <Text className={`font-black ${SIZE_TEXT_CLASSES[size]}`} style={{ color: theme.colors.accentText }}>
           {children}
         </Text>
       )}
@@ -36,7 +46,7 @@ export function PrimaryButton({ children, onPress, disabled, loading, className 
   )
 }
 
-export function SecondaryButton({ children, onPress, disabled, loading, className = '', fullWidth }: ButtonProps) {
+export function SecondaryButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -45,7 +55,7 @@ export function SecondaryButton({ children, onPress, disabled, loading, classNam
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
-      className={`items-center justify-center rounded-2xl px-5 py-4 active:scale-[0.98] active:opacity-80 ${
+      className={`items-center justify-center rounded-xl active:scale-[0.98] active:opacity-80 ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
       style={{ backgroundColor: theme.colors.border }}
@@ -53,7 +63,7 @@ export function SecondaryButton({ children, onPress, disabled, loading, classNam
       {loading ? (
         <ActivityIndicator color={theme.colors.text} />
       ) : (
-        <Text className="text-sm font-bold" style={{ color: theme.colors.text }}>
+        <Text className={`font-bold ${SIZE_TEXT_CLASSES[size]}`} style={{ color: theme.colors.text }}>
           {children}
         </Text>
       )}
@@ -61,7 +71,7 @@ export function SecondaryButton({ children, onPress, disabled, loading, classNam
   )
 }
 
-export function OutlineButton({ children, onPress, disabled, loading, className = '', fullWidth }: ButtonProps) {
+export function OutlineButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -70,7 +80,7 @@ export function OutlineButton({ children, onPress, disabled, loading, className 
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
-      className={`items-center justify-center rounded-2xl border bg-transparent px-5 py-4 active:scale-[0.98] ${
+      className={`items-center justify-center rounded-xl border bg-transparent active:scale-[0.98] ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
       style={{ borderColor: theme.colors.border }}
@@ -78,7 +88,7 @@ export function OutlineButton({ children, onPress, disabled, loading, className 
       {loading ? (
         <ActivityIndicator color={theme.colors.text} />
       ) : (
-        <Text className="text-sm font-bold" style={{ color: theme.colors.text }}>
+        <Text className={`font-bold ${SIZE_TEXT_CLASSES[size]}`} style={{ color: theme.colors.text }}>
           {children}
         </Text>
       )}
@@ -86,7 +96,7 @@ export function OutlineButton({ children, onPress, disabled, loading, className 
   )
 }
 
-export function DangerButton({ children, onPress, disabled, loading, className = '', fullWidth }: ButtonProps) {
+export function DangerButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -95,7 +105,7 @@ export function DangerButton({ children, onPress, disabled, loading, className =
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
-      className={`items-center justify-center rounded-2xl px-5 py-4 active:scale-[0.98] ${
+      className={`items-center justify-center rounded-xl active:scale-[0.98] ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
       style={{ backgroundColor: `${theme.colors.error}26` }}
@@ -103,7 +113,7 @@ export function DangerButton({ children, onPress, disabled, loading, className =
       {loading ? (
         <ActivityIndicator color={theme.colors.error} />
       ) : (
-        <Text className="text-sm font-black" style={{ color: theme.colors.error }}>
+        <Text className={`font-black ${SIZE_TEXT_CLASSES[size]}`} style={{ color: theme.colors.error }}>
           {children}
         </Text>
       )}

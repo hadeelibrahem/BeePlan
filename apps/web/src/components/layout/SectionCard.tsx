@@ -7,7 +7,7 @@ type SectionCardProps = {
 
 export function SectionCard({ children, className = '' }: SectionCardProps) {
   return (
-    <section className={`rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-surface)] p-6 shadow-xl ${className}`}>
+    <section className={`rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 shadow-xl ${className}`}>
       {children}
     </section>
   )

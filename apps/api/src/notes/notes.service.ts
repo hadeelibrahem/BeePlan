@@ -38,7 +38,9 @@ export class NotesService {
     const [row] = await this.db
       .select()
       .from(standaloneNotes)
-      .where(and(eq(standaloneNotes.id, id), eq(standaloneNotes.userId, userId)));
+      .where(
+        and(eq(standaloneNotes.id, id), eq(standaloneNotes.userId, userId)),
+      );
 
     if (!row) {
       throw new NotFoundException('Note not found.');
@@ -67,10 +69,14 @@ export class NotesService {
       .update(standaloneNotes)
       .set({
         ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
-        ...(dto.content !== undefined ? { content: dto.content.trim() || null } : {}),
+        ...(dto.content !== undefined
+          ? { content: dto.content.trim() || null }
+          : {}),
         updatedAt: new Date(),
       })
-      .where(and(eq(standaloneNotes.id, id), eq(standaloneNotes.userId, userId)))
+      .where(
+        and(eq(standaloneNotes.id, id), eq(standaloneNotes.userId, userId)),
+      )
       .returning();
 
     return this.toEntity(row);
@@ -80,6 +86,8 @@ export class NotesService {
     await this.findOne(userId, id);
     await this.db
       .delete(standaloneNotes)
-      .where(and(eq(standaloneNotes.id, id), eq(standaloneNotes.userId, userId)));
+      .where(
+        and(eq(standaloneNotes.id, id), eq(standaloneNotes.userId, userId)),
+      );
   }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { PrimaryButton, SecondaryButton } from './layout'
 import { useTheme } from '../theme/useTheme'
 
@@ -9,6 +10,11 @@ type TaskStatusWorkflowSheetProps = {
   visible: boolean
   status: TaskStatus
   progress: number
+  hasSubtasks?: boolean
+  subtasksComplete?: boolean
+  subtaskProgress?: number
+  completedSubtasksCount?: number
+  totalSubtasksCount?: number
   onClose: () => void
   onSave: (next: {
     status: TaskStatus
@@ -17,6 +23,8 @@ type TaskStatusWorkflowSheetProps = {
     missedReason?: string
   }) => void
 }
+
+const SUBTASKS_INCOMPLETE_MESSAGE = 'Complete all subtasks before marking this task as Done.'
 
 const statusOptions: {
   value: TaskStatus
@@ -54,11 +62,17 @@ export function TaskStatusWorkflowSheet({
   visible,
   status,
   progress,
+  hasSubtasks = false,
+  subtasksComplete = true,
+  subtaskProgress = 0,
+  completedSubtasksCount = 0,
+  totalSubtasksCount = 0,
   onClose,
   onSave,
 }: TaskStatusWorkflowSheetProps) {
   const { theme } = useTheme()
   const { colors } = theme
+  const insets = useSafeAreaInsets()
   const [selectedStatus, setSelectedStatus] = useState<TaskStatus>(status)
   const [progressValue, setProgressValue] = useState(progress)
   const [completionDate, setCompletionDate] = useState('')
@@ -73,11 +87,17 @@ export function TaskStatusWorkflowSheet({
     setMissedReason('')
   }, [progress, status, visible])
 
+  const doneDisabled = hasSubtasks && !subtasksComplete
+  const saveDisabled = selectedStatus === 'Done' && doneDisabled
+
   const helperText = useMemo(() => {
+    if (hasSubtasks) {
+      return `Calculated automatically from ${completedSubtasksCount} of ${totalSubtasksCount} subtasks completed.`
+    }
     if (selectedStatus === 'Done') return 'Completion details will be saved with this status.'
     if (selectedStatus === 'Missed') return 'Add a short reason so the timeline stays useful.'
     return 'Adjust progress before saving if the task moved forward.'
-  }, [selectedStatus])
+  }, [completedSubtasksCount, hasSubtasks, selectedStatus, totalSubtasksCount])
 
   const toneColor = (tone: (typeof statusOptions)[number]['tone']) => {
     if (tone === 'primary') return colors.primary
@@ -92,11 +112,12 @@ export function TaskStatusWorkflowSheet({
         <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" accessibilityLabel="Close status sheet" />
 
         <View
-          className="rounded-t-[28px] border px-5 pb-5 pt-3"
+          className="rounded-t-[28px] border px-5 pt-3"
           style={{
             maxHeight: '88%',
             backgroundColor: colors.surfaceElevated,
             borderColor: colors.border,
+            paddingBottom: insets.bottom + 20,
             shadowColor: theme.cardShadow.color,
             shadowOpacity: theme.cardShadow.opacity,
             shadowRadius: theme.cardShadow.radius,
@@ -119,48 +140,60 @@ export function TaskStatusWorkflowSheet({
               {statusOptions.map((option) => {
                 const isSelected = selectedStatus === option.value
                 const color = toneColor(option.tone)
+                const isDisabled = option.value === 'Done' && doneDisabled
 
                 return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() => setSelectedStatus(option.value)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: isSelected }}
-                    className="flex-row items-center gap-4 rounded-3xl border p-4 active:scale-[0.99] active:opacity-90"
-                    style={{
-                      backgroundColor: isSelected ? colors.accentSoft : colors.background,
-                      borderColor: isSelected ? colors.accent : colors.border,
-                    }}
-                  >
-                    <View
-                      className="h-12 w-12 items-center justify-center rounded-2xl border"
+                  <View key={option.value}>
+                    <Pressable
+                      onPress={() => {
+                        if (isDisabled) return
+                        setSelectedStatus(option.value)
+                      }}
+                      disabled={isDisabled}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected, disabled: isDisabled }}
+                      className="flex-row items-center gap-4 rounded-3xl border p-4 active:scale-[0.99] active:opacity-90"
                       style={{
-                        backgroundColor: isSelected ? colors.accent : colors.card,
-                        borderColor: isSelected ? colors.accent : colors.border,
+                        backgroundColor: isSelected && !isDisabled ? colors.accentSoft : colors.background,
+                        borderColor: isSelected && !isDisabled ? colors.accent : colors.border,
+                        opacity: isDisabled ? 0.5 : 1,
                       }}
                     >
-                      <Text className="text-xs font-black" style={{ color: isSelected ? colors.accentText : color }}>
-                        {option.icon}
-                      </Text>
-                    </View>
+                      <View
+                        className="h-12 w-12 items-center justify-center rounded-2xl border"
+                        style={{
+                          backgroundColor: isSelected && !isDisabled ? colors.accent : colors.card,
+                          borderColor: isSelected && !isDisabled ? colors.accent : colors.border,
+                        }}
+                      >
+                        <Text className="text-xs font-black" style={{ color: isSelected && !isDisabled ? colors.accentText : color }}>
+                          {option.icon}
+                        </Text>
+                      </View>
 
-                    <View className="flex-1">
-                      <Text className="font-black" style={{ color: colors.text }}>
-                        {option.value}
-                      </Text>
-                      <Text className="mt-1 text-sm leading-5" style={{ color: colors.secondaryText }}>
-                        {option.description}
-                      </Text>
-                    </View>
+                      <View className="flex-1">
+                        <Text className="font-black" style={{ color: colors.text }}>
+                          {option.value}
+                        </Text>
+                        <Text className="mt-1 text-sm leading-5" style={{ color: colors.secondaryText }}>
+                          {option.description}
+                        </Text>
+                      </View>
 
-                    <View
-                      className="h-5 w-5 rounded-full border"
-                      style={{
-                        borderColor: isSelected ? colors.accent : colors.border,
-                        backgroundColor: isSelected ? colors.accent : 'transparent',
-                      }}
-                    />
-                  </Pressable>
+                      <View
+                        className="h-5 w-5 rounded-full border"
+                        style={{
+                          borderColor: isSelected && !isDisabled ? colors.accent : colors.border,
+                          backgroundColor: isSelected && !isDisabled ? colors.accent : 'transparent',
+                        }}
+                      />
+                    </Pressable>
+                    {isDisabled ? (
+                      <Text className="mt-2 px-1 text-xs font-semibold" style={{ color: colors.error }}>
+                        {SUBTASKS_INCOMPLETE_MESSAGE}
+                      </Text>
+                    ) : null}
+                  </View>
                 )
               })}
             </View>
@@ -176,30 +209,35 @@ export function TaskStatusWorkflowSheet({
                   </Text>
                 </View>
                 <Text className="text-3xl font-black" style={{ color: colors.accent }}>
-                  {progressValue}%
+                  {hasSubtasks ? subtaskProgress : progressValue}%
                 </Text>
               </View>
 
               <View className="h-3 overflow-hidden rounded-full" style={{ backgroundColor: colors.progressTrack }}>
-                <View className="h-full rounded-full" style={{ width: `${progressValue}%`, backgroundColor: colors.accent }} />
+                <View
+                  className="h-full rounded-full"
+                  style={{ width: `${hasSubtasks ? subtaskProgress : progressValue}%`, backgroundColor: colors.accent }}
+                />
               </View>
 
-              <View className="mt-4 flex-row gap-2">
-                {[0, 25, 50, 75, 100].map((value) => (
-                  <Pressable
-                    key={value}
-                    onPress={() => setProgressValue(value)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Set progress to ${value} percent`}
-                    className="flex-1 items-center rounded-2xl py-3 active:opacity-80"
-                    style={{ backgroundColor: progressValue === value ? colors.accent : colors.card }}
-                  >
-                    <Text className="text-xs font-black" style={{ color: progressValue === value ? colors.accentText : colors.text }}>
-                      {value}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
+              {hasSubtasks ? null : (
+                <View className="mt-4 flex-row gap-2">
+                  {[0, 25, 50, 75, 100].map((value) => (
+                    <Pressable
+                      key={value}
+                      onPress={() => setProgressValue(value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set progress to ${value} percent`}
+                      className="flex-1 items-center rounded-2xl py-3 active:opacity-80"
+                      style={{ backgroundColor: progressValue === value ? colors.accent : colors.card }}
+                    >
+                      <Text className="text-xs font-black" style={{ color: progressValue === value ? colors.accentText : colors.text }}>
+                        {value}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
 
               {selectedStatus === 'Done' ? (
                 <View className="mt-4">
@@ -245,11 +283,12 @@ export function TaskStatusWorkflowSheet({
               onPress={() =>
                 onSave({
                   status: selectedStatus,
-                  progress: progressValue,
+                  progress: hasSubtasks ? subtaskProgress : progressValue,
                   completionDate,
                   missedReason,
                 })
               }
+              disabled={saveDisabled}
               className="flex-1"
             >
               Save Status

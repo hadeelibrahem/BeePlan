@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type SubtaskFormValues = {
   title: string;
@@ -43,6 +44,7 @@ type Props = {
 
 export default function SubtaskFormModal({ visible, mode, initialValues, onCancel, onDelete, onSubmit }: Props) {
   const [values, setValues] = useState<SubtaskFormValues>({ ...emptyValues, ...initialValues });
+  const insets = useSafeAreaInsets();
   const isEdit = mode === 'edit';
   const update = <K extends keyof SubtaskFormValues>(key: K, value: SubtaskFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }));
@@ -50,7 +52,10 @@ export default function SubtaskFormModal({ visible, mode, initialValues, onCance
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
       <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
-        <View className="max-h-[92%] rounded-t-[28px] border-t p-5" style={{ backgroundColor: palette.bg, borderColor: palette.border }}>
+        <View
+          className="max-h-[92%] rounded-t-[28px] border-t px-5 pt-5"
+          style={{ backgroundColor: palette.bg, borderColor: palette.border, paddingBottom: insets.bottom + 20 }}
+        >
           <View className="mb-5 flex-row items-start justify-between">
             <View className="flex-1">
               <TouchableOpacity onPress={onCancel} className="mb-3 flex-row items-center gap-2">

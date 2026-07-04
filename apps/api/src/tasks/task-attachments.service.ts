@@ -141,23 +141,39 @@ export class TaskAttachmentsService {
     const [row] = await this.db
       .select()
       .from(taskAttachments)
-      .where(and(eq(taskAttachments.id, attachmentId), eq(taskAttachments.taskId, taskId)));
+      .where(
+        and(
+          eq(taskAttachments.id, attachmentId),
+          eq(taskAttachments.taskId, taskId),
+        ),
+      );
 
     if (!row) {
       throw new NotFoundException('Attachment not found.');
     }
 
-    await this.db.delete(taskAttachments).where(eq(taskAttachments.id, attachmentId));
+    await this.db
+      .delete(taskAttachments)
+      .where(eq(taskAttachments.id, attachmentId));
     await this.deleteFile(row.storageKey);
   }
 
-  async getFileForDownload(userId: string, taskId: string, attachmentId: string) {
+  async getFileForDownload(
+    userId: string,
+    taskId: string,
+    attachmentId: string,
+  ) {
     await this.getTaskForUser(userId, taskId);
 
     const [row] = await this.db
       .select()
       .from(taskAttachments)
-      .where(and(eq(taskAttachments.id, attachmentId), eq(taskAttachments.taskId, taskId)));
+      .where(
+        and(
+          eq(taskAttachments.id, attachmentId),
+          eq(taskAttachments.taskId, taskId),
+        ),
+      );
 
     if (!row) {
       throw new NotFoundException('Attachment not found.');

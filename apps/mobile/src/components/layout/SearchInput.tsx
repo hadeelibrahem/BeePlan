@@ -11,7 +11,7 @@ export function SearchInput({ value, onChangeText, placeholder = 'Search...' }: 
   const { theme } = useTheme()
 
   return (
-    <View className="mb-5 flex-row items-center rounded-2xl px-4 py-3.5" style={{ backgroundColor: theme.colors.input }}>
+    <View className="mb-3 flex-row items-center rounded-xl px-3 py-2.5" style={{ backgroundColor: theme.colors.input }}>
       <Text className="mr-2 text-sm" style={{ color: theme.colors.secondaryText }}>{'🔍'}</Text>
       <TextInput
         value={value}

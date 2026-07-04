@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { normalizeReminderDraft, ReminderDraft } from './reminder-draft';
@@ -72,7 +77,9 @@ export class AiService {
       this.logger.error(
         `Qwen request failed: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
-      throw new InternalServerErrorException('Failed to parse reminder with AI.');
+      throw new InternalServerErrorException(
+        'Failed to parse reminder with AI.',
+      );
     }
 
     return this.toDraft(raw);
@@ -133,7 +140,9 @@ export class AiService {
       parsed = JSON.parse(cleaned);
     } catch {
       this.logger.error('Qwen returned a response that was not valid JSON.');
-      throw new InternalServerErrorException('AI returned an invalid response.');
+      throw new InternalServerErrorException(
+        'AI returned an invalid response.',
+      );
     }
 
     return normalizeReminderDraft(parsed);

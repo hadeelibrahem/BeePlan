@@ -274,13 +274,16 @@ export async function deleteReminder(id: string, accessToken: string): Promise<v
   await apiRequest(`/reminders/${id}`, accessToken, { method: 'DELETE' });
 }
 
-export async function toggleReminderStatus(id: string, accessToken: string): Promise<Reminder | null> {
-  const current = await getReminderById(id, accessToken);
-  if (!current) return null;
-
+export async function toggleReminderStatus(
+  id: string,
+  accessToken: string,
+  currentStatus: Reminder['status'],
+): Promise<Reminder | null> {
+  // Takes the caller's already-known status instead of doing a GET just to
+  // read it back — the caller (reminders list/state) always has it locally.
   const data = await apiRequest<ReminderResponse>(`/reminders/${id}`, accessToken, {
     method: 'PATCH',
-    body: JSON.stringify({ status: current.status === 'done' ? 'active' : 'done' }),
+    body: JSON.stringify({ status: currentStatus === 'done' ? 'active' : 'done' }),
   });
 
   return fromResponse(data);

@@ -160,7 +160,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
     return (
       <AppScreen>
         <PageHeader title="Edit Task" subtitle="No task selected" onBack={onBack} />
-        <SectionCard className="mb-5">
+        <SectionCard className="mb-3">
           <Text style={{ color: colors.secondaryText }}>This task could not be loaded. Go back and try again.</Text>
         </SectionCard>
       </AppScreen>
@@ -196,7 +196,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
           value={title}
           onChangeText={setTitle}
           placeholderTextColor={colors.placeholder}
-          className="mb-5 rounded-2xl border px-4 py-4 text-sm"
+          className="mb-3 rounded-xl border px-3 py-2.5 text-sm"
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
 
@@ -207,7 +207,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
           onChangeText={setDescription}
           placeholderTextColor={colors.placeholder}
           textAlignVertical="top"
-          className="mb-5 h-32 rounded-2xl border px-4 py-4 text-sm"
+          className="mb-3 h-24 rounded-xl border px-3 py-2.5 text-sm"
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
 
@@ -217,12 +217,12 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
             <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />
           ))}
         </View>
-        {error ? <Text className="mt-3 text-sm font-bold text-red-300">{error}</Text> : null}
+        {error ? <Text className="mt-2 text-sm font-bold text-red-300">{error}</Text> : null}
       </Card>
 
       <Card title="Task Settings">
         <Label text="Priority" />
-        <View className="mb-5 flex-row flex-wrap gap-2">
+        <View className="mb-3 flex-row flex-wrap gap-2">
           {PRIORITIES.map((item) => (
             <Segment
               key={item}
@@ -235,13 +235,13 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
         </View>
 
         <Label text="Status" />
-        <View className="mb-5 flex-row flex-wrap gap-2">
+        <View className="mb-3 flex-row flex-wrap gap-2">
           {STATUSES.map((item) => (
             <Chip key={item} label={item} active={status === item} onPress={() => setStatus(item)} />
           ))}
         </View>
 
-        <View className="flex-row gap-3">
+        <View className="flex-row gap-2">
           <View className="flex-1">
             <Label text="Due Date" />
             <Select label={formatDateLabel(dueDate)} onPress={openDatePicker} />
@@ -254,7 +254,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
       </Card>
 
       <Card title="Progress & Time Estimation">
-        <View className="flex-row gap-3">
+        <View className="flex-row gap-2">
           <View className="flex-1">
             <Label text="Estimated Hours" />
             <TextInput
@@ -262,7 +262,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
               onChangeText={setEstimatedHours}
               keyboardType="numeric"
               placeholderTextColor={colors.placeholder}
-              className="mb-5 rounded-2xl border px-4 py-4 text-sm"
+              className="mb-3 rounded-xl border px-3 py-2.5 text-sm"
               style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
             />
           </View>
@@ -273,7 +273,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
               onChangeText={setSpentHours}
               keyboardType="numeric"
               placeholderTextColor={colors.placeholder}
-              className="mb-5 rounded-2xl border px-4 py-4 text-sm"
+              className="mb-3 rounded-xl border px-3 py-2.5 text-sm"
               style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
             />
           </View>
@@ -290,7 +290,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
           onChangeText={setNotes}
           placeholderTextColor={colors.placeholder}
           textAlignVertical="top"
-          className="h-28 rounded-2xl border px-4 py-4 text-sm"
+          className="h-20 rounded-xl border px-3 py-2.5 text-sm"
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
       </Card>
@@ -365,8 +365,8 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
   const { colors } = theme;
 
   return (
-    <SectionCard className="mb-5">
-      <Text className="mb-5 text-lg font-black" style={{ color: colors.text }}>{title}</Text>
+    <SectionCard className="mb-3">
+      <Text className="mb-3 text-base font-black" style={{ color: colors.text }}>{title}</Text>
       {children}
     </SectionCard>
   );
@@ -376,7 +376,7 @@ function Label({ text }: { text: string }) {
   const { theme } = useTheme();
 
   return (
-    <Text className="mb-2 text-xs font-black uppercase tracking-wide" style={{ color: theme.colors.secondaryText }}>
+    <Text className="mb-1.5 text-xs font-black uppercase tracking-wide" style={{ color: theme.colors.secondaryText }}>
       {text}
     </Text>
   );
@@ -391,7 +391,7 @@ function Segment({ label, active, color, onPress }: { label: string; active?: bo
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="rounded-2xl border px-3 py-3 active:opacity-80"
+      className="rounded-xl border px-2 py-2 active:opacity-80"
       style={{
         borderColor: active ? colors.accent : colors.border,
         backgroundColor: active ? colors.accentSoft : colors.input,
@@ -411,7 +411,7 @@ function Chip({ label, active, onPress }: { label: string; active?: boolean; onP
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="rounded-full px-4 py-3 active:opacity-80"
+      className="rounded-full px-3 py-2 active:opacity-80"
       style={{ backgroundColor: active ? colors.accent : colors.input }}
     >
       <Text className="text-xs font-bold" style={{ color: active ? colors.accentText : colors.text }}>{label}</Text>
@@ -428,10 +428,10 @@ function Select({ label, onPress }: { label: string; onPress?: () => void }) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className="rounded-2xl border px-4 py-4 active:opacity-80"
+      className="rounded-xl border px-3 py-2.5 active:opacity-80"
       style={{ borderColor: colors.border, backgroundColor: colors.input }}
     >
-      <Text style={{ color: colors.text }}>{label}</Text>
+      <Text className="text-sm" style={{ color: colors.text }}>{label}</Text>
     </Pressable>
   );
 }

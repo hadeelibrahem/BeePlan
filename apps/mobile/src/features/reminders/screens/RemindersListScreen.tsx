@@ -72,7 +72,7 @@ export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, o
           onPress={onBack}
           accessibilityRole="button"
           accessibilityLabel={t('actions.back')}
-          className="mb-4 h-8 w-8 items-center justify-center rounded-full border active:opacity-70"
+          className="mb-3 h-8 w-8 items-center justify-center rounded-full border active:opacity-70"
           style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }}
         >
           <Text className="text-sm font-black" style={{ color: theme.colors.text }}>{'←'}</Text>
@@ -90,7 +90,7 @@ export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, o
           description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
         />
       ) : (
-        <View className="gap-3">
+        <View className="gap-2">
           {filtered.map((reminder) => (
             <ReminderCard
               key={reminder.id}

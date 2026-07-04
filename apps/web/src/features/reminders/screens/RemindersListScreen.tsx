@@ -34,6 +34,7 @@ export function RemindersListScreen({
   onBack,
   onSignOut,
   onNavigateTasks,
+  onNavigateFocus,
   onNavigateCalendar,
   onNavigateNotes,
   onNavigateAnalytics,
@@ -81,6 +82,7 @@ export function RemindersListScreen({
       active="reminders"
       onNavigateDashboard={onBack}
       onNavigateTasks={onNavigateTasks}
+      onNavigateFocus={onNavigateFocus}
       onNavigateCalendar={onNavigateCalendar}
       onNavigateNotes={onNavigateNotes}
       onNavigateAnalytics={onNavigateAnalytics}
@@ -106,47 +108,47 @@ export function RemindersListScreen({
         }
       />
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+      <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
         <StatsCard
-          icon={<RemindersIcon className="h-5 w-5" />}
+          icon={<RemindersIcon className="h-4 w-4" />}
           value={String(totalCount)}
           title={t('dashboard.statTotal')}
           desc={t('dashboard.statTotalDesc')}
         />
         <StatsCard
-          icon={<RemindersIcon className="h-5 w-5" />}
+          icon={<RemindersIcon className="h-4 w-4" />}
           value={String(activeCount)}
           title={t('dashboard.statActive')}
           desc={t('dashboard.statActiveDesc')}
         />
         <StatsCard
-          icon={<RemindersIcon className="h-5 w-5" />}
+          icon={<RemindersIcon className="h-4 w-4" />}
           value={String(completedCount)}
           title={t('dashboard.statCompleted')}
           desc={t('dashboard.statCompletedDesc')}
         />
         <StatsCard
-          icon={<RemindersIcon className="h-5 w-5" />}
+          icon={<RemindersIcon className="h-4 w-4" />}
           value={String(highPriorityCount)}
           title={t('dashboard.statHighPriority')}
           desc={t('dashboard.statHighPriorityDesc')}
         />
       </section>
 
-      <div className="mb-6">
+      <div className="mb-4">
         <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
-          icon={<RemindersIcon className="h-6 w-6" />}
+          icon={<RemindersIcon className="h-5 w-5" />}
           title={search ? t('dashboard.noResults') : t('dashboard.noReminders')}
           description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
           actionLabel={search ? undefined : t('dashboard.newReminder')}
           onAction={search ? undefined : onCreate}
         />
       ) : (
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {filtered.map((reminder) => (
             <ReminderCard
               key={reminder.id}

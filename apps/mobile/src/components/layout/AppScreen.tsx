@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../theme/useTheme'
 
 type AppScreenProps = {
@@ -12,6 +12,12 @@ type AppScreenProps = {
   contentClassName?: string
 }
 
+// Generous allowance for a fixed footer (BottomActionBar or BottomNavBar), which
+// float above content on their own safe-area padding — this just keeps the last
+// scrolled card clear of them. insets.bottom is added on top for notched/gesture devices.
+const FOOTER_CONTENT_ALLOWANCE = 160
+const NO_FOOTER_CONTENT_GAP = 24
+
 export function AppScreen({
   children,
   scroll = true,
@@ -21,17 +27,22 @@ export function AppScreen({
   contentClassName = '',
 }: AppScreenProps) {
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
+  const bottomPadding = insets.bottom + (footer ? FOOTER_CONTENT_ALLOWANCE : NO_FOOTER_CONTENT_GAP)
+
   const content = scroll ? (
     <ScrollView
       className={`flex-1 px-4 pt-6 ${contentClassName}`}
-      contentContainerStyle={{ paddingBottom: footer ? 140 : 32 }}
+      contentContainerStyle={{ paddingBottom: bottomPadding }}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
       {children}
     </ScrollView>
   ) : (
-    <View className={`flex-1 px-4 pt-6 ${contentClassName}`}>{children}</View>
+    <View className={`flex-1 px-4 pt-6 ${contentClassName}`} style={{ paddingBottom: bottomPadding }}>
+      {children}
+    </View>
   )
 
   return (

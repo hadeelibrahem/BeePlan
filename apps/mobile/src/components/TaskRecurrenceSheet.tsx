@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
 import { useTheme } from '../theme/useTheme'
 
@@ -88,6 +89,7 @@ export function TaskRecurrenceSheet({
 }: TaskRecurrenceSheetProps) {
   const { theme } = useTheme()
   const { colors } = theme
+  const insets = useSafeAreaInsets()
   const [draft, setDraft] = useState<RecurrenceSettings>(recurrence ?? defaultRecurrenceSettings)
   const [error, setError] = useState('')
 
@@ -132,11 +134,12 @@ export function TaskRecurrenceSheet({
         <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" accessibilityLabel="Close recurrence sheet" />
 
         <View
-          className="rounded-t-[28px] border px-5 pb-5 pt-3"
+          className="rounded-t-[28px] border px-5 pt-3"
           style={{
             maxHeight: '90%',
             backgroundColor: colors.surfaceElevated,
             borderColor: colors.border,
+            paddingBottom: insets.bottom + 20,
             shadowColor: theme.cardShadow.color,
             shadowOpacity: theme.cardShadow.opacity,
             shadowRadius: theme.cardShadow.radius,

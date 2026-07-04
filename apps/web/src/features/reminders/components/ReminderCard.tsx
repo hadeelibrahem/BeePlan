@@ -46,7 +46,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
         completed ? 'opacity-60' : ''
       }`}
     >
-      <div className="flex w-full items-start gap-3 px-4 py-4 text-start">
+      <div className="flex w-full items-start gap-3 px-3 py-3 text-start">
         {onToggle && (
           <button
             type="button"

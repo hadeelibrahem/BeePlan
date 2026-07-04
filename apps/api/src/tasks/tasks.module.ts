@@ -22,6 +22,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
     }),
   ],
   controllers: [TasksController],
-  providers: [TasksService, RecurringTaskSchedulerService, TaskAttachmentsService, JwtAuthGuard],
+  providers: [
+    TasksService,
+    RecurringTaskSchedulerService,
+    TaskAttachmentsService,
+    JwtAuthGuard,
+  ],
 })
 export class TasksModule {}

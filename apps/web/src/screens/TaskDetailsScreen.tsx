@@ -1,49 +1,23 @@
-﻿import { useEffect, useState, type MouseEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
-import {
-  TaskDependenciesWorkflowModal,
-  type DependencyTask,
-} from '../components/TaskDependenciesWorkflowModal'
-import {
-  TaskRecurrenceModal,
-  createRecurrenceSummary,
-  getNextOccurrenceLabel,
-  type RecurrenceSettings,
-} from '../components/TaskRecurrenceModal'
+import { DangerButton, OutlineButton, PrimaryButton } from '../components/layout/Buttons'
+import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
+import { createRecurrenceSummary, getNextOccurrenceLabel } from '../components/TaskRecurrenceModal'
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import {
-  addDependencies,
-  addSubtask,
-  addTaskLabel,
   changeTaskStatus,
-  deleteAttachment,
-  deleteSubtask,
   getAttachments,
-  getDependencies,
-  getRecurrence,
-  getSubtasks,
-  getTaskActivity,
-  getTaskLabels,
   openAttachment,
-  removeDependency,
-  removeTaskLabel,
-  removeRecurrence,
-  replaceDependency,
-  recurrenceToApi,
   recurrenceToUi,
-  saveRecurrence,
   toApiStatus,
   toUiPriority,
   toUiStatus,
   updateSubtask,
-  updateTask,
-  uploadAttachment,
   type ApiTask,
   type ApiTaskActivity,
   type ApiSubtask,
-  type ApiTaskLabel,
   type ApiTaskAttachment,
 } from '../lib/tasksApi'
 
@@ -68,40 +42,38 @@ export default function TaskDetailsScreen({
   onBack,
   onEdit,
   onDelete,
-  onMarkDone,
   onSignOut,
   ...nav
 }: TaskDetailsScreenProps) {
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const [search, setSearch] = useState('')
-  const currentTaskId = task?.id ?? ''
   const [status, setStatus] = useState<TaskStatus>(toTaskStatus(task))
   const [progress, setProgress] = useState(task?.progress ?? 0)
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
   const [dependencies, setDependencies] = useState<DependencyTask[]>(
     task ? toDependencyTasks(task.dependencies) : [],
   )
-  const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(
-    task ? recurrenceToUi(task.recurrence) : null,
-  )
-  const [labels, setLabels] = useState<ApiTaskLabel[]>(toLabelDetails(task))
+  const [recurrence, setRecurrence] = useState(task ? recurrenceToUi(task.recurrence) : null)
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? [])
   const [activityItems, setActivityItems] = useState<ApiTaskActivity[]>(task?.activities ?? [])
-  const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>(task?.attachments ?? [])
-  const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
+  const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([])
   const [error, setError] = useState('')
-  const [uploadingAttachment, setUploadingAttachment] = useState(false)
-  const [dependencyModal, setDependencyModal] = useState<{
-    mode: 'add' | 'edit' | 'remove'
-    dependency?: DependencyTask | null
-  } | null>(null)
-  const availableDependencies = tasks.length ? toDependencyTasks(tasks) : []
-  const displaySubtasks = subtaskItems.map(toUiSubtask)
-  const displayActivities = activityItems
-  const displayAttachments = attachmentItems
-  const completedSubtasksCount = subtaskItems.filter((subtask) => subtask.isDone).length
-  const dependenciesComplete = dependencies.length > 0 && dependencies.every((item) => item.status === 'Done')
+
+  const latestActivity = useMemo(
+    () =>
+      [...activityItems].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0],
+    [activityItems],
+  )
+  const completedSubtasksCount = useMemo(
+    () => subtaskItems.filter((subtask) => subtask.isDone).length,
+    [subtaskItems],
+  )
+  const dependenciesComplete = useMemo(
+    () => dependencies.length > 0 && dependencies.every((item) => item.status === 'Done'),
+    [dependencies],
+  )
+  const isBlocked = dependencies.length > 0 && !dependenciesComplete
   const recurrenceSummary = task?.recurrence?.summary ?? createRecurrenceSummary(recurrence)
   const nextOccurrence =
     task?.recurrence?.nextOccurrenceDate
@@ -110,6 +82,7 @@ export default function TaskDetailsScreen({
   const reminderText = task?.reminderEnabled
     ? `${task.reminderBeforeMinutes ?? 30} minutes before due date`
     : 'No reminder set'
+  const focusText = task?.isFocusTask ? 'Enabled' : 'Not set'
 
   useEffect(() => {
     if (!task) return
@@ -118,289 +91,141 @@ export default function TaskDetailsScreen({
     setProgress(task.progress)
     setDependencies(toDependencyTasks(task.dependencies))
     setRecurrence(recurrenceToUi(task.recurrence))
-    setLabels(toLabelDetails(task))
     setSubtaskItems(task.subtasks)
     setActivityItems(task.activities)
-    setAttachmentItems(task.attachments)
   }, [task])
 
   useEffect(() => {
     if (!task || !accessToken) return
+    let cancelled = false
 
-    Promise.all([
-      getTaskLabels(accessToken, task.id),
-      getSubtasks(accessToken, task.id),
-      getDependencies(accessToken, task.id),
-      getRecurrence(accessToken, task.id),
-      getTaskActivity(accessToken, task.id),
-      getAttachments(accessToken, task.id),
-    ])
-      .then(([nextLabels, nextSubtasks, nextDependencies, nextRecurrence, nextActivity, nextAttachments]) => {
-        setLabels(nextLabels)
-        setSubtaskItems(nextSubtasks)
-        setDependencies(toDependencyTasks(nextDependencies))
-        setRecurrence(recurrenceToUi(nextRecurrence))
-        setActivityItems(nextActivity)
-        setAttachmentItems(nextAttachments)
+    getAttachments(accessToken, task.id)
+      .then((items) => {
+        if (!cancelled) setAttachmentItems(items)
       })
-      .catch((taskDetailsError: unknown) => {
-        console.error('[BeePlan Tasks] Unable to load task details sections', taskDetailsError)
+      .catch((fetchError: unknown) => {
+        if (!cancelled) {
+          setError(fetchError instanceof Error ? fetchError.message : 'Unable to load attachments.')
+        }
       })
-  }, [accessToken, task?.id])
 
-  async function handleAddLabel() {
-    if (!task || !accessToken) return
-    const name = window.prompt('Label name')
-    if (!name?.trim()) return
-
-    try {
-      const updatedLabels = await addTaskLabel(accessToken, task.id, name)
-      setLabels(updatedLabels)
-      getTaskActivity(accessToken, task.id).then(setActivityItems).catch(() => undefined)
-      onTaskUpdated?.({ ...task, labels: updatedLabels.map((label) => label.name), labelDetails: updatedLabels })
-    } catch (labelError) {
-      setError(labelError instanceof Error ? labelError.message : 'Unable to add label.')
+    return () => {
+      cancelled = true
     }
-  }
+  }, [task, accessToken])
 
-  async function handleRemoveLabel(label: ApiTaskLabel) {
-    if (!task || !accessToken) return
+  const handleOpenAttachment = useCallback(
+    async (attachment: ApiTaskAttachment) => {
+      if (!task || !accessToken || !attachment.id) return
 
-    try {
-      const updatedLabels = await removeTaskLabel(accessToken, task.id, label.id)
-      setLabels(updatedLabels)
-      getTaskActivity(accessToken, task.id).then(setActivityItems).catch(() => undefined)
-      onTaskUpdated?.({ ...task, labels: updatedLabels.map((item) => item.name), labelDetails: updatedLabels })
-    } catch (labelError) {
-      setError(labelError instanceof Error ? labelError.message : 'Unable to remove label.')
-    }
-  }
-
-  async function handleUploadAttachment(fileList: FileList | null) {
-    const file = fileList?.[0]
-    if (!task || !accessToken || !file) return
-
-    setUploadingAttachment(true)
-    setError('')
-    try {
-      const uploaded = await uploadAttachment(accessToken, task.id, file)
-      setAttachmentItems((current) => [...current, uploaded])
-      getTaskActivity(accessToken, task.id).then(setActivityItems).catch(() => undefined)
-    } catch (attachmentError) {
-      setError(attachmentError instanceof Error ? attachmentError.message : 'Unable to upload attachment.')
-    } finally {
-      setUploadingAttachment(false)
-    }
-  }
-
-  async function handleOpenAttachment(attachment: ApiTaskAttachment) {
-    if (!task || !accessToken || !attachment.id) return
-
-    try {
-      await openAttachment(accessToken, task.id, attachment)
-    } catch (attachmentError) {
-      setError(attachmentError instanceof Error ? attachmentError.message : 'Unable to open attachment.')
-    }
-  }
-
-  async function handleDeleteAttachment(attachment: ApiTaskAttachment) {
-    if (!task || !accessToken || !attachment.id) return
-
-    try {
-      await deleteAttachment(accessToken, task.id, attachment.id)
-      setAttachmentItems((current) => current.filter((item) => item.id !== attachment.id))
-      getTaskActivity(accessToken, task.id).then(setActivityItems).catch(() => undefined)
-    } catch (attachmentError) {
-      setError(attachmentError instanceof Error ? attachmentError.message : 'Unable to delete attachment.')
-    }
-  }
-
-  async function handleAddSubtask() {
-    if (!task || !accessToken) return
-    const title = window.prompt('Subtask title')
-    if (!title?.trim()) return
-
-    try {
-      const updatedTask = await addSubtask(accessToken, task.id, { title })
-      setSubtaskItems(updatedTask.subtasks)
-      setActivityItems(updatedTask.activities)
-      setProgress(updatedTask.progress)
-      onTaskUpdated?.(updatedTask)
-    } catch (subtaskError) {
-      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to add subtask.')
-    }
-  }
-
-  async function handleToggleSubtask(subtask: ApiSubtask) {
-    if (!task || !accessToken) return
-
-    try {
-      const updatedTask = await updateSubtask(accessToken, task.id, subtask.id, {
-        isDone: !subtask.isDone,
-        status: subtask.isDone ? 'todo' : 'done',
-      })
-      setSubtaskItems(updatedTask.subtasks)
-      setActivityItems(updatedTask.activities)
-      setProgress(updatedTask.progress)
-      onTaskUpdated?.(updatedTask)
-    } catch (subtaskError) {
-      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.')
-    }
-  }
-
-  async function handleDeleteSubtask(subtask: ApiSubtask) {
-    if (!task || !accessToken) return
-
-    try {
-      const updatedTask = await deleteSubtask(accessToken, task.id, subtask.id)
-      setSubtaskItems(updatedTask.subtasks)
-      setActivityItems(updatedTask.activities)
-      setProgress(updatedTask.progress)
-      onTaskUpdated?.(updatedTask)
-    } catch (subtaskError) {
-      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to delete subtask.')
-    }
-  }
-
-  async function handleToggleReminder() {
-    if (!task || !accessToken) return
-
-    try {
-      const updatedTask = await updateTask(accessToken, task.id, {
-        reminderEnabled: !task.reminderEnabled,
-        reminderBeforeMinutes: task.reminderEnabled ? task.reminderBeforeMinutes : (task.reminderBeforeMinutes ?? 30),
-      })
-      setActivityItems(updatedTask.activities)
-      onTaskUpdated?.(updatedTask)
-    } catch (reminderError) {
-      setError(reminderError instanceof Error ? reminderError.message : 'Unable to update reminder.')
-    }
-  }
-
-  async function saveStatus(nextStatus: {
-    status: TaskStatus
-    progress: number
-    completionDate?: string
-    missedReason?: string
-  }) {
-    setError('')
-    setStatus(nextStatus.status)
-    setProgress(nextStatus.progress)
-
-    if (task && accessToken) {
       try {
-        const updatedTask = await changeTaskStatus(accessToken, task.id, {
+        await openAttachment(accessToken, task.id, attachment)
+      } catch (attachmentError) {
+        setError(attachmentError instanceof Error ? attachmentError.message : 'Unable to open attachment.')
+      }
+    },
+    [task, accessToken],
+  )
+
+  const handleToggleSubtask = useCallback(
+    async (subtask: ApiSubtask) => {
+      if (!task || !accessToken) return
+
+      // Optimistic update: flip the subtask and recompute progress locally
+      // right away, then reconcile with the server response in the
+      // background. Roll back only this subtask if the request fails.
+      const nextIsDone = !subtask.isDone
+      const previousSubtaskItems = subtaskItems
+      const previousProgress = progress
+      const optimisticSubtasks = subtaskItems.map((item) =>
+        item.id === subtask.id ? { ...item, isDone: nextIsDone, status: nextIsDone ? 'done' : 'todo' } : item,
+      )
+      const optimisticProgress = optimisticSubtasks.length
+        ? Math.round((optimisticSubtasks.filter((item) => item.isDone).length / optimisticSubtasks.length) * 100)
+        : progress
+
+      setSubtaskItems(optimisticSubtasks)
+      setProgress(optimisticProgress)
+      setError('')
+
+      try {
+        const updatedTask = await updateSubtask(accessToken, task.id, subtask.id, {
+          isDone: nextIsDone,
+          status: nextIsDone ? 'done' : 'todo',
+        })
+        setSubtaskItems(updatedTask.subtasks)
+        setActivityItems(updatedTask.activities)
+        setProgress(updatedTask.progress)
+        onTaskUpdated?.(updatedTask)
+      } catch (subtaskError) {
+        setSubtaskItems(previousSubtaskItems)
+        setProgress(previousProgress)
+        setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.')
+      }
+    },
+    [task, accessToken, subtaskItems, progress, onTaskUpdated],
+  )
+
+  const saveStatus = useCallback(
+    async (nextStatus: {
+      status: TaskStatus
+      progress: number
+      completionDate?: string
+      missedReason?: string
+    }) => {
+      if (
+        isBlocked &&
+        (nextStatus.status === 'In Progress' || nextStatus.status === 'Done') &&
+        nextStatus.status !== status
+      ) {
+        setError('This task cannot start until all its dependencies are completed.')
+        setIsStatusModalOpen(false)
+        return
+      }
+
+      const subtasksIncomplete = subtaskItems.length > 0 && completedSubtasksCount < subtaskItems.length
+      if (nextStatus.status === 'Done' && subtasksIncomplete) {
+        setError('Complete all subtasks before marking this task as Done.')
+        setIsStatusModalOpen(false)
+        return
+      }
+
+      setError('')
+
+      if (task && accessToken) {
+        // Optimistic update: reflect the new status/progress immediately and
+        // close the sheet right away; roll back if the server rejects it.
+        const previousStatus = status
+        const previousProgress = progress
+        setStatus(nextStatus.status)
+        setProgress(nextStatus.progress)
+        setIsStatusModalOpen(false)
+
+        const payload = {
           status: toApiStatus(nextStatus.status),
           progress: nextStatus.progress,
-          completionDate: nextStatus.completionDate,
-          missedReason: nextStatus.missedReason,
-        })
-        setActivityItems(updatedTask.activities)
-        onTaskUpdated?.(updatedTask)
-      } catch (saveError) {
-        setError(saveError instanceof Error ? saveError.message : 'Unable to change task status.')
+          ...(nextStatus.status === 'Done' && nextStatus.completionDate
+            ? { completionDate: nextStatus.completionDate }
+            : {}),
+          ...(nextStatus.status === 'Missed' && nextStatus.missedReason?.trim()
+            ? { missedReason: nextStatus.missedReason.trim() }
+            : {}),
+        }
+        try {
+          const updatedTask = await changeTaskStatus(accessToken, task.id, payload)
+          setStatus(toTaskStatus(updatedTask))
+          setProgress(updatedTask.progress)
+          setActivityItems(updatedTask.activities)
+          onTaskUpdated?.(updatedTask)
+        } catch (saveError) {
+          setStatus(previousStatus)
+          setProgress(previousProgress)
+          setError(saveError instanceof Error ? saveError.message : 'Unable to change task status.')
+        }
       }
-    }
-
-    setIsStatusModalOpen(false)
-  }
-
-  async function handleAddDependencies(nextDependencies: DependencyTask[]) {
-    const filtered = nextDependencies.filter((item) => item.id !== currentTaskId)
-    if (!filtered.length) return
-
-    setError('')
-
-    if (task && accessToken) {
-      try {
-        const updatedTask = await addDependencies(
-          accessToken,
-          task.id,
-          filtered.map((item) => item.id),
-        )
-        onTaskUpdated?.(updatedTask)
-        setDependencies(toDependencyTasks(updatedTask.dependencies))
-        setActivityItems(updatedTask.activities)
-        return
-      } catch (dependencyError) {
-        setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to add dependency.')
-      }
-    }
-
-    setDependencies((current) => {
-      const currentIds = new Set(current.map((item) => item.id))
-      return [...current, ...filtered.filter((item) => !currentIds.has(item.id))]
-    })
-  }
-
-  async function handleReplaceDependency(oldDependencyId: string, replacement: DependencyTask) {
-    setError('')
-
-    if (task && accessToken) {
-      try {
-        const updatedTask = await replaceDependency(accessToken, task.id, oldDependencyId, replacement.id)
-        onTaskUpdated?.(updatedTask)
-        setDependencies(toDependencyTasks(updatedTask.dependencies))
-        setActivityItems(updatedTask.activities)
-        return
-      } catch (dependencyError) {
-        setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to update dependency.')
-      }
-    }
-
-    setDependencies((current) => current.map((item) => (item.id === oldDependencyId ? replacement : item)))
-  }
-
-  async function handleRemoveDependency(dependencyId: string) {
-    setError('')
-
-    if (task && accessToken) {
-      try {
-        const updatedTask = await removeDependency(accessToken, task.id, dependencyId)
-        onTaskUpdated?.(updatedTask)
-        setDependencies(toDependencyTasks(updatedTask.dependencies))
-        setActivityItems(updatedTask.activities)
-        return
-      } catch (dependencyError) {
-        setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to remove dependency.')
-      }
-    }
-
-    setDependencies((current) => current.filter((item) => item.id !== dependencyId))
-  }
-
-  async function handleSaveRecurrence(nextRecurrence: RecurrenceSettings | null) {
-    setError('')
-    setRecurrence(nextRecurrence)
-
-    if (task && accessToken) {
-      try {
-        const apiRecurrence = recurrenceToApi(nextRecurrence)
-        const updatedTask = apiRecurrence
-          ? await saveRecurrence(accessToken, task.id, apiRecurrence)
-          : await removeRecurrence(accessToken, task.id)
-        setActivityItems(updatedTask.activities)
-        onTaskUpdated?.(updatedTask)
-      } catch (recurrenceError) {
-        setError(recurrenceError instanceof Error ? recurrenceError.message : 'Unable to save recurrence.')
-      }
-    }
-  }
-
-  async function handleRemoveRecurrence() {
-    setError('')
-    setRecurrence(null)
-
-    if (task && accessToken) {
-      try {
-        const updatedTask = await removeRecurrence(accessToken, task.id)
-        setActivityItems(updatedTask.activities)
-        onTaskUpdated?.(updatedTask)
-      } catch (recurrenceError) {
-        setError(recurrenceError instanceof Error ? recurrenceError.message : 'Unable to remove recurrence.')
-      }
-    }
-  }
+    },
+    [isBlocked, status, subtaskItems, completedSubtasksCount, task, accessToken, progress, onTaskUpdated],
+  )
 
   return (
     <>
@@ -408,6 +233,7 @@ export default function TaskDetailsScreen({
         active="tasks"
         onNavigateDashboard={nav.onNavigateDashboard}
         onNavigateTasks={onBack}
+        onNavigateFocus={nav.onNavigateFocus}
         onNavigateReminders={nav.onNavigateReminders}
         onNavigateCalendar={nav.onNavigateCalendar}
         onNavigateNotes={nav.onNavigateNotes}
@@ -416,359 +242,198 @@ export default function TaskDetailsScreen({
         panelCaption="You're doing great today."
         panelPercent={64}
       >
-          <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
-            <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">
-              Back
-            </button>
-            <span>Tasks</span>
-            <span>/</span>
-            <span className="text-[var(--bp-text)]">Task Details</span>
+        <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+          <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">
+            Back
+          </button>
+          <span>Tasks</span>
+          <span>/</span>
+          <span className="text-[var(--bp-text)]">Task Details</span>
+        </div>
+
+        <PageHeader
+          title="Task Details"
+          subtitle="View your task at a glance"
+          toolbar={
+            <TopActionBar
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Search tasks..."
+              themeMode={mode}
+              onToggleTheme={toggleTheme}
+              languageLabel={t('common.languageToggle')}
+              onToggleLanguage={toggleLanguage}
+              onProfileClick={onSignOut}
+            />
+          }
+        />
+
+        <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                <Badge color={statusColor(status)}>{status}</Badge>
+                <Badge color="red">{task ? toUiPriority(task.priority) : 'Medium'}</Badge>
+                <Badge color="yellow">{task?.category || 'Uncategorized'}</Badge>
+              </div>
+              <h2 className="mb-1.5 text-lg font-black">{task?.title ?? 'No task selected'}</h2>
+              <p className="max-w-3xl text-sm leading-6 text-slate-400">
+                {task?.description || 'No description provided.'}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <PrimaryButton size="sm" onClick={onEdit}>Edit Task</PrimaryButton>
+              <OutlineButton size="sm" onClick={() => setIsStatusModalOpen(true)}>Change Status</OutlineButton>
+              <DangerButton size="sm" onClick={onDelete}>Delete Task</DangerButton>
+            </div>
           </div>
 
-          <PageHeader
-            title="Task Details"
-            subtitle="View and manage your task"
-            toolbar={
-              <TopActionBar
-                searchValue={search}
-                onSearchChange={setSearch}
-                searchPlaceholder="Search tasks..."
-                themeMode={mode}
-                onToggleTheme={toggleTheme}
-                languageLabel={t('common.languageToggle')}
-                onToggleLanguage={toggleLanguage}
-                onProfileClick={onSignOut}
-              />
-            }
-          />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <InfoBox title="Created" value={formatDate(task?.createdAt) || 'Not available'} />
+            <InfoBox title="Updated" value={formatDate(task?.updatedAt) || 'Not available'} />
+            <InfoBox
+              title="Due Date"
+              value={`${formatDate(task?.dueDate) || 'No due date'}${task?.dueTime ? ` - ${task.dueTime}` : ''}`}
+            />
+          </div>
+        </section>
 
-          <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
-            <section className="space-y-6">
-              <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                <div className="mb-8 flex justify-between">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsStatusModalOpen(true)}
-                      className="rounded-lg transition active:scale-95"
-                      aria-label="Change task status"
-                    >
-                      <Badge color={statusColor(status)}>{status}</Badge>
-                    </button>
-                  <Badge color="red">{task ? toUiPriority(task.priority) : 'Medium'}</Badge>
-                  <Badge color="yellow">{task?.category || 'Uncategorized'}</Badge>
-                  </div>
-                  <span className="text-2xl font-black text-[var(--bp-accent)]">{task?.isFavorite ? 'STAR' : 'TASK'}</span>
-                </div>
-
-                <h2 className="mb-4 text-2xl font-black">{task?.title ?? 'No task selected'}</h2>
-                <p className="max-w-4xl leading-7 text-slate-400">
-                  {task?.description || 'No description provided.'}
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_240px]">
+          <section className="space-y-4">
+            <SectionBlock title="Progress">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs text-slate-400">
+                  {completedSubtasksCount} of {subtaskItems.length} subtasks completed
                 </p>
-
-                <div className="mt-7 grid gap-4 md:grid-cols-4">
-                  <InfoBox title="Created" value={formatDate(task?.createdAt) || 'Not available'} />
-                  <InfoBox title="Updated" value={formatDate(task?.updatedAt) || 'Not available'} />
-                  <InfoBox title="Due Date" value={formatDate(task?.dueDate) || 'No due date'} />
-                  <InfoBox title="Due Time" value={task?.dueTime || 'No due time'} />
-                </div>
-              </section>
-
-              <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                <div className="mb-5 flex items-center justify-between">
-                  <h3 className="font-black">Progress</h3>
-                  <span className="text-3xl font-black text-[var(--bp-accent)]">{progress}%</span>
-                </div>
-                <div className="h-3 rounded-full bg-[var(--bp-border)]">
-                  <div className="h-3 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
-                </div>
-
-                <div className="mt-5 space-y-4 text-sm">
-                  <ProgressRow icon="DONE" label={`${completedSubtasksCount} of ${subtaskItems.length} subtasks completed`} />
-                  <ProgressRow icon="EST" label="Estimated" value={formatMinutes(task?.estimatedTimeMinutes, '0h')} />
-                  <ProgressRow icon="SPENT" label="Spent" value={formatMinutes(task?.spentTimeMinutes, '0h')} blue />
-                  <ProgressRow icon="LEFT" label="Remaining" value={formatMinutes(task?.remainingTimeMinutes, '0h')} yellow />
-                </div>
-              </section>
-
-              <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                <div className="mb-6 flex justify-between">
-                  <div>
-                    <h3 className="font-black">Subtasks</h3>
-                    <p className="text-sm text-slate-500">
-                      {completedSubtasksCount} of {subtaskItems.length} completed
-                    </p>
-                  </div>
-                  <button onClick={() => void handleAddSubtask()} className="font-bold text-[var(--bp-accent)]">+ Add Subtask</button>
-                </div>
-
-                <div className="space-y-2">
-                  {displaySubtasks.length ? (
-                    displaySubtasks.map((item) => (
-                      <Subtask
-                        key={item.id}
-                        {...item}
-                        onToggle={() => void handleToggleSubtask(item.source)}
-                        onDelete={() => void handleDeleteSubtask(item.source)}
-                      />
-                    ))
-                  ) : (
-                    <div className="rounded-3xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] p-6 text-center">
-                      <p className="font-black text-[var(--bp-text)]">No subtasks yet</p>
-                      <p className="mt-2 text-sm text-slate-500">Add smaller steps to track progress.</p>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                <div className="mb-6 flex justify-between">
-                  <h3 className="font-black">Dependencies</h3>
-                  <button
-                    type="button"
-                    onClick={() => setDependencyModal({ mode: 'add' })}
-                    className="font-bold text-[var(--bp-accent)] transition hover:text-yellow-200 active:scale-95"
-                  >
-                    + Add Dependency
-                  </button>
-                </div>
-
-                {dependencies.length ? (
-                  <div
-                    className={`mb-5 rounded-2xl border px-4 py-3 text-sm font-semibold ${
-                      dependenciesComplete
-                        ? 'border-green-500/30 bg-green-500/10 text-green-300'
-                        : 'border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
-                    }`}
-                  >
-                    {dependenciesComplete
-                      ? 'All dependencies are completed. This task is ready to start.'
-                      : 'This task cannot start until all dependencies are completed.'}
-                  </div>
-                ) : null}
-
-                {dependencies.length ? (
-                  dependencies.map((dependency, index) => (
-                    <div key={dependency.id}>
-                      <Dependency
-                        task={dependency}
-                        onEdit={() => setDependencyModal({ mode: 'edit', dependency })}
-                        onRemove={(event) => {
-                          event.stopPropagation()
-                          setDependencyModal({ mode: 'remove', dependency })
-                        }}
-                      />
-                      {index < dependencies.length - 1 ? <Arrow /> : null}
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-3xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] p-6 text-center">
-                    <p className="font-black text-[var(--bp-text)]">No dependencies yet</p>
-                    <p className="mt-2 text-sm text-slate-500">Add tasks that must be completed first.</p>
-                  </div>
-                )}
-              </section>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                  <div className="mb-5 flex items-center justify-between">
-                    <h3 className="font-black">Reminder</h3>
-                    <button
-                      type="button"
-                      onClick={() => void handleToggleReminder()}
-                      className={`flex h-7 w-12 items-center rounded-full p-1 transition ${
-                        task?.reminderEnabled ? 'justify-end bg-[var(--bp-accent)]' : 'justify-start bg-[var(--bp-border)]'
-                      }`}
-                      aria-label="Toggle reminder"
-                    >
-                      <span className="h-5 w-5 rounded-full bg-white" />
-                    </button>
-                  </div>
-                  <p className="text-sm text-slate-400">{reminderText}</p>
-                </section>
-
-                <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                  <div className="mb-5 flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="font-black">Recurring</h3>
-                      <p className="mt-1 text-sm text-slate-400">
-                        {recurrence ? 'Next occurrence' : 'Repeat schedule'}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsRecurrenceModalOpen(true)}
-                      className="font-bold text-[var(--bp-accent)] transition hover:text-yellow-200 active:scale-95"
-                    >
-                      {recurrence ? 'Edit Recurrence' : 'Set Recurrence'}
-                    </button>
-                  </div>
-                  <p className="font-bold text-purple-400">{recurrenceSummary}</p>
-                  <p className="mt-2 text-sm text-slate-500">{nextOccurrence}</p>
-                </section>
+                <span className="text-lg font-black text-[var(--bp-accent)]">{progress}%</span>
               </div>
+              <div className="h-2 rounded-full bg-[var(--bp-border)]">
+                <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
+              </div>
+            </SectionBlock>
 
-              <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                <div className="mb-4 flex justify-between">
-                  <h3 className="font-black">Notes</h3>
-                  <button className="text-sm text-slate-400">Edit</button>
-                </div>
-                <p className="leading-7 text-slate-400">
-                  {task?.notes || 'No notes yet.'}
-                </p>
-              </section>
-
-              <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                <div className="mb-5 flex justify-between">
-                  <div>
-                    <h3 className="font-black">Attachments</h3>
-                    <p className="text-sm text-slate-500">{displayAttachments.length} files</p>
-                  </div>
-                  <label className="cursor-pointer font-bold text-[var(--bp-accent)] transition hover:text-yellow-200 aria-disabled:cursor-not-allowed aria-disabled:opacity-60">
-                    {uploadingAttachment ? 'Uploading...' : '+ Add'}
-                    <input
-                      type="file"
-                      className="hidden"
-                      disabled={uploadingAttachment || !task}
-                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
-                      onChange={(event) => {
-                        void handleUploadAttachment(event.target.files)
-                        event.target.value = ''
-                      }}
-                    />
-                  </label>
-                </div>
-
-                {displayAttachments.length ? (
-                  <div className="space-y-3">
-                    {displayAttachments.map((file, index) => (
-                      <Attachment
-                        key={file.id ?? `${file.name}-${index}`}
-                        file={file}
-                        onOpen={() => void handleOpenAttachment(file)}
-                        onDelete={() => void handleDeleteAttachment(file)}
-                      />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <SectionBlock title="Subtasks" subtitle={`${completedSubtasksCount} of ${subtaskItems.length} completed`}>
+                {subtaskItems.length ? (
+                  <div className="space-y-1.5">
+                    {subtaskItems.map((item) => (
+                      <Subtask key={item.id} subtask={item} onToggle={handleToggleSubtask} />
                     ))}
                   </div>
                 ) : (
-                  <div className="flex h-28 items-center justify-center rounded-2xl border border-dashed border-[var(--bp-border)] px-5 text-center text-slate-500">
-                    No attachments yet. Add images, PDFs, or documents.
-                  </div>
+                  <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
                 )}
-              </section>
+              </SectionBlock>
 
-              <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                <h3 className="mb-6 font-black">Activity Timeline</h3>
-                {displayActivities.length ? (
-                  displayActivities.map((activity) => (
-                    <Timeline
-                      key={activity.id}
-                      title={formatActivityTitle(activity.action)}
-                      desc={`${activity.description} - ${formatDate(activity.createdAt)}`}
-                      color={activityColor(activity.action)}
-                    />
-                  ))
+              <SectionBlock title="Dependencies">
+                {dependencies.length ? (
+                  <>
+                    <div
+                      className={`mb-3 rounded-xl border px-3 py-2 text-xs font-semibold ${
+                        dependenciesComplete
+                          ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                          : 'border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
+                      }`}
+                    >
+                      {dependenciesComplete
+                        ? 'All dependencies are completed. This task is ready to start.'
+                        : 'This task cannot start until all dependencies are completed.'}
+                    </div>
+                    <div className="space-y-2">
+                      {dependencies.map((dependency) => (
+                        <Dependency key={dependency.id} task={dependency} />
+                      ))}
+                    </div>
+                  </>
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] p-6 text-center">
-                    <p className="font-black text-[var(--bp-text)]">No activity yet</p>
-                    <p className="mt-2 text-sm text-slate-500">Changes will appear here as you update the task.</p>
-                  </div>
+                  <EmptyBlock title="No dependencies" description="Tasks that must finish first will appear here." />
                 )}
-              </section>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                  <div className="mb-6 flex justify-between">
-                    <h3 className="font-black">Labels</h3>
-                    <button onClick={() => void handleAddLabel()} className="font-bold text-[var(--bp-accent)]">+ Add Label</button>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    {labels.length ? (
-                      labels.map((label, index) => (
-                        <button
-                          key={label.id}
-                          type="button"
-                          title="Remove label"
-                          onClick={() => void handleRemoveLabel(label)}
-                        >
-                          <Badge color={labelColors[index % labelColors.length]}>{label.name}</Badge>
-                        </button>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">No labels attached.</p>
-                    )}
-                  </div>
-                </section>
-
-                <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-7">
-                  <h3 className="mb-6 font-black">Time Estimation</h3>
-                  <div className="h-3 rounded-full bg-[var(--bp-border)]">
-                    <div className="h-3 rounded-full bg-blue-400" style={{ width: `${clampPercent(task?.progressPercentage ?? 0)}%` }} />
-                  </div>
-                  <div className="mt-6 grid grid-cols-3 text-center">
-                    <Time value={formatHours(task?.estimatedHours, formatMinutes(task?.estimatedTimeMinutes, '0h'))} label="Estimated" />
-                    <Time value={formatHours(task?.spentHours, formatMinutes(task?.spentTimeMinutes, '0h'))} label="Spent" blue />
-                    <Time value={formatHours(task?.remainingHours, formatMinutes(task?.remainingTimeMinutes, '0h'))} label="Remaining" yellow />
-                  </div>
-                </section>
-              </div>
-            </section>
-
-            <aside className="hidden space-y-4 xl:block">
-              <SideCard title="Priority" value={task ? toUiPriority(task.priority) : 'Medium'} red />
-              <SideCard title="Status" value={status} blue onClick={() => setIsStatusModalOpen(true)} />
-              <SideCard title="Category" value={task?.category || 'Uncategorized'} yellow />
-              <SideCard title="Due Date" value={`${formatDate(task?.dueDate) || 'No due date'}\n${task?.dueTime || 'No due time'}`} />
-              <SideCard title="Reminder" value={reminderText} />
-              <SideCard title="Recurring" value={recurrenceSummary} onClick={() => setIsRecurrenceModalOpen(true)} />
-              <SideCard title="Time Estimate" value={formatMinutes(task?.estimatedTimeMinutes, '0h')} />
-            </aside>
-          </div>
-
-          {error ? <p className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300">{error}</p> : null}
-
-          <footer className="mt-8 border-t border-[var(--bp-border)] pt-6">
-          <div className="flex justify-between gap-4">
-            <button onClick={onDelete} className="rounded-xl border border-red-500/50 px-8 py-3 font-bold text-red-400">
-              Delete Task
-            </button>
-            <div className="flex gap-4">
-              <button onClick={onEdit} className="rounded-xl bg-[var(--bp-border)] px-10 py-3 font-bold text-[var(--bp-text)]">
-                Edit Task
-              </button>
-              <button onClick={onMarkDone} className="rounded-xl bg-[var(--bp-accent)] px-10 py-3 font-black text-[var(--bp-accent-text)]">
-                Mark as Done
-              </button>
+              </SectionBlock>
             </div>
-          </div>
-          </footer>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <SectionBlock title="Automation">
+                <div className="divide-y divide-[var(--bp-border)]">
+                  <AutomationRow label="Reminder" value={reminderText} />
+                  <AutomationRow label="Recurring" value={`${recurrenceSummary}${recurrence ? ` - ${nextOccurrence}` : ''}`} />
+                  <AutomationRow label="Focus" value={focusText} />
+                </div>
+              </SectionBlock>
+
+              <SectionBlock title="Notes">
+                <p className="text-sm leading-6 text-slate-400">{task?.notes || 'No notes yet.'}</p>
+              </SectionBlock>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <SectionBlock title="Time Tracking">
+                <div className="divide-y divide-[var(--bp-border)]">
+                  <AutomationRow label="Estimated" value={`${task?.estimatedHours ?? 0}h`} />
+                  <AutomationRow label="Spent" value={`${task?.spentHours ?? 0}h`} />
+                  <AutomationRow label="Remaining" value={`${task?.remainingHours ?? 0}h`} />
+                </div>
+              </SectionBlock>
+
+              <SectionBlock title="Attachments" subtitle={`${attachmentItems.length} files`}>
+                {attachmentItems.length ? (
+                  <div className="space-y-2">
+                    {attachmentItems.map((file, index) => (
+                      <Attachment key={file.id ?? `${file.name}-${index}`} file={file} onOpen={handleOpenAttachment} />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyBlock title="No attachments" description="Files added from Edit Task will appear here." />
+                )}
+              </SectionBlock>
+
+              <SectionBlock title="Latest Activity">
+                {latestActivity ? (
+                  <Timeline
+                    title={formatActivityTitle(latestActivity.action)}
+                    desc={`${latestActivity.description} - ${formatActivityDateTime(latestActivity.createdAt)}`}
+                    color={activityColor(latestActivity.action)}
+                  />
+                ) : (
+                  <EmptyBlock title="No activity yet" description="Changes will appear here as you update the task." />
+                )}
+              </SectionBlock>
+            </div>
+          </section>
+
+          <aside className="hidden xl:block">
+            <SectionBlock title="Details">
+              <div className="divide-y divide-[var(--bp-border)]">
+                <MetaRow label="Status" value={status} color="blue" />
+                <MetaRow label="Priority" value={task ? toUiPriority(task.priority) : 'Medium'} color="red" />
+                <MetaRow label="Category" value={task?.category || 'Uncategorized'} color="yellow" />
+                <MetaRow
+                  label="Due Date"
+                  value={formatDate(task?.dueDate) || 'No due date'}
+                  secondaryValue={task?.dueTime || 'No due time'}
+                />
+              </div>
+            </SectionBlock>
+          </aside>
+        </div>
+
+        {error ? (
+          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
+            {error}
+          </p>
+        ) : null}
       </AppLayout>
       <TaskStatusWorkflowModal
         open={isStatusModalOpen}
         status={status}
         progress={progress}
+        hasSubtasks={subtaskItems.length > 0}
+        subtasksComplete={subtaskItems.length === 0 || completedSubtasksCount === subtaskItems.length}
+        subtaskProgress={subtaskItems.length ? Math.round((completedSubtasksCount / subtaskItems.length) * 100) : 0}
+        completedSubtasksCount={completedSubtasksCount}
+        totalSubtasksCount={subtaskItems.length}
         onClose={() => setIsStatusModalOpen(false)}
         onSave={(nextStatus) => void saveStatus(nextStatus)}
-      />
-      <TaskDependenciesWorkflowModal
-        open={Boolean(dependencyModal)}
-        mode={dependencyModal?.mode ?? 'add'}
-        currentTaskId={currentTaskId}
-        availableTasks={availableDependencies}
-        dependencies={dependencies}
-        dependency={dependencyModal?.dependency}
-        onClose={() => setDependencyModal(null)}
-        onAdd={(tasks) => void handleAddDependencies(tasks)}
-        onSaveReplacement={(oldDependencyId, replacement) => void handleReplaceDependency(oldDependencyId, replacement)}
-        onRemove={(dependencyId) => void handleRemoveDependency(dependencyId)}
-      />
-      <TaskRecurrenceModal
-        open={isRecurrenceModalOpen}
-        mode={recurrence ? 'edit' : 'create'}
-        recurrence={recurrence}
-        onClose={() => setIsRecurrenceModalOpen(false)}
-        onSave={(nextRecurrence) => void handleSaveRecurrence(nextRecurrence)}
-        onRemove={() => void handleRemoveRecurrence()}
       />
     </>
   )
@@ -783,108 +448,106 @@ function Badge({ children, color }: { children: React.ReactNode; color: string }
     purple: 'bg-purple-500/20 text-purple-400',
   }
 
-  return <span className={`rounded-lg px-3 py-2 text-sm font-bold ${colors[color]}`}>{children}</span>
+  return <span className={`rounded-md px-2 py-1 text-xs font-bold ${colors[color]}`}>{children}</span>
 }
 
 function InfoBox({ title, value }: { title: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-[var(--bp-surface)] p-4">
-      <p className="text-xs font-black uppercase text-slate-500">{title}</p>
-      <p className="mt-2 font-bold text-[var(--bp-text)]">{value}</p>
+    <div className="rounded-xl bg-[var(--bp-bg)] p-3">
+      <p className="text-[10px] font-black uppercase text-slate-500">{title}</p>
+      <p className="mt-1 text-sm font-bold text-[var(--bp-text)]">{value}</p>
     </div>
   )
 }
 
-function ProgressRow({ icon, label, value, blue, yellow }: { icon: string; label: string; value?: string; blue?: boolean; yellow?: boolean }) {
-  return (
-    <div className="flex justify-between text-slate-400">
-      <span>{icon} {label}</span>
-      {value ? <span className={`font-bold ${blue ? 'text-blue-400' : yellow ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-text)]'}`}>{value}</span> : null}
-    </div>
-  )
-}
-
-function Subtask({
+function SectionBlock({
   title,
-  date,
-  done,
-  onToggle,
-  onDelete,
+  subtitle,
+  children,
 }: {
   title: string
-  date: string
-  done: boolean
-  source: ApiSubtask
-  onToggle: () => void
-  onDelete: () => void
+  subtitle?: string
+  children: React.ReactNode
 }) {
   return (
-    <div className="grid grid-cols-[24px_1fr_120px_50px_70px_70px] items-center gap-4 rounded-xl px-4 py-3">
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`h-5 w-5 rounded-md border text-[9px] font-black ${done ? 'border-green-400 bg-green-400 text-black' : 'border-slate-500'}`}
-        aria-label={done ? 'Mark subtask incomplete' : 'Mark subtask complete'}
-      >
-        {done ? 'OK' : ''}
-      </button>
-      <p className={done ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}>{title}</p>
-      <p className="text-sm text-slate-500">{date}</p>
-      <span className="rounded-full bg-[var(--bp-accent)]/20 px-2 py-1 text-center text-xs font-bold text-[var(--bp-accent)]">AC</span>
-      <span className={`text-sm font-bold ${done ? 'text-green-400' : 'text-slate-500'}`}>{done ? 'Done' : 'Open'}</span>
-      <button type="button" onClick={onDelete} className="text-sm font-bold text-red-300">
-        Delete
-      </button>
+    <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-black">{title}</h3>
+        {subtitle ? <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p> : null}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function EmptyBlock({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] p-4 text-center">
+      <p className="text-sm font-black text-[var(--bp-text)]">{title}</p>
+      <p className="mt-1 text-xs text-slate-500">{description}</p>
     </div>
   )
 }
 
-function Dependency({
-  task,
-  onEdit,
-  onRemove,
-}: {
-  task: DependencyTask
-  onEdit: () => void
-  onRemove: (event: MouseEvent<HTMLButtonElement>) => void
-}) {
+function AutomationRow({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onEdit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') onEdit()
-      }}
-      className="grid w-full gap-4 rounded-2xl bg-[var(--bp-bg)] px-5 py-4 text-start transition hover:bg-[var(--bp-surface)] active:scale-[0.99] md:grid-cols-[1fr_auto]"
-    >
-      <div className="flex min-w-0 items-start gap-4">
-        <span className={`mt-2 h-3 w-3 shrink-0 rounded-full ${dependencyDotColor(task.status)}`} />
+    <div className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+      <span className="text-sm font-bold text-[var(--bp-text)]">{label}</span>
+      <span className="text-end text-xs text-slate-400">{value}</span>
+    </div>
+  )
+}
+
+const Subtask = memo(function Subtask({
+  subtask,
+  onToggle,
+}: {
+  subtask: ApiSubtask
+  onToggle: (subtask: ApiSubtask) => void
+}) {
+  const done = subtask.isDone
+  return (
+    <div className="flex items-center gap-3 rounded-lg bg-[var(--bp-bg)] px-3 py-2">
+      <button
+        type="button"
+        onClick={() => onToggle(subtask)}
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[8px] font-black ${
+          done ? 'border-green-400 bg-green-400 text-black' : 'border-slate-500'
+        }`}
+        aria-label={done ? 'Mark subtask incomplete' : 'Mark subtask complete'}
+      >
+        {done ? '✓' : ''}
+      </button>
+      <p className={`min-w-0 flex-1 truncate text-sm ${done ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}>
+        {subtask.title}
+      </p>
+      <p className="shrink-0 text-xs text-slate-500">{formatDate(subtask.dueDate) || 'No due date'}</p>
+      <span className={`shrink-0 text-xs font-bold ${done ? 'text-green-400' : 'text-slate-500'}`}>
+        {done ? 'Done' : 'Open'}
+      </span>
+    </div>
+  )
+})
+
+const Dependency = memo(function Dependency({ task }: { task: DependencyTask }) {
+  return (
+    <div className="grid w-full gap-3 rounded-xl bg-[var(--bp-bg)] px-3 py-2.5 md:grid-cols-[1fr_auto]">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dependencyDotColor(task.status)}`} />
         <div className="min-w-0">
-          <p className="font-bold text-[var(--bp-text)]">{task.title}</p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="text-sm font-bold text-[var(--bp-text)]">{task.title}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
             {task.category} - Due {task.dueDate}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 md:justify-end">
+      <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
         <Badge color={dependencyBadgeColor(task.status)}>{task.status}</Badge>
-        <span className="rounded-lg bg-[var(--bp-surface)] px-3 py-2 text-sm font-bold text-slate-300">{task.priority}</span>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="rounded-lg bg-red-500/15 px-3 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/25"
-        >
-          Remove
-        </button>
+        <span className="rounded-md bg-[var(--bp-surface)] px-2 py-1 text-xs font-bold text-slate-300">{task.priority}</span>
       </div>
     </div>
   )
-}
-
-function Arrow() {
-  return <div className="py-2 text-center text-slate-500">v</div>
-}
+})
 
 function dependencyDotColor(status: DependencyTask['status']) {
   if (status === 'Done') return 'bg-green-400'
@@ -900,38 +563,29 @@ function dependencyBadgeColor(status: DependencyTask['status']) {
   return 'purple'
 }
 
-function Attachment({
+const Attachment = memo(function Attachment({
   file,
   onOpen,
-  onDelete,
 }: {
   file: ApiTaskAttachment
-  onOpen?: () => void
-  onDelete?: () => void
+  onOpen?: (file: ApiTaskAttachment) => void
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl bg-[var(--bp-surface)] p-4">
-      <button
-        type="button"
-        onClick={onOpen}
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[10px] font-black text-white ${attachmentColor(file.type)}`}
-      >
+    <button
+      type="button"
+      onClick={() => onOpen?.(file)}
+      className="flex w-full items-center gap-3 rounded-xl bg-[var(--bp-bg)] p-2.5 text-start transition hover:bg-[var(--bp-border)]/30"
+    >
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[9px] font-black text-white ${attachmentColor(file.type)}`}>
         FILE
-      </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start">
-        <p className="truncate font-bold text-[var(--bp-text)] hover:underline">{file.name}</p>
-        <p className="text-sm text-slate-500">{formatFileSize(file.size) || file.type || 'Attached file'}</p>
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="shrink-0 rounded-lg bg-red-500/15 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/25"
-      >
-        Remove
-      </button>
-    </div>
+      </span>
+      <span className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-[var(--bp-text)]">{file.name}</p>
+        <p className="text-xs text-slate-500">{formatFileSize(file.size) || file.type || 'Attached file'}</p>
+      </span>
+    </button>
   )
-}
+})
 
 function formatFileSize(size?: string) {
   const bytes = Number(size)
@@ -941,17 +595,17 @@ function formatFileSize(size?: string) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function Timeline({ title, desc, color }: { title: string; desc: string; color: string }) {
+const Timeline = memo(function Timeline({ title, desc, color }: { title: string; desc: string; color: string }) {
   return (
-    <div className="relative mb-8 flex gap-5">
-      <span className={`mt-1 h-6 w-6 rounded-full ${color}`} />
+    <div className="flex gap-3">
+      <span className={`mt-1 h-4 w-4 shrink-0 rounded-full ${color}`} />
       <div>
-        <p className="font-bold text-[var(--bp-text)]">{title}</p>
-        <p className="text-sm text-slate-500">{desc}</p>
+        <p className="text-sm font-bold text-[var(--bp-text)]">{title}</p>
+        <p className="text-xs text-slate-500">{desc}</p>
       </div>
     </div>
   )
-}
+})
 
 function formatActivityTitle(action: string) {
   return action
@@ -978,54 +632,25 @@ function attachmentColor(type?: string) {
   return 'bg-orange-500'
 }
 
-function Time({ value, label, blue, yellow }: { value: string; label: string; blue?: boolean; yellow?: boolean }) {
-  return (
-    <div>
-      <p className={`text-xl font-black ${blue ? 'text-blue-400' : yellow ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-text)]'}`}>{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
-    </div>
-  )
-}
-
-function SideCard({
-  title,
+function MetaRow({
+  label,
   value,
-  red,
-  blue,
-  yellow,
-  onClick,
+  secondaryValue,
+  color,
 }: {
-  title: string
+  label: string
   value: string
-  red?: boolean
-  blue?: boolean
-  yellow?: boolean
-  onClick?: () => void
+  secondaryValue?: string
+  color?: 'red' | 'blue' | 'yellow'
 }) {
-  const content = (
-    <>
-      <p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-500">{title}</p>
-      <p className={`whitespace-pre-line font-bold ${red ? 'text-red-400' : blue ? 'text-blue-400' : yellow ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-text)]'}`}>
-        {value}
-      </p>
-    </>
-  )
-
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="w-full rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-5 text-start transition hover:border-[var(--bp-accent)]/50 active:scale-[0.99]"
-      >
-        {content}
-      </button>
-    )
-  }
+  const valueColor =
+    color === 'red' ? 'text-red-400' : color === 'blue' ? 'text-blue-400' : color === 'yellow' ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-text)]'
 
   return (
-    <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-5">
-      {content}
+    <div className="py-2.5 first:pt-0 last:pb-0">
+      <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`mt-1 text-sm font-bold ${valueColor}`}>{value}</p>
+      {secondaryValue ? <p className="mt-0.5 text-xs text-slate-500">{secondaryValue}</p> : null}
     </div>
   )
 }
@@ -1057,34 +682,6 @@ function normalizeDependencyPriority(priority: string): DependencyTask['priority
   return 'Medium'
 }
 
-function toUiSubtask(subtask: ApiTask['subtasks'][number]) {
-  return {
-    id: subtask.id,
-    title: subtask.title,
-    date: formatDate(subtask.dueDate) || 'No due date',
-    done: subtask.isDone,
-    source: subtask,
-  }
-}
-
-function toLabelDetails(task?: ApiTask | null): ApiTaskLabel[] {
-  if (!task) return []
-  if (task.labelDetails?.length) return task.labelDetails
-
-  return task.labels.map((label) => ({
-    id: toLabelId(label),
-    name: label,
-  }))
-}
-
-function toLabelId(label: string) {
-  return label
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9\u0600-\u06ff]+/gi, '-')
-    .replace(/^-+|-+$/g, '') || encodeURIComponent(label)
-}
-
 function formatDate(value?: string) {
   if (!value) return ''
   const date = new Date(value)
@@ -1096,24 +693,15 @@ function formatDate(value?: string) {
   }).format(date)
 }
 
-function formatMinutes(value?: number, fallback = '0h') {
-  if (value === undefined || value === null) return fallback
-  if (value <= 0) return '0h'
-  const hours = Math.floor(value / 60)
-  const minutes = value % 60
-  if (!hours) return `${minutes}m`
-  return minutes ? `${hours}h ${minutes}m` : `${hours}h`
+function formatActivityDateTime(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
 }
-
-function formatHours(value?: number, fallback = '0h') {
-  if (value === undefined || value === null) return fallback
-  if (value <= 0) return '0h'
-  return Number.isInteger(value) ? `${value}h` : `${value.toFixed(1)}h`
-}
-
-function clampPercent(value: number) {
-  return Math.max(0, Math.min(Math.round(value), 100))
-}
-
-const labelColors = ['purple', 'yellow', 'blue', 'red', 'green']
-

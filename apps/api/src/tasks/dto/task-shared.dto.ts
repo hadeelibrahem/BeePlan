@@ -202,6 +202,10 @@ export class TaskCoreDto {
   isFavorite?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  isFocusTask?: boolean;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SubtaskDto)
@@ -211,6 +215,12 @@ export class TaskCoreDto {
   @ValidateNested()
   @Type(() => TaskRecurrenceDto)
   recurrence?: TaskRecurrenceDto | null;
+}
+
+export class SubtaskReorderDto {
+  @IsArray()
+  @IsUUID('4', { each: true })
+  subtaskIds!: string[];
 }
 
 export class DependencyTaskIdsDto {

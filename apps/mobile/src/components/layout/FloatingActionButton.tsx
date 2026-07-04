@@ -26,7 +26,7 @@ export const FloatingActionButton = memo(function FloatingActionButton({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Primary action"
-      className="absolute right-6 h-16 w-16 items-center justify-center rounded-3xl shadow-2xl active:scale-95"
+      className="absolute right-5 h-14 w-14 items-center justify-center rounded-2xl shadow-2xl active:scale-95"
       style={{
         bottom: resolvedBottom,
         backgroundColor: theme.colors.accent,
@@ -36,7 +36,7 @@ export const FloatingActionButton = memo(function FloatingActionButton({
         elevation: 6,
       }}
     >
-      <Text className="text-3xl font-black" style={{ color: theme.colors.accentText }}>{label}</Text>
+      <Text className="text-2xl font-black" style={{ color: theme.colors.accentText }}>{label}</Text>
     </Pressable>
   )
 })

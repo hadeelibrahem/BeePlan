@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
 import { useTheme } from '../theme/useTheme'
 
@@ -44,6 +45,7 @@ export function TaskDependenciesWorkflowSheet({
 }: TaskDependenciesWorkflowSheetProps) {
   const { theme } = useTheme()
   const { colors } = theme
+  const insets = useSafeAreaInsets()
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [replacementId, setReplacementId] = useState('')
@@ -101,11 +103,12 @@ export function TaskDependenciesWorkflowSheet({
         />
 
         <View
-          className="rounded-t-[28px] border px-5 pb-5 pt-3"
+          className="rounded-t-[28px] border px-5 pt-3"
           style={{
             maxHeight: '90%',
             backgroundColor: colors.surfaceElevated,
             borderColor: colors.border,
+            paddingBottom: insets.bottom + 20,
             shadowColor: theme.cardShadow.color,
             shadowOpacity: theme.cardShadow.opacity,
             shadowRadius: theme.cardShadow.radius,

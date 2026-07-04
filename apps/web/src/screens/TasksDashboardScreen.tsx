@@ -55,6 +55,7 @@ export default function TasksDashboardScreen({
     <AppLayout
       active="dashboard"
       onNavigateTasks={onViewTasks}
+      onNavigateFocus={nav.onNavigateFocus}
       onNavigateReminders={onViewReminders}
       onNavigateCalendar={nav.onNavigateCalendar}
       onNavigateNotes={nav.onNavigateNotes}
@@ -81,14 +82,14 @@ export default function TasksDashboardScreen({
       />
 
       {summaryError ? (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
-          <p className="text-sm font-semibold text-red-300">{summaryError}</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+          <p className="text-xs font-semibold text-red-300">{summaryError}</p>
           {onRetrySummary ? (
             <button
               type="button"
               onClick={onRetrySummary}
               disabled={summaryLoading}
-              className="text-sm font-bold text-[var(--bp-accent)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+              className="text-xs font-bold text-[var(--bp-accent)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
             >
               {summaryLoading ? 'Retrying…' : 'Retry'}
             </button>
@@ -96,44 +97,44 @@ export default function TasksDashboardScreen({
         </div>
       ) : null}
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value={todayTasksValue} title="Today's Tasks" desc="Tasks planned for today" />
-        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value={completedValue} title="Completed" desc="Tasks you've completed" />
-        <StatsCard icon={<AnalyticsIcon className="h-5 w-5" />} value={highPriorityValue} title="High Priority" desc="Important tasks to focus on" />
+      <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={todayTasksValue} title="Today's Tasks" desc="Tasks planned for today" />
+        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={completedValue} title="Completed" desc="Tasks you've completed" />
+        <StatsCard icon={<AnalyticsIcon className="h-4 w-4" />} value={highPriorityValue} title="High Priority" desc="Important tasks to focus on" />
         <StatsCard
-          icon={<RemindersIcon className="h-5 w-5" />}
+          icon={<RemindersIcon className="h-4 w-4" />}
           value={remindersValue}
           title="Reminders"
           desc="Smart reminders synced"
         />
       </section>
 
-      <SectionCard className="mb-6">
+      <SectionCard className="mb-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold">Overall Progress</h2>
-            <p className="text-sm text-slate-400">You're doing great! Keep it up.</p>
+            <h2 className="text-sm font-bold">Overall Progress</h2>
+            <p className="text-xs text-slate-400">You're doing great! Keep it up.</p>
           </div>
-          <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[var(--bp-accent)] text-xl font-black text-[var(--bp-accent)]">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-[var(--bp-accent)] text-sm font-black text-[var(--bp-accent)]">
             {isLoading ? loadingLabel : `${overallProgress}%`}
           </div>
         </div>
 
-        <div className="mt-6 h-3 rounded-full bg-[var(--bp-bg)]">
-          <div className="h-3 rounded-full bg-[var(--bp-accent)]" style={{ width: `${overallProgress}%` }} />
+        <div className="mt-4 h-2 rounded-full bg-[var(--bp-bg)]">
+          <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${overallProgress}%` }} />
         </div>
 
-        <div className="mt-3 flex justify-between text-sm text-slate-400">
+        <div className="mt-2 flex justify-between text-xs text-slate-400">
           <span>{completedTasks} completed</span>
           <span>{totalTasks} total tasks</span>
         </div>
       </SectionCard>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <SectionCard>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-bold">Today's Focus</h2>
-            <button type="button" onClick={onViewTasks} className="text-sm font-bold text-[var(--bp-accent)]">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-bold">Today's Focus</h2>
+            <button type="button" onClick={onViewTasks} className="text-xs font-bold text-[var(--bp-accent)]">
               View All {isRTL ? '<' : '>'}
             </button>
           </div>
@@ -145,13 +146,13 @@ export default function TasksDashboardScreen({
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-4 font-bold">Quick Actions</h2>
+          <h2 className="mb-3 text-sm font-bold">Quick Actions</h2>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <ActionCard icon={<TasksIcon className="h-5 w-5" />} title="New Task" desc="Create a new task" onClick={onViewTasks} />
-            <ActionCard icon={<RemindersIcon className="h-5 w-5" />} title="New Reminder" desc="Add a reminder" onClick={onViewReminders} />
-            <ActionCard icon={<CalendarIcon className="h-5 w-5" />} title="View Calendar" desc="See your schedule" onClick={nav.onNavigateCalendar} />
-            <ActionCard icon={<TasksIcon className="h-5 w-5" />} title="All Tasks" desc="View all tasks" onClick={onViewTasks} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ActionCard icon={<TasksIcon className="h-4 w-4" />} title="New Task" desc="Create a new task" onClick={onViewTasks} />
+            <ActionCard icon={<RemindersIcon className="h-4 w-4" />} title="New Reminder" desc="Add a reminder" onClick={onViewReminders} />
+            <ActionCard icon={<CalendarIcon className="h-4 w-4" />} title="View Calendar" desc="See your schedule" onClick={nav.onNavigateCalendar} />
+            <ActionCard icon={<TasksIcon className="h-4 w-4" />} title="All Tasks" desc="View all tasks" onClick={onViewTasks} />
           </div>
         </SectionCard>
       </section>
@@ -171,13 +172,13 @@ function FocusTask({
   done?: boolean
 }) {
   return (
-    <div className="mb-4 flex items-center gap-4">
-      <div className={`h-5 w-5 rounded-full border ${done ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]' : 'border-slate-500'}`} />
+    <div className="mb-3 flex items-center gap-3">
+      <div className={`h-4 w-4 rounded-full border ${done ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]' : 'border-slate-500'}`} />
       <div className="flex-1">
-        <p className={`font-semibold ${done ? 'text-slate-500 line-through' : ''}`}>{title}</p>
-        <p className="text-sm text-slate-400">{time}</p>
+        <p className={`text-sm font-semibold ${done ? 'text-slate-500 line-through' : ''}`}>{title}</p>
+        <p className="text-xs text-slate-400">{time}</p>
       </div>
-      <span className={`h-2 w-2 rounded-full ${color}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${color}`} />
     </div>
   )
 }
@@ -197,11 +198,11 @@ function ActionCard({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-bg)] p-5 text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--bp-accent)]/40"
+      className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] p-3 text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--bp-accent)]/40"
     >
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">{icon}</div>
-      <h3 className="font-bold">{title}</h3>
-      <p className="text-sm text-slate-400">{desc}</p>
+      <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">{icon}</div>
+      <h3 className="text-sm font-bold">{title}</h3>
+      <p className="text-xs text-slate-400">{desc}</p>
     </button>
   )
 }

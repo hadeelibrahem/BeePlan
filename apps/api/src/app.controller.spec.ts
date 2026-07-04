@@ -14,7 +14,9 @@ describe('AppController', () => {
         {
           provide: DatabaseService,
           useValue: {
-            healthCheck: jest.fn().mockResolvedValue({ ok: true, latencyMs: 1 }),
+            healthCheck: jest
+              .fn()
+              .mockResolvedValue({ ok: true, latencyMs: 1 }),
           },
         },
       ],
