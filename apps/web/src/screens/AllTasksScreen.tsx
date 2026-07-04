@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   AppLayout,
+  EmptyState,
   FilterTabs,
   FloatingActionButton,
   PageHeader,
@@ -12,13 +14,23 @@ import {
 } from '../components/layout'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
-import { toUiPriority, toUiStatus, type ApiTask } from '../lib/tasksApi'
+import {
+  getTaskFilterSummary,
+  getTasks,
+  toUiPriority,
+  toUiStatus,
+  type ApiTask,
+  type ApiTaskStatus,
+  type TaskDueFilter,
+  type TaskFilters,
+} from '../lib/tasksApi'
 
 type AllTasksScreenProps = SidebarNavHandlers & {
   onBackDashboard?: () => void
   onCreateTask?: () => void
   onViewTaskDetails?: (taskId: string) => void
   onSignOut?: () => void
+  accessToken?: string | null
   tasks?: ApiTask[]
   loading?: boolean
   error?: string
@@ -45,42 +57,132 @@ const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: 'missed', label: 'Missed' },
 ]
 
+function mapTabToApiStatus(tab: TaskFilter): ApiTaskStatus | undefined {
+  if (tab === 'todo') return 'todo'
+  if (tab === 'inProgress') return 'in_progress'
+  if (tab === 'done') return 'done'
+  if (tab === 'missed') return 'missed'
+  return undefined
+}
+
+const DUE_FILTER_LABELS: Record<TaskDueFilter, string> = {
+  today: 'Today',
+  upcoming: 'Upcoming',
+  overdue: 'Overdue',
+}
+
 export default function AllTasksScreen({
   onBackDashboard,
   onCreateTask,
   onViewTaskDetails,
   onSignOut,
+  accessToken,
   tasks: apiTasks = [],
   loading = false,
   error = '',
   ...nav
 }: AllTasksScreenProps) {
   const [search, setSearch] = useState('')
-  const [activeFilter, setActiveFilter] = useState<TaskFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<TaskFilter>('all')
+  const [dueFilter, setDueFilter] = useState<TaskDueFilter | null>(null)
+  const [focusActive, setFocusActive] = useState(false)
+  const [completedActive, setCompletedActive] = useState(false)
+  const [highPriorityActive, setHighPriorityActive] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
-  const mappedTasks = apiTasks.map(fromApiTask)
-  const filteredTasks = mappedTasks.filter((task) => {
-    const matchesSearch = task.title.toLowerCase().includes(search.toLowerCase())
-    const matchesFilter =
-      activeFilter === 'all' ||
-      (activeFilter === 'todo' && task.status === 'To Do') ||
-      (activeFilter === 'inProgress' && task.status === 'In Progress') ||
-      (activeFilter === 'done' && task.status === 'Done') ||
-      (activeFilter === 'missed' && task.status === 'Missed')
 
-    return matchesSearch && matchesFilter
+  const filters: TaskFilters = useMemo(() => {
+    const next: TaskFilters = {}
+    const status = mapTabToApiStatus(statusFilter)
+    if (status) next.status = status
+    if (dueFilter) next.due = dueFilter
+    if (focusActive) next.focus = true
+    if (completedActive) next.completed = true
+    if (highPriorityActive) next.priority = 'high'
+    if (categoryFilter) next.category = categoryFilter
+    return next
+  }, [statusFilter, dueFilter, focusActive, completedActive, highPriorityActive, categoryFilter])
+
+  const hasActiveFilters =
+    statusFilter !== 'all' ||
+    Boolean(dueFilter) ||
+    focusActive ||
+    completedActive ||
+    highPriorityActive ||
+    Boolean(categoryFilter)
+
+  const tasksQuery = useQuery({
+    queryKey: ['tasks', filters],
+    queryFn: () => getTasks(accessToken ?? '', filters),
+    enabled: Boolean(accessToken),
   })
+
+  const summaryQuery = useQuery({
+    queryKey: ['tasks', 'filter-summary'],
+    queryFn: () => getTaskFilterSummary(accessToken ?? ''),
+    enabled: Boolean(accessToken),
+  })
+
+  const mappedTasks = apiTasks.map(fromApiTask)
   const allCount = mappedTasks.length
   const todoCount = mappedTasks.filter((task) => task.status === 'To Do').length
   const inProgressCount = mappedTasks.filter((task) => task.status === 'In Progress').length
   const doneCount = mappedTasks.filter((task) => task.status === 'Done').length
   const missedCount = mappedTasks.filter((task) => task.status === 'Missed').length
 
+  const filteredTasks = (tasksQuery.data ?? [])
+    .map(fromApiTask)
+    .filter((task) => task.title.toLowerCase().includes(search.toLowerCase()))
+
+  const counts = summaryQuery.data?.counts
+  const categories = summaryQuery.data?.categories ?? []
+
+  function clearFilters() {
+    setStatusFilter('all')
+    setDueFilter(null)
+    setFocusActive(false)
+    setCompletedActive(false)
+    setHighPriorityActive(false)
+    setCategoryFilter(null)
+  }
+
+  function toggleDueFilter(value: TaskDueFilter) {
+    setDueFilter((current) => (current === value ? null : value))
+  }
+
+  const activeChips: { key: string; label: string; onRemove: () => void }[] = []
+  if (statusFilter !== 'all') {
+    activeChips.push({
+      key: 'status',
+      label: FILTERS.find((filter) => filter.value === statusFilter)?.label ?? statusFilter,
+      onRemove: () => setStatusFilter('all'),
+    })
+  }
+  if (dueFilter) {
+    activeChips.push({ key: 'due', label: DUE_FILTER_LABELS[dueFilter], onRemove: () => setDueFilter(null) })
+  }
+  if (focusActive) {
+    activeChips.push({ key: 'focus', label: 'Focus Tasks', onRemove: () => setFocusActive(false) })
+  }
+  if (completedActive) {
+    activeChips.push({ key: 'completed', label: 'Completed', onRemove: () => setCompletedActive(false) })
+  }
+  if (highPriorityActive) {
+    activeChips.push({ key: 'highPriority', label: 'High Priority', onRemove: () => setHighPriorityActive(false) })
+  }
+  if (categoryFilter) {
+    activeChips.push({ key: 'category', label: categoryFilter, onRemove: () => setCategoryFilter(null) })
+  }
+
+  const listError = error || (tasksQuery.error instanceof Error ? tasksQuery.error.message : '')
+  const listLoading = loading || tasksQuery.isLoading
+
   return (
     <AppLayout
       active="tasks"
       onNavigateDashboard={onBackDashboard}
+      onNavigateFocus={nav.onNavigateFocus}
       onNavigateReminders={nav.onNavigateReminders}
       onNavigateCalendar={nav.onNavigateCalendar}
       onNavigateNotes={nav.onNavigateNotes}
@@ -108,11 +210,11 @@ export default function AllTasksScreen({
         pageActions={<SecondaryButton>Sort: Due Date</SecondaryButton>}
       />
 
-      <div className="mb-6">
-        <FilterTabs tabs={FILTERS} active={activeFilter} onChange={setActiveFilter} />
+      <div className="mb-4">
+        <FilterTabs tabs={FILTERS} active={statusFilter} onChange={setStatusFilter} />
       </div>
 
-      <section className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
+      <section className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <StatsCard icon="ALL" value={String(allCount)} title="All Tasks" desc="Every task you've created" />
         <StatsCard icon="TODO" value={String(todoCount)} title="To Do" desc="Not started yet" />
         <StatsCard icon="MOVE" value={String(inProgressCount)} title="In Progress" desc="Currently working on" />
@@ -120,37 +222,118 @@ export default function AllTasksScreen({
         <StatsCard icon="LATE" value={String(missedCount)} title="Missed" desc="Past their due date" />
       </section>
 
-      {error ? <p className="mb-4 text-sm font-semibold text-red-300">{error}</p> : null}
-      {loading ? <p className="mb-4 text-sm text-slate-400">Loading tasks...</p> : null}
+      {listError ? <p className="mb-3 text-sm font-semibold text-red-300">{listError}</p> : null}
+      {listLoading ? <p className="mb-3 text-sm text-slate-400">Loading tasks...</p> : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
-        <section className="space-y-4">
-          <TaskGroup title="Tasks" count={`${filteredTasks.length} tasks`} tasks={filteredTasks} onViewTaskDetails={onViewTaskDetails} />
+      {activeChips.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {activeChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={chip.onRemove}
+              className="flex items-center gap-1.5 rounded-full bg-[var(--bp-accent)]/15 px-3 py-1 text-xs font-semibold text-[var(--bp-accent)] transition hover:bg-[var(--bp-accent)]/25"
+            >
+              {chip.label}
+              <span aria-hidden>&times;</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-full border border-[var(--bp-border)] px-3 py-1 text-xs font-semibold text-slate-400 transition hover:border-[var(--bp-accent)]/40 hover:text-[var(--bp-text)]"
+          >
+            Clear Filters
+          </button>
+        </div>
+      )}
+
+      <div className="grid gap-3 xl:grid-cols-[1fr_240px]">
+        <section className="space-y-3">
+          {!listLoading && filteredTasks.length === 0 ? (
+            <EmptyState
+              icon="EMPTY"
+              title="No tasks match the selected filters."
+              description={
+                hasActiveFilters || search
+                  ? 'Try clearing a filter or adjusting your search.'
+                  : "You don't have any tasks yet — create one to get started."
+              }
+            />
+          ) : (
+            <TaskGroup title="Tasks" count={`${filteredTasks.length} tasks`} tasks={filteredTasks} onViewTaskDetails={onViewTaskDetails} />
+          )}
         </section>
 
-        <aside className="space-y-4">
+        <aside className="space-y-3">
           <Panel title="Quick Filters">
-            <FilterRow label="Overdue" count="3" color="bg-red-400" />
-            <FilterRow label="Due Today" count="5" color="bg-[var(--bp-accent)]" />
-            <FilterRow label="Due This Week" count="9" color="bg-blue-400" />
-          </Panel>
-
-          <Panel title="My Filters">
-            <FilterRow label="Important" count="6" color="bg-[var(--bp-accent)]" />
-            <FilterRow label="Personal Tasks" count="4" color="bg-purple-400" />
+            <FilterRow
+              label="Overdue"
+              count={counts?.overdue ?? 0}
+              color="bg-red-400"
+              active={dueFilter === 'overdue'}
+              onClick={() => toggleDueFilter('overdue')}
+            />
+            <FilterRow
+              label="Due Today"
+              count={counts?.today ?? 0}
+              color="bg-[var(--bp-accent)]"
+              active={dueFilter === 'today'}
+              onClick={() => toggleDueFilter('today')}
+            />
+            <FilterRow
+              label="Upcoming"
+              count={counts?.upcoming ?? 0}
+              color="bg-blue-400"
+              active={dueFilter === 'upcoming'}
+              onClick={() => toggleDueFilter('upcoming')}
+            />
+            <FilterRow
+              label="Focus Tasks"
+              count={counts?.focus ?? 0}
+              color="bg-purple-400"
+              active={focusActive}
+              onClick={() => setFocusActive((value) => !value)}
+            />
+            <FilterRow
+              label="Completed"
+              count={counts?.completed ?? 0}
+              color="bg-green-400"
+              active={completedActive}
+              onClick={() => setCompletedActive((value) => !value)}
+            />
+            <FilterRow
+              label="High Priority"
+              count={counts?.highPriority ?? 0}
+              color="bg-orange-400"
+              active={highPriorityActive}
+              onClick={() => setHighPriorityActive((value) => !value)}
+            />
           </Panel>
 
           <Panel title="Categories">
-            <FilterRow label="Work" count="12" color="bg-blue-400" />
-            <FilterRow label="Personal" count="6" color="bg-purple-400" />
-            <FilterRow label="Study" count="3" color="bg-green-400" />
-            <FilterRow label="Health" count="2" color="bg-red-400" />
+            {categories.length === 0 ? (
+              <p className="text-xs text-slate-400">No categories yet.</p>
+            ) : (
+              categories.map((category, index) => (
+                <FilterRow
+                  key={category.name}
+                  label={category.name}
+                  count={category.count}
+                  color={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                  active={categoryFilter === category.name}
+                  onClick={() => setCategoryFilter((current) => (current === category.name ? null : category.name))}
+                />
+              ))
+            )}
           </Panel>
         </aside>
       </div>
     </AppLayout>
   )
 }
+
+const CATEGORY_COLORS = ['bg-blue-400', 'bg-purple-400', 'bg-green-400', 'bg-red-400', 'bg-orange-400', 'bg-[var(--bp-accent)]']
 
 function TaskGroup({
   title,
@@ -165,11 +348,11 @@ function TaskGroup({
 }) {
   return (
     <div>
-      <h3 className="mb-3 font-bold">
-        {title} <span className="text-sm text-slate-400">- {count}</span>
+      <h3 className="mb-2 text-sm font-bold">
+        {title} <span className="text-xs text-slate-400">- {count}</span>
       </h3>
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]">
+      <div className="overflow-hidden rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)]">
         {tasks.map((task) => (
           <TaskRow key={task.id} task={task} onViewTaskDetails={onViewTaskDetails} />
         ))}
@@ -191,12 +374,12 @@ function TaskRow({
     <button
       type="button"
       onClick={() => onViewTaskDetails?.(task.id)}
-      className="grid w-full cursor-pointer grid-cols-[28px_1fr_120px_120px_160px_24px] items-center gap-4 border-b border-[var(--bp-border)] px-5 py-4 text-start transition hover:bg-[var(--bp-bg)] last:border-b-0"
+      className="grid w-full cursor-pointer grid-cols-[24px_1fr_110px_110px_140px_20px] items-center gap-3 border-b border-[var(--bp-border)] px-3 py-2.5 text-start transition hover:bg-[var(--bp-bg)] last:border-b-0"
     >
-      <div className={`h-5 w-5 rounded-md border ${task.done ? 'border-green-400 bg-green-400' : 'border-slate-500'}`} />
+      <div className={`h-4 w-4 rounded border ${task.done ? 'border-green-400 bg-green-400' : 'border-slate-500'}`} />
 
       <div>
-        <p className={`font-semibold text-[var(--bp-text)] ${task.done ? 'text-slate-500 line-through' : ''}`}>{task.title}</p>
+        <p className={`text-sm font-semibold text-[var(--bp-text)] ${task.done ? 'text-slate-500 line-through' : ''}`}>{task.title}</p>
         <p className="text-xs text-slate-400">{task.category} - {task.due}</p>
       </div>
 
@@ -204,9 +387,9 @@ function TaskRow({
       <Badge label={task.status} type={task.status} />
 
       <div>
-        <div className="h-2 rounded-full bg-[var(--bp-bg)]">
+        <div className="h-1.5 rounded-full bg-[var(--bp-bg)]">
           <div
-            className={`h-2 rounded-full ${
+            className={`h-1.5 rounded-full ${
               task.progress === 100 ? 'bg-green-400' : task.progress === 0 ? 'bg-slate-600' : 'bg-[var(--bp-accent)]'
             }`}
             style={{ width: `${task.progress}%` }}
@@ -250,26 +433,50 @@ function Badge({ label, type }: { label: string; type: string }) {
             ? 'bg-blue-500/20 text-blue-300'
             : 'bg-slate-500/20 text-slate-300'
 
-  return <span className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${color}`}>{label}</span>
+  return <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-bold ${color}`}>{label}</span>
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <SectionCard className="p-5">
-      <h3 className="mb-4 font-bold">{title}</h3>
+    <SectionCard>
+      <h3 className="mb-3 text-sm font-bold">{title}</h3>
       {children}
     </SectionCard>
   )
 }
 
-function FilterRow({ label, count, color }: { label: string; count: string; color: string }) {
+function FilterRow({
+  label,
+  count,
+  color,
+  active,
+  onClick,
+}: {
+  label: string
+  count: number
+  color: string
+  active?: boolean
+  onClick?: () => void
+}) {
   return (
-    <div className="mb-4 flex items-center justify-between text-sm last:mb-0">
-      <div className="flex items-center gap-3">
-        <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
-        <span className="text-slate-300">{label}</span>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`mb-3 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition last:mb-0 ${
+        active ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-text)]' : 'text-slate-300 hover:bg-[var(--bp-bg)]'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 rounded-full ${color}`} />
+        <span className="text-sm">{label}</span>
       </div>
-      <span className="rounded-full bg-[var(--bp-border)] px-2 py-1 text-xs">{count}</span>
-    </div>
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs ${
+          active ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]' : 'bg-[var(--bp-border)]'
+        }`}
+      >
+        {count}
+      </span>
+    </button>
   )
 }

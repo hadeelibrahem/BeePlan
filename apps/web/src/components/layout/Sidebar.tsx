@@ -5,16 +5,18 @@ import {
   CalendarIcon,
   CloseIcon,
   DashboardIcon,
+  FocusIcon,
   NotesIcon,
   RemindersIcon,
   TasksIcon,
 } from './icons'
 
-export type SidebarPage = 'dashboard' | 'tasks' | 'reminders' | 'calendar' | 'notes' | 'analytics'
+export type SidebarPage = 'dashboard' | 'tasks' | 'focus' | 'reminders' | 'calendar' | 'notes' | 'analytics'
 
 export type SidebarNavHandlers = {
   onNavigateDashboard?: () => void
   onNavigateTasks?: () => void
+  onNavigateFocus?: () => void
   onNavigateReminders?: () => void
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
@@ -33,6 +35,7 @@ type SidebarProps = SidebarNavHandlers & {
 const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon; handler: keyof SidebarNavHandlers }[] = [
   { page: 'dashboard', label: 'Dashboard', Icon: DashboardIcon, handler: 'onNavigateDashboard' },
   { page: 'tasks', label: 'Tasks', Icon: TasksIcon, handler: 'onNavigateTasks' },
+  { page: 'focus', label: 'Focus', Icon: FocusIcon, handler: 'onNavigateFocus' },
   { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
   { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
   { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
@@ -42,7 +45,7 @@ const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon;
 export function Sidebar({ active, panelTitle, panelCaption, panelPercent, mobileOpen, onCloseMobile, ...nav }: SidebarProps) {
   return (
     <>
-      <aside className="hidden w-64 shrink-0 rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 p-4 lg:block">
+      <aside className="hidden w-48 shrink-0 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 p-3 lg:block">
         <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} />
       </aside>
 
@@ -92,11 +95,11 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="mb-8 flex items-center gap-3 px-2">
-        <BeePlanLogo showTagline size={48} />
+      <div className="mb-5 flex items-center gap-2 px-1">
+        <BeePlanLogo showTagline size={34} />
       </div>
 
-      <nav className="space-y-1 text-sm">
+      <nav className="space-y-0.5 text-sm">
         {NAV_ITEMS.map(({ page, label, Icon, handler }) => (
           <SideItem
             key={page}
@@ -111,8 +114,8 @@ function SidebarContent({
         ))}
       </nav>
 
-      <div className="mt-10">
-        <p className="mb-3 px-4 text-xs font-bold uppercase tracking-wide text-slate-400">Categories</p>
+      <div className="mt-6">
+        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Categories</p>
         <CategoryDot label="Work" color="bg-blue-400" />
         <CategoryDot label="Personal" color="bg-purple-400" />
         <CategoryDot label="Study" color="bg-green-400" />
@@ -120,10 +123,10 @@ function SidebarContent({
         <CategoryDot label="Finance" color="bg-[var(--bp-accent)]" />
       </div>
 
-      <div className="mt-16 rounded-2xl bg-[var(--bp-bg)] p-4">
-        <p className="font-bold">{panelTitle}</p>
-        <p className="mt-1 text-xs text-slate-400">{panelCaption}</p>
-        <div className="mt-4 flex h-20 w-20 items-center justify-center rounded-full border-4 border-[var(--bp-accent)] font-black text-[var(--bp-accent)]">
+      <div className="mt-6 rounded-xl bg-[var(--bp-bg)] p-3">
+        <p className="text-xs font-bold">{panelTitle}</p>
+        <p className="mt-0.5 text-[11px] text-slate-400">{panelCaption}</p>
+        <div className="mx-auto mt-3 flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[var(--bp-accent)] text-xs font-black text-[var(--bp-accent)]">
           {panelPercent}%
         </div>
       </div>
@@ -147,21 +150,21 @@ function SideItem({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-start transition-all duration-150 ${
+      className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start transition-all duration-150 ${
         active ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'text-slate-300 hover:translate-x-0.5 hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]'
       }`}
     >
       {active && <span className="absolute inset-y-1 start-0 w-1 rounded-full bg-[var(--bp-accent)]" />}
       <span className={active ? 'text-[var(--bp-accent)]' : 'text-slate-400 transition-colors group-hover:text-[var(--bp-text)]'}>{icon}</span>
-      <span className="font-semibold">{label}</span>
+      <span className="text-[13px] font-semibold">{label}</span>
     </button>
   )
 }
 
 function CategoryDot({ label, color }: { label: string; color: string }) {
   return (
-    <div className="mb-3 flex items-center gap-3 px-4 text-sm text-slate-300">
-      <span className={`h-3 w-3 rounded-full ${color}`} />
+    <div className="mb-2 flex items-center gap-2.5 px-3 text-[13px] text-slate-300">
+      <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
       {label}
     </div>
   )

@@ -1,8 +1,8 @@
 import './global.css';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
@@ -21,6 +21,7 @@ import AuthScreen from './src/screens/AuthScreen';
 import AllTasksScreen from './src/screens/AllTasksScreen';
 import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import EditTaskScreen from './src/screens/EditTaskScreen';
+import FocusScreen from './src/screens/FocusScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import TaskDetailsScreen from './src/screens/TaskDetailsScreen';
@@ -45,6 +46,7 @@ type AppScreen =
   | 'reset'
   | 'dashboard'
   | 'tasks'
+  | 'focus'
   | 'createTask'
   | 'taskDetails'
   | 'editTask'
@@ -82,6 +84,11 @@ function ThemedApp() {
   const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
   const { accessToken, loading, user, signOut } = useAuth();
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
+  const invalidateTaskFilters = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    [queryClient],
+  );
 
   useEffect(() => {
     const handleUrl = (url: string | null) => {
@@ -132,11 +139,22 @@ function ThemedApp() {
 
   async function handleToggle(id: string) {
     if (!accessToken) return;
+    const current = reminders.find((reminder) => reminder.id === id);
+    if (!current) return;
+
+    // Optimistic update: flip the reminder's status locally right away and
+    // roll back only if the request fails.
+    const optimisticStatus = current.status === 'done' ? 'active' : 'done';
+    setReminders((currentList) =>
+      currentList.map((reminder) => (reminder.id === id ? { ...reminder, status: optimisticStatus } : reminder)),
+    );
+
     try {
-      const updated = await toggleReminderStatus(id, accessToken);
+      const updated = await toggleReminderStatus(id, accessToken, current.status);
       if (!updated) return;
-      setReminders((current) => current.map((reminder) => (reminder.id === id ? updated : reminder)));
+      setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? updated : reminder)));
     } catch (error) {
+      setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? current : reminder)));
       console.error('[App] toggleReminderStatus failed:', error);
       const message = error instanceof Error ? error.message : 'Could not update reminder.';
       Alert.alert('Failed to update reminder', message);
@@ -159,6 +177,7 @@ function ThemedApp() {
       setTasks((current) => [createdTask, ...current]);
       setSelectedTask(createdTask);
       setScreen('taskDetails');
+      invalidateTaskFilters();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not create task.';
       Alert.alert('Failed to create task', message);
@@ -171,6 +190,7 @@ function ThemedApp() {
     setTasks((current) => current.map((item) => (item.id === taskId ? updatedTask : item)));
     setSelectedTask(updatedTask);
     setScreen('taskDetails');
+    invalidateTaskFilters();
   }
 
   async function handleDeleteTask() {
@@ -184,6 +204,7 @@ function ThemedApp() {
       setTasks((current) => current.filter((task) => task.id !== selectedTask.id));
       setSelectedTask(null);
       setScreen('tasks');
+      invalidateTaskFilters();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not delete task.';
       Alert.alert('Failed to delete task', message);
@@ -201,6 +222,7 @@ function ThemedApp() {
       setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
       setSelectedTask(updatedTask);
       setScreen('tasks');
+      invalidateTaskFilters();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not update task.';
       Alert.alert('Failed to update task', message);
@@ -249,21 +271,34 @@ function ThemedApp() {
         <TasksDashboardScreen
           onSignOut={() => void handleSignOut()}
           onViewTasks={() => setScreen('tasks')}
+          onViewFocus={() => setScreen('focus')}
           onViewReminders={() => setScreen('reminders')}
           onCreateTask={() => setScreen('createTask')}
         />
       ) : screen === 'tasks' ? (
         <AllTasksScreen
           onBackDashboard={() => setScreen('dashboard')}
+          onViewFocus={() => setScreen('focus')}
           onViewReminders={() => setScreen('reminders')}
           onCreateTask={() => setScreen('createTask')}
           onViewTaskDetails={(task) => {
             setSelectedTask(tasks.find((item) => item.id === task.id) ?? null);
             setScreen('taskDetails');
           }}
+          accessToken={accessToken}
           tasks={tasks}
           loading={tasksLoading}
           error={tasksError}
+        />
+      ) : screen === 'focus' ? (
+        <FocusScreen
+          onBackDashboard={() => setScreen('dashboard')}
+          onViewReminders={() => setScreen('reminders')}
+          onViewTaskDetails={(task) => {
+            setSelectedTask(tasks.find((item) => item.id === task.id) ?? null);
+            setScreen('taskDetails');
+          }}
+          tasks={tasks}
         />
       ) : screen === 'createTask' ? (
         <CreateTaskScreen
@@ -273,6 +308,7 @@ function ThemedApp() {
       ) : screen === 'taskDetails' ? (
         <TaskDetailsScreen
           task={selectedTask}
+          tasks={tasks}
           accessToken={accessToken ?? ''}
           onBack={() => setScreen('tasks')}
           onEdit={() => setScreen('editTask')}

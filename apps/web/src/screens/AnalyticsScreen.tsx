@@ -56,21 +56,21 @@ export default function AnalyticsScreen({ tasks = [], reminders = [], onSignOut,
         }
       />
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value={String(completedTasks)} title="Completed Tasks" desc="Tasks marked done" />
-        <StatsCard icon={<TasksIcon className="h-5 w-5" />} value={String(missedTasks)} title="Missed Tasks" desc="Tasks past their due date" />
-        <StatsCard icon={<AnalyticsIcon className="h-5 w-5" />} value={`${completionRate}%`} title="Completion Rate" desc="Completed of all tasks" />
-        <StatsCard icon={<RemindersIcon className="h-5 w-5" />} value={String(reminders.length)} title="Reminders" desc="Active and completed" />
+      <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={String(completedTasks)} title="Completed Tasks" desc="Tasks marked done" />
+        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={String(missedTasks)} title="Missed Tasks" desc="Tasks past their due date" />
+        <StatsCard icon={<AnalyticsIcon className="h-4 w-4" />} value={`${completionRate}%`} title="Completion Rate" desc="Completed of all tasks" />
+        <StatsCard icon={<RemindersIcon className="h-4 w-4" />} value={String(reminders.length)} title="Reminders" desc="Active and completed" />
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <SectionCard>
-          <h2 className="mb-4 font-bold">Tasks by Category</h2>
+          <h2 className="mb-3 text-sm font-bold">Tasks by Category</h2>
           <BreakdownList entries={byCategory} total={totalTasks} />
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-4 font-bold">Tasks by Priority</h2>
+          <h2 className="mb-3 text-sm font-bold">Tasks by Priority</h2>
           <BreakdownList entries={byPriority} total={totalTasks} labelize={capitalize} />
         </SectionCard>
       </div>
@@ -105,7 +105,7 @@ function BreakdownList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {entries.map(([label, count]) => {
         const percent = total === 0 ? 0 : Math.round((count / total) * 100)
         return (
@@ -114,8 +114,8 @@ function BreakdownList({
               <span className="font-semibold text-[var(--bp-text)]">{labelize(label)}</span>
               <span className="text-slate-400">{count} - {percent}%</span>
             </div>
-            <div className="h-2 rounded-full bg-[var(--bp-bg)]">
-              <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${percent}%` }} />
+            <div className="h-1.5 rounded-full bg-[var(--bp-bg)]">
+              <div className="h-1.5 rounded-full bg-[var(--bp-accent)]" style={{ width: `${percent}%` }} />
             </div>
           </div>
         )

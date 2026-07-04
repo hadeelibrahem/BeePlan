@@ -1362,7 +1362,8 @@ export class AuthService {
       throw new BadRequestException('Google redirect URI is invalid.');
     }
 
-    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
 
     if (isProduction && !this.isPublicHttpsUrl(url)) {
       console.info(

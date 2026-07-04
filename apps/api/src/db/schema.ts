@@ -3,6 +3,7 @@ import {
   boolean,
   date,
   decimal,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -99,40 +100,63 @@ export const savedLocations = pgTable('saved_locations', {
   createdAt: createdAt(),
 });
 
-export const tasks = pgTable('tasks', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  priority: varchar('priority', { length: 20 }).notNull().default('medium'),
-  status: varchar('status', { length: 20 }).notNull().default('todo'),
-  progress: integer('progress').notNull().default(0),
-  dueDate: timestamp('due_date'),
-  dueTime: varchar('due_time', { length: 20 }),
-  categoryId: uuid('category_id').references(() => categories.id, {
-    onDelete: 'set null',
-  }),
-  category: varchar('category', { length: 120 }),
-  notes: text('notes'),
-  estimatedTimeMinutes: integer('estimated_time_minutes').notNull().default(0),
-  spentTimeMinutes: integer('spent_time_minutes').notNull().default(0),
-  remainingTimeMinutes: integer('remaining_time_minutes')
-    .notNull()
-    .default(0),
-  reminderEnabled: boolean('reminder_enabled').notNull().default(false),
-  reminderBeforeMinutes: integer('reminder_before_minutes'),
-  labels: jsonb('labels'),
-  attachments: jsonb('attachments'),
-  isFavorite: boolean('is_favorite').notNull().default(false),
-  recurrenceRootId: uuid('recurrence_root_id').references(
-    (): AnyPgColumn => tasks.id,
-    { onDelete: 'set null' },
-  ),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const tasks = pgTable(
+  'tasks',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    priority: varchar('priority', { length: 20 }).notNull().default('medium'),
+    status: varchar('status', { length: 20 }).notNull().default('todo'),
+    progress: integer('progress').notNull().default(0),
+    dueDate: timestamp('due_date'),
+    dueTime: varchar('due_time', { length: 20 }),
+    categoryId: uuid('category_id').references(() => categories.id, {
+      onDelete: 'set null',
+    }),
+    category: varchar('category', { length: 120 }),
+    notes: text('notes'),
+    estimatedTimeMinutes: integer('estimated_time_minutes')
+      .notNull()
+      .default(0),
+    spentTimeMinutes: integer('spent_time_minutes').notNull().default(0),
+    remainingTimeMinutes: integer('remaining_time_minutes')
+      .notNull()
+      .default(0),
+    reminderEnabled: boolean('reminder_enabled').notNull().default(false),
+    reminderBeforeMinutes: integer('reminder_before_minutes'),
+    labels: jsonb('labels'),
+    attachments: jsonb('attachments'),
+    isFavorite: boolean('is_favorite').notNull().default(false),
+    isFocusTask: boolean('is_focus_task').notNull().default(false),
+    recurrenceRootId: uuid('recurrence_root_id').references(
+      (): AnyPgColumn => tasks.id,
+      { onDelete: 'set null' },
+    ),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // `findAll`/`findOne` and virtually every mutation filter by
+    // (userId, id) or userId alone — this is the hottest lookup in the app.
+    index('idx_tasks_user_id').on(table.userId),
+    // Powers status filter tabs (All Tasks) and the dashboard summary counts.
+    index('idx_tasks_status').on(table.status),
+    // Powers "due today"/calendar/overdue filtering.
+    index('idx_tasks_due_date').on(table.dueDate),
+    // Powers the "High Priority" quick filter and priority filtering.
+    index('idx_tasks_priority').on(table.priority),
+    // Powers the Categories sidebar filter and category counts.
+    index('idx_tasks_category').on(table.category),
+    // Powers the "Focus Tasks" quick filter.
+    index('idx_tasks_focus').on(table.isFocusTask),
+    // Powers the "Has Reminder" filter.
+    index('idx_tasks_reminder_enabled').on(table.reminderEnabled),
+  ],
+);
 
 export const taskAttachments = pgTable('task_attachments', {
   id: id(),
@@ -149,21 +173,29 @@ export const taskAttachments = pgTable('task_attachments', {
   createdAt: createdAt(),
 });
 
-export const subtasks = pgTable('subtasks', {
-  id: id(),
-  taskId: uuid('task_id')
-    .notNull()
-    .references(() => tasks.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  isDone: boolean('is_done').notNull().default(false),
-  orderIndex: integer('order_index').notNull().default(0),
-  assignee: varchar('assignee', { length: 80 }),
-  dueDate: timestamp('due_date'),
-  status: varchar('status', { length: 30 }).notNull().default('todo'),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const subtasks = pgTable(
+  'subtasks',
+  {
+    id: id(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    isDone: boolean('is_done').notNull().default(false),
+    orderIndex: integer('order_index').notNull().default(0),
+    assignee: varchar('assignee', { length: 80 }),
+    dueDate: timestamp('due_date'),
+    status: varchar('status', { length: 30 }).notNull().default('todo'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index('idx_subtasks_task_id').on(table.taskId)],
+);
 
+// Note: task_dependencies.taskId is already served by the composite primary
+// key below (taskId, dependencyTaskId) — Postgres can use a multi-column
+// btree index for lookups on just its leading column, so a separate index
+// on taskId alone would only add write overhead with no read benefit.
 export const taskDependencies = pgTable(
   'task_dependencies',
   {
@@ -175,9 +207,7 @@ export const taskDependencies = pgTable(
       .references(() => tasks.id, { onDelete: 'cascade' }),
     createdAt: createdAt(),
   },
-  (table) => [
-    primaryKey({ columns: [table.taskId, table.dependencyTaskId] }),
-  ],
+  (table) => [primaryKey({ columns: [table.taskId, table.dependencyTaskId] })],
 );
 
 export const taskRecurrenceRules = pgTable('task_recurrence_rules', {

@@ -147,7 +147,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
   }[values.type];
 
   return (
-    <View className="gap-6">
+    <View className="gap-4">
       <InputField
         label={t('reminders.title')}
         placeholder={t('reminders.titlePlaceholder', { brand_name: t('common.brand_name') })}
@@ -157,7 +157,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
       <ReminderTypeSelector value={values.type} onChange={setType} />
 
-      <View className="gap-4">
+      <View className="gap-3">
         <View>
           <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
             {t('reminders.trigger')}
@@ -186,7 +186,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
         )}
 
         {values.type === 'context' && (
-          <View className="gap-4">
+          <View className="gap-3">
             <InputField
               placeholder={t('reminders.contextPlaceholder')}
               value={values.context?.condition ?? ''}
@@ -211,7 +211,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
         )}
 
         {values.type === 'checklist' && (
-          <View className="gap-4">
+          <View className="gap-3">
             <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />
             <ChecklistReminderSection
               value={values.checklistReminderTrigger ?? { time: { type: 'none' }, location: { type: 'none' } }}

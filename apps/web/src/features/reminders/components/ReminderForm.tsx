@@ -142,25 +142,25 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
   return (
     <form
-      className="grid gap-6"
+      className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault()
         void submit()
       }}
     >
-      <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)] focus-within:shadow-[0_0_24px_rgba(253,239,75,0.08)]">
+      <label className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2.5 transition focus-within:border-[var(--bp-accent)] focus-within:shadow-[0_0_24px_rgba(253,239,75,0.08)]">
         <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">{t('reminders.title')}</span>
         <input
           value={values.title}
           onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))}
           placeholder={t('reminders.titlePlaceholder', { brand_name: t('common.brand_name') })}
-          className="w-full bg-transparent py-2 text-2xl font-black leading-8 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)]"
+          className="w-full bg-transparent py-1.5 text-xl font-black leading-7 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)]"
         />
       </label>
 
       <ReminderTypeSelector value={values.type} onChange={setType} />
 
-      <section className="grid gap-4">
+      <section className="grid gap-3">
         <div>
           <p className="text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">{t('reminders.trigger')}</p>
           <p className="mt-1 text-sm text-[var(--bp-muted)]">
@@ -202,7 +202,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
                 }))
               }
               placeholder={t('reminders.contextPlaceholder')}
-              className="w-full rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-4 text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
+              className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2.5 text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
             />
             <input
               value={values.context?.detail ?? ''}
@@ -213,13 +213,13 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
                 }))
               }
               placeholder={t('reminders.contextDetailPlaceholder')}
-              className="w-full rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-4 text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
+              className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2.5 text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
             />
           </section>
         )}
 
         {values.type === 'checklist' && (
-          <section className="grid gap-4">
+          <section className="grid gap-3">
             <ChecklistInput value={values.checklistItems ?? []} onChange={setChecklistItems} />
             <ChecklistReminderSection
               value={values.checklistReminderTrigger ?? { time: { type: 'none' }, location: { type: 'none' } }}
@@ -230,12 +230,12 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
       </section>
 
       <label>
-        <span className="mb-2 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">{t('reminders.notes')}</span>
+        <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">{t('reminders.notes')}</span>
         <textarea
           value={values.description}
           onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
           placeholder={t('reminders.notesPlaceholder')}
-          className="min-h-28 w-full resize-y rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-4 text-base leading-6 text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
+          className="min-h-24 w-full resize-y rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2.5 text-sm leading-6 text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
         />
       </label>
 
@@ -247,7 +247,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
       <button
         type="submit"
         disabled={!isValid || isSubmitting}
-        className="sticky bottom-4 rounded-2xl border border-[var(--bp-accent)] bg-[var(--bp-accent)] py-4 text-base font-black text-[var(--bp-accent-text)] shadow-[0_16px_40px_var(--bp-shadow)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--bp-border)] disabled:bg-[var(--bp-disabled)] disabled:text-[var(--bp-disabled-text)]"
+        className="sticky bottom-4 rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent)] py-3 text-sm font-black text-[var(--bp-accent-text)] shadow-[0_16px_40px_var(--bp-shadow)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--bp-border)] disabled:bg-[var(--bp-disabled)] disabled:text-[var(--bp-disabled-text)]"
       >
         {isSubmitting ? t('reminders.saving') : submitLabel}
       </button>

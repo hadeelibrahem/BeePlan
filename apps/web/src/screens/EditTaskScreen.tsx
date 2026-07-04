@@ -7,37 +7,58 @@ import {
   createRecurrenceSummary,
   type RecurrenceSettings,
 } from '../components/TaskRecurrenceModal'
+import { TaskDependenciesWorkflowModal, type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import {
+  addDependencies,
+  addSubtask,
+  deleteAttachment,
+  deleteSubtask,
+  getAttachments,
   recurrenceToApi,
   recurrenceToUi,
+  removeDependency,
+  replaceDependency,
   toApiPriority,
   toApiStatus,
   toUiPriority,
   toUiStatus,
+  updateSubtask,
+  uploadAttachment,
+  type ApiDependency,
+  type ApiSubtask,
   type ApiTask,
+  type ApiTaskAttachment,
   type TaskPayload,
 } from '../lib/tasksApi'
 
 type EditTaskScreenProps = SidebarNavHandlers & {
   task: ApiTask
+  tasks?: ApiTask[]
+  accessToken?: string
   onBack?: () => void
   onCancel?: () => void
   onDelete?: () => void
   onSave?: (payload: TaskPayload) => Promise<void> | void
+  onTaskUpdated?: (task: ApiTask) => void
   onSignOut?: () => void
 }
 
-type EditableSubtask = {
-  title: string
-  done: boolean
-  assignee?: string
-  dueDate?: string
-  status?: string
-}
+const REMINDER_OPTIONS = [10, 30, 60, 1440]
 
-export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSave, onSignOut, ...nav }: EditTaskScreenProps) {
+export default function EditTaskScreen({
+  task,
+  tasks = [],
+  accessToken,
+  onBack,
+  onCancel,
+  onDelete,
+  onSave,
+  onTaskUpdated,
+  onSignOut,
+  ...nav
+}: EditTaskScreenProps) {
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const [search, setSearch] = useState('')
@@ -49,20 +70,22 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
   const [dueDate, setDueDate] = useState(toDateInput(task.dueDate))
   const [dueTime, setDueTime] = useState(task.dueTime)
   const [notes, setNotes] = useState(task.notes)
+  const [reminderEnabled, setReminderEnabled] = useState(task.reminderEnabled)
+  const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task.reminderBeforeMinutes ?? 30)
+  const [estimatedHours, setEstimatedHours] = useState(String(task.estimatedHours))
+  const [spentHours, setSpentHours] = useState(String(task.spentHours))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [subtasks, setSubtasks] = useState<EditableSubtask[]>(() =>
-    task.subtasks.map((item) => ({
-      title: item.title,
-      done: item.isDone,
-      assignee: item.assignee,
-      dueDate: item.dueDate,
-      status: item.status,
-    })),
-  )
+  const [progress, setProgress] = useState(task.progress)
+  const [subtasks, setSubtasks] = useState<ApiSubtask[]>(task.subtasks)
+  const [dependencies, setDependencies] = useState<ApiDependency[]>(task.dependencies)
+  const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([])
+  const [uploading, setUploading] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
-  const [editingSubtaskIndex, setEditingSubtaskIndex] = useState<number | null>(null)
-  const [deletingSubtaskIndex, setDeletingSubtaskIndex] = useState<number | null>(null)
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null)
+  const [deletingSubtaskId, setDeletingSubtaskId] = useState<string | null>(null)
+  const [dependencyModalMode, setDependencyModalMode] = useState<'add' | 'edit' | 'remove' | null>(null)
+  const [selectedDependency, setSelectedDependency] = useState<ApiDependency | null>(null)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(recurrenceToUi(task.recurrence))
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
   const recurrenceSummary = createRecurrenceSummary(recurrence)
@@ -78,35 +101,157 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
     setDueDate(toDateInput(task.dueDate))
     setDueTime(task.dueTime)
     setNotes(task.notes)
+    setReminderEnabled(task.reminderEnabled)
+    setReminderBeforeMinutes(task.reminderBeforeMinutes ?? 30)
+    setEstimatedHours(String(task.estimatedHours))
+    setSpentHours(String(task.spentHours))
+    setProgress(task.progress)
     setRecurrence(recurrenceToUi(task.recurrence))
-    setSubtasks(
-      task.subtasks.map((item) => ({
-        title: item.title,
-        done: item.isDone,
-        assignee: item.assignee,
-        dueDate: item.dueDate,
-        status: item.status,
-      })),
-    )
+    setSubtasks(task.subtasks)
+    setDependencies(task.dependencies)
   }, [task])
 
-  const handleAddSubtask = (values: SubtaskFormValues) => {
-    setSubtasks((current) => [...current, { title: values.title, done: false }])
-    setAddingSubtask(false)
+  useEffect(() => {
+    if (!accessToken || !task.id) return
+    let cancelled = false
+
+    getAttachments(accessToken, task.id)
+      .then((items) => {
+        if (!cancelled) setAttachments(items)
+      })
+      .catch((fetchError: unknown) => {
+        if (!cancelled) {
+          setError(fetchError instanceof Error ? fetchError.message : 'Unable to load attachments.')
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, task.id])
+
+  function applyUpdatedTask(updatedTask: ApiTask) {
+    setSubtasks(updatedTask.subtasks)
+    setDependencies(updatedTask.dependencies)
+    setProgress(updatedTask.progress)
+    setError('')
+    onTaskUpdated?.(updatedTask)
   }
 
-  const handleEditSubtask = (values: SubtaskFormValues) => {
-    if (editingSubtaskIndex === null) return
-    setSubtasks((current) =>
-      current.map((item, index) => (index === editingSubtaskIndex ? { ...item, title: values.title } : item)),
-    )
-    setEditingSubtaskIndex(null)
+  async function handleAddSubtask(values: SubtaskFormValues) {
+    if (!accessToken) return
+
+    try {
+      const updatedTask = await addSubtask(accessToken, task.id, { title: values.title.trim() })
+      applyUpdatedTask(updatedTask)
+      setAddingSubtask(false)
+    } catch (subtaskError) {
+      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to add subtask.')
+    }
   }
 
-  const handleConfirmDelete = () => {
-    if (deletingSubtaskIndex === null) return
-    setSubtasks((current) => current.filter((_, index) => index !== deletingSubtaskIndex))
-    setDeletingSubtaskIndex(null)
+  async function handleEditSubtask(values: SubtaskFormValues) {
+    if (!accessToken || editingSubtaskId === null) return
+
+    try {
+      const updatedTask = await updateSubtask(accessToken, task.id, editingSubtaskId, { title: values.title.trim() })
+      applyUpdatedTask(updatedTask)
+      setEditingSubtaskId(null)
+    } catch (subtaskError) {
+      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.')
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!accessToken || deletingSubtaskId === null) return
+
+    try {
+      const updatedTask = await deleteSubtask(accessToken, task.id, deletingSubtaskId)
+      applyUpdatedTask(updatedTask)
+    } catch (subtaskError) {
+      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to delete subtask.')
+    } finally {
+      setDeletingSubtaskId(null)
+    }
+  }
+
+  async function handleToggleSubtask(subtask: ApiSubtask) {
+    if (!accessToken) return
+    const nextIsDone = !subtask.isDone
+
+    try {
+      const updatedTask = await updateSubtask(accessToken, task.id, subtask.id, {
+        isDone: nextIsDone,
+        status: nextIsDone ? 'done' : 'todo',
+      })
+      applyUpdatedTask(updatedTask)
+    } catch (subtaskError) {
+      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.')
+    }
+  }
+
+  async function handleAddDependencies(selected: DependencyTask[]) {
+    if (!accessToken || !selected.length) return
+
+    try {
+      const updatedTask = await addDependencies(accessToken, task.id, selected.map((item) => item.id))
+      applyUpdatedTask(updatedTask)
+    } catch (dependencyError) {
+      setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to add dependency.')
+    }
+  }
+
+  async function handleRemoveDependency(dependencyId: string) {
+    if (!accessToken) return
+
+    try {
+      const updatedTask = await removeDependency(accessToken, task.id, dependencyId)
+      applyUpdatedTask(updatedTask)
+    } catch (dependencyError) {
+      setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to remove dependency.')
+    }
+  }
+
+  async function handleReplaceDependency(oldDependencyId: string, replacement: DependencyTask) {
+    if (!accessToken) return
+
+    try {
+      const updatedTask = await replaceDependency(accessToken, task.id, oldDependencyId, replacement.id)
+      applyUpdatedTask(updatedTask)
+    } catch (dependencyError) {
+      setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to replace dependency.')
+    }
+  }
+
+  async function handleUploadFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !accessToken) return
+
+    setUploading(true)
+    setError('')
+
+    try {
+      const uploaded = await uploadAttachment(accessToken, task.id, file)
+      setAttachments((current) => [uploaded, ...current])
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload attachment.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleDeleteAttachment(attachment: ApiTaskAttachment) {
+    if (!accessToken || !attachment.id) return
+    const previous = attachments
+    setAttachments((current) => current.filter((item) => item.id !== attachment.id))
+
+    try {
+      await deleteAttachment(accessToken, task.id, attachment.id)
+    } catch (deleteError) {
+      setAttachments(previous)
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete attachment.')
+    }
   }
 
   async function handleSave() {
@@ -115,8 +260,21 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
       return
     }
 
+    if (dueTime && !dueDate) {
+      setError('Due time requires a due date.')
+      return
+    }
+
+    if (status === 'Done' && subtasks.some((item) => !item.isDone)) {
+      setError('Complete all subtasks before marking this task as Done.')
+      return
+    }
+
     setSaving(true)
     setError('')
+
+    const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60)
+    const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60)
 
     try {
       await onSave?.({
@@ -128,20 +286,12 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
         dueDate: dueDate || undefined,
         dueTime,
         notes: notes.trim(),
-        estimatedTimeMinutes: task.estimatedTimeMinutes,
-        spentTimeMinutes: task.spentTimeMinutes,
-        remainingTimeMinutes: task.remainingTimeMinutes,
-        reminderEnabled: task.reminderEnabled,
-        reminderBeforeMinutes: task.reminderBeforeMinutes,
+        estimatedTimeMinutes,
+        spentTimeMinutes,
+        remainingTimeMinutes: Math.max(estimatedTimeMinutes - spentTimeMinutes, 0),
+        reminderEnabled,
+        reminderBeforeMinutes,
         recurrence: recurrenceToApi(recurrence),
-        subtasks: subtasks.map((item, index) => ({
-          title: item.title,
-          isDone: item.done,
-          orderIndex: index,
-          assignee: item.assignee,
-          dueDate: item.dueDate,
-          status: item.status,
-        })),
       })
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save task changes.')
@@ -150,12 +300,19 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
     }
   }
 
+  const reminderMinuteOptions = REMINDER_OPTIONS.includes(reminderBeforeMinutes)
+    ? REMINDER_OPTIONS
+    : [...REMINDER_OPTIONS, reminderBeforeMinutes].sort((a, b) => a - b)
+  const remainingHoursDisplay = Math.max((Number(estimatedHours) || 0) - (Number(spentHours) || 0), 0)
+  const completedSubtasksCount = subtasks.filter((item) => item.isDone).length
+
   return (
     <>
       <AppLayout
         active="tasks"
         onNavigateDashboard={nav.onNavigateDashboard}
         onNavigateTasks={onCancel}
+        onNavigateFocus={nav.onNavigateFocus}
         onNavigateReminders={nav.onNavigateReminders}
         onNavigateCalendar={nav.onNavigateCalendar}
         onNavigateNotes={nav.onNavigateNotes}
@@ -164,7 +321,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
         panelCaption="Last updated today."
         panelPercent={72}
       >
-          <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
+          <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
             <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">Back</button>
             <span>Tasks</span>
             <span>/</span>
@@ -188,29 +345,28 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
             }
           />
 
-          <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-            <section className="space-y-6">
+          <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+            <section className="space-y-3">
               <Card title="Task Information" code="INFO">
                 <FieldLabel label="Task Title" required />
                 <input className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} />
 
                 <FieldLabel label="Description" />
                 <textarea
-                  className={`${inputClass} min-h-36 resize-none`}
+                  className={`${inputClass} min-h-28 resize-none`}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                 />
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <FieldLabel label="Category" />
-                    <select className={inputClass} value={category} onChange={(event) => setCategory(event.target.value)}>
-                      <option>Marketing</option>
-                      <option>Design</option>
-                      <option>Development</option>
-                      <option>Research</option>
-                      <option>General</option>
-                    </select>
+                    <input
+                      className={inputClass}
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value)}
+                      placeholder="e.g. Work, Study, Personal"
+                    />
                   </div>
                   <div>
                     <FieldLabel label="Status" />
@@ -225,65 +381,82 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
               </Card>
 
               <Card title="Editable Subtasks" action="+ Add Subtask" onAction={() => setAddingSubtask(true)}>
-                <div className="space-y-3">
-                  {subtasks.map((item, index) => (
-                    <div key={item.title} className="grid gap-3 rounded-2xl bg-[var(--bp-surface)] p-4 md:grid-cols-[32px_1fr_auto_auto] md:items-center">
-                      <button className={`h-6 w-6 rounded-md border ${item.done ? 'border-green-400 bg-green-400 text-xs font-black text-[#1F2937]' : 'border-slate-500'}`}>
-                        {item.done ? 'OK' : ''}
-                      </button>
-                      <input className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-3 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]" defaultValue={item.title} />
+                <div className="space-y-2">
+                  {subtasks.map((item) => (
+                    <div key={item.id} className="grid gap-2 rounded-xl bg-[var(--bp-surface)] p-3 md:grid-cols-[28px_1fr_auto_auto] md:items-center">
                       <button
-                        onClick={() => setEditingSubtaskIndex(index)}
-                        className="rounded-xl bg-[var(--bp-border)] px-4 py-3 text-sm font-bold text-[var(--bp-text)]"
+                        type="button"
+                        onClick={() => void handleToggleSubtask(item)}
+                        aria-label={item.isDone ? 'Mark subtask incomplete' : 'Mark subtask complete'}
+                        className={`h-5 w-5 rounded border text-[10px] font-black ${item.isDone ? 'border-green-400 bg-green-400 text-[#1F2937]' : 'border-slate-500'}`}
+                      >
+                        {item.isDone ? 'OK' : ''}
+                      </button>
+                      <p className={`truncate px-3 py-2 text-sm ${item.isDone ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}>
+                        {item.title}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setEditingSubtaskId(item.id)}
+                        className="rounded-lg bg-[var(--bp-border)] px-3 py-2 text-xs font-bold text-[var(--bp-text)]"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => setDeletingSubtaskIndex(index)}
-                        className="rounded-xl border border-red-500/40 px-4 py-3 text-sm font-bold text-red-300"
+                        type="button"
+                        onClick={() => setDeletingSubtaskId(item.id)}
+                        className="rounded-lg border border-red-500/40 px-3 py-2 text-xs font-bold text-red-300"
                       >
                         Delete
                       </button>
                     </div>
                   ))}
+                  {!subtasks.length ? <p className="text-sm text-slate-400">No subtasks yet.</p> : null}
                 </div>
               </Card>
 
               <Card title="Notes">
                 <textarea
-                  className={`${inputClass} min-h-28 resize-none`}
+                  className={`${inputClass} min-h-20 resize-none`}
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                 />
               </Card>
 
-              <Card title="Attachments" action="Upload">
-                <div className="space-y-3">
-                  {task.attachments.map((file) => (
-                    <div key={file.name} className="flex items-center gap-4 rounded-2xl bg-[var(--bp-surface)] p-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--bp-border)] text-xs font-black text-[var(--bp-accent)]">{file.type ?? 'FILE'}</div>
+              <Card title="Attachments" action={uploading ? 'Uploading...' : 'Upload'} onAction={() => document.getElementById('edit-task-file-input')?.click()}>
+                <input id="edit-task-file-input" type="file" className="hidden" onChange={(event) => void handleUploadFile(event)} />
+                <div className="space-y-2">
+                  {attachments.map((file) => (
+                    <div key={file.id ?? file.name} className="flex items-center gap-3 rounded-xl bg-[var(--bp-surface)] p-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--bp-border)] text-[10px] font-black text-[var(--bp-accent)]">{file.type ?? 'FILE'}</div>
                       <div className="flex-1">
-                        <p className="font-bold text-[var(--bp-text)]">{file.name}</p>
-                        <p className="text-sm text-slate-500">{file.size ?? 'Attached file'}</p>
+                        <p className="text-sm font-bold text-[var(--bp-text)]">{file.name}</p>
+                        <p className="text-xs text-slate-500">{file.size ?? 'Attached file'}</p>
                       </div>
-                      <button className="rounded-xl border border-red-500/40 px-4 py-2 text-sm font-bold text-red-300">Delete</button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteAttachment(file)}
+                        className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-300"
+                      >
+                        Delete
+                      </button>
                     </div>
                   ))}
-                  {!task.attachments.length ? <p className="text-sm text-slate-400">No attachments yet.</p> : null}
+                  {!attachments.length ? <p className="text-sm text-slate-400">No attachments yet.</p> : null}
                 </div>
               </Card>
             </section>
 
-            <aside className="space-y-6">
+            <aside className="space-y-3">
               <Card title="Task Settings" code="SET">
                 <FieldLabel label="Priority" />
-                <div className="mb-5 grid grid-cols-3 gap-3">
+                <div className="mb-3 grid grid-cols-3 gap-2">
                   <Segment active={priority === 'Low'} label="Low" color="text-green-400" onClick={() => setPriority('Low')} />
                   <Segment active={priority === 'Medium'} label="Medium" color="text-orange-400" onClick={() => setPriority('Medium')} />
                   <Segment active={priority === 'High'} label="High" color="text-red-400" onClick={() => setPriority('High')} />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
                   <div>
                     <FieldLabel label="Due Date" />
                     <input type="date" className={inputClass} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
@@ -295,25 +468,39 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
                 </div>
               </Card>
 
-              <Card title="Progress Overview" code="72">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm text-slate-400">
-                    {subtasks.filter((item) => item.done).length} of {subtasks.length} subtasks completed
+              <Card title="Progress Overview" code={`${progress}`}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    {completedSubtasksCount} of {subtasks.length} subtasks completed
                   </span>
-                  <span className="text-2xl font-black text-[var(--bp-accent)]">{task.progress}%</span>
+                  <span className="text-lg font-black text-[var(--bp-accent)]">{progress}%</span>
                 </div>
-                <div className="h-3 rounded-full bg-[var(--bp-border)]">
-                  <div className="h-3 rounded-full bg-[var(--bp-accent)]" style={{ width: `${task.progress}%` }} />
+                <div className="h-2 rounded-full bg-[var(--bp-border)]">
+                  <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
                 </div>
               </Card>
 
               <Card title="Reminder & Recurring">
                 <FieldLabel label="Reminder" />
-                <select className={inputClass} defaultValue={formatReminder(task.reminderBeforeMinutes)}>
-                  <option>10 minutes before</option>
-                  <option>30 minutes before</option>
-                  <option>1 hour before</option>
-                  <option>1 day before</option>
+                <label className="mb-3 flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={reminderEnabled}
+                    onChange={(event) => setReminderEnabled(event.target.checked)}
+                  />
+                  Enable reminder
+                </label>
+                <select
+                  className={inputClass}
+                  value={reminderBeforeMinutes}
+                  disabled={!reminderEnabled}
+                  onChange={(event) => setReminderBeforeMinutes(Number(event.target.value))}
+                >
+                  {reminderMinuteOptions.map((minutes) => (
+                    <option key={minutes} value={minutes}>
+                      {formatReminderLabel(minutes)}
+                    </option>
+                  ))}
                 </select>
 
                 <FieldLabel label="Recurring" />
@@ -326,11 +513,23 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
                 </button>
               </Card>
 
-              <Card title="Dependencies" action="+ Add">
-                {task.dependencies.map((dependency) => (
-                  <Dependency key={dependency.id} label={dependency.title} status={toUiStatus(dependency.status)} />
+              <Card title="Dependencies" action="+ Add" onAction={() => setDependencyModalMode('add')}>
+                {dependencies.map((dependency) => (
+                  <Dependency
+                    key={dependency.id}
+                    label={dependency.title}
+                    status={toUiStatus(dependency.status)}
+                    onReplace={() => {
+                      setSelectedDependency(dependency)
+                      setDependencyModalMode('edit')
+                    }}
+                    onRemove={() => {
+                      setSelectedDependency(dependency)
+                      setDependencyModalMode('remove')
+                    }}
+                  />
                 ))}
-                {!task.dependencies.length ? <p className="text-sm text-slate-400">No dependencies yet.</p> : null}
+                {!dependencies.length ? <p className="text-sm text-slate-400">No dependencies yet.</p> : null}
               </Card>
 
               <Card title="Activity Information">
@@ -339,31 +538,53 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
               </Card>
 
               <Card title="Time Tracking">
-                <InfoRow label="Estimated Time" value={`${task.estimatedHours}h`} />
-                <InfoRow label="Time Spent" value={`${task.spentHours}h`} />
-                <InfoRow label="Remaining Time" value={`${task.remainingHours}h`} />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <FieldLabel label="Estimated Hours" />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className={inputClass}
+                      value={estimatedHours}
+                      onChange={(event) => setEstimatedHours(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel label="Spent Hours" />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className={inputClass}
+                      value={spentHours}
+                      onChange={(event) => setSpentHours(event.target.value)}
+                    />
+                  </div>
+                </div>
+                <InfoRow label="Remaining Time" value={`${remainingHoursDisplay}h`} />
               </Card>
             </aside>
           </div>
 
-          <footer className="mt-8 flex flex-col gap-3 border-t border-[var(--bp-border)] pt-6 md:flex-row md:items-center md:justify-between">
-            <button onClick={onDelete} className="rounded-xl border border-red-500/50 px-8 py-4 font-bold text-red-400">
+          <footer className="mt-6 flex flex-col gap-2 border-t border-[var(--bp-border)] pt-4 md:flex-row md:items-center md:justify-between">
+            <button onClick={onDelete} className="rounded-lg border border-red-500/50 px-5 py-2.5 text-sm font-bold text-red-400">
               Delete Task
             </button>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button onClick={onCancel} className="rounded-xl bg-[var(--bp-border)] px-10 py-4 font-bold text-[var(--bp-text)]">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button onClick={onCancel} className="rounded-lg bg-[var(--bp-border)] px-6 py-2.5 text-sm font-bold text-[var(--bp-text)]">
                 Cancel Changes
               </button>
               <button
                 onClick={() => void handleSave()}
                 disabled={saving}
-                className="rounded-xl bg-[var(--bp-accent)] px-10 py-4 font-black text-[var(--bp-accent-text)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-[var(--bp-accent)] px-6 py-2.5 text-sm font-black text-[var(--bp-accent-text)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </footer>
-          {error ? <p className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300">{error}</p> : null}
+          {error ? <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300">{error}</p> : null}
       </AppLayout>
 
       {addingSubtask ? (
@@ -371,31 +592,47 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
           mode="add"
           onCancel={() => setAddingSubtask(false)}
           onBack={() => setAddingSubtask(false)}
-          onSubmit={handleAddSubtask}
+          onSubmit={(values) => void handleAddSubtask(values)}
         />
       ) : null}
 
-      {editingSubtaskIndex !== null ? (
+      {editingSubtaskId !== null ? (
         <SubtaskFormModal
           mode="edit"
-          initialValues={{ title: subtasks[editingSubtaskIndex]?.title }}
-          onCancel={() => setEditingSubtaskIndex(null)}
-          onBack={() => setEditingSubtaskIndex(null)}
+          initialValues={{ title: subtasks.find((item) => item.id === editingSubtaskId)?.title }}
+          onCancel={() => setEditingSubtaskId(null)}
+          onBack={() => setEditingSubtaskId(null)}
           onDelete={() => {
-            setDeletingSubtaskIndex(editingSubtaskIndex)
-            setEditingSubtaskIndex(null)
+            setDeletingSubtaskId(editingSubtaskId)
+            setEditingSubtaskId(null)
           }}
-          onSubmit={handleEditSubtask}
+          onSubmit={(values) => void handleEditSubtask(values)}
         />
       ) : null}
 
-      {deletingSubtaskIndex !== null ? (
+      {deletingSubtaskId !== null ? (
         <DeleteSubtaskModal
-          subtaskTitle={subtasks[deletingSubtaskIndex]?.title}
-          onCancel={() => setDeletingSubtaskIndex(null)}
-          onConfirm={handleConfirmDelete}
+          subtaskTitle={subtasks.find((item) => item.id === deletingSubtaskId)?.title}
+          onCancel={() => setDeletingSubtaskId(null)}
+          onConfirm={() => void handleConfirmDelete()}
         />
       ) : null}
+
+      <TaskDependenciesWorkflowModal
+        open={dependencyModalMode !== null}
+        mode={dependencyModalMode ?? 'add'}
+        currentTaskId={task.id}
+        availableTasks={tasks.map(toDependencyOption)}
+        dependencies={dependencies.map(toDependencyOption)}
+        dependency={selectedDependency ? toDependencyOption(selectedDependency) : null}
+        onClose={() => {
+          setDependencyModalMode(null)
+          setSelectedDependency(null)
+        }}
+        onAdd={(selected) => void handleAddDependencies(selected)}
+        onSaveReplacement={(oldId, replacement) => void handleReplaceDependency(oldId, replacement)}
+        onRemove={(dependencyId) => void handleRemoveDependency(dependencyId)}
+      />
 
       <TaskRecurrenceModal
         open={isRecurrenceModalOpen}
@@ -410,7 +647,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
 }
 
 const inputClass =
-  'mb-5 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]'
+  'mb-3 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]'
 
 function Card({
   title,
@@ -426,14 +663,14 @@ function Card({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h3 className="flex items-center gap-3 text-lg font-black">
+    <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-base font-black">
           {code ? <span className="text-[var(--bp-accent)]">{code}</span> : null}
           {title}
         </h3>
         {action ? (
-          <button onClick={onAction} className="font-bold text-[var(--bp-accent)]">
+          <button onClick={onAction} className="text-sm font-bold text-[var(--bp-accent)]">
             {action}
           </button>
         ) : null}
@@ -456,7 +693,7 @@ function Segment({ label, active, color, onClick }: { label: string; active?: bo
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-4 py-3 text-sm font-bold ${active ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]' : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`}`}
+      className={`rounded-lg border px-3 py-2 text-sm font-bold ${active ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]' : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`}`}
     >
       {label}
     </button>
@@ -465,18 +702,38 @@ function Segment({ label, active, color, onClick }: { label: string; active?: bo
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between rounded-2xl bg-[var(--bp-surface)] px-4 py-3">
-      <span className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</span>
-      <span className="font-bold text-[var(--bp-text)]">{value}</span>
+    <div className="mb-2 flex items-center justify-between rounded-xl bg-[var(--bp-surface)] px-3 py-2">
+      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-sm font-bold text-[var(--bp-text)]">{value}</span>
     </div>
   )
 }
 
-function Dependency({ label, status }: { label: string; status: string }) {
+function Dependency({
+  label,
+  status,
+  onReplace,
+  onRemove,
+}: {
+  label: string
+  status: string
+  onReplace: () => void
+  onRemove: () => void
+}) {
   return (
-    <div className="mb-3 flex items-center justify-between rounded-2xl bg-[var(--bp-surface)] p-4">
-      <span className="font-bold text-[var(--bp-text)]">{label}</span>
-      <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-bold text-blue-300">{status}</span>
+    <div className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-[var(--bp-surface)] p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-bold text-[var(--bp-text)]">{label}</p>
+        <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-bold text-blue-300">{status}</span>
+      </div>
+      <div className="flex shrink-0 gap-1.5">
+        <button type="button" onClick={onReplace} className="rounded-lg bg-[var(--bp-border)] px-2.5 py-1.5 text-xs font-bold text-[var(--bp-text)]">
+          Replace
+        </button>
+        <button type="button" onClick={onRemove} className="rounded-lg border border-red-500/40 px-2.5 py-1.5 text-xs font-bold text-red-300">
+          Remove
+        </button>
+      </div>
     </div>
   )
 }
@@ -495,9 +752,35 @@ function formatDate(value?: string) {
   return date.toISOString().slice(0, 10)
 }
 
-function formatReminder(minutes?: number) {
+function formatReminderLabel(minutes: number) {
   if (minutes === 10) return '10 minutes before'
+  if (minutes === 30) return '30 minutes before'
   if (minutes === 60) return '1 hour before'
   if (minutes === 1440) return '1 day before'
-  return '30 minutes before'
+  return `${minutes} minutes before`
+}
+
+type DependencySource = Pick<ApiTask, 'id' | 'title' | 'category' | 'status' | 'dueDate' | 'priority'>
+
+function toDependencyOption(task: DependencySource): DependencyTask {
+  return {
+    id: task.id,
+    title: task.title,
+    category: task.category || 'General',
+    status: toUiStatus(task.status) as DependencyTask['status'],
+    dueDate: formatDependencyDueDate(task.dueDate),
+    priority: normalizeDependencyPriority(toUiPriority(task.priority)),
+  }
+}
+
+function formatDependencyDueDate(value?: string) {
+  if (!value) return 'No due date'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'No due date'
+  return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+}
+
+function normalizeDependencyPriority(priority: string): DependencyTask['priority'] {
+  if (priority === 'Low' || priority === 'High') return priority
+  return 'Medium'
 }

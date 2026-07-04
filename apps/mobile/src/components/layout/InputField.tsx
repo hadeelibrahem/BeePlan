@@ -30,9 +30,9 @@ export function InputField({
   const borderColor = error ? theme.colors.error : focused ? theme.colors.accent : theme.colors.border
 
   return (
-    <View className="mb-4">
+    <View className="mb-3">
       {label && (
-        <Text className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: theme.colors.secondaryText }}>
+        <Text className="mb-1.5 text-xs font-bold uppercase tracking-wide" style={{ color: theme.colors.secondaryText }}>
           {label}
         </Text>
       )}
@@ -47,7 +47,7 @@ export function InputField({
         autoCapitalize={autoCapitalize}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        className={`rounded-2xl border px-4 py-4 text-sm ${multiline ? 'min-h-24' : ''}`}
+        className={`rounded-xl border px-3 py-2.5 text-sm ${multiline ? 'min-h-20' : ''}`}
         style={[
           { backgroundColor: theme.colors.input, color: theme.colors.text, borderColor },
           multiline ? { textAlignVertical: 'top' } : undefined,

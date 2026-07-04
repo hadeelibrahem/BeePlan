@@ -109,19 +109,19 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <SectionCard>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between">
             <button
               type="button"
               onClick={() => goToMonth(-1)}
-              className="rounded-lg px-3 py-1 text-sm font-semibold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
             >
               {isRTL ? '→' : '←'} Prev
             </button>
-            <h2 className="font-bold">{monthLabel}</h2>
+            <h2 className="text-sm font-bold">{monthLabel}</h2>
             <button
               type="button"
               onClick={() => goToMonth(1)}
-              className="rounded-lg px-3 py-1 text-sm font-semibold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
             >
               Next {isRTL ? '←' : '→'}
             </button>
@@ -162,14 +162,14 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-4 font-bold">
+          <h2 className="mb-3 text-sm font-bold">
             {new Date(selectedDateKey).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </h2>
 
           {selectedTasks.length === 0 && selectedReminders.length === 0 ? (
-            <EmptyState icon={<CalendarIcon className="h-6 w-6" />} title="Nothing scheduled" description="No tasks or reminders are due on this day." />
+            <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="Nothing scheduled" description="No tasks or reminders are due on this day." />
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {selectedTasks.length > 0 && (
                 <div>
                   <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-400">

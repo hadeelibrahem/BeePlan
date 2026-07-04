@@ -95,7 +95,11 @@ export class RemindersService {
     return this.toEntity(row);
   }
 
-  async update(userId: string, id: string, dto: UpdateReminderDto): Promise<Reminder> {
+  async update(
+    userId: string,
+    id: string,
+    dto: UpdateReminderDto,
+  ): Promise<Reminder> {
     await this.findOne(userId, id);
 
     const [row] = await this.db

@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   StreamableFile,
   UploadedFile,
@@ -21,10 +22,12 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { TaskQueryDto } from './dto/task-query.dto';
 import {
   DependencyTaskIdsDto,
   ReplaceDependencyDto,
   SubtaskDto,
+  SubtaskReorderDto,
   TaskLabelDto,
   TaskProgressDto,
   TaskRecurrenceDto,
@@ -33,7 +36,10 @@ import {
 } from './dto/task-shared.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { RecurringTaskSchedulerService } from './recurring-task-scheduler.service';
-import { MAX_ATTACHMENT_SIZE_BYTES, TaskAttachmentsService } from './task-attachments.service';
+import {
+  MAX_ATTACHMENT_SIZE_BYTES,
+  TaskAttachmentsService,
+} from './task-attachments.service';
 import { TasksService } from './tasks.service';
 
 @UseGuards(JwtAuthGuard)
@@ -61,13 +67,25 @@ export class TasksController {
   @Post('recurrence/run')
   @HttpCode(HttpStatus.OK)
   async runRecurrenceScheduler(@Req() request: AuthenticatedRequest) {
-    const createdCount = await this.recurringTaskSchedulerService.run(request.user.id);
+    const createdCount = await this.recurringTaskSchedulerService.run(
+      request.user.id,
+    );
     return { createdCount };
   }
 
   @Get()
-  findAll(@Req() request: AuthenticatedRequest) {
-    return this.tasksService.findAll(request.user.id);
+  findAll(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: TaskQueryDto,
+  ) {
+    return this.tasksService.findAll(request.user.id, query);
+  }
+
+  // Must stay above `:id` — Nest matches routes in declaration order, so a
+  // literal segment declared after `:id` would never be reached.
+  @Get('filters/summary')
+  getFilterSummary(@Req() request: AuthenticatedRequest) {
+    return this.tasksService.getFilterSummary(request.user.id);
   }
 
   @Get(':id')
@@ -164,6 +182,16 @@ export class TasksController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.tasksService.listSubtasks(request.user.id, id);
+  }
+
+  @Post(':id/subtasks/reorder')
+  @HttpCode(HttpStatus.OK)
+  reorderSubtasks(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SubtaskReorderDto,
+  ) {
+    return this.tasksService.reorderSubtasks(request.user.id, id, dto);
   }
 
   @Patch(':id/subtasks/:subtaskId')
@@ -293,11 +321,12 @@ export class TasksController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
   ) {
-    const { stream, fileName, mimeType } = await this.taskAttachmentsService.getFileForDownload(
-      request.user.id,
-      id,
-      attachmentId,
-    );
+    const { stream, fileName, mimeType } =
+      await this.taskAttachmentsService.getFileForDownload(
+        request.user.id,
+        id,
+        attachmentId,
+      );
 
     return new StreamableFile(stream, {
       type: mimeType,

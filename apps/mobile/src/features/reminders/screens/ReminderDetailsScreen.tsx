@@ -22,18 +22,18 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
         title={t('reminders.typeReminder', { type: t(`filters.${reminder.type}`) })}
         onBack={onBack}
         actions={
-          <PrimaryButton onPress={onEdit} className="px-5 py-3">
+          <PrimaryButton onPress={onEdit} size="sm">
             {t('actions.edit')}
           </PrimaryButton>
         }
       />
 
       <SectionCard>
-        <Text className="text-3xl font-black" style={{ color: colors.text }}>{reminder.title}</Text>
+        <Text className="text-xl font-black" style={{ color: colors.text }}>{reminder.title}</Text>
         {!!reminder.description && (
-          <Text className="mt-3 text-base leading-7" style={{ color: colors.secondaryText }}>{reminder.description}</Text>
+          <Text className="mt-2 text-sm leading-6" style={{ color: colors.secondaryText }}>{reminder.description}</Text>
         )}
-        <View className="mt-6 gap-3">
+        <View className="mt-3 gap-2">
           <Detail label={t('reminders.detailStatus')} value={t(`status.${reminder.status}`)} />
           <Detail label={t('reminders.detailPriority')} value={reminder.priority} />
           {reminder.remindAt && <Detail label={t('reminders.detailWhen')} value={reminder.remindAt} />}
@@ -48,13 +48,13 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
       </SectionCard>
 
       {!!reminder.checklistItems?.length && (
-        <SectionCard className="mt-5">
-          <Text className="mb-4 text-lg font-black" style={{ color: colors.text }}>{t('reminders.checklist')}</Text>
-          <View className="gap-3">
+        <SectionCard className="mt-3">
+          <Text className="mb-3 text-base font-black" style={{ color: colors.text }}>{t('reminders.checklist')}</Text>
+          <View className="gap-2">
             {reminder.checklistItems.map((item) => (
-              <View key={item.id} className="flex-row items-center gap-3">
+              <View key={item.id} className="flex-row items-center gap-2">
                 <View
-                  className={`h-5 w-5 rounded-full ${item.isDone ? '' : 'border'}`}
+                  className={`h-4 w-4 rounded-full ${item.isDone ? '' : 'border'}`}
                   style={{ backgroundColor: item.isDone ? colors.accent : 'transparent', borderColor: colors.secondaryText }}
                 />
                 <Text className="flex-1 text-sm font-semibold" style={{ color: colors.secondaryText }}>{item.title}</Text>
@@ -72,8 +72,8 @@ function Detail({ label, value }: { label: string; value: string }) {
   const { colors } = theme;
 
   return (
-    <View className="rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
-      <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>{label}</Text>
+    <View className="rounded-xl border p-3" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
+      <Text className="text-[10px] font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>{label}</Text>
       <Text className="mt-1 text-sm font-bold" style={{ color: colors.text }}>{value}</Text>
     </View>
   );

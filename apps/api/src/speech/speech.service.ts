@@ -29,13 +29,17 @@ export class SpeechService {
       });
 
       if (transcript.status === 'error') {
-        this.logger.error(`AssemblyAI transcription failed: ${transcript.error}`);
+        this.logger.error(
+          `AssemblyAI transcription failed: ${transcript.error}`,
+        );
         throw new InternalServerErrorException('Failed to transcribe audio.');
       }
 
       const text = transcript.text?.trim();
       if (!text) {
-        throw new UnprocessableEntityException('No speech could be detected in the audio.');
+        throw new UnprocessableEntityException(
+          'No speech could be detected in the audio.',
+        );
       }
 
       return text;

@@ -90,6 +90,7 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
         active="tasks"
         onNavigateDashboard={nav.onNavigateDashboard}
         onNavigateTasks={onCancel}
+        onNavigateFocus={nav.onNavigateFocus}
         onNavigateReminders={nav.onNavigateReminders}
         onNavigateCalendar={nav.onNavigateCalendar}
         onNavigateNotes={nav.onNavigateNotes}
@@ -98,7 +99,7 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
         panelCaption="You're doing great today."
         panelPercent={64}
       >
-          <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
+          <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
             <button type="button" onClick={onCancel} className="hover:text-[var(--bp-text)]">
               Back
             </button>
@@ -124,15 +125,15 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
             }
           />
 
-          <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-            <section className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6 shadow-2xl">
+          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+            <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 shadow-2xl">
               <SectionTitle icon="INFO" title="Task Information" />
 
               <FieldLabel label="Task Title" required />
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="mb-6 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
+                className="mb-4 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                 placeholder="Enter task title..."
               />
 
@@ -140,18 +141,18 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="mb-2 min-h-40 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
+                className="mb-1.5 min-h-28 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                 placeholder="Describe your task..."
               />
-              <p className="mb-6 text-end text-xs text-slate-500">{description.length}/500</p>
+              <p className="mb-4 text-end text-xs text-slate-500">{description.length}/500</p>
 
-              <div className="mb-6 border-t border-[var(--bp-border)] pt-6">
+              <div className="mb-4 border-t border-[var(--bp-border)] pt-4">
                 <FieldLabel label="Subtasks" />
                 <p className="mb-3 text-sm text-slate-400">Break down your task into smaller steps</p>
                 <button
                   type="button"
                   onClick={() => setIsSubtaskModalOpen(true)}
-                  className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-4 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60"
+                  className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60"
                 >
                   + Add Subtask
                 </button>
@@ -173,46 +174,46 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
                 ) : null}
               </div>
 
-              <div className="mb-6 border-t border-[var(--bp-border)] pt-6">
+              <div className="mb-4 border-t border-[var(--bp-border)] pt-4">
                 <FieldLabel label="Notes" />
               <textarea
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
-                  className="min-h-24 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
+                  className="min-h-20 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                   placeholder="Additional notes (optional)..."
                 />
               </div>
 
-              <div className="border-t border-[var(--bp-border)] pt-6">
+              <div className="border-t border-[var(--bp-border)] pt-4">
                 <FieldLabel label="Attachments" />
-                <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] text-center">
+                <div className="flex min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] text-center">
                   <div className="text-sm font-black text-[var(--bp-accent)]">UPLOAD</div>
-                  <p className="mt-3 text-sm text-slate-300">Drag & drop files here, or click to browse</p>
+                  <p className="mt-2 text-sm text-slate-300">Drag & drop files here, or click to browse</p>
                   <p className="mt-1 text-xs text-slate-500">Supports: Images, PDF, Documents</p>
                 </div>
               </div>
             </section>
 
-            <section className="space-y-5">
-              <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
+            <section className="space-y-3">
+              <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                 <SectionTitle icon="SET" title="Task Settings" />
 
                 <FieldLabel label="Priority" />
-                <div className="mb-6 grid grid-cols-3 gap-3">
+                <div className="mb-4 grid grid-cols-3 gap-2">
                   {['Low', 'Medium', 'High'].map((item) => (
                     <Segment key={item} active={priority === item} label={item} color={item === 'Low' ? 'text-green-400' : item === 'High' ? 'text-red-400' : 'text-orange-400'} onClick={() => setPriority(item)} />
                   ))}
                 </div>
 
                 <FieldLabel label="Task Status" />
-                <div className="mb-6 grid grid-cols-4 gap-3">
+                <div className="mb-4 grid grid-cols-4 gap-2">
                   {['To Do', 'In Progress', 'Done', 'Missed'].map((item) => (
                     <Segment key={item} active={status === item} label={item} color={item === 'Done' ? 'text-green-400' : item === 'Missed' ? 'text-red-400' : item === 'In Progress' ? 'text-blue-400' : 'text-[var(--bp-accent)]'} onClick={() => setStatus(item)} />
                   ))}
                 </div>
 
                 <FieldLabel label="Category" />
-                <select value={category} onChange={(event) => setCategory(event.target.value)} className="mb-6 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
+                <select value={category} onChange={(event) => setCategory(event.target.value)} className="mb-4 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
                   <option>Select category...</option>
                   <option>Work</option>
                   <option>Personal</option>
@@ -220,14 +221,14 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
                   <option>Health</option>
                 </select>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <FieldLabel label="Due Date" />
                     <input
                       type="date"
                       value={dueDate}
                       onChange={(event) => setDueDate(event.target.value)}
-                      className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
+                      className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
                     />
                   </div>
                   <div>
@@ -236,31 +237,31 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
                       type="time"
                       value={dueTime}
                       onChange={(event) => setDueTime(event.target.value)}
-                      className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
+                      className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="grid gap-5 lg:grid-cols-2">
-                <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                   <FieldLabel label="Recurring Task" />
                   <button
                     type="button"
                     onClick={() => setIsRecurrenceModalOpen(true)}
-                    className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-start font-bold text-[var(--bp-text)] outline-none transition hover:border-[var(--bp-accent)]"
+                    className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-start font-bold text-[var(--bp-text)] outline-none transition hover:border-[var(--bp-accent)]"
                   >
                     {recurrenceSummary}
                   </button>
                 </div>
 
-                <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
+                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                   <FieldLabel label="Dependencies" />
-                  <p className="mb-4 text-sm text-slate-400">Task depends on another task</p>
+                  <p className="mb-3 text-sm text-slate-400">Task depends on another task</p>
                   <button
                     type="button"
                     onClick={() => setDependencyModalOpen(true)}
-                    className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-4 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={!availableDependencies.length}
                   >
                     + Add Dependency
@@ -284,19 +285,19 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
-                <div className="mb-4 flex items-center justify-between">
+              <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
+                <div className="mb-3 flex items-center justify-between">
                   <div>
                     <FieldLabel label="Reminder" />
                     <p className="text-sm text-slate-400">BeePlan will remind you before the due date.</p>
                   </div>
-                  <div className="flex h-7 w-12 items-center justify-end rounded-full bg-[var(--bp-accent)] p-1">
-                    <div className="h-5 w-5 rounded-full bg-white" />
+                  <div className="flex h-6 w-11 items-center justify-end rounded-full bg-[var(--bp-accent)] p-1">
+                    <div className="h-4 w-4 rounded-full bg-white" />
                   </div>
                 </div>
 
                 <FieldLabel label="Reminder Time" />
-                <select value={reminderBeforeMinutes} onChange={(event) => setReminderBeforeMinutes(Number(event.target.value))} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-4 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
+                <select value={reminderBeforeMinutes} onChange={(event) => setReminderBeforeMinutes(Number(event.target.value))} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
                   <option value={30}>30 minutes before</option>
                   <option value={10}>10 minutes before</option>
                   <option value={60}>1 hour before</option>
@@ -304,7 +305,7 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
                 </select>
               </div>
 
-              <div className="rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-6">
+              <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                 <FieldLabel label="Quick Tip" />
                 <p className="text-sm leading-6 text-slate-400">
                   Break large tasks into subtasks to make them easier to manage.
@@ -313,12 +314,12 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
             </section>
           </div>
 
-          <div className="mt-8 flex justify-end gap-4 border-t border-[var(--bp-border)] pt-6">
+          <div className="mt-6 flex justify-end gap-3 border-t border-[var(--bp-border)] pt-4">
             {error ? <p className="me-auto self-center text-sm font-semibold text-red-300">{error}</p> : null}
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-12 py-4 font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
+              className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-6 py-2.5 font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
             >
               Cancel
             </button>
@@ -327,7 +328,7 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
-              className="rounded-xl bg-[var(--bp-accent)] px-12 py-4 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
+              className="rounded-xl bg-[var(--bp-accent)] px-6 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
             >
               {saving ? 'Saving...' : 'Save Task'}
             </button>
@@ -374,7 +375,7 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
 
 function SectionTitle({ icon, title }: { icon: string; title: string }) {
   return (
-    <h3 className="mb-6 flex items-center gap-3 text-lg font-black">
+    <h3 className="mb-4 flex items-center gap-2 text-base font-black">
       <span className="text-[var(--bp-accent)]">{icon}</span>
       {title}
     </h3>
@@ -404,7 +405,7 @@ function Segment({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
+      className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
         active
           ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
           : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`

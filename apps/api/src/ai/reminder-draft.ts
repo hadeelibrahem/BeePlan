@@ -28,10 +28,24 @@ export interface ReminderDraft {
   checklist: string[];
 }
 
-const REMINDER_TYPES: ReminderDraftType[] = ['time', 'location', 'context', 'checklist'];
+const REMINDER_TYPES: ReminderDraftType[] = [
+  'time',
+  'location',
+  'context',
+  'checklist',
+];
 const PRIORITIES: ReminderDraftPriority[] = ['low', 'medium', 'high'];
-const REPEAT_OPTIONS: ReminderDraftRepeat[] = ['none', 'daily', 'weekly', 'monthly'];
-const LOCATION_MODES: ReminderDraftLocationMode[] = ['none', 'specific', 'general'];
+const REPEAT_OPTIONS: ReminderDraftRepeat[] = [
+  'none',
+  'daily',
+  'weekly',
+  'monthly',
+];
+const LOCATION_MODES: ReminderDraftLocationMode[] = [
+  'none',
+  'specific',
+  'general',
+];
 const LOCATION_TRIGGERS: ReminderDraftLocationTrigger[] = ['arrive', 'leave'];
 
 export function createEmptyReminderDraft(): ReminderDraft {
@@ -58,8 +72,13 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
-function asOneOf<T extends string>(value: unknown, options: readonly T[], fallback: T): T {
-  return typeof value === 'string' && (options as readonly string[]).includes(value)
+function asOneOf<T extends string>(
+  value: unknown,
+  options: readonly T[],
+  fallback: T,
+): T {
+  return typeof value === 'string' &&
+    (options as readonly string[]).includes(value)
     ? (value as T)
     : fallback;
 }
@@ -69,7 +88,9 @@ function asNumber(value: unknown, fallback: number): number {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 /**

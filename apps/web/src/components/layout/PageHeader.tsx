@@ -12,15 +12,15 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, subtitle, toolbar, pageActions }: PageHeaderProps) {
   return (
-    <header className="mb-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <header className="mb-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-3xl font-black text-[var(--bp-text)]">{title}</h2>
-          <p className="text-sm text-slate-400">{subtitle}</p>
+          <h2 className="text-2xl font-black text-[var(--bp-text)]">{title}</h2>
+          <p className="text-xs text-slate-400">{subtitle}</p>
         </div>
-        {toolbar && <div className="flex flex-wrap items-center gap-4">{toolbar}</div>}
+        {toolbar && <div className="flex flex-wrap items-center gap-3">{toolbar}</div>}
       </div>
-      {pageActions && <div className="mt-4 flex flex-wrap items-center gap-3">{pageActions}</div>}
+      {pageActions && <div className="mt-3 flex flex-wrap items-center gap-3">{pageActions}</div>}
     </header>
   )
 }

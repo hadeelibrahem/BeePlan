@@ -11,14 +11,14 @@ export function FilterTabs<T extends string>({ tabs, active, onChange }: FilterT
   const { theme } = useTheme()
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-1 mb-5">
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-1 mb-3">
       {tabs.map((tab) => {
         const isActive = active === tab.value
         return (
           <Pressable
             key={tab.value}
             onPress={() => onChange(tab.value)}
-            className="mx-1 rounded-full px-4 py-2 active:opacity-80"
+            className="mx-1 rounded-full px-3 py-1.5 active:opacity-80"
             style={{ backgroundColor: isActive ? theme.colors.accent : theme.colors.surfaceElevated }}
           >
             <Text

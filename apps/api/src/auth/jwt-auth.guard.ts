@@ -46,7 +46,9 @@ export class JwtAuthGuard implements CanActivate {
     try {
       payload = this.jwtService.verify<JwtPayload>(token);
     } catch {
-      throw new UnauthorizedException('Your session has expired. Please sign in again.');
+      throw new UnauthorizedException(
+        'Your session has expired. Please sign in again.',
+      );
     }
 
     if (!payload.sub) {
@@ -58,13 +60,17 @@ export class JwtAuthGuard implements CanActivate {
     // until the user's version is first bumped (logout/password reset).
     const claimedVersion = payload.tokenVersion ?? 0;
 
-    const [currentUser] = await this.databaseService.db
-      .select({ tokenVersion: users.tokenVersion })
-      .from(users)
-      .where(eq(users.id, payload.sub));
+    const currentUser = await this.databaseService.db.query.users.findFirst({
+      columns: {
+        tokenVersion: true,
+      },
+      where: eq(users.id, payload.sub),
+    });
 
     if (!currentUser || currentUser.tokenVersion !== claimedVersion) {
-      throw new UnauthorizedException('Your session has expired. Please sign in again.');
+      throw new UnauthorizedException(
+        'Your session has expired. Please sign in again.',
+      );
     }
 
     request.user = {

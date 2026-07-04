@@ -25,9 +25,17 @@ export class GoogleAuthGuard extends AuthGuard('google') {
 
   canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<Request>();
-    const response = context.switchToHttp().getResponse<{ redirect: (url: string) => void }>();
-    const redirectPath = typeof request.query.redirectPath === 'string' ? request.query.redirectPath : '/';
-    const returnTo = typeof request.query.returnTo === 'string' ? request.query.returnTo : undefined;
+    const response = context
+      .switchToHttp()
+      .getResponse<{ redirect: (url: string) => void }>();
+    const redirectPath =
+      typeof request.query.redirectPath === 'string'
+        ? request.query.redirectPath
+        : '/';
+    const returnTo =
+      typeof request.query.returnTo === 'string'
+        ? request.query.returnTo
+        : undefined;
     const state = encodeState({ redirectPath, returnTo });
 
     if (this.authService.isGoogleOAuthConfigured()) {
@@ -41,14 +49,25 @@ export class GoogleAuthGuard extends AuthGuard('google') {
       return super.canActivate(context);
     }
 
-    response.redirect(this.authService.getOAuthErrorRedirect(new Error('Google login is not configured yet.'), state));
+    response.redirect(
+      this.authService.getOAuthErrorRedirect(
+        new Error('Google login is not configured yet.'),
+        state,
+      ),
+    );
     return false;
   }
 
   getAuthenticateOptions(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<Request>();
-    const redirectPath = typeof request.query.redirectPath === 'string' ? request.query.redirectPath : '/';
-    const returnTo = typeof request.query.returnTo === 'string' ? request.query.returnTo : undefined;
+    const redirectPath =
+      typeof request.query.redirectPath === 'string'
+        ? request.query.redirectPath
+        : '/';
+    const returnTo =
+      typeof request.query.returnTo === 'string'
+        ? request.query.returnTo
+        : undefined;
 
     return {
       scope: ['email', 'profile'],
@@ -69,7 +88,8 @@ export class GoogleCallbackGuard extends AuthGuard('google') {
   ) {
     if (error || !user) {
       const request = context.switchToHttp().getRequest<RequestWithAuthError>();
-      request.authError = error ?? info ?? new Error('Google login failed. Please try again.');
+      request.authError =
+        error ?? info ?? new Error('Google login failed. Please try again.');
       return null;
     }
 

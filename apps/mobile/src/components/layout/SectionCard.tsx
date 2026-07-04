@@ -13,7 +13,7 @@ export const SectionCard = memo(function SectionCard({ children, className = '',
 
   return (
     <View
-      className={`rounded-3xl border p-4 ${className}`}
+      className={`rounded-2xl border p-3 ${className}`}
       style={[
         {
           borderColor: theme.colors.cardBorder,

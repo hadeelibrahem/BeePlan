@@ -104,24 +104,24 @@ export default function NotesScreen({ accessToken, onSignOut, ...nav }: NotesScr
         }
       />
 
-      <SectionCard className="mb-6">
-        <h2 className="mb-3 font-bold">New note</h2>
-        <div className="space-y-3">
+      <SectionCard className="mb-4">
+        <h2 className="mb-2 text-sm font-bold">New note</h2>
+        <div className="space-y-2">
           <input
             value={draftTitle}
             onChange={(event) => setDraftTitle(event.target.value)}
             placeholder="Title"
-            className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-3 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
+            className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
           />
           <textarea
             value={draftContent}
             onChange={(event) => setDraftContent(event.target.value)}
             placeholder="Write something..."
             rows={3}
-            className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-3 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
+            className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
           />
           <div className="flex justify-end">
-            <PrimaryButton onClick={handleCreate} disabled={!draftTitle.trim()} loading={creating}>
+            <PrimaryButton size="sm" onClick={handleCreate} disabled={!draftTitle.trim()} loading={creating}>
               Add note
             </PrimaryButton>
           </div>
@@ -129,49 +129,49 @@ export default function NotesScreen({ accessToken, onSignOut, ...nav }: NotesScr
       </SectionCard>
 
       {error && (
-        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
+        <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>
       )}
 
       {loading ? (
         <p className="text-sm text-slate-400">Loading notes...</p>
       ) : notes.length === 0 ? (
-        <EmptyState icon={<NotesIcon className="h-6 w-6" />} title="No notes yet" description="Create your first note above to start jotting down ideas." />
+        <EmptyState icon={<NotesIcon className="h-5 w-5" />} title="No notes yet" description="Create your first note above to start jotting down ideas." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           {notes.map((note) => (
             <SectionCard key={note.id}>
               {editingId === note.id ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <input
                     value={editTitle}
                     onChange={(event) => setEditTitle(event.target.value)}
-                    className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-2 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
+                    className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-1.5 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
                   />
                   <textarea
                     value={editContent}
                     onChange={(event) => setEditContent(event.target.value)}
                     rows={3}
-                    className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-2 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
+                    className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-1.5 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
                   />
                   <div className="flex justify-end gap-2">
-                    <SecondaryButton onClick={() => setEditingId(null)}>Cancel</SecondaryButton>
-                    <PrimaryButton onClick={() => handleSaveEdit(note.id)} disabled={!editTitle.trim()}>
+                    <SecondaryButton size="sm" onClick={() => setEditingId(null)}>Cancel</SecondaryButton>
+                    <PrimaryButton size="sm" onClick={() => handleSaveEdit(note.id)} disabled={!editTitle.trim()}>
                       Save
                     </PrimaryButton>
                   </div>
                 </div>
               ) : (
                 <div>
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <h3 className="font-bold text-[var(--bp-text)]">{note.title}</h3>
+                  <div className="mb-1.5 flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-bold text-[var(--bp-text)]">{note.title}</h3>
                     <span className="shrink-0 text-xs text-slate-400">
                       {new Date(note.updatedAt).toLocaleDateString()}
                     </span>
                   </div>
-                  {note.content && <p className="mb-3 whitespace-pre-wrap text-sm text-slate-400">{note.content}</p>}
+                  {note.content && <p className="mb-2 whitespace-pre-wrap text-sm text-slate-400">{note.content}</p>}
                   <div className="flex justify-end gap-2">
-                    <SecondaryButton onClick={() => startEdit(note)}>Edit</SecondaryButton>
-                    <SecondaryButton onClick={() => handleDelete(note.id)} className="text-red-300">
+                    <SecondaryButton size="sm" onClick={() => startEdit(note)}>Edit</SecondaryButton>
+                    <SecondaryButton size="sm" onClick={() => handleDelete(note.id)} className="text-red-300">
                       Delete
                     </SecondaryButton>
                   </div>

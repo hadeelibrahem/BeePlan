@@ -111,7 +111,9 @@ export class RecurringTaskSchedulerService {
     return createdCount;
   }
 
-  private async selectChainTasks(where: ReturnType<typeof or>): Promise<ChainTask[]> {
+  private async selectChainTasks(
+    where: ReturnType<typeof or>,
+  ): Promise<ChainTask[]> {
     const rows = await this.db
       .select({
         id: tasks.id,
@@ -136,10 +138,14 @@ export class RecurringTaskSchedulerService {
     return rows;
   }
 
-  private async processRule(rule: RecurrenceRow, restrictToUserId?: string): Promise<boolean> {
+  private async processRule(
+    rule: RecurrenceRow,
+    restrictToUserId?: string,
+  ): Promise<boolean> {
     const [anchorTask] = await this.selectChainTasks(eq(tasks.id, rule.taskId));
     if (!anchorTask) return false;
-    if (restrictToUserId && anchorTask.userId !== restrictToUserId) return false;
+    if (restrictToUserId && anchorTask.userId !== restrictToUserId)
+      return false;
 
     const rootId = anchorTask.recurrenceRootId ?? anchorTask.id;
 
@@ -150,8 +156,13 @@ export class RecurringTaskSchedulerService {
     if (chain.length === 0) return false;
 
     const withDates = chain
-      .map((task) => ({ task, day: task.dueDateText ? this.parseCalendarDay(task.dueDateText) : null }))
-      .filter((entry): entry is { task: ChainTask; day: Date } => entry.day !== null);
+      .map((task) => ({
+        task,
+        day: task.dueDateText ? this.parseCalendarDay(task.dueDateText) : null,
+      }))
+      .filter(
+        (entry): entry is { task: ChainTask; day: Date } => entry.day !== null,
+      );
 
     if (withDates.length === 0) return false;
 
@@ -172,7 +183,9 @@ export class RecurringTaskSchedulerService {
       if (withDates.length >= rule.occurrences) return false;
     }
 
-    const alreadyExists = withDates.some((entry) => this.isSameDay(entry.day, nextDueDay));
+    const alreadyExists = withDates.some((entry) =>
+      this.isSameDay(entry.day, nextDueDay),
+    );
     if (alreadyExists) return false;
 
     const anchor = latest.task;
@@ -222,7 +235,9 @@ export class RecurringTaskSchedulerService {
   }
 
   private truncateToUtcDay(date: Date): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    return new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
   }
 
   private isSameDay(a: Date, b: Date) {
@@ -237,7 +252,10 @@ export class RecurringTaskSchedulerService {
     )}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
   }
 
-  private computeNextDueDate(reference: Date, rule: RecurrenceRow): Date | null {
+  private computeNextDueDate(
+    reference: Date,
+    rule: RecurrenceRow,
+  ): Date | null {
     const weekdays = (rule.weekdays as string[] | null) ?? [];
     const next = new Date(reference);
 
@@ -278,7 +296,11 @@ export class RecurringTaskSchedulerService {
     }
   }
 
-  private nextWeekday(reference: Date, weekdays: string[], intervalWeeks: number): Date {
+  private nextWeekday(
+    reference: Date,
+    weekdays: string[],
+    intervalWeeks: number,
+  ): Date {
     const next = new Date(reference);
 
     if (!weekdays.length) {
@@ -303,11 +325,17 @@ export class RecurringTaskSchedulerService {
     const smallestOffset = Math.min(...offsets);
     // If we're repeating every N>1 weeks, once we've cycled through this
     // week's remaining matching weekdays we jump the extra (N-1) weeks.
-    next.setUTCDate(next.getUTCDate() + smallestOffset + 7 * (intervalWeeks - 1));
+    next.setUTCDate(
+      next.getUTCDate() + smallestOffset + 7 * (intervalWeeks - 1),
+    );
     return next;
   }
 
-  private addMonths(reference: Date, months: number, monthlyMode: string | null): Date {
+  private addMonths(
+    reference: Date,
+    months: number,
+    monthlyMode: string | null,
+  ): Date {
     const next = new Date(reference);
     const originalDay = next.getUTCDate();
     next.setUTCMonth(next.getUTCMonth() + months);

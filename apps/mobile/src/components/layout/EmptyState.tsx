@@ -15,11 +15,11 @@ export function EmptyState({ icon, title, description, actionLabel, onAction }: 
 
   return (
     <View
-      className="items-center gap-4 rounded-3xl border px-6 py-16"
+      className="items-center gap-3 rounded-2xl border px-4 py-10"
       style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.card }}
     >
-      <View className="h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: theme.colors.accentSoft }}>
-        <Text className="text-2xl">{icon}</Text>
+      <View className="h-12 w-12 items-center justify-center rounded-xl" style={{ backgroundColor: theme.colors.accentSoft }}>
+        <Text className="text-xl">{icon}</Text>
       </View>
       <View className="items-center">
         <Text className="mb-1 text-center text-sm font-bold" style={{ color: theme.colors.text }}>

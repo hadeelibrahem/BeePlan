@@ -17,7 +17,7 @@ export const AppHeader = memo(function AppHeader({ subtitle, onProfilePress, pro
   const { colors } = theme
 
   return (
-    <View className="mb-5 flex-row items-center justify-between">
+    <View className="mb-4 flex-row items-center justify-between">
       <View className="flex-1 flex-row items-center gap-3">
         <BeePlanLogo size={28} iconOnly />
 
