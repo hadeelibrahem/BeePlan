@@ -28,6 +28,7 @@ import {
 type AllTasksScreenProps = SidebarNavHandlers & {
   onBackDashboard?: () => void
   onCreateTask?: () => void
+  onCreateTaskAi?: () => void
   onViewTaskDetails?: (taskId: string) => void
   onSignOut?: () => void
   accessToken?: string | null
@@ -74,6 +75,7 @@ const DUE_FILTER_LABELS: Record<TaskDueFilter, string> = {
 export default function AllTasksScreen({
   onBackDashboard,
   onCreateTask,
+  onCreateTaskAi,
   onViewTaskDetails,
   onSignOut,
   accessToken,
@@ -89,6 +91,7 @@ export default function AllTasksScreen({
   const [completedActive, setCompletedActive] = useState(false)
   const [highPriorityActive, setHighPriorityActive] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [addTaskChooserOpen, setAddTaskChooserOpen] = useState(false)
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
 
@@ -186,8 +189,21 @@ export default function AllTasksScreen({
       panelTitle="Keep going!"
       panelCaption="You're doing great today."
       panelPercent={64}
-      fab={<FloatingActionButton onClick={onCreateTask} />}
+      fab={<FloatingActionButton onClick={() => setAddTaskChooserOpen(true)} />}
     >
+      {addTaskChooserOpen ? (
+        <AddTaskModeChooser
+          onClose={() => setAddTaskChooserOpen(false)}
+          onManual={() => {
+            setAddTaskChooserOpen(false)
+            onCreateTask?.()
+          }}
+          onAiPlan={() => {
+            setAddTaskChooserOpen(false)
+            onCreateTaskAi?.()
+          }}
+        />
+      ) : null}
       <PageHeader
         title="All Tasks"
         subtitle="Manage, filter, and track all your tasks"
@@ -330,6 +346,58 @@ export default function AllTasksScreen({
 }
 
 const CATEGORY_COLORS = ['bg-blue-400', 'bg-purple-400', 'bg-green-400', 'bg-red-400', 'bg-orange-400', 'bg-[var(--bp-accent)]']
+
+function AddTaskModeChooser({
+  onClose,
+  onManual,
+  onAiPlan,
+}: {
+  onClose: () => void
+  onManual: () => void
+  onAiPlan: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add task"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-5 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-black text-[var(--bp-text)]">Add Task</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 transition hover:text-[var(--bp-text)]">
+            &times;
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onManual}
+          className="mb-3 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-3.5 text-start transition hover:border-[var(--bp-accent)]/60"
+        >
+          <p className="font-bold text-[var(--bp-text)]">Manual Task</p>
+          <p className="mt-1 text-xs text-slate-400">Fill in the task details yourself.</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={onAiPlan}
+          className="w-full rounded-xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/10 px-4 py-3.5 text-start transition hover:border-[var(--bp-accent)]"
+        >
+          <p className="font-bold text-[var(--bp-accent)]">AI Plan Task</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Describe a big goal and let AI break it into subtasks, focus sessions, and reminders.
+          </p>
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function TaskGroup({
   title,

@@ -29,6 +29,7 @@ import AuthScreen from './screens/AuthScreen'
 import AllTasksScreen from './screens/AllTasksScreen'
 import AnalyticsScreen from './screens/AnalyticsScreen'
 import AiPlannerScreen from './screens/AiPlannerScreen'
+import AiTaskBuilderScreen from './screens/AiTaskBuilderScreen'
 import CalendarScreen from './screens/CalendarScreen'
 import CreateTaskScreen from './screens/CreateTaskScreen'
 import EditTaskScreen from './screens/EditTaskScreen'
@@ -47,6 +48,7 @@ type AppScreen =
   | 'focus'
   | 'planner'
   | 'createTask'
+  | 'aiPlanTask'
   | 'taskDetails'
   | 'editTask'
   | 'list'
@@ -339,6 +341,7 @@ function ThemedApp() {
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
+        onViewTaskDetails={openTaskDetails}
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
@@ -354,6 +357,7 @@ function ThemedApp() {
       <AllTasksScreen
         onBackDashboard={() => setScreen('dashboard')}
         onCreateTask={() => setScreen('createTask')}
+        onCreateTaskAi={() => setScreen('aiPlanTask')}
         onViewTaskDetails={openTaskDetails}
         accessToken={accessToken}
         tasks={tasks}
@@ -417,6 +421,20 @@ function ThemedApp() {
 
   if (screen === 'analytics') {
     return <AnalyticsScreen {...sidebarNav} tasks={tasks} reminders={reminders} onSignOut={() => void handleSignOut()} />
+  }
+
+  if (screen === 'aiPlanTask') {
+    return (
+      <AiTaskBuilderScreen
+        accessToken={accessToken ?? ''}
+        onCancel={() => setScreen('tasks')}
+        onSaveTask={handleCreateTask}
+        onReminderCreated={(reminder) => setReminders((current) => [reminder, ...current])}
+        onSaved={handleTaskCreated}
+        onSignOut={() => void handleSignOut()}
+        {...sidebarNav}
+      />
+    )
   }
 
   if (screen === 'createTask') {

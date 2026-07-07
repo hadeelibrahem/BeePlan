@@ -117,6 +117,20 @@ function SidebarContent({
         ))}
       </nav>
 
+      {/*
+        TODO: these category dots are static placeholders, not real data.
+        There's no dedicated categories API — the `categories` DB table
+        (apps/api/src/db/schema.ts) is defined but has zero backend routes.
+        The closest real source is `GET /tasks/filters/summary`
+        (apps/web/src/lib/tasksApi.ts -> TaskFilterSummary.categories), which
+        derives distinct category names + counts from tasks.category
+        free-text values and is already used by AllTasksScreen's filter
+        sidebar. Wiring that into this persistent Sidebar (rendered by
+        AppLayout on every screen) would mean fetching it at the app root and
+        threading it through every AppLayout call site — left out of this
+        change to keep the fix scoped; do that as a follow-up instead of
+        inventing new backend category endpoints/tables.
+      */}
       <div className="mt-6">
         <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Categories</p>
         <CategoryDot label="Work" color="bg-blue-400" />

@@ -1,3 +1,11 @@
+// NOTE: `TaskDependenciesWorkflowSheet` below is currently never rendered
+// anywhere in the app — only the `DependencyTask` type from this file is
+// imported (by src/screens/TaskDetailsScreen.tsx). The backend already
+// supports dependency add/replace/remove (see apps/api/src/tasks), so this
+// component is a ready-made UI for that flow; it just hasn't been wired up
+// yet. Left in place rather than deleted since the type export is in active
+// use and the component may still be the intended implementation for
+// dependency management on mobile.
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'

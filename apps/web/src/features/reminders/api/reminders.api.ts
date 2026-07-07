@@ -292,9 +292,12 @@ export async function toggleReminderStatus(
   return fromResponse(data)
 }
 
-async function apiFormRequest(path: string, formData: FormData) {
+async function apiFormRequest(path: string, accessToken: string, formData: FormData) {
   const response = await fetch(`${apiUrl}${path}`, {
     method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: formData,
   })
   const data = await response.json().catch(() => null)
@@ -307,27 +310,19 @@ async function apiFormRequest(path: string, formData: FormData) {
   return data
 }
 
-export async function parseReminderText(text: string): Promise<ReminderDraft> {
-  const response = await fetch(`${apiUrl}/ai/parse-reminder`, {
+export async function parseReminderText(text: string, accessToken: string): Promise<ReminderDraft> {
+  return apiRequest('/ai/parse-reminder', accessToken, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
-  })
-  const data = await response.json().catch(() => null)
-
-  if (!response.ok) {
-    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
-    throw new Error(message ?? 'Something went wrong. Please try again.')
-  }
-
-  return data as ReminderDraft
+  }) as Promise<ReminderDraft>
 }
 
 export async function createVoiceReminderDraft(
   audio: Blob,
+  accessToken: string,
   fileName = 'recording.webm',
 ): Promise<VoiceReminderDraftResponse> {
   const formData = new FormData()
   formData.append('audio', audio, fileName)
-  return apiFormRequest('/ai/voice-reminder-draft', formData) as Promise<VoiceReminderDraftResponse>
+  return apiFormRequest('/ai/voice-reminder-draft', accessToken, formData) as Promise<VoiceReminderDraftResponse>
 }

@@ -3,7 +3,8 @@
   "compilerOptions": {
     "types": ["node", "jest"],
     "composite": true,
-    "noEmit": false
+    "noEmit": false,
+    "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*.ts", "test/**/*.ts"],
   "exclude": ["node_modules", "dist"]

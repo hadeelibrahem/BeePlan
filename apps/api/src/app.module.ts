@@ -7,7 +7,7 @@ import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
-import { envSchema } from './config/env';
+import { validateEnv } from './config/env';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './db/database.module';
 import { NotesModule } from './notes/notes.module';
@@ -20,7 +20,7 @@ import { TasksModule } from './tasks/tasks.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['apps/api/.env', '.env'],
-      validate: (config) => envSchema.parse(config),
+      validate: validateEnv,
     }),
     // Global baseline rate limit for every route (100 req/min per IP).
     // Sensitive auth endpoints layer a much stricter `@Throttle()` override

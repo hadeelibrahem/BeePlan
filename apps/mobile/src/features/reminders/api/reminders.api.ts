@@ -295,24 +295,34 @@ export type RecordedAudioFile = {
   type: string;
 };
 
-async function apiFormRequest(path: string, formData: FormData) {
-  const response = await apiFetch(path, { method: 'POST', body: formData });
+async function apiFormRequest(path: string, accessToken: string, formData: FormData) {
+  const response = await apiFetch(path, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: formData,
+  });
   return readJsonOrThrow(response, `${API_BASE_URL}${path}`);
 }
 
-export async function parseReminderText(text: string): Promise<ReminderDraft> {
+export async function parseReminderText(text: string, accessToken: string): Promise<ReminderDraft> {
   const response = await apiFetch('/ai/parse-reminder', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify({ text }),
   });
   return readJsonOrThrow<ReminderDraft>(response, `${API_BASE_URL}/ai/parse-reminder`);
 }
 
-export async function createVoiceReminderDraft(audio: RecordedAudioFile): Promise<VoiceReminderDraftResponse> {
+export async function createVoiceReminderDraft(
+  audio: RecordedAudioFile,
+  accessToken: string,
+): Promise<VoiceReminderDraftResponse> {
   const formData = new FormData();
   // React Native's FormData accepts a { uri, name, type } file descriptor;
   // the DOM `FormData` typings don't model this, hence the cast.
   formData.append('audio', { uri: audio.uri, name: audio.name, type: audio.type } as unknown as Blob);
-  return apiFormRequest('/ai/voice-reminder-draft', formData) as Promise<VoiceReminderDraftResponse>;
+  return apiFormRequest('/ai/voice-reminder-draft', accessToken, formData) as Promise<VoiceReminderDraftResponse>;
 }

@@ -28,6 +28,7 @@ type TasksDashboardScreenProps = SidebarNavHandlers & {
   onRetrySummary?: () => void
   onViewReminders: () => void
   onViewTasks: () => void
+  onViewTaskDetails?: (taskId: string) => void
   onSignOut?: () => void
 }
 
@@ -41,6 +42,7 @@ export default function TasksDashboardScreen({
   onRetrySummary,
   onViewReminders,
   onViewTasks,
+  onViewTaskDetails,
   onSignOut,
   ...nav
 }: TasksDashboardScreenProps) {
@@ -146,7 +148,7 @@ export default function TasksDashboardScreen({
           {isFocusLoading ? (
             <p className="py-8 text-center text-sm text-slate-400">Loading focus tasks...</p>
           ) : focusTasks.length ? (
-            focusTasks.map((task) => <FocusTask key={task.id} task={task} />)
+            focusTasks.map((task) => <FocusTask key={task.id} task={task} onClick={onViewTaskDetails} />)
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">
@@ -175,14 +177,17 @@ export default function TasksDashboardScreen({
   )
 }
 
-function FocusTask({ task }: { task: ApiTask }) {
+function FocusTask({ task, onClick }: { task: ApiTask; onClick?: (taskId: string) => void }) {
   const reason = getPrimaryFocusReason(task)
   const dueLabel = formatFocusDue(task)
   const reasonColor =
     reason === 'Due Today' ? 'bg-[var(--bp-accent)]' : reason === 'Focus' ? 'bg-purple-400' : 'bg-orange-400'
 
   return (
-    <div className="mb-3 flex items-center gap-3 last:mb-0">
+    <div
+      className={`mb-3 flex items-center gap-3 last:mb-0 ${onClick ? 'cursor-pointer rounded-lg transition hover:bg-[var(--bp-bg)]' : ''}`}
+      onClick={onClick ? () => onClick(task.id) : undefined}
+    >
       <div className="h-4 w-4 shrink-0 rounded-full border border-slate-500" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[var(--bp-text)]">{task.title}</p>
