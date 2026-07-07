@@ -1,5 +1,5 @@
 export { AppLayout } from './AppLayout'
-export { Sidebar, type SidebarNavHandlers, type SidebarPage } from './Sidebar'
+export { Sidebar, SidebarNavItem, type SidebarNavHandlers, type SidebarPage } from './Sidebar'
 export { TopActionBar } from './TopActionBar'
 export { PageHeader } from './PageHeader'
 export { StatsCard } from './StatsCard'

@@ -78,6 +78,30 @@ export const standaloneNotes = pgTable('standalone_notes', {
   updatedAt: updatedAt(),
 });
 
+export const plannerPreferences = pgTable('planner_preferences', {
+  id: id(),
+  userId: uuid('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  focusStartTime: varchar('focus_start_time', { length: 5 }).notNull().default('08:00'),
+  focusEndTime: varchar('focus_end_time', { length: 5 }).notNull().default('11:00'),
+  workBlockMinutes: integer('work_block_minutes').notNull().default(50),
+  breakMinutes: integer('break_minutes').notNull().default(10),
+  energyMorning: varchar('energy_morning', { length: 10 }).notNull().default('high'),
+  energyAfternoon: varchar('energy_afternoon', { length: 10 }).notNull().default('medium'),
+  energyEvening: varchar('energy_evening', { length: 10 }).notNull().default('low'),
+  energyNight: varchar('energy_night', { length: 10 }).notNull().default('low'),
+  scheduleHardTasksInFocus: boolean('schedule_hard_tasks_in_focus').notNull().default(true),
+  finishStartedFirst: boolean('finish_started_first').notNull().default(true),
+  groupSimilarTasks: boolean('group_similar_tasks').notNull().default(true),
+  bufferBeforeMeetings: boolean('buffer_before_meetings').notNull().default(true),
+  bufferMinutes: integer('buffer_minutes').notNull().default(15),
+  note: varchar('note', { length: 1000 }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const categories = pgTable('categories', {
   id: id(),
   userId: uuid('user_id')

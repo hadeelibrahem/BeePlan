@@ -28,6 +28,7 @@ import {
 import AuthScreen from './screens/AuthScreen'
 import AllTasksScreen from './screens/AllTasksScreen'
 import AnalyticsScreen from './screens/AnalyticsScreen'
+import AiPlannerScreen from './screens/AiPlannerScreen'
 import CalendarScreen from './screens/CalendarScreen'
 import CreateTaskScreen from './screens/CreateTaskScreen'
 import EditTaskScreen from './screens/EditTaskScreen'
@@ -44,6 +45,7 @@ type AppScreen =
   | 'dashboard'
   | 'tasks'
   | 'focus'
+  | 'planner'
   | 'createTask'
   | 'taskDetails'
   | 'editTask'
@@ -81,6 +83,7 @@ function ThemedApp() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState('')
+  const [plannerRefreshKey, setPlannerRefreshKey] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const { accessToken, loading, user, signOut } = useAuth()
@@ -89,6 +92,7 @@ function ThemedApp() {
     () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     [queryClient],
   )
+  const refreshPlanner = useCallback(() => setPlannerRefreshKey((value) => value + 1), [])
 
   useEffect(() => {
     const syncPath = () => setAuthScreen(getAuthScreenFromPath())
@@ -163,6 +167,7 @@ function ThemedApp() {
       if (!updated) return
       setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? updated : reminder)))
       refreshSummary()
+      refreshPlanner()
     } catch {
       setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? current : reminder)))
     }
@@ -180,10 +185,10 @@ function ThemedApp() {
     if (!accessToken) return
     const createdTask = await createTask(accessToken, payload)
     setTasks((current) => [createdTask, ...current])
-    setSelectedTaskId(createdTask.id)
-    setScreen('taskDetails')
     refreshSummary()
     invalidateTaskFilters()
+    refreshPlanner()
+    return createdTask
   }
 
   function showInvalidTaskIdError(action: string) {
@@ -229,10 +234,20 @@ function ThemedApp() {
 
     const updatedTask = await updateTask(accessToken, taskId, payload)
     setTasks((current) => current.map((task) => (task.id === taskId ? updatedTask : task)))
-    setSelectedTaskId(updatedTask.id)
-    setScreen('taskDetails')
     refreshSummary()
     invalidateTaskFilters()
+    refreshPlanner()
+    return updatedTask
+  }
+
+  function handleTaskCreated(task: ApiTask) {
+    setSelectedTaskId(task.id)
+    setScreen('taskDetails')
+  }
+
+  function handleTaskSaved(task: ApiTask) {
+    setSelectedTaskId(task.id)
+    setScreen('taskDetails')
   }
 
   async function handleDeleteTask(taskId: string) {
@@ -249,25 +264,14 @@ function ThemedApp() {
     setScreen('tasks')
     refreshSummary()
     invalidateTaskFilters()
+    refreshPlanner()
   }
 
   function handleTaskUpdated(updatedTask: ApiTask) {
-    setTasks((current) => {
-      const previous = current.find((item) => item.id === updatedTask.id)
-      // The dashboard summary only depends on status/priority/dueDate/reminderEnabled
-      // across all tasks — skip refetching it for edits that don't touch those
-      // (e.g. a subtask toggle that doesn't flip the parent task's status).
-      const summaryRelevantChange =
-        !previous ||
-        previous.status !== updatedTask.status ||
-        previous.priority !== updatedTask.priority ||
-        previous.dueDate !== updatedTask.dueDate ||
-        previous.reminderEnabled !== updatedTask.reminderEnabled
-
-      if (summaryRelevantChange) refreshSummary()
-
-      return current.map((item) => (item.id === updatedTask.id ? updatedTask : item))
-    })
+    setTasks((current) => current.map((item) => (item.id === updatedTask.id ? updatedTask : item)))
+    refreshSummary()
+    invalidateTaskFilters()
+    refreshPlanner()
   }
 
   async function refreshSelectedTask(taskId: string) {
@@ -296,6 +300,7 @@ function ThemedApp() {
     onNavigateDashboard: () => setScreen('dashboard'),
     onNavigateTasks: () => setScreen('tasks'),
     onNavigateFocus: () => setScreen('focus'),
+    onNavigatePlanner: () => setScreen('planner'),
     onNavigateReminders: () => setScreen('list'),
     onNavigateCalendar: () => setScreen('calendar'),
     onNavigateNotes: () => setScreen('notes'),
@@ -326,13 +331,16 @@ function ThemedApp() {
     return (
       <TasksDashboardScreen
         reminders={reminders}
+        tasks={tasks}
         summary={summary}
         summaryLoading={summaryLoading}
         summaryError={summaryError}
+        tasksLoading={tasksLoading}
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
         onNavigateFocus={sidebarNav.onNavigateFocus}
+        onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -352,6 +360,7 @@ function ThemedApp() {
         loading={tasksLoading}
         error={tasksError}
         onNavigateFocus={sidebarNav.onNavigateFocus}
+        onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -368,11 +377,32 @@ function ThemedApp() {
         onViewTaskDetails={openTaskDetails}
         tasks={tasks}
         onNavigateTasks={sidebarNav.onNavigateTasks}
+        onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
         onSignOut={() => void handleSignOut()}
+      />
+    )
+  }
+
+  if (screen === 'planner') {
+    return (
+      <AiPlannerScreen
+        accessToken={accessToken ?? ''}
+        refreshKey={plannerRefreshKey}
+        completedTaskIds={new Set(tasks.filter((task) => task.status === 'done').map((task) => task.id))}
+        onCompleteTask={async (taskId) => {
+          if (!accessToken || !isValidTaskId(taskId)) return
+          const updatedTask = await changeTaskStatus(accessToken, taskId, { status: 'done' })
+          setTasks((current) => current.map((task) => (task.id === taskId ? updatedTask : task)))
+          refreshSummary()
+          invalidateTaskFilters()
+          refreshPlanner()
+        }}
+        onSignOut={() => void handleSignOut()}
+        {...sidebarNav}
       />
     )
   }
@@ -393,11 +423,14 @@ function ThemedApp() {
     return (
       <CreateTaskScreen
         tasks={tasks}
+        accessToken={accessToken ?? ''}
         onCancel={() => setScreen('tasks')}
         onSave={handleCreateTask}
+        onCreated={handleTaskCreated}
         onSignOut={() => void handleSignOut()}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
         onNavigateFocus={sidebarNav.onNavigateFocus}
+        onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -430,10 +463,12 @@ function ThemedApp() {
           setScreen('tasks')
           refreshSummary()
           invalidateTaskFilters()
+          refreshPlanner()
         }}
         onSignOut={() => void handleSignOut()}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
         onNavigateFocus={sidebarNav.onNavigateFocus}
+        onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -453,9 +488,11 @@ function ThemedApp() {
         onDelete={() => void handleDeleteTask(selectedTask.id)}
         onSave={(payload) => void handleUpdateTask(selectedTask.id, payload)}
         onTaskUpdated={handleTaskUpdated}
+        onSaved={handleTaskSaved}
         onSignOut={() => void handleSignOut()}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
         onNavigateFocus={sidebarNav.onNavigateFocus}
+        onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
@@ -474,6 +511,7 @@ function ThemedApp() {
           setSelectedId(reminder.id)
           setScreen('details')
           refreshSummary()
+          refreshPlanner()
         }}
       />,
     )
@@ -500,6 +538,7 @@ function ThemedApp() {
           setSelectedId(reminder.id)
           setScreen('details')
           refreshSummary()
+          refreshPlanner()
         }}
       />,
     )
@@ -518,6 +557,7 @@ function ThemedApp() {
       onSignOut={() => void handleSignOut()}
       onNavigateTasks={sidebarNav.onNavigateTasks}
       onNavigateFocus={sidebarNav.onNavigateFocus}
+      onNavigatePlanner={sidebarNav.onNavigatePlanner}
       onNavigateCalendar={sidebarNav.onNavigateCalendar}
       onNavigateNotes={sidebarNav.onNavigateNotes}
       onNavigateAnalytics={sidebarNav.onNavigateAnalytics}

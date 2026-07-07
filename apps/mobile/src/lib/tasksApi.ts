@@ -1,4 +1,7 @@
 import { API_BASE_URL, apiFetch, readJsonOrThrow } from './apiClient';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { Linking } from 'react-native';
 
 export type ApiTaskStatus = 'todo' | 'in_progress' | 'done' | 'missed';
 export type ApiTaskPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -6,6 +9,23 @@ export type ApiTaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type ApiTaskLabel = {
   id: string;
   name: string;
+};
+
+export type ApiTaskAttachment = {
+  id?: string;
+  taskId?: string;
+  name?: string;
+  size?: string;
+  url?: string;
+  type?: string;
+  fileName?: string;
+  fileUrl?: string;
+  previewUrl?: string;
+  downloadUrl?: string;
+  storagePath?: string;
+  fileType?: string;
+  fileSize?: number | string;
+  uploadedAt?: string;
 };
 
 export type ApiTaskActivity = {
@@ -84,6 +104,7 @@ export type ApiTask = {
   activities: ApiTaskActivity[];
   createdAt: string;
   updatedAt: string;
+  attachments: ApiTaskAttachment[];
 };
 
 export type TaskPayload = Partial<
@@ -150,6 +171,15 @@ export type TaskFilterSummary = {
   categories: { name: string; count: number }[];
 };
 
+export type DashboardSummary = {
+  todayTasks: number;
+  completedTasks: number;
+  highPriorityTasks: number;
+  reminders: number;
+  totalTasks: number;
+  overallProgress: number;
+};
+
 function buildTaskQuery(filters?: TaskFilters) {
   if (!filters) return '';
 
@@ -173,6 +203,10 @@ export function getTasks(accessToken: string, filters?: TaskFilters) {
 
 export function getTaskFilterSummary(accessToken: string) {
   return request<TaskFilterSummary>(accessToken, '/tasks/filters/summary');
+}
+
+export function getDashboardSummary(accessToken: string) {
+  return request<DashboardSummary>(accessToken, '/dashboard/summary');
 }
 
 export function createTask(accessToken: string, payload: TaskPayload) {
@@ -319,6 +353,61 @@ export function removeRecurrence(accessToken: string, taskId: string) {
 
 export function getTaskActivity(accessToken: string, taskId: string) {
   return request<ApiTaskActivity[]>(accessToken, `/tasks/${taskId}/activity`);
+}
+
+export function getAttachments(accessToken: string, taskId: string) {
+  return request<ApiTaskAttachment[]>(accessToken, `/tasks/${taskId}/attachments`);
+}
+
+export async function uploadAttachment(accessToken: string, taskId: string, file: { uri: string; name: string; type?: string }) {
+  const path = `/tasks/${taskId}/attachments`;
+  const url = `${API_BASE_URL}${path}`;
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.type ?? 'application/octet-stream',
+  } as never);
+
+  const response = await apiFetch(path, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+
+  return readJsonOrThrow<ApiTaskAttachment>(response, url);
+}
+
+export function deleteAttachment(accessToken: string, taskId: string, attachmentId: string) {
+  return request<void>(accessToken, `/tasks/${taskId}/attachments/${encodeURIComponent(attachmentId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function openAttachment(accessToken: string, taskId: string, attachment: ApiTaskAttachment) {
+  if (!attachment.id) {
+    throw new Error('Unable to open attachment.');
+  }
+
+  const fileName = attachment.fileName ?? attachment.name ?? 'attachment';
+  const safeName = fileName.replace(/[^a-z0-9._-]+/gi, '_');
+  const localUri = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ''}${Date.now()}-${safeName}`;
+  const downloadUrl = `${API_BASE_URL}/tasks/${taskId}/attachments/${attachment.id}/download`;
+  const result = await FileSystem.downloadAsync(downloadUrl, localUri, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(result.uri, {
+      mimeType: attachment.fileType ?? attachment.type ?? undefined,
+      dialogTitle: fileName,
+    });
+    return;
+  }
+
+  await Linking.openURL(result.uri);
 }
 
 export function toUiStatus(status: ApiTaskStatus) {

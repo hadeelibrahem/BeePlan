@@ -35,27 +35,22 @@ const RESPONSE_SCHEMA = `{
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly client: OpenAI;
-  private readonly model: string;
+  private readonly client: OpenAI | null;
+  private readonly model: string | null;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('QWEN_API_KEY');
     const baseURL = this.configService.get<string>('QWEN_BASE_URL');
     const model = this.configService.get<string>('QWEN_MODEL');
-    if (!apiKey) {
-      throw new Error('QWEN_API_KEY is not configured');
-    }
-    if (!baseURL) {
-      throw new Error('QWEN_BASE_URL is not configured');
-    }
-    if (!model) {
-      throw new Error('QWEN_MODEL is not configured');
-    }
-    this.client = new OpenAI({ apiKey, baseURL });
-    this.model = model;
+    this.client = apiKey && baseURL ? new OpenAI({ apiKey, baseURL }) : null;
+    this.model = model ?? null;
   }
 
   async parseReminder(text: string): Promise<ReminderDraft> {
+    if (!this.client || !this.model) {
+      throw new InternalServerErrorException('AI reminder parsing is not configured.');
+    }
+
     const trimmed = text.trim();
     if (!trimmed) {
       throw new BadRequestException('text must not be empty.');

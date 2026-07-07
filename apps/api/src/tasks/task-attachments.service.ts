@@ -19,8 +19,8 @@ type AttachmentRow = typeof taskAttachments.$inferSelect;
  * This is intentionally a DEV-LOCAL storage backend, isolated to its own
  * directory (gitignored, see repo .gitignore) and never exposed as a public
  * static path — files are only ever served back out through
- * `download()`/the authenticated `/tasks/:id/attachments/:attachmentId/download`
- * route, so ownership is checked on every read, not just on upload.
+ * authenticated preview/download routes, so ownership is checked on every
+ * read, not just on upload.
  *
  * To swap in real cloud storage later (Supabase Storage, S3, etc.), this is
  * the only file that needs to change: replace `saveFile`/`deleteFile`/
@@ -37,6 +37,16 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/gif',
   'image/webp',
+  'image/svg+xml',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
+  'video/mp4',
+  'video/ogg',
+  'video/webm',
+  'application/json',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -45,7 +55,40 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain',
+  'text/html',
 ]);
+
+const EXTENSION_MIME_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.oga': 'audio/ogg',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
+  '.webm': 'video/webm',
+  '.mp4': 'video/mp4',
+  '.ogv': 'video/ogg',
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx':
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx':
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.log': 'text/plain',
+  '.html': 'text/html',
+  '.htm': 'text/html',
+};
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -58,7 +101,12 @@ export class TaskAttachmentsService {
   }
 
   static isAllowedMimeType(mimeType: string): boolean {
-    return ALLOWED_MIME_TYPES.has(mimeType);
+    return (
+      ALLOWED_MIME_TYPES.has(mimeType) ||
+      mimeType.startsWith('text/') ||
+      mimeType.startsWith('audio/') ||
+      mimeType.startsWith('video/')
+    );
   }
 
   private async getTaskForUser(userId: string, taskId: string) {
@@ -75,13 +123,23 @@ export class TaskAttachmentsService {
   }
 
   private toEntity(row: AttachmentRow) {
+    const previewUrl = `/tasks/${row.taskId}/attachments/${row.id}/preview`;
+    const downloadUrl = `/tasks/${row.taskId}/attachments/${row.id}/download`;
     return {
       id: row.id,
       taskId: row.taskId,
+      fileName: row.fileName,
+      fileUrl: previewUrl,
+      previewUrl,
+      downloadUrl,
+      storagePath: row.storageKey,
+      fileType: row.mimeType,
+      fileSize: row.sizeBytes,
+      uploadedAt: row.createdAt.toISOString(),
       name: row.fileName,
       size: String(row.sizeBytes),
       type: row.mimeType,
-      url: `/tasks/${row.taskId}/attachments/${row.id}/download`,
+      url: previewUrl,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -107,9 +165,11 @@ export class TaskAttachmentsService {
       throw new BadRequestException('No file was uploaded.');
     }
 
-    if (!TaskAttachmentsService.isAllowedMimeType(file.mimetype)) {
+    const mimeType = resolveAttachmentMimeType(file.mimetype, file.originalname);
+
+    if (!TaskAttachmentsService.isAllowedMimeType(mimeType)) {
       throw new BadRequestException(
-        `Unsupported file type "${file.mimetype}". Allowed: images, PDF, and common office documents.`,
+        `Unsupported file type "${file.mimetype}". Allowed: images, PDF, text, media, and common office documents.`,
       );
     }
 
@@ -127,7 +187,7 @@ export class TaskAttachmentsService {
         userId,
         fileName: file.originalname,
         storageKey,
-        mimeType: file.mimetype,
+        mimeType,
         sizeBytes: file.size,
       })
       .returning();
@@ -158,7 +218,7 @@ export class TaskAttachmentsService {
     await this.deleteFile(row.storageKey);
   }
 
-  async getFileForDownload(
+  async getFile(
     userId: string,
     taskId: string,
     attachmentId: string,
@@ -199,4 +259,12 @@ export class TaskAttachmentsService {
       // File already gone / never written — deleting the DB row is what matters.
     }
   }
+}
+
+function resolveAttachmentMimeType(mimeType: string, fileName: string) {
+  if (mimeType && mimeType !== 'application/octet-stream') {
+    return mimeType;
+  }
+
+  return EXTENSION_MIME_TYPES[extname(fileName).toLowerCase()] ?? mimeType;
 }

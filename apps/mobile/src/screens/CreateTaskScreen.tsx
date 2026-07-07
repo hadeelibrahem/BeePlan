@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { Pressable, Text, TextInput, View } from 'react-native'
+import * as DocumentPicker from 'expo-document-picker'
 import {
   TaskRecurrenceSheet,
   createRecurrenceSummary,
   type RecurrenceSettings,
 } from '../components/TaskRecurrenceSheet'
-import { recurrenceToApi, type TaskPayload } from '../lib/tasksApi'
+import TaskAttachmentPicker from '../components/TaskAttachmentPicker'
+import { recurrenceToApi, type ApiTask, type TaskPayload, uploadAttachment } from '../lib/tasksApi'
 import {
   AppScreen,
   BottomActionBar,
@@ -17,11 +19,13 @@ import {
 import { useTheme } from '../theme/useTheme'
 
 type Props = {
+  accessToken?: string
   onCancel: () => void
-  onSave: (payload: TaskPayload) => Promise<void> | void
+  onSave: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void
+  onCreated?: (task: ApiTask) => void
 }
 
-export default function CreateTaskScreen({ onCancel, onSave }: Props) {
+export default function CreateTaskScreen({ accessToken, onCancel, onSave, onCreated }: Props) {
   const { theme } = useTheme()
   const { colors } = theme
   const [title, setTitle] = useState('')
@@ -29,8 +33,10 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadingAttachments, setUploadingAttachments] = useState(false)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(null)
   const [isRecurrenceSheetVisible, setIsRecurrenceSheetVisible] = useState(false)
+  const [attachments, setAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([])
   const recurrenceSummary = createRecurrenceSummary(recurrence)
 
   async function handleSave() {
@@ -43,7 +49,7 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
     setError('')
 
     try {
-      await onSave({
+      const createdTask = await onSave({
         title: title.trim(),
         description: description.trim(),
         notes: notes.trim(),
@@ -54,9 +60,25 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
         reminderBeforeMinutes: 30,
         recurrence: recurrenceToApi(recurrence),
       })
+
+      if (!createdTask) return
+
+      if (attachments.length && accessToken) {
+        setUploadingAttachments(true)
+        for (const file of attachments) {
+          await uploadAttachment(accessToken, createdTask.id, {
+            uri: file.uri,
+            name: file.name ?? 'attachment',
+            type: file.mimeType ?? 'application/octet-stream',
+          })
+        }
+      }
+
+      onCreated?.(createdTask)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to create task.')
     } finally {
+      setUploadingAttachments(false)
       setSaving(false)
     }
   }
@@ -69,8 +91,8 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
           <SecondaryButton onPress={onCancel} className="flex-1">
             Cancel
           </SecondaryButton>
-          <PrimaryButton onPress={() => void handleSave()} className="flex-1" disabled={saving}>
-            {saving ? 'Saving...' : 'Save Task'}
+          <PrimaryButton onPress={() => void handleSave()} className="flex-1" disabled={saving || uploadingAttachments}>
+            {saving || uploadingAttachments ? 'Saving...' : 'Save Task'}
           </PrimaryButton>
         </BottomActionBar>
       }
@@ -189,16 +211,12 @@ export default function CreateTaskScreen({ onCancel, onSave }: Props) {
       </Card>
 
       <Card title="Attachments" icon="📎">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Upload files"
-          className="h-24 items-center justify-center rounded-xl border border-dashed active:opacity-70"
-          style={{ borderColor: colors.border, backgroundColor: colors.background }}
-        >
-          <Text className="text-xl">☁️</Text>
-          <Text className="mt-1.5 text-sm" style={{ color: colors.secondaryText }}>Upload files</Text>
-          <Text className="text-xs" style={{ color: colors.secondaryText }}>Images, PDF, Documents</Text>
-        </Pressable>
+        <TaskAttachmentPicker
+          files={attachments}
+          onChange={setAttachments}
+          disabled={saving || uploadingAttachments}
+          onValidationError={setError}
+        />
       </Card>
       <TaskRecurrenceSheet
         visible={isRecurrenceSheetVisible}
