@@ -11,17 +11,18 @@ import { AssemblyAI } from 'assemblyai';
 @Injectable()
 export class SpeechService {
   private readonly logger = new Logger(SpeechService.name);
-  private readonly client: AssemblyAI;
+  private readonly client: AssemblyAI | null;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('ASSEMBLYAI_API_KEY');
-    if (!apiKey) {
-      throw new Error('ASSEMBLYAI_API_KEY is not configured');
-    }
-    this.client = new AssemblyAI({ apiKey });
+    this.client = apiKey ? new AssemblyAI({ apiKey }) : null;
   }
 
   async transcribe(file: Express.Multer.File): Promise<string> {
+    if (!this.client) {
+      throw new InternalServerErrorException('Speech transcription is not configured.');
+    }
+
     try {
       const transcript = await this.client.transcripts.transcribe({
         audio: file.buffer,

@@ -25,6 +25,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureRemindersTable();
     await this.ensureGoogleLoginApprovalsTable();
     await this.ensureStandaloneNotesTable();
+    await this.ensurePlannerPreferencesTable();
   }
 
   async healthCheck() {
@@ -312,6 +313,31 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists standalone_notes_user_id_updated_at_idx
         on standalone_notes (user_id, updated_at desc)
+    `);
+  }
+
+  private async ensurePlannerPreferencesTable() {
+    await this.getPool().query(`
+      create table if not exists planner_preferences (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null unique references users(id) on delete cascade,
+        focus_start_time varchar(5) not null default '08:00',
+        focus_end_time varchar(5) not null default '11:00',
+        work_block_minutes integer not null default 50,
+        break_minutes integer not null default 10,
+        energy_morning varchar(10) not null default 'high',
+        energy_afternoon varchar(10) not null default 'medium',
+        energy_evening varchar(10) not null default 'low',
+        energy_night varchar(10) not null default 'low',
+        schedule_hard_tasks_in_focus boolean not null default true,
+        finish_started_first boolean not null default true,
+        group_similar_tasks boolean not null default true,
+        buffer_before_meetings boolean not null default true,
+        buffer_minutes integer not null default 15,
+        note varchar(1000),
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
     `);
   }
 

@@ -45,13 +45,8 @@ export default function FocusScreen({
   return (
     <AppLayout
       active="focus"
+      {...nav}
       onNavigateDashboard={onBackDashboard}
-      onNavigateTasks={nav.onNavigateTasks}
-      onNavigateFocus={nav.onNavigateFocus}
-      onNavigateReminders={nav.onNavigateReminders}
-      onNavigateCalendar={nav.onNavigateCalendar}
-      onNavigateNotes={nav.onNavigateNotes}
-      onNavigateAnalytics={nav.onNavigateAnalytics}
       panelTitle="Stay focused"
       panelCaption="Tasks ready for a focus session."
       panelPercent={focusTasks.length ? 100 : 0}

@@ -35,6 +35,7 @@ export function RemindersListScreen({
   onSignOut,
   onNavigateTasks,
   onNavigateFocus,
+  onNavigatePlanner,
   onNavigateCalendar,
   onNavigateNotes,
   onNavigateAnalytics,
@@ -83,6 +84,7 @@ export function RemindersListScreen({
       onNavigateDashboard={onBack}
       onNavigateTasks={onNavigateTasks}
       onNavigateFocus={onNavigateFocus}
+      onNavigatePlanner={onNavigatePlanner}
       onNavigateCalendar={onNavigateCalendar}
       onNavigateNotes={onNavigateNotes}
       onNavigateAnalytics={onNavigateAnalytics}

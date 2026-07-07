@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import TaskAttachmentPicker from '../components/TaskAttachmentPicker';
 import {
   AppScreen,
   BottomActionBar,
@@ -17,22 +19,28 @@ import {
 } from '../components/TaskRecurrenceSheet';
 import { useTheme } from '../theme/useTheme';
 import {
+  deleteAttachment,
+  getAttachments,
   recurrenceToApi,
   recurrenceToUi,
   toApiPriority,
   toApiStatus,
   toUiPriority,
   toUiStatus,
+  uploadAttachment,
   type ApiTask,
+  type ApiTaskAttachment,
   type TaskPayload,
 } from '../lib/tasksApi';
 
 type Props = {
   task: ApiTask | null;
+  accessToken?: string;
   onBack: () => void;
   onCancel: () => void;
   onDelete: () => void;
-  onSave: (payload: TaskPayload) => Promise<void> | void;
+  onSave: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void;
+  onSaved?: (task: ApiTask) => void;
 };
 
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const;
@@ -61,7 +69,34 @@ function formatTimeLabel(time: string) {
   return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
 }
 
-export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSave }: Props) {
+function formatFileSize(size?: number | string) {
+  const value = typeof size === 'string' ? Number(size) : size;
+  if (!value || Number.isNaN(value)) return '';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentLabel(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLowerCase();
+  if (normalized.includes('pdf')) return 'PDF';
+  if (normalized.includes('image') || normalized.match(/\.(png|jpe?g|gif|webp)$/)) return 'IMG';
+  if (normalized.match(/\.(docx?|txt)$/) || normalized.includes('word')) return 'DOC';
+  if (normalized.match(/\.(xlsx?|csv)$/) || normalized.includes('sheet') || normalized.includes('excel')) return 'XLS';
+  if (normalized.match(/\.(pptx?)$/) || normalized.includes('powerpoint')) return 'SLD';
+  return 'FILE';
+}
+
+function attachmentColor(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLowerCase();
+  if (normalized.includes('pdf')) return 'bg-red-500';
+  if (normalized.includes('image') || normalized.match(/\.(png|jpe?g|gif|webp)$/)) return 'bg-green-500';
+  if (normalized.match(/\.(xlsx?|csv)$/) || normalized.includes('sheet') || normalized.includes('excel')) return 'bg-blue-500';
+  if (normalized.match(/\.(docx?|txt)$/) || normalized.includes('word')) return 'bg-indigo-500';
+  return 'bg-orange-500';
+}
+
+export default function EditTaskScreen({ task, accessToken, onBack, onCancel, onDelete, onSave, onSaved }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -82,7 +117,29 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
   const [iosPicker, setIosPicker] = useState<'date' | 'time' | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([]);
+  const [draftAttachments, setDraftAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const recurrenceSummary = createRecurrenceSummary(recurrence);
+
+  useEffect(() => {
+    if (!task || !accessToken) return;
+
+    let cancelled = false;
+    getAttachments(accessToken, task.id)
+      .then((items) => {
+        if (!cancelled) setAttachments(items);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load attachments.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [task, accessToken]);
 
   const openDatePicker = () => {
     if (Platform.OS === 'android') {
@@ -135,7 +192,7 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
     const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60);
 
     try {
-      await onSave({
+      const updatedTask = await onSave({
         title: title.trim(),
         description: description.trim(),
         category: category.trim(),
@@ -149,9 +206,28 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
         remainingTimeMinutes: Math.max(estimatedTimeMinutes - spentTimeMinutes, 0),
         recurrence: recurrenceToApi(recurrence),
       });
+
+      if (!updatedTask) return;
+
+      if (draftAttachments.length && accessToken) {
+        setUploadingAttachments(true);
+        for (const file of draftAttachments) {
+          await uploadAttachment(accessToken, task.id, {
+            uri: file.uri,
+            name: file.name ?? 'attachment',
+            type: file.mimeType ?? 'application/octet-stream',
+          });
+        }
+        const refreshedAttachments = await getAttachments(accessToken, task.id);
+        setAttachments(refreshedAttachments);
+        setDraftAttachments([]);
+      }
+
+      onSaved?.(updatedTask);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save task changes.');
     } finally {
+      setUploadingAttachments(false);
       setSaving(false);
     }
   }
@@ -181,8 +257,8 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
                 Cancel Changes
               </SecondaryButton>
             </View>
-            <PrimaryButton onPress={() => void handleSave()} fullWidth disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
+            <PrimaryButton onPress={() => void handleSave()} fullWidth disabled={saving || uploadingAttachments}>
+              {saving || uploadingAttachments ? 'Saving...' : 'Save Changes'}
             </PrimaryButton>
           </View>
         </BottomActionBar>
@@ -293,6 +369,55 @@ export default function EditTaskScreen({ task, onBack, onCancel, onDelete, onSav
           className="h-20 rounded-xl border px-3 py-2.5 text-sm"
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
+      </Card>
+
+      <Card title="Attachments">
+        <TaskAttachmentPicker
+          files={draftAttachments}
+          onChange={setDraftAttachments}
+          disabled={saving || uploadingAttachments}
+          onValidationError={setError}
+        />
+        <View className="mt-3 gap-2">
+          {attachments.map((file) => (
+            <View key={file.id ?? file.fileName ?? file.name} className="flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: colors.card }}>
+              <View className={`h-9 w-9 items-center justify-center rounded-lg ${attachmentColor(file.fileType ?? file.type, file.fileName ?? file.name)}`}>
+                <Text className="text-[9px] font-black text-white">{attachmentLabel(file.fileType ?? file.type, file.fileName ?? file.name)}</Text>
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="text-sm font-bold" style={{ color: colors.text }} numberOfLines={1}>
+                  {file.fileName ?? file.name}
+                </Text>
+                <Text className="text-xs" style={{ color: colors.secondaryText }}>
+                  {formatFileSize(file.fileSize ?? file.size)}
+                  {file.fileType ?? file.type ? ` • ${file.fileType ?? file.type}` : ''}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  if (!accessToken || !file.id) return;
+                  const previous = attachments;
+                  setAttachments((current) => current.filter((item) => item.id !== file.id));
+                  void deleteAttachment(accessToken, task.id, file.id).catch((deleteError: unknown) => {
+                    setAttachments(previous);
+                    setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete attachment.');
+                  });
+                }}
+                className="rounded-lg px-3 py-1.5 active:opacity-80"
+                style={{ backgroundColor: `${colors.error}22` }}
+              >
+                <Text className="text-xs font-bold" style={{ color: colors.error }}>
+                  Delete
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+          {!attachments.length ? (
+            <Text className="text-sm" style={{ color: colors.secondaryText }}>
+              No attachments yet.
+            </Text>
+          ) : null}
+        </View>
       </Card>
 
       <Card title="Recurring Task">

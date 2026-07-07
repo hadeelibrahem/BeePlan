@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 
 import { Pressable, Text, View } from 'react-native';
 import {
   changeTaskStatus,
+  getAttachments,
+  openAttachment,
   recurrenceToUi,
   toApiStatus,
   toUiPriority,
@@ -10,6 +12,7 @@ import {
   type ApiSubtask,
   type ApiTask,
   type ApiTaskActivity,
+  type ApiTaskAttachment,
 } from '../lib/tasksApi';
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowSheet';
 import { createRecurrenceSummary, getNextOccurrenceLabel, type RecurrenceSettings } from '../components/TaskRecurrenceSheet';
@@ -57,6 +60,7 @@ export default function TaskDetailsScreen({
     task ? recurrenceToUi(task.recurrence) : null,
   );
   const [activityItems, setActivityItems] = useState<ApiTaskActivity[]>(task?.activities ?? []);
+  const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([]);
   const [error, setError] = useState('');
 
   const completedSubtasks = useMemo(() => subtaskItems.filter((item) => item.isDone).length, [subtaskItems]);
@@ -83,6 +87,38 @@ export default function TaskDetailsScreen({
     setRecurrence(recurrenceToUi(task.recurrence));
     setActivityItems(task.activities);
   }, [task]);
+
+  useEffect(() => {
+    if (!task || !accessToken) return;
+
+    let cancelled = false;
+    getAttachments(accessToken, task.id)
+      .then((items) => {
+        if (!cancelled) setAttachmentItems(items);
+      })
+      .catch((attachmentError: unknown) => {
+        if (!cancelled) {
+          setError(attachmentError instanceof Error ? attachmentError.message : 'Unable to load attachments.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [task, accessToken]);
+
+  const handleOpenAttachment = useCallback(
+    async (attachment: ApiTaskAttachment) => {
+      if (!task || !accessToken || !attachment.id) return;
+
+      try {
+        await openAttachment(accessToken, task.id, attachment);
+      } catch (attachmentError) {
+        setError(attachmentError instanceof Error ? attachmentError.message : 'Unable to open attachment.');
+      }
+    },
+    [task, accessToken],
+  );
 
   const saveStatus = useCallback(
     async (next: { status: TaskStatus; progress: number; completionDate?: string; missedReason?: string }) => {
@@ -280,6 +316,38 @@ export default function TaskDetailsScreen({
         </Text>
       </Card>
 
+      <Card title="Attachments">
+        {attachmentItems.length ? (
+          <View className="gap-2">
+            {attachmentItems.map((file) => (
+              <Pressable
+                key={file.id ?? file.fileName ?? file.name}
+                onPress={() => void handleOpenAttachment(file)}
+                className="flex-row items-center gap-3 rounded-2xl p-3 active:opacity-80"
+                style={{ backgroundColor: colors.background }}
+              >
+                <View className={`h-9 w-9 items-center justify-center rounded-lg ${attachmentColor(file.fileType ?? file.type, file.fileName ?? file.name)}`}>
+                  <Text className="text-[9px] font-black text-white">
+                    {attachmentLabel(file.fileType ?? file.type, file.fileName ?? file.name)}
+                  </Text>
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-sm font-bold" style={{ color: colors.text }} numberOfLines={1}>
+                    {file.fileName ?? file.name}
+                  </Text>
+                  <Text className="text-xs" style={{ color: colors.secondaryText }}>
+                    {formatFileSize(file.fileSize ?? file.size)}
+                    {file.fileType ?? file.type ? ` • ${file.fileType ?? file.type}` : ''}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <EmptyBlock title="No attachments yet" description="Files uploaded from Edit Task will appear here." />
+        )}
+      </Card>
+
       <Card title="Latest Activity">
         {latestActivity ? (
           <TimelineRow
@@ -388,6 +456,33 @@ function formatDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+}
+
+function formatFileSize(size?: number | string) {
+  const value = typeof size === 'string' ? Number(size) : size;
+  if (!value || Number.isNaN(value)) return '';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentLabel(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLowerCase();
+  if (normalized.includes('pdf')) return 'PDF';
+  if (normalized.includes('image') || normalized.match(/\.(png|jpe?g|gif|webp)$/)) return 'IMG';
+  if (normalized.match(/\.(docx?|txt)$/) || normalized.includes('word')) return 'DOC';
+  if (normalized.match(/\.(xlsx?|csv)$/) || normalized.includes('sheet') || normalized.includes('excel')) return 'XLS';
+  if (normalized.match(/\.(pptx?)$/) || normalized.includes('powerpoint')) return 'SLD';
+  return 'FILE';
+}
+
+function attachmentColor(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLowerCase();
+  if (normalized.includes('pdf')) return 'bg-red-500';
+  if (normalized.includes('image') || normalized.match(/\.(png|jpe?g|gif|webp)$/)) return 'bg-green-500';
+  if (normalized.match(/\.(xlsx?|csv)$/) || normalized.includes('sheet') || normalized.includes('excel')) return 'bg-blue-500';
+  if (normalized.match(/\.(docx?|txt)$/) || normalized.includes('word')) return 'bg-indigo-500';
+  return 'bg-orange-500';
 }
 
 function formatActivityDateTime(value?: string) {

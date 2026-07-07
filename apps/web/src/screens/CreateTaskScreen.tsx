@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
+import TaskAttachmentPicker from '../components/TaskAttachmentPicker'
 import {
   TaskRecurrenceModal,
   createRecurrenceSummary,
@@ -14,6 +15,7 @@ import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import {
   recurrenceToApi,
+  uploadAttachment,
   toApiPriority,
   toApiStatus,
   toUiPriority,
@@ -24,12 +26,22 @@ import {
 
 type CreateTaskScreenProps = SidebarNavHandlers & {
   tasks?: ApiTask[]
+  accessToken?: string
   onCancel?: () => void
-  onSave?: (payload: TaskPayload) => Promise<void> | void
+  onSave?: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void
+  onCreated?: (task: ApiTask) => void
   onSignOut?: () => void
 }
 
-export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignOut, ...nav }: CreateTaskScreenProps) {
+export default function CreateTaskScreen({
+  tasks = [],
+  accessToken,
+  onCancel,
+  onSave,
+  onCreated,
+  onSignOut,
+  ...nav
+}: CreateTaskScreenProps) {
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const [search, setSearch] = useState('')
@@ -46,8 +58,10 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false)
   const [dependencyModalOpen, setDependencyModalOpen] = useState(false)
   const [dependencies, setDependencies] = useState<DependencyTask[]>([])
+  const [attachments, setAttachments] = useState<File[]>([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadingAttachments, setUploadingAttachments] = useState(false)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(null)
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
   const recurrenceSummary = createRecurrenceSummary(recurrence)
@@ -63,7 +77,7 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
     setError('')
 
     try {
-      await onSave?.({
+      const createdTask = await onSave?.({
         title: title.trim(),
         description,
         notes,
@@ -77,9 +91,21 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
         recurrence: recurrenceToApi(recurrence),
         subtasks,
       })
+
+      if (!createdTask) return
+
+      if (attachments.length && accessToken) {
+        setUploadingAttachments(true)
+        for (const file of attachments) {
+          await uploadAttachment(accessToken, createdTask.id, file)
+        }
+      }
+
+      onCreated?.(createdTask)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save task.')
     } finally {
+      setUploadingAttachments(false)
       setSaving(false)
     }
   }
@@ -88,16 +114,11 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
     <>
       <AppLayout
         active="tasks"
-        onNavigateDashboard={nav.onNavigateDashboard}
+        {...nav}
         onNavigateTasks={onCancel}
-        onNavigateFocus={nav.onNavigateFocus}
-        onNavigateReminders={nav.onNavigateReminders}
-        onNavigateCalendar={nav.onNavigateCalendar}
-        onNavigateNotes={nav.onNavigateNotes}
-        onNavigateAnalytics={nav.onNavigateAnalytics}
         panelTitle="Keep going!"
         panelCaption="You're doing great today."
-        panelPercent={64}
+        panelPercent={0}
       >
           <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
             <button type="button" onClick={onCancel} className="hover:text-[var(--bp-text)]">
@@ -186,11 +207,12 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
 
               <div className="border-t border-[var(--bp-border)] pt-4">
                 <FieldLabel label="Attachments" />
-                <div className="flex min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] text-center">
-                  <div className="text-sm font-black text-[var(--bp-accent)]">UPLOAD</div>
-                  <p className="mt-2 text-sm text-slate-300">Drag & drop files here, or click to browse</p>
-                  <p className="mt-1 text-xs text-slate-500">Supports: Images, PDF, Documents</p>
-                </div>
+                <TaskAttachmentPicker
+                  files={attachments}
+                  onChange={setAttachments}
+                  disabled={saving || uploadingAttachments}
+                  onValidationError={setError}
+                />
               </div>
             </section>
 
@@ -327,10 +349,10 @@ export default function CreateTaskScreen({ tasks = [], onCancel, onSave, onSignO
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || uploadingAttachments}
               className="rounded-xl bg-[var(--bp-accent)] px-6 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
             >
-              {saving ? 'Saving...' : 'Save Task'}
+              {saving || uploadingAttachments ? 'Saving...' : 'Save Task'}
             </button>
           </div>
       </AppLayout>

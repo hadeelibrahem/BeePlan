@@ -52,10 +52,19 @@ export type ApiRecurrence = {
 
 export type ApiTaskAttachment = {
   id?: string
-  name: string
+  taskId?: string
+  name?: string
   size?: string
   url?: string
   type?: string
+  fileName?: string
+  fileUrl?: string
+  previewUrl?: string
+  downloadUrl?: string
+  storagePath?: string
+  fileType?: string
+  fileSize?: number | string
+  uploadedAt?: string
 }
 
 export type ApiTaskActivity = {
@@ -365,23 +374,72 @@ export function deleteAttachment(accessToken: string, taskId: string, attachment
   })
 }
 
-export async function openAttachment(accessToken: string, taskId: string, attachment: ApiTaskAttachment) {
-  const path = `/tasks/${taskId}/attachments/${attachment.id}/download`
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
+function attachmentPath(taskId: string, attachment: ApiTaskAttachment, action: 'preview' | 'download') {
+  if (attachment.id) {
+    return `/tasks/${taskId}/attachments/${attachment.id}/${action}`
+  }
+
+  if (action === 'preview') return attachment.previewUrl ?? attachment.fileUrl ?? attachment.url ?? ''
+  return attachment.downloadUrl ?? attachment.fileUrl ?? attachment.url ?? ''
+}
+
+function attachmentRequestUrl(path: string) {
+  return /^https?:\/\//i.test(path) ? path : `${apiUrl}${path}`
+}
+
+export async function getAttachmentPreviewBlob(accessToken: string, taskId: string, attachment: ApiTaskAttachment) {
+  const path = attachmentPath(taskId, attachment, 'preview')
+  if (!path) {
+    throw new Error('Unable to preview attachment. Please try again.')
+  }
+
+  let response: Response
+  try {
+    response = await fetch(attachmentRequestUrl(path), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  } catch {
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+  }
 
   if (!response.ok) {
-    throw new Error('Unable to open attachment. Please try again.')
+    throw new Error('Unable to preview attachment. Please try again.')
+  }
+
+  const responseBlob = await response.blob()
+  const contentType = response.headers.get('Content-Type') ?? attachment.fileType ?? attachment.type ?? ''
+  const blob = responseBlob.type || !contentType ? responseBlob : new Blob([responseBlob], { type: contentType })
+
+  return {
+    blob,
+    contentType: blob.type || contentType,
+  }
+}
+
+export async function downloadAttachment(accessToken: string, taskId: string, attachment: ApiTaskAttachment) {
+  const path = attachmentPath(taskId, attachment, 'download')
+  if (!path) {
+    throw new Error('Unable to download attachment. Please try again.')
+  }
+
+  let response: Response
+  try {
+    response = await fetch(attachmentRequestUrl(path), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  } catch {
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+  }
+
+  if (!response.ok) {
+    throw new Error('Unable to download attachment. Please try again.')
   }
 
   const blob = await response.blob()
   const blobUrl = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = blobUrl
-  link.target = '_blank'
-  link.rel = 'noopener noreferrer'
-  link.download = attachment.name
+  link.download = attachment.fileName ?? attachment.name ?? 'attachment'
   document.body.appendChild(link)
   link.click()
   link.remove()

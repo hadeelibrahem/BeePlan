@@ -21,10 +21,10 @@ export const envSchema = z.object({
   API_PUBLIC_URL: z.string().url().optional(),
   FRONTEND_URL: z.string().url().optional(),
   WEB_APP_URL: z.string().url().optional(),
-  ASSEMBLYAI_API_KEY: z.string().min(1, 'ASSEMBLYAI_API_KEY is required'),
-  QWEN_API_KEY: z.string().min(1, 'QWEN_API_KEY is required'),
-  QWEN_BASE_URL: z.string().url('QWEN_BASE_URL is required'),
-  QWEN_MODEL: z.string().min(1, 'QWEN_MODEL is required'),
+  ASSEMBLYAI_API_KEY: z.string().optional(),
+  QWEN_API_KEY: z.string().optional(),
+  QWEN_BASE_URL: z.string().url().optional(),
+  QWEN_MODEL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

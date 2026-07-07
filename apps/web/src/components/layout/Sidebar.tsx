@@ -7,16 +7,18 @@ import {
   DashboardIcon,
   FocusIcon,
   NotesIcon,
+  PlannerIcon,
   RemindersIcon,
   TasksIcon,
 } from './icons'
 
-export type SidebarPage = 'dashboard' | 'tasks' | 'focus' | 'reminders' | 'calendar' | 'notes' | 'analytics'
+export type SidebarPage = 'dashboard' | 'tasks' | 'focus' | 'planner' | 'reminders' | 'calendar' | 'notes' | 'analytics'
 
 export type SidebarNavHandlers = {
   onNavigateDashboard?: () => void
   onNavigateTasks?: () => void
   onNavigateFocus?: () => void
+  onNavigatePlanner?: () => void
   onNavigateReminders?: () => void
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
@@ -36,6 +38,7 @@ const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon;
   { page: 'dashboard', label: 'Dashboard', Icon: DashboardIcon, handler: 'onNavigateDashboard' },
   { page: 'tasks', label: 'Tasks', Icon: TasksIcon, handler: 'onNavigateTasks' },
   { page: 'focus', label: 'Focus', Icon: FocusIcon, handler: 'onNavigateFocus' },
+  { page: 'planner', label: 'AI Planner', Icon: PlannerIcon, handler: 'onNavigatePlanner' },
   { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
   { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
   { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
@@ -101,7 +104,7 @@ function SidebarContent({
 
       <nav className="space-y-0.5 text-sm">
         {NAV_ITEMS.map(({ page, label, Icon, handler }) => (
-          <SideItem
+          <SidebarNavItem
             key={page}
             active={active === page}
             icon={<Icon />}
@@ -134,7 +137,13 @@ function SidebarContent({
   )
 }
 
-function SideItem({
+/**
+ * Reusable, fully-clickable sidebar/nav row. The `<button>` is the root
+ * element so the icon, label, empty space, background, and hover state all
+ * share one click/hover/focus target instead of being scoped to the icon or
+ * text alone.
+ */
+export function SidebarNavItem({
   icon,
   label,
   active,
@@ -150,7 +159,7 @@ function SideItem({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start transition-all duration-150 ${
+      className={`group relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-start transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-surface)] ${
         active ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'text-slate-300 hover:translate-x-0.5 hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]'
       }`}
     >

@@ -67,6 +67,16 @@ export function FocusIcon({ className = base }: IconProps) {
   )
 }
 
+export function PlannerIcon({ className = base }: IconProps) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+      <path d="M5 5h14v14H5z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 9h8M8 13h5M16 13l2 2 3-4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 3v4M15 3v4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function SearchIcon({ className = base }: IconProps) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

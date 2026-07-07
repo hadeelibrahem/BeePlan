@@ -322,7 +322,7 @@ export class TasksController {
     @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
   ) {
     const { stream, fileName, mimeType } =
-      await this.taskAttachmentsService.getFileForDownload(
+      await this.taskAttachmentsService.getFile(
         request.user.id,
         id,
         attachmentId,
@@ -330,7 +330,26 @@ export class TasksController {
 
     return new StreamableFile(stream, {
       type: mimeType,
-      disposition: `inline; filename="${encodeURIComponent(fileName)}"`,
+      disposition: contentDisposition(fileName, 'attachment'),
+    });
+  }
+
+  @Get(':id/attachments/:attachmentId/preview')
+  async previewAttachment(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+  ) {
+    const { stream, fileName, mimeType } =
+      await this.taskAttachmentsService.getFile(
+        request.user.id,
+        id,
+        attachmentId,
+      );
+
+    return new StreamableFile(stream, {
+      type: mimeType,
+      disposition: contentDisposition(fileName, 'inline'),
     });
   }
 
@@ -343,4 +362,22 @@ export class TasksController {
   ) {
     await this.taskAttachmentsService.remove(request.user.id, id, attachmentId);
   }
+}
+
+function contentDisposition(
+  fileName: string,
+  dispositionType: 'inline' | 'attachment',
+) {
+  const fallbackFileName =
+    fileName
+      .replace(/[\r\n"]/g, '_')
+      .replace(/[^\x20-\x7E]/g, '_')
+      .trim() || 'attachment';
+  const encodedFileName = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+  return `${dispositionType}; filename="${fallbackFileName}"; filename*=UTF-8''${encodedFileName}`;
 }

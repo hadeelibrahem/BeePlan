@@ -47,8 +47,9 @@ export class TaskAttachmentDto {
   @IsString()
   id?: string;
 
+  @IsOptional()
   @IsString()
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsString()
@@ -61,6 +62,30 @@ export class TaskAttachmentDto {
   @IsOptional()
   @IsString()
   type?: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  storagePath?: string;
+
+  @IsOptional()
+  @IsString()
+  fileType?: string;
+
+  @IsOptional()
+  @IsString()
+  fileSize?: string;
+
+  @IsOptional()
+  @IsString()
+  uploadedAt?: string;
 }
 
 export class TaskRecurrenceDto {

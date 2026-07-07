@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import DeleteSubtaskModal from '../components/DeleteSubtaskModal'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
+import TaskAttachmentPicker from '../components/TaskAttachmentPicker'
+import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
 import SubtaskFormModal, { type SubtaskFormValues } from '../components/SubtaskFormModal'
 import {
   TaskRecurrenceModal,
@@ -40,7 +42,8 @@ type EditTaskScreenProps = SidebarNavHandlers & {
   onBack?: () => void
   onCancel?: () => void
   onDelete?: () => void
-  onSave?: (payload: TaskPayload) => Promise<void> | void
+  onSave?: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void
+  onSaved?: (task: ApiTask) => void
   onTaskUpdated?: (task: ApiTask) => void
   onSignOut?: () => void
 }
@@ -55,6 +58,7 @@ export default function EditTaskScreen({
   onCancel,
   onDelete,
   onSave,
+  onSaved,
   onTaskUpdated,
   onSignOut,
   ...nav
@@ -80,7 +84,9 @@ export default function EditTaskScreen({
   const [subtasks, setSubtasks] = useState<ApiSubtask[]>(task.subtasks)
   const [dependencies, setDependencies] = useState<ApiDependency[]>(task.dependencies)
   const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([])
-  const [uploading, setUploading] = useState(false)
+  const [previewAttachment, setPreviewAttachment] = useState<ApiTaskAttachment | null>(null)
+  const [draftAttachments, setDraftAttachments] = useState<File[]>([])
+  const [uploadingAttachments, setUploadingAttachments] = useState(false)
   const [addingSubtask, setAddingSubtask] = useState(false)
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null)
   const [deletingSubtaskId, setDeletingSubtaskId] = useState<string | null>(null)
@@ -223,24 +229,6 @@ export default function EditTaskScreen({
     }
   }
 
-  async function handleUploadFile(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file || !accessToken) return
-
-    setUploading(true)
-    setError('')
-
-    try {
-      const uploaded = await uploadAttachment(accessToken, task.id, file)
-      setAttachments((current) => [uploaded, ...current])
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload attachment.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   async function handleDeleteAttachment(attachment: ApiTaskAttachment) {
     if (!accessToken || !attachment.id) return
     const previous = attachments
@@ -277,7 +265,7 @@ export default function EditTaskScreen({
     const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60)
 
     try {
-      await onSave?.({
+      const updatedTask = await onSave?.({
         title: title.trim(),
         description: description.trim(),
         category: category.trim(),
@@ -293,11 +281,31 @@ export default function EditTaskScreen({
         reminderBeforeMinutes,
         recurrence: recurrenceToApi(recurrence),
       })
+
+      if (!updatedTask) return
+
+      if (draftAttachments.length && accessToken) {
+        setUploadingAttachments(true)
+        for (const file of draftAttachments) {
+          await uploadAttachment(accessToken, task.id, file)
+        }
+        const refreshedAttachments = await getAttachments(accessToken, task.id)
+        setAttachments(refreshedAttachments)
+        setDraftAttachments([])
+      }
+
+      onSaved?.(updatedTask)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save task changes.')
     } finally {
+      setUploadingAttachments(false)
       setSaving(false)
     }
+  }
+
+  function handlePreviewAttachment(attachment: ApiTaskAttachment) {
+    if (!accessToken || !attachment.id) return
+    setPreviewAttachment(attachment)
   }
 
   const reminderMinuteOptions = REMINDER_OPTIONS.includes(reminderBeforeMinutes)
@@ -310,16 +318,11 @@ export default function EditTaskScreen({
     <>
       <AppLayout
         active="tasks"
-        onNavigateDashboard={nav.onNavigateDashboard}
+        {...nav}
         onNavigateTasks={onCancel}
-        onNavigateFocus={nav.onNavigateFocus}
-        onNavigateReminders={nav.onNavigateReminders}
-        onNavigateCalendar={nav.onNavigateCalendar}
-        onNavigateNotes={nav.onNavigateNotes}
-        onNavigateAnalytics={nav.onNavigateAnalytics}
         panelTitle="Editing task"
         panelCaption="Last updated today."
-        panelPercent={72}
+        panelPercent={task.progress}
       >
           <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
             <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">Back</button>
@@ -423,16 +426,31 @@ export default function EditTaskScreen({
                 />
               </Card>
 
-              <Card title="Attachments" action={uploading ? 'Uploading...' : 'Upload'} onAction={() => document.getElementById('edit-task-file-input')?.click()}>
-                <input id="edit-task-file-input" type="file" className="hidden" onChange={(event) => void handleUploadFile(event)} />
-                <div className="space-y-2">
+              <Card title="Attachments">
+                <TaskAttachmentPicker
+                  files={draftAttachments}
+                  onChange={setDraftAttachments}
+                  disabled={saving || uploadingAttachments}
+                  onValidationError={setError}
+                />
+                <div className="mt-4 space-y-2">
                   {attachments.map((file) => (
-                    <div key={file.id ?? file.name} className="flex items-center gap-3 rounded-xl bg-[var(--bp-surface)] p-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--bp-border)] text-[10px] font-black text-[var(--bp-accent)]">{file.type ?? 'FILE'}</div>
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-[var(--bp-text)]">{file.name}</p>
-                        <p className="text-xs text-slate-500">{file.size ?? 'Attached file'}</p>
-                      </div>
+                    <div key={file.id ?? file.fileName ?? file.name} className="flex items-center gap-3 rounded-xl bg-[var(--bp-surface)] p-3">
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewAttachment(file)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black text-white ${attachmentColor(file.fileType ?? file.type, file.fileName ?? file.name)}`}>
+                          {attachmentLabel(file.fileType ?? file.type, file.fileName ?? file.name)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-[var(--bp-text)]">{file.fileName ?? file.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {formatFileSize(file.fileSize ?? file.size) || (file.fileType ?? file.type) || 'Attached file'}
+                          </p>
+                        </span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => void handleDeleteAttachment(file)}
@@ -642,6 +660,14 @@ export default function EditTaskScreen({
         onSave={setRecurrence}
         onRemove={() => setRecurrence(null)}
       />
+      <AttachmentPreviewModal
+        open={Boolean(previewAttachment && accessToken)}
+        accessToken={accessToken ?? ''}
+        taskId={task.id}
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+        onError={setError}
+      />
     </>
   )
 }
@@ -750,6 +776,33 @@ function formatDate(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Not available'
   return date.toISOString().slice(0, 10)
+}
+
+function formatFileSize(size?: number | string) {
+  const value = typeof size === 'string' ? Number(size) : size
+  if (!value || Number.isNaN(value)) return ''
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function attachmentLabel(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLowerCase()
+  if (normalized.includes('pdf')) return 'PDF'
+  if (normalized.includes('image') || normalized.match(/\.(png|jpe?g|gif|webp)$/)) return 'IMG'
+  if (normalized.match(/\.(docx?|txt)$/) || normalized.includes('word')) return 'DOC'
+  if (normalized.match(/\.(xlsx?|csv)$/) || normalized.includes('sheet') || normalized.includes('excel')) return 'XLS'
+  if (normalized.match(/\.(pptx?)$/) || normalized.includes('powerpoint')) return 'SLD'
+  return 'FILE'
+}
+
+function attachmentColor(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLowerCase()
+  if (normalized.includes('pdf')) return 'bg-red-500'
+  if (normalized.includes('image') || normalized.match(/\.(png|jpe?g|gif|webp)$/)) return 'bg-green-500'
+  if (normalized.match(/\.(xlsx?|csv)$/) || normalized.includes('sheet') || normalized.includes('excel')) return 'bg-blue-500'
+  if (normalized.match(/\.(docx?|txt)$/) || normalized.includes('word')) return 'bg-indigo-500'
+  return 'bg-orange-500'
 }
 
 function formatReminderLabel(minutes: number) {

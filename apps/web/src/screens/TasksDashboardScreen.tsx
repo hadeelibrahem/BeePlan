@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import {
   AnalyticsIcon,
   AppLayout,
   CalendarIcon,
+  FocusIcon,
   FloatingActionButton,
   PageHeader,
   RemindersIcon,
@@ -15,13 +16,15 @@ import {
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import type { Reminder } from '../features/reminders'
-import type { DashboardSummary } from '../lib/tasksApi'
+import type { ApiTask, DashboardSummary } from '../lib/tasksApi'
 
 type TasksDashboardScreenProps = SidebarNavHandlers & {
   reminders: Reminder[]
+  tasks?: ApiTask[]
   summary?: DashboardSummary | null
   summaryLoading?: boolean
   summaryError?: string
+  tasksLoading?: boolean
   onRetrySummary?: () => void
   onViewReminders: () => void
   onViewTasks: () => void
@@ -30,9 +33,11 @@ type TasksDashboardScreenProps = SidebarNavHandlers & {
 
 export default function TasksDashboardScreen({
   reminders,
+  tasks = [],
   summary = null,
   summaryLoading = false,
   summaryError = '',
+  tasksLoading = false,
   onRetrySummary,
   onViewReminders,
   onViewTasks,
@@ -42,7 +47,7 @@ export default function TasksDashboardScreen({
   const { t, toggleLanguage, isRTL } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const isLoading = summaryLoading && !summary
-  const loadingLabel = '…'
+  const loadingLabel = '...'
   const todayTasksValue = isLoading ? loadingLabel : String(summary?.todayTasks ?? 0)
   const completedValue = isLoading ? loadingLabel : String(summary?.completedTasks ?? 0)
   const highPriorityValue = isLoading ? loadingLabel : String(summary?.highPriorityTasks ?? 0)
@@ -50,19 +55,18 @@ export default function TasksDashboardScreen({
   const totalTasks = summary?.totalTasks ?? 0
   const completedTasks = summary?.completedTasks ?? 0
   const overallProgress = summary?.overallProgress ?? 0
+  const focusTasks = useMemo(() => getDashboardFocusTasks(tasks), [tasks])
+  const isFocusLoading = tasksLoading && tasks.length === 0
 
   return (
     <AppLayout
       active="dashboard"
+      {...nav}
       onNavigateTasks={onViewTasks}
-      onNavigateFocus={nav.onNavigateFocus}
       onNavigateReminders={onViewReminders}
-      onNavigateCalendar={nav.onNavigateCalendar}
-      onNavigateNotes={nav.onNavigateNotes}
-      onNavigateAnalytics={nav.onNavigateAnalytics}
       panelTitle="Keep going!"
       panelCaption="You're doing great today."
-      panelPercent={64}
+      panelPercent={overallProgress}
       fab={<FloatingActionButton onClick={onViewTasks} />}
     >
       <PageHeader
@@ -91,7 +95,7 @@ export default function TasksDashboardScreen({
               disabled={summaryLoading}
               className="text-xs font-bold text-[var(--bp-accent)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {summaryLoading ? 'Retrying…' : 'Retry'}
+              {summaryLoading ? 'Retrying...' : 'Retry'}
             </button>
           ) : null}
         </div>
@@ -139,10 +143,21 @@ export default function TasksDashboardScreen({
             </button>
           </div>
 
-          <FocusTask title="Finalize Q3 marketing strategy" time="10:00 AM" color="bg-red-400" />
-          <FocusTask title="Review design mockups for mobile app" time="1:30 PM" color="bg-orange-400" />
-          <FocusTask title="Team sync - weekly standup" time="9:00 AM" color="bg-[var(--bp-accent)]" done />
-          <FocusTask title="Update project documentation" time="4:00 PM" color="bg-slate-400" />
+          {isFocusLoading ? (
+            <p className="py-8 text-center text-sm text-slate-400">Loading focus tasks...</p>
+          ) : focusTasks.length ? (
+            focusTasks.map((task) => <FocusTask key={task.id} task={task} />)
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">
+                <FocusIcon className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-semibold text-[var(--bp-text)]">No focus tasks for today.</p>
+              <p className="mt-1 max-w-sm text-xs text-slate-400">
+                Tasks due today, focus tasks, or high-priority tasks will appear here.
+              </p>
+            </div>
+          )}
         </SectionCard>
 
         <SectionCard>
@@ -160,25 +175,26 @@ export default function TasksDashboardScreen({
   )
 }
 
-function FocusTask({
-  title,
-  time,
-  color,
-  done,
-}: {
-  title: string
-  time: string
-  color: string
-  done?: boolean
-}) {
+function FocusTask({ task }: { task: ApiTask }) {
+  const reason = getPrimaryFocusReason(task)
+  const dueLabel = formatFocusDue(task)
+  const reasonColor =
+    reason === 'Due Today' ? 'bg-[var(--bp-accent)]' : reason === 'Focus' ? 'bg-purple-400' : 'bg-orange-400'
+
   return (
-    <div className="mb-3 flex items-center gap-3">
-      <div className={`h-4 w-4 rounded-full border ${done ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]' : 'border-slate-500'}`} />
-      <div className="flex-1">
-        <p className={`text-sm font-semibold ${done ? 'text-slate-500 line-through' : ''}`}>{title}</p>
-        <p className="text-xs text-slate-400">{time}</p>
+    <div className="mb-3 flex items-center gap-3 last:mb-0">
+      <div className="h-4 w-4 shrink-0 rounded-full border border-slate-500" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-[var(--bp-text)]">{task.title}</p>
+        <p className="truncate text-xs text-slate-400">
+          {task.category || 'General'}
+          {dueLabel ? ` • ${dueLabel}` : ''}
+        </p>
       </div>
-      <span className={`h-1.5 w-1.5 rounded-full ${color}`} />
+      <div className="flex shrink-0 items-center gap-2">
+        <span className={`h-1.5 w-1.5 rounded-full ${reasonColor}`} />
+        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{reason}</span>
+      </div>
     </div>
   )
 }
@@ -205,4 +221,91 @@ function ActionCard({
       <p className="text-xs text-slate-400">{desc}</p>
     </button>
   )
+}
+
+function getDashboardFocusTasks(tasks: ApiTask[]) {
+  const { startOfToday, startOfTomorrow } = getUtcDayBounds()
+
+  return tasks
+    .filter((task) => task.status !== 'done' && task.status !== 'missed')
+    .map((task) => ({
+      task,
+      reasons: getTaskFocusReasons(task, startOfToday, startOfTomorrow),
+    }))
+    .filter(({ reasons }) => reasons.length > 0)
+    .sort((left, right) => {
+      const leftScore = focusScore(left.reasons)
+      const rightScore = focusScore(right.reasons)
+
+      if (leftScore !== rightScore) return rightScore - leftScore
+
+      const leftDue = left.task.dueDate ? new Date(left.task.dueDate).getTime() : Number.POSITIVE_INFINITY
+      const rightDue = right.task.dueDate ? new Date(right.task.dueDate).getTime() : Number.POSITIVE_INFINITY
+      if (leftDue !== rightDue) return leftDue - rightDue
+
+      return left.task.title.localeCompare(right.task.title)
+    })
+    .map(({ task }) => task)
+}
+
+function getTaskFocusReasons(task: ApiTask, startOfToday: number, startOfTomorrow: number) {
+  const reasons: string[] = []
+  const dueTime = task.dueDate ? new Date(task.dueDate).getTime() : null
+
+  if (dueTime !== null && dueTime >= startOfToday && dueTime < startOfTomorrow) {
+    reasons.push('Due Today')
+  }
+
+  if (task.isFocusTask) {
+    reasons.push('Focus')
+  }
+
+  if (task.priority === 'high') {
+    reasons.push('High Priority')
+  }
+
+  return reasons
+}
+
+function getPrimaryFocusReason(task: ApiTask) {
+  const { startOfToday, startOfTomorrow } = getUtcDayBounds()
+  const reasons = getTaskFocusReasons(task, startOfToday, startOfTomorrow)
+  return reasons[0] ?? 'Focus'
+}
+
+function focusScore(reasons: string[]) {
+  return reasons.reduce((score, reason) => {
+    if (reason === 'Due Today') return score + 3
+    if (reason === 'Focus') return score + 2
+    if (reason === 'High Priority') return score + 1
+    return score
+  }, 0)
+}
+
+function getUtcDayBounds() {
+  const now = new Date()
+  const startOfToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const startOfTomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
+  return { startOfToday, startOfTomorrow }
+}
+
+function formatFocusDue(task: ApiTask) {
+  if (!task.dueDate) return task.dueTime ? `at ${formatTime(task.dueTime)}` : ''
+
+  const date = new Date(task.dueDate)
+  if (Number.isNaN(date.getTime())) return task.dueTime ? `at ${formatTime(task.dueTime)}` : ''
+
+  const dateLabel = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
+  return task.dueTime ? `${dateLabel} at ${formatTime(task.dueTime)}` : dateLabel
+}
+
+function formatTime(time: string) {
+  const [hoursStr, minutesStr] = time.split(':')
+  const hours = Number(hoursStr)
+  const minutes = Number(minutesStr)
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return time
+
+  const isPm = hours >= 12
+  const displayHours = hours % 12 === 0 ? 12 : hours % 12
+  return `${displayHours}:${String(minutes).padStart(2, '0')} ${isPm ? 'PM' : 'AM'}`
 }

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import { DangerButton, OutlineButton, PrimaryButton } from '../components/layout/Buttons'
+import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { createRecurrenceSummary, getNextOccurrenceLabel } from '../components/TaskRecurrenceModal'
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
@@ -9,7 +10,6 @@ import { useTheme } from '../theme/ThemeContext'
 import {
   changeTaskStatus,
   getAttachments,
-  openAttachment,
   recurrenceToUi,
   toApiStatus,
   toUiPriority,
@@ -58,6 +58,7 @@ export default function TaskDetailsScreen({
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? [])
   const [activityItems, setActivityItems] = useState<ApiTaskActivity[]>(task?.activities ?? [])
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([])
+  const [previewAttachment, setPreviewAttachment] = useState<ApiTaskAttachment | null>(null)
   const [error, setError] = useState('')
 
   const latestActivity = useMemo(
@@ -115,14 +116,9 @@ export default function TaskDetailsScreen({
   }, [task, accessToken])
 
   const handleOpenAttachment = useCallback(
-    async (attachment: ApiTaskAttachment) => {
+    (attachment: ApiTaskAttachment) => {
       if (!task || !accessToken || !attachment.id) return
-
-      try {
-        await openAttachment(accessToken, task.id, attachment)
-      } catch (attachmentError) {
-        setError(attachmentError instanceof Error ? attachmentError.message : 'Unable to open attachment.')
-      }
+      setPreviewAttachment(attachment)
     },
     [task, accessToken],
   )
@@ -231,13 +227,8 @@ export default function TaskDetailsScreen({
     <>
       <AppLayout
         active="tasks"
-        onNavigateDashboard={nav.onNavigateDashboard}
+        {...nav}
         onNavigateTasks={onBack}
-        onNavigateFocus={nav.onNavigateFocus}
-        onNavigateReminders={nav.onNavigateReminders}
-        onNavigateCalendar={nav.onNavigateCalendar}
-        onNavigateNotes={nav.onNavigateNotes}
-        onNavigateAnalytics={nav.onNavigateAnalytics}
         panelTitle="Keep going!"
         panelCaption="You're doing great today."
         panelPercent={64}
@@ -379,7 +370,7 @@ export default function TaskDetailsScreen({
                 {attachmentItems.length ? (
                   <div className="space-y-2">
                     {attachmentItems.map((file, index) => (
-                      <Attachment key={file.id ?? `${file.name}-${index}`} file={file} onOpen={handleOpenAttachment} />
+                      <Attachment key={file.id ?? `${file.fileName ?? file.name}-${index}`} file={file} onOpen={handleOpenAttachment} />
                     ))}
                   </div>
                 ) : (
@@ -434,6 +425,14 @@ export default function TaskDetailsScreen({
         totalSubtasksCount={subtaskItems.length}
         onClose={() => setIsStatusModalOpen(false)}
         onSave={(nextStatus) => void saveStatus(nextStatus)}
+      />
+      <AttachmentPreviewModal
+        open={Boolean(previewAttachment && task && accessToken)}
+        accessToken={accessToken}
+        taskId={task?.id ?? ''}
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
+        onError={setError}
       />
     </>
   )
@@ -576,20 +575,22 @@ const Attachment = memo(function Attachment({
       onClick={() => onOpen?.(file)}
       className="flex w-full items-center gap-3 rounded-xl bg-[var(--bp-bg)] p-2.5 text-start transition hover:bg-[var(--bp-border)]/30"
     >
-      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[9px] font-black text-white ${attachmentColor(file.type)}`}>
-        FILE
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[9px] font-black text-white ${attachmentColor(file.fileType ?? file.type, file.fileName ?? file.name)}`}>
+        {attachmentLabel(file.fileType ?? file.type, file.fileName ?? file.name)}
       </span>
       <span className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-[var(--bp-text)]">{file.name}</p>
-        <p className="text-xs text-slate-500">{formatFileSize(file.size) || file.type || 'Attached file'}</p>
+        <p className="truncate text-sm font-bold text-[var(--bp-text)]">{file.fileName ?? file.name}</p>
+        <p className="text-xs text-slate-500">
+          {formatFileSize(file.fileSize ?? file.size) || (file.fileType ?? file.type) || 'Attached file'}
+        </p>
       </span>
     </button>
   )
 })
 
-function formatFileSize(size?: string) {
-  const bytes = Number(size)
-  if (!size || Number.isNaN(bytes)) return ''
+function formatFileSize(size?: string | number) {
+  const bytes = typeof size === 'string' ? Number(size) : size
+  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return ''
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -624,11 +625,22 @@ function activityColor(action: string) {
   return 'bg-slate-400'
 }
 
-function attachmentColor(type?: string) {
-  const normalized = type?.toLocaleLowerCase() ?? ''
+function attachmentLabel(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLocaleLowerCase()
+  if (normalized.includes('pdf')) return 'PDF'
+  if (normalized.includes('image') || normalized.match(/\.(png|jpe?g|gif|webp)$/)) return 'IMG'
+  if (normalized.match(/\.(docx?|txt)$/) || normalized.includes('word')) return 'DOC'
+  if (normalized.match(/\.(xlsx?|csv)$/) || normalized.includes('sheet') || normalized.includes('excel')) return 'XLS'
+  if (normalized.match(/\.(pptx?)$/) || normalized.includes('powerpoint')) return 'SLD'
+  return 'FILE'
+}
+
+function attachmentColor(type?: string, fileName?: string) {
+  const normalized = `${type ?? ''} ${fileName ?? ''}`.toLocaleLowerCase()
   if (normalized.includes('pdf')) return 'bg-red-500'
   if (normalized.includes('image') || normalized.includes('jpg') || normalized.includes('png')) return 'bg-green-500'
   if (normalized.includes('sheet') || normalized.includes('excel') || normalized.includes('csv')) return 'bg-blue-500'
+  if (normalized.includes('word') || normalized.includes('doc')) return 'bg-indigo-500'
   return 'bg-orange-500'
 }
 

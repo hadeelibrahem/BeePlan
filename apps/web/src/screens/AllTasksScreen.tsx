@@ -181,12 +181,8 @@ export default function AllTasksScreen({
   return (
     <AppLayout
       active="tasks"
+      {...nav}
       onNavigateDashboard={onBackDashboard}
-      onNavigateFocus={nav.onNavigateFocus}
-      onNavigateReminders={nav.onNavigateReminders}
-      onNavigateCalendar={nav.onNavigateCalendar}
-      onNavigateNotes={nav.onNavigateNotes}
-      onNavigateAnalytics={nav.onNavigateAnalytics}
       panelTitle="Keep going!"
       panelCaption="You're doing great today."
       panelPercent={64}
