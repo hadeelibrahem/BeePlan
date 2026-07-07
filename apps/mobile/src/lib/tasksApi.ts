@@ -171,15 +171,6 @@ export type TaskFilterSummary = {
   categories: { name: string; count: number }[];
 };
 
-export type DashboardSummary = {
-  todayTasks: number;
-  completedTasks: number;
-  highPriorityTasks: number;
-  reminders: number;
-  totalTasks: number;
-  overallProgress: number;
-};
-
 function buildTaskQuery(filters?: TaskFilters) {
   if (!filters) return '';
 
@@ -197,16 +188,25 @@ function buildTaskQuery(filters?: TaskFilters) {
   return query ? `?${query}` : '';
 }
 
+export type DashboardSummary = {
+  todayTasks: number;
+  completedTasks: number;
+  highPriorityTasks: number;
+  reminders: number;
+  totalTasks: number;
+  overallProgress: number;
+};
+
+export function getDashboardSummary(accessToken: string) {
+  return request<DashboardSummary>(accessToken, '/dashboard/summary');
+}
+
 export function getTasks(accessToken: string, filters?: TaskFilters) {
   return request<ApiTask[]>(accessToken, `/tasks${buildTaskQuery(filters)}`);
 }
 
 export function getTaskFilterSummary(accessToken: string) {
   return request<TaskFilterSummary>(accessToken, '/tasks/filters/summary');
-}
-
-export function getDashboardSummary(accessToken: string) {
-  return request<DashboardSummary>(accessToken, '/dashboard/summary');
 }
 
 export function createTask(accessToken: string, payload: TaskPayload) {

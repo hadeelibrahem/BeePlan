@@ -15,6 +15,7 @@ import type { AiAssistantMode, AiAssistantState, ReminderDraft } from '../types/
 
 type Props = {
   onApplyDraft: (draft: ReminderDraft) => void;
+  accessToken: string;
 };
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -63,7 +64,7 @@ function buildSummaryLines(draft: ReminderDraft, t: Translate): { label: string;
   return lines;
 }
 
-export function AiAssistantSection({ onApplyDraft }: Props) {
+export function AiAssistantSection({ onApplyDraft, accessToken }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
@@ -98,7 +99,7 @@ export function AiAssistantSection({ onApplyDraft }: Props) {
     setErrorMessage('');
     setState('processing');
     try {
-      const result = await parseReminderText(text.trim());
+      const result = await parseReminderText(text.trim(), accessToken);
       setTranscript('');
       setDraft(result);
       setState('draft_ready');
@@ -131,7 +132,7 @@ export function AiAssistantSection({ onApplyDraft }: Props) {
       await recorder.stop();
       const uri = recorder.uri;
       if (!uri) throw new Error('Recording failed.');
-      const result = await createVoiceReminderDraft({ uri, name: 'recording.m4a', type: 'audio/m4a' });
+      const result = await createVoiceReminderDraft({ uri, name: 'recording.m4a', type: 'audio/m4a' }, accessToken);
       setTranscript(result.transcript);
       setDraft(result.draft);
       setState('draft_ready');

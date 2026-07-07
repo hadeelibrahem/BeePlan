@@ -14,10 +14,12 @@ import {
   toggleReminderStatus,
   type Reminder,
 } from './src/features/reminders';
+import { AddTaskSheet } from './src/components/AddTaskSheet';
 import { useAuth } from './src/hooks/useAuth';
 import { LanguageProvider } from './src/i18n/LanguageContext';
 import { AuthProvider } from './src/providers/AuthProvider';
 import AuthScreen from './src/screens/AuthScreen';
+import AiTaskBuilderScreen from './src/screens/AiTaskBuilderScreen';
 import AllTasksScreen from './src/screens/AllTasksScreen';
 import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import EditTaskScreen from './src/screens/EditTaskScreen';
@@ -50,6 +52,7 @@ type AppScreen =
   | 'tasks'
   | 'focus'
   | 'createTask'
+  | 'aiPlanTask'
   | 'taskDetails'
   | 'editTask'
   | 'reminders'
@@ -73,7 +76,6 @@ export default function App() {
   );
 }
 
-
 function ThemedApp() {
   const [screen, setScreen] = useState<AppScreen>('auth');
   const [resetEmail, setResetEmail] = useState('');
@@ -87,6 +89,7 @@ function ThemedApp() {
   const [summaryError, setSummaryError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
+  const [addTaskSheetVisible, setAddTaskSheetVisible] = useState(false);
   const { accessToken, loading, user, signOut } = useAuth();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -113,7 +116,7 @@ function ThemedApp() {
   useEffect(() => {
     if (!user || !accessToken) return;
 
-    console.log('[App] reminders screen mounted for user — calling GET /reminders');
+    console.log('[App] reminders screen mounted for user � calling GET /reminders');
     fetchReminders(accessToken)
       .then((fetched) => {
         console.log('[App] fetchReminders resolved with', fetched.length, 'reminder(s)');
@@ -140,7 +143,7 @@ function ThemedApp() {
       .finally(() => setTasksLoading(false));
   }, [accessToken, user]);
 
-  const refreshSummary = useCallback(() => {
+  const loadDashboardSummary = useCallback(() => {
     if (!accessToken) return;
 
     setSummaryLoading(true);
@@ -156,8 +159,8 @@ function ThemedApp() {
 
   useEffect(() => {
     if (!user || !accessToken) return;
-    refreshSummary();
-  }, [accessToken, user, refreshSummary]);
+    loadDashboardSummary();
+  }, [accessToken, user, loadDashboardSummary]);
 
   const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null;
 
@@ -166,8 +169,6 @@ function ThemedApp() {
     const current = reminders.find((reminder) => reminder.id === id);
     if (!current) return;
 
-    // Optimistic update: flip the reminder's status locally right away and
-    // roll back only if the request fails.
     const optimisticStatus = current.status === 'done' ? 'active' : 'done';
     setReminders((currentList) =>
       currentList.map((reminder) => (reminder.id === id ? { ...reminder, status: optimisticStatus } : reminder)),
@@ -177,7 +178,7 @@ function ThemedApp() {
       const updated = await toggleReminderStatus(id, accessToken, current.status);
       if (!updated) return;
       setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? updated : reminder)));
-      refreshSummary();
+      loadDashboardSummary();
     } catch (error) {
       setReminders((currentList) => currentList.map((reminder) => (reminder.id === id ? current : reminder)));
       console.error('[App] toggleReminderStatus failed:', error);
@@ -194,6 +195,7 @@ function ThemedApp() {
     setReminders([]);
     setTasks([]);
     setSummary(null);
+    setSummaryError('');
   }
 
   async function handleCreateTask(payload: TaskPayload) {
@@ -201,8 +203,8 @@ function ThemedApp() {
     try {
       const createdTask = await createTask(accessToken, payload);
       setTasks((current) => [createdTask, ...current]);
-      refreshSummary();
       invalidateTaskFilters();
+      loadDashboardSummary();
       return createdTask;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not create task.';
@@ -210,18 +212,18 @@ function ThemedApp() {
     }
   }
 
+  function handleTaskCreated(task: ApiTask) {
+    setSelectedTask(task);
+    setScreen('taskDetails');
+  }
+
   async function handleUpdateTask(taskId: string, payload: TaskPayload) {
     if (!accessToken) return;
     const updatedTask = await updateTask(accessToken, taskId, payload);
     setTasks((current) => current.map((item) => (item.id === taskId ? updatedTask : item)));
-    refreshSummary();
     invalidateTaskFilters();
+    loadDashboardSummary();
     return updatedTask;
-  }
-
-  function handleTaskCreated(task: ApiTask) {
-    setSelectedTask(task);
-    setScreen('taskDetails');
   }
 
   function handleTaskSaved(task: ApiTask) {
@@ -240,8 +242,8 @@ function ThemedApp() {
       setTasks((current) => current.filter((task) => task.id !== selectedTask.id));
       setSelectedTask(null);
       setScreen('tasks');
-      refreshSummary();
       invalidateTaskFilters();
+      loadDashboardSummary();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not delete task.';
       Alert.alert('Failed to delete task', message);
@@ -259,8 +261,8 @@ function ThemedApp() {
       setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
       setSelectedTask(updatedTask);
       setScreen('tasks');
-      refreshSummary();
       invalidateTaskFilters();
+      loadDashboardSummary();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not update task.';
       Alert.alert('Failed to update task', message);
@@ -270,8 +272,8 @@ function ThemedApp() {
   function handleTaskUpdated(updatedTask: ApiTask) {
     setTasks((current) => current.map((item) => (item.id === updatedTask.id ? updatedTask : item)));
     setSelectedTask(updatedTask);
-    refreshSummary();
     invalidateTaskFilters();
+    loadDashboardSummary();
   }
 
   if (loading) {
@@ -314,24 +316,28 @@ function ThemedApp() {
         </>
       ) : screen === 'dashboard' ? (
         <TasksDashboardScreen
-          onSignOut={() => void handleSignOut()}
-          onViewTasks={() => setScreen('tasks')}
-          onViewFocus={() => setScreen('focus')}
-          onViewReminders={() => setScreen('reminders')}
-          onCreateTask={() => setScreen('createTask')}
+          userName={user?.fullName}
           tasks={tasks}
           summary={summary}
           summaryLoading={summaryLoading}
           summaryError={summaryError}
-          tasksLoading={tasksLoading}
-          onRetrySummary={refreshSummary}
+          onRetrySummary={loadDashboardSummary}
+          onSignOut={() => void handleSignOut()}
+          onViewTasks={() => setScreen('tasks')}
+          onViewFocus={() => setScreen('focus')}
+          onViewReminders={() => setScreen('reminders')}
+          onCreateTask={() => setAddTaskSheetVisible(true)}
+          onViewTaskDetails={(task) => {
+            setSelectedTask(task);
+            setScreen('taskDetails');
+          }}
         />
       ) : screen === 'tasks' ? (
         <AllTasksScreen
           onBackDashboard={() => setScreen('dashboard')}
           onViewFocus={() => setScreen('focus')}
           onViewReminders={() => setScreen('reminders')}
-          onCreateTask={() => setScreen('createTask')}
+          onCreateTask={() => setAddTaskSheetVisible(true)}
           onViewTaskDetails={(task) => {
             setSelectedTask(tasks.find((item) => item.id === task.id) ?? null);
             setScreen('taskDetails');
@@ -357,6 +363,14 @@ function ThemedApp() {
           onCancel={() => setScreen('tasks')}
           onSave={handleCreateTask}
           onCreated={handleTaskCreated}
+        />
+      ) : screen === 'aiPlanTask' ? (
+        <AiTaskBuilderScreen
+          accessToken={accessToken ?? ''}
+          onCancel={() => setScreen('tasks')}
+          onSaveTask={handleCreateTask}
+          onReminderCreated={(reminder) => setReminders((current) => [reminder, ...current])}
+          onSaved={handleTaskCreated}
         />
       ) : screen === 'taskDetails' ? (
         <TaskDetailsScreen
@@ -419,6 +433,19 @@ function ThemedApp() {
           onBack={() => setScreen('dashboard')}
         />
       )}
+
+      <AddTaskSheet
+        visible={addTaskSheetVisible}
+        onClose={() => setAddTaskSheetVisible(false)}
+        onSelectManual={() => {
+          setAddTaskSheetVisible(false);
+          setScreen('createTask');
+        }}
+        onSelectAi={() => {
+          setAddTaskSheetVisible(false);
+          setScreen('aiPlanTask');
+        }}
+      />
     </View>
   );
 }

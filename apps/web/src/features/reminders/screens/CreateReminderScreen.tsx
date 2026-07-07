@@ -41,7 +41,7 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated }: Props
         <p className="mb-4 mt-1.5 max-w-xl text-sm leading-6 text-[var(--bp-muted)]">
           {t('reminders.createSubtitle', { brand_name: t('common.brand_name') })}
         </p>
-        <AiAssistantSection onApplyDraft={applyDraft} />
+        <AiAssistantSection onApplyDraft={applyDraft} accessToken={accessToken} />
         <ReminderForm
           key={formKey}
           initialReminder={draftReminder}

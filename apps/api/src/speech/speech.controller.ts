@@ -5,12 +5,15 @@ import {
   HttpStatus,
   Post,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { audioMulterOptions } from './audio-upload.options';
 import { SpeechService } from './speech.service';
 
+@UseGuards(JwtAuthGuard)
 @Controller('speech')
 export class SpeechController {
   constructor(private readonly speechService: SpeechService) {}

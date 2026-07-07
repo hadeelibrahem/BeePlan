@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DatabaseModule } from '../db/database.module';
 import { SpeechModule } from '../speech/speech.module';
 import { AiPlannerController } from './ai-planner.controller';
@@ -9,6 +10,7 @@ import { PlannerPreferencesService } from './planner/planner-preferences.service
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
 import { PlannerRuleEngine } from './planner/planner-rule-engine';
 import { PlannerSchedulerEngine } from './planner/planner-scheduler-engine';
+import { TaskPlanChatService } from './task-plan-chat.service';
 
 @Module({
   imports: [DatabaseModule, SpeechModule],
@@ -16,10 +18,12 @@ import { PlannerSchedulerEngine } from './planner/planner-scheduler-engine';
   providers: [
     AiService,
     AiPlannerService,
+    TaskPlanChatService,
     PlannerRuleEngine,
     PlannerReasoningEngine,
     PlannerSchedulerEngine,
     PlannerPreferencesService,
+    JwtAuthGuard,
   ],
 })
 export class AiModule {}

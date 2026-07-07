@@ -22,6 +22,13 @@ type AttachmentRow = typeof taskAttachments.$inferSelect;
  * authenticated preview/download routes, so ownership is checked on every
  * read, not just on upload.
  *
+ * TODO(production): this is NOT production-safe on Railway (see
+ * RAILWAY_DEPLOY.md). Railway's filesystem is ephemeral per deploy/restart —
+ * every uploaded file under apps/api/uploads/ is lost on the next deploy,
+ * restart, or scale event, and won't be shared across multiple instances.
+ * Do not rely on this for any attachment a user expects to persist in
+ * production; it only works for local single-instance development.
+ *
  * To swap in real cloud storage later (Supabase Storage, S3, etc.), this is
  * the only file that needs to change: replace `saveFile`/`deleteFile`/
  * `readFile` with calls to the storage provider's SDK, and store whatever

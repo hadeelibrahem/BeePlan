@@ -10,11 +10,13 @@ import type { ApiTask, DashboardSummary } from '../lib/tasksApi'
 import { useTheme } from '../theme/useTheme'
 
 type Props = {
+  userName?: string
   onSignOut: () => void
   onViewTasks: () => void
   onViewFocus?: () => void
   onViewReminders: () => void
   onCreateTask: () => void
+  onViewTaskDetails?: (task: ApiTask) => void
   tasks?: ApiTask[]
   summary?: DashboardSummary | null
   summaryLoading?: boolean
@@ -24,11 +26,13 @@ type Props = {
 }
 
 export default function TasksDashboardScreen({
+  userName,
   onSignOut,
   onViewTasks,
   onViewFocus,
   onViewReminders,
   onCreateTask,
+  onViewTaskDetails,
   tasks = [],
   summary = null,
   summaryLoading = false,
@@ -52,7 +56,7 @@ export default function TasksDashboardScreen({
 
   return (
     <ScreenLayout
-      headerSubtitle="Good morning, Fatima"
+      headerSubtitle={userName ? `Good morning, ${userName}` : 'Good morning'}
       onProfilePress={onSignOut}
       fab={<FloatingActionButton onPress={onCreateTask} aboveNavBar />}
       footer={<BottomNavBar active="dashboard" onNavigateTasks={onViewTasks} onNavigateFocus={onViewFocus} onNavigateReminders={onViewReminders} />}
@@ -112,7 +116,9 @@ export default function TasksDashboardScreen({
         {isFocusLoading ? (
           <Text className="py-6 text-center text-sm" style={{ color: colors.secondaryText }}>Loading focus tasks...</Text>
         ) : focusTasks.length ? (
-          focusTasks.map((task) => <FocusTask key={task.id} task={task} />)
+          focusTasks.map((task) => (
+            <FocusTask key={task.id} task={task} onPress={onViewTaskDetails ? () => onViewTaskDetails(task) : undefined} />
+          ))
         ) : (
           <View className="items-center justify-center py-6">
             <View className="mb-3 h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: colors.accentSoft }}>
@@ -142,7 +148,7 @@ export default function TasksDashboardScreen({
   )
 }
 
-function FocusTask({ task }: { task: ApiTask }) {
+function FocusTask({ task, onPress }: { task: ApiTask; onPress?: () => void }) {
   const { theme } = useTheme()
   const { colors } = theme
   const reason = getPrimaryFocusReason(task)
@@ -151,7 +157,13 @@ function FocusTask({ task }: { task: ApiTask }) {
     reason === 'Due Today' ? colors.accent : reason === 'Focus' ? colors.primary : colors.warning
 
   return (
-    <View className="mb-3 flex-row items-center gap-3 last:mb-0">
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={task.title}
+      className="mb-3 flex-row items-center gap-3 last:mb-0 active:opacity-70"
+    >
       <View className="h-4 w-4 rounded-full border" style={{ borderColor: colors.border }} />
       <View className="min-w-0 flex-1">
         <Text className="truncate text-sm font-semibold" style={{ color: colors.text }}>
@@ -168,7 +180,7 @@ function FocusTask({ task }: { task: ApiTask }) {
           {reason}
         </Text>
       </View>
-    </View>
+    </Pressable>
   )
 }
 

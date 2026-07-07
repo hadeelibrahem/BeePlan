@@ -28,3 +28,25 @@ export const envSchema = z.object({
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+// `ConfigModule.forRoot({ validate })` calls this once at boot. A raw
+// `envSchema.parse(config)` would surface a wall of ZodError JSON on an
+// unhandled-rejection crash, which is hard to act on. Reformat failures into
+// one line per missing/invalid variable so a misconfigured deployment (e.g.
+// missing QWEN_API_KEY) fails loudly with an actionable message instead of an
+// opaque stack trace.
+export function validateEnv(config: Record<string, unknown>): Env {
+  const result = envSchema.safeParse(config);
+
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('\n');
+    throw new Error(
+      `Invalid or missing environment variables:\n${issues}\n` +
+        'Check apps/api/.env against apps/api/.env.example for the required values.',
+    );
+  }
+
+  return result.data;
+}

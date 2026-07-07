@@ -6,6 +6,7 @@ import type { AiAssistantMode, AiAssistantState, ReminderDraft } from '../types/
 
 type Props = {
   onApplyDraft: (draft: ReminderDraft) => void
+  accessToken: string
 }
 
 type Translate = (key: string, params?: Record<string, string | number>) => string
@@ -54,7 +55,7 @@ function buildSummaryLines(draft: ReminderDraft, t: Translate): { label: string;
   return lines
 }
 
-export function AiAssistantSection({ onApplyDraft }: Props) {
+export function AiAssistantSection({ onApplyDraft, accessToken }: Props) {
   const { t } = useLanguage()
   const [mode, setMode] = useState<AiAssistantMode>('text')
   const [state, setState] = useState<AiAssistantState>('idle')
@@ -86,7 +87,7 @@ export function AiAssistantSection({ onApplyDraft }: Props) {
     setErrorMessage('')
     setState('processing')
     try {
-      const result = await parseReminderText(text.trim())
+      const result = await parseReminderText(text.trim(), accessToken)
       setTranscript('')
       setDraft(result)
       setState('draft_ready')
@@ -126,7 +127,7 @@ export function AiAssistantSection({ onApplyDraft }: Props) {
     recorder.onstop = () => {
       recorder.stream.getTracks().forEach((track) => track.stop())
       const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-      void createVoiceReminderDraft(blob, 'recording.webm')
+      void createVoiceReminderDraft(blob, accessToken, 'recording.webm')
         .then((result) => {
           setTranscript(result.transcript)
           setDraft(result.draft)
