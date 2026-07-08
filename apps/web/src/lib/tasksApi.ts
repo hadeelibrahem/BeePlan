@@ -40,7 +40,7 @@ export type ApiDependency = {
 export type ApiRecurrence = {
   frequency: 'Never' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly' | 'Custom'
   weekdays: string[]
-  monthlyMode: 'sameDay' | 'lastDay'
+  monthlyMode: 'sameDay' | 'lastDay' | 'firstWeekday'
   customInterval: number
   customUnit: 'days' | 'weeks' | 'months'
   endType: 'never' | 'date' | 'occurrences'
@@ -78,6 +78,38 @@ export type ApiTaskActivity = {
 export type UiRecurrence = Omit<ApiRecurrence, 'endType'> & {
   endType: 'never' | 'onDate' | 'after'
   endDate: string
+}
+
+export type AiRecurrenceParseResponse = {
+  repeat: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'never'
+  interval: number
+  daysOfWeek: string[]
+  dayOfMonth: number | null
+  endCondition: 'never' | 'onDate' | 'afterOccurrences'
+  endDate: string | null
+  occurrences: number | null
+  time: string | null
+  preview: string
+  confidence: number
+  clarifyingQuestion: string | null
+}
+
+export type RecurrenceSuggestion = {
+  id: string
+  sourceTaskId: string
+  taskTitle: string
+  reason: string
+  suggestedRepeat: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'never'
+  repeat: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'never'
+  interval: number
+  daysOfWeek: string[]
+  dayOfMonth: number | null
+  endCondition: 'never' | 'onDate' | 'afterOccurrences'
+  endDate: string | null
+  occurrences: number | null
+  suggestedTime: string | null
+  preview: string
+  confidence: number
 }
 
 export type ApiTask = {
@@ -521,15 +553,131 @@ export function saveRecurrence(accessToken: string, taskId: string, recurrence: 
 export function recurrenceToApi(recurrence: UiRecurrence | null | undefined): ApiRecurrence | null {
   if (!recurrence) return null
 
+  const endType =
+    recurrence.endType === 'onDate'
+      ? 'date'
+      : recurrence.endType === 'after'
+        ? 'occurrences'
+        : 'never'
+
   return {
     ...recurrence,
-    endType:
-      recurrence.endType === 'onDate'
-        ? 'date'
-        : recurrence.endType === 'after'
-          ? 'occurrences'
-          : 'never',
+    endType,
+    // Always send a machine date (YYYY-MM-DD) — never a display/localized
+    // string. Omit it entirely unless the recurrence actually ends on a date.
+    endDate: endType === 'date' ? (toApiDate(recurrence.endDate) ?? undefined) : undefined,
   }
+}
+
+const MONTH_INDEX: Record<string, number> = {
+  january: 0, jan: 0,
+  february: 1, feb: 1,
+  march: 2, mar: 2,
+  april: 3, apr: 3,
+  may: 4,
+  june: 5, jun: 5,
+  july: 6, jul: 6,
+  august: 7, aug: 7,
+  september: 8, sep: 8, sept: 8,
+  october: 9, oct: 9,
+  november: 10, nov: 10,
+  december: 11, dec: 11,
+}
+
+/**
+ * Convert any date-ish value into a validated API date string (YYYY-MM-DD), or
+ * null when it cannot be resolved to a real calendar date. Accepts Date
+ * objects, ISO dates/datetimes, and human-readable dates coming from the AI or
+ * display layer ("August", "31 Aug 2026", "Aug 31, 2026", "08/31/2026").
+ *
+ * This is the payload counterpart to the display formatters — display code may
+ * render "Aug 31, 2026", but the API always receives "2026-08-31".
+ */
+export function toApiDate(value: unknown, referenceDate: Date = new Date()): string | null {
+  if (value == null) return null
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime())
+      ? null
+      : buildApiDate(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())
+  }
+
+  if (typeof value !== 'string') return null
+  const raw = value.trim()
+  if (!raw) return null
+
+  // ISO date or datetime — keep only the calendar-date part.
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/)
+  if (iso) return buildApiDate(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+
+  const reference = Number.isNaN(referenceDate.getTime()) ? new Date() : referenceDate
+  const lower = raw.toLowerCase()
+
+  // YYYY/MM/DD
+  let match = lower.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+  if (match) return buildApiDate(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+
+  // MM/DD/YYYY or DD/MM/YYYY (disambiguated when a value exceeds 12)
+  match = lower.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
+  if (match) {
+    const first = Number(match[1])
+    const second = Number(match[2])
+    const year = Number(match[3])
+    return first > 12 && second <= 12
+      ? buildApiDate(year, second - 1, first)
+      : buildApiDate(year, first - 1, second)
+  }
+
+  // Month name based: "August", "August 15", "31 Aug 2026", "Aug 31, 2026".
+  let monthIndex: number | null = null
+  let matchedToken = ''
+  for (const [name, index] of Object.entries(MONTH_INDEX)) {
+    if (new RegExp(`\\b${name}\\b`).test(lower) && name.length > matchedToken.length) {
+      matchedToken = name
+      monthIndex = index
+    }
+  }
+  if (monthIndex !== null) {
+    let day: number | null = null
+    let year: number | null = null
+    for (const token of lower.match(/\d{1,4}/g) ?? []) {
+      const number = Number(token)
+      if (number >= 1000) year = number
+      else if (day === null && number >= 1 && number <= 31) day = number
+    }
+    const resolvedYear = year ?? yearForMonthDay(monthIndex, day, reference)
+    if (day === null) {
+      const lastDay = new Date(Date.UTC(resolvedYear, monthIndex + 1, 0)).getUTCDate()
+      return buildApiDate(resolvedYear, monthIndex, lastDay)
+    }
+    return buildApiDate(resolvedYear, monthIndex, day)
+  }
+
+  return null
+}
+
+function buildApiDate(year: number, monthIndex: number, day: number): string | null {
+  if (!Number.isInteger(year) || year < 1970 || year > 9999) return null
+  if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null
+  const date = new Date(Date.UTC(year, monthIndex, day))
+  // Reject overflowed dates like "Feb 30" that JS silently rolls forward.
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== monthIndex ||
+    date.getUTCDate() !== day
+  ) {
+    return null
+  }
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function yearForMonthDay(monthIndex: number, day: number | null, reference: Date): number {
+  const year = reference.getUTCFullYear()
+  const refMonth = reference.getUTCMonth()
+  const refDay = reference.getUTCDate()
+  if (monthIndex < refMonth) return year + 1
+  if (monthIndex === refMonth && day !== null && day < refDay) return year + 1
+  return year
 }
 
 export function recurrenceToUi(recurrence: ApiRecurrence | null | undefined): UiRecurrence | null {
@@ -553,6 +701,28 @@ export function removeRecurrence(accessToken: string, taskId: string) {
 
 export function getRecurrence(accessToken: string, taskId: string) {
   return request<ApiRecurrence | null>(accessToken, `/tasks/${taskId}/recurrence`)
+}
+
+export function parseRecurrenceWithAi(
+  accessToken: string,
+  payload: { message: string; currentDate: string; timezone: string },
+) {
+  return request<AiRecurrenceParseResponse>(accessToken, '/ai/recurrence/parse', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function getRecurrenceSuggestions(accessToken: string) {
+  return request<{ suggestions: RecurrenceSuggestion[] }>(accessToken, '/ai/recurrence/suggestions')
+}
+
+export function dismissRecurrenceSuggestion(accessToken: string, suggestionId: string) {
+  return request<{ ok: boolean }>(
+    accessToken,
+    `/ai/recurrence/suggestions/${encodeURIComponent(suggestionId)}/dismiss`,
+    { method: 'POST' },
+  )
 }
 
 export function getTaskActivity(accessToken: string, taskId: string) {

@@ -360,9 +360,11 @@ export default function CreateTaskScreen({
         open={isRecurrenceModalOpen}
         mode={recurrence ? 'edit' : 'create'}
         recurrence={recurrence}
+        accessToken={accessToken}
         onClose={() => setIsRecurrenceModalOpen(false)}
         onSave={setRecurrence}
         onRemove={() => setRecurrence(null)}
+        onApplyTime={setDueTime}
       />
       <TaskDependenciesWorkflowModal
         open={dependencyModalOpen}
@@ -464,7 +466,6 @@ function formatDate(value?: string) {
     day: '2-digit',
   }).format(date)
 }
-
 
 
 

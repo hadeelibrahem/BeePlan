@@ -7,7 +7,7 @@ import { useTheme } from '../theme/useTheme'
 export type RecurrenceFrequency = 'Never' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly' | 'Custom'
 export type RecurrenceEndType = 'never' | 'onDate' | 'after'
 export type RecurrenceCustomUnit = 'days' | 'weeks' | 'months'
-export type RecurrenceMonthlyMode = 'sameDay' | 'lastDay'
+export type RecurrenceMonthlyMode = 'sameDay' | 'lastDay' | 'firstWeekday'
 
 export type RecurrenceSettings = {
   frequency: RecurrenceFrequency
@@ -55,13 +55,18 @@ export function createRecurrenceSummary(recurrence: RecurrenceSettings | null) {
     summary =
       recurrence.monthlyMode === 'lastDay'
         ? 'Repeats on the last day of each month'
-        : 'Repeats on the same day every month'
+        : recurrence.monthlyMode === 'firstWeekday' && weekdayText
+          ? `Repeats on the first ${weekdayText} of each month`
+          : 'Repeats on the same day every month'
   }
   if (recurrence.frequency === 'Yearly') summary = 'Repeats yearly'
   if (recurrence.frequency === 'Custom') {
     const unit = recurrence.customInterval === 1 ? recurrence.customUnit.replace(/s$/, '') : recurrence.customUnit
     summary = `Repeats every ${recurrence.customInterval} ${unit}`
     if (recurrence.customUnit === 'weeks' && weekdayText) summary += ` on ${weekdayText}`
+    if (recurrence.customUnit === 'months' && recurrence.monthlyMode === 'firstWeekday' && weekdayText) {
+      summary += ` on the first ${weekdayText}`
+    }
   }
 
   if (recurrence.endType === 'onDate' && recurrence.endDate) summary += ` until ${formatDate(recurrence.endDate)}`
@@ -110,9 +115,16 @@ export function TaskRecurrenceSheet({
   const toggleWeekday = (weekday: string) => {
     setDraft((current) => ({
       ...current,
-      weekdays: current.weekdays.includes(weekday)
-        ? current.weekdays.filter((item) => item !== weekday)
-        : [...current.weekdays, weekday],
+      weekdays:
+        (current.frequency === 'Monthly' ||
+          (current.frequency === 'Custom' && current.customUnit === 'months')) &&
+        current.monthlyMode === 'firstWeekday'
+          ? current.weekdays.includes(weekday)
+            ? []
+            : [weekday]
+          : current.weekdays.includes(weekday)
+            ? current.weekdays.filter((item) => item !== weekday)
+            : [...current.weekdays, weekday],
     }))
     setError('')
   }
@@ -172,7 +184,11 @@ export function TaskRecurrenceSheet({
               ))}
             </View>
 
-            {draft.frequency === 'Weekly' || (draft.frequency === 'Custom' && draft.customUnit === 'weeks') ? (
+            {draft.frequency === 'Weekly' ||
+            (draft.frequency === 'Custom' &&
+              (draft.customUnit === 'weeks' ||
+                (draft.customUnit === 'months' && draft.monthlyMode === 'firstWeekday'))) ||
+            (draft.frequency === 'Monthly' && draft.monthlyMode === 'firstWeekday') ? (
               <View className="mt-5 rounded-3xl border p-4" style={{ backgroundColor: colors.background, borderColor: colors.border }}>
                 <Text className="mb-3 font-black" style={{ color: colors.text }}>
                   Weekdays
@@ -190,7 +206,7 @@ export function TaskRecurrenceSheet({
               </View>
             ) : null}
 
-            {draft.frequency === 'Monthly' ? (
+            {draft.frequency === 'Monthly' || (draft.frequency === 'Custom' && draft.customUnit === 'months') ? (
               <View className="mt-5 rounded-3xl border p-4" style={{ backgroundColor: colors.background, borderColor: colors.border }}>
                 <Text className="mb-3 font-black" style={{ color: colors.text }}>
                   Monthly Options
@@ -206,6 +222,12 @@ export function TaskRecurrenceSheet({
                     selected={draft.monthlyMode === 'lastDay'}
                     label="Last day of month"
                     onPress={() => updateDraft({ monthlyMode: 'lastDay' })}
+                    fullWidth
+                  />
+                  <OptionButton
+                    selected={draft.monthlyMode === 'firstWeekday'}
+                    label="First weekday"
+                    onPress={() => updateDraft({ monthlyMode: 'firstWeekday' })}
                     fullWidth
                   />
                 </View>
@@ -328,9 +350,15 @@ function validateRecurrence(recurrence: RecurrenceSettings) {
   if (recurrence.frequency === 'Never') return ''
 
   if (recurrence.frequency === 'Weekly' && recurrence.weekdays.length === 0) return 'Select at least one weekday.'
+  if (recurrence.frequency === 'Monthly' && recurrence.monthlyMode === 'firstWeekday' && recurrence.weekdays.length === 0) {
+    return 'Select the weekday for the monthly recurrence.'
+  }
   if (recurrence.frequency === 'Custom') {
     if (recurrence.customInterval <= 0) return 'Custom repeat interval must be greater than 0.'
     if (recurrence.customUnit === 'weeks' && recurrence.weekdays.length === 0) return 'Select at least one weekday.'
+    if (recurrence.customUnit === 'months' && recurrence.monthlyMode === 'firstWeekday' && recurrence.weekdays.length === 0) {
+      return 'Select the weekday for the monthly recurrence.'
+    }
   }
   if (recurrence.endType === 'onDate' && !recurrence.endDate) return 'End date is required.'
   if (recurrence.endType === 'after' && recurrence.occurrences <= 0) return 'Occurrences must be greater than 0.'

@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { validateEnv } from './config/env';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './db/database.module';
+import { FocusModule } from './focus/focus.module';
 import { NotesModule } from './notes/notes.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { SpeechModule } from './speech/speech.module';
@@ -37,6 +38,7 @@ import { TasksModule } from './tasks/tasks.module';
     TasksModule,
     DashboardModule,
     NotesModule,
+    FocusModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

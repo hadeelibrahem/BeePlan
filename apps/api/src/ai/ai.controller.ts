@@ -2,9 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Logger,
+  Param,
   Post,
   Req,
   UploadedFile,
@@ -18,7 +20,10 @@ import { audioMulterOptions } from '../speech/audio-upload.options';
 import { SpeechService } from '../speech/speech.service';
 import { AiService } from './ai.service';
 import { ParseReminderDto } from './dto/parse-reminder.dto';
+import { ParseRecurrenceDto } from './dto/parse-recurrence.dto';
 import { TaskPlanChatDto } from './dto/task-plan-chat.dto';
+import { RecurrenceParseService } from './recurrence-parse.service';
+import { RecurrenceSuggestionsService } from './recurrence-suggestions.service';
 import { TaskPlanChatService } from './task-plan-chat.service';
 
 @UseGuards(JwtAuthGuard)
@@ -30,6 +35,8 @@ export class AiController {
     private readonly aiService: AiService,
     private readonly speechService: SpeechService,
     private readonly taskPlanChatService: TaskPlanChatService,
+    private readonly recurrenceParseService: RecurrenceParseService,
+    private readonly recurrenceSuggestionsService: RecurrenceSuggestionsService,
   ) {}
 
   @Post('task-plan/chat')
@@ -43,6 +50,26 @@ export class AiController {
   @HttpCode(HttpStatus.OK)
   parseReminder(@Body() dto: ParseReminderDto) {
     return this.aiService.parseReminder(dto.text);
+  }
+
+  @Post('recurrence/parse')
+  @HttpCode(HttpStatus.OK)
+  parseRecurrence(@Body() dto: ParseRecurrenceDto) {
+    return this.recurrenceParseService.parse(dto);
+  }
+
+  @Get('recurrence/suggestions')
+  recurrenceSuggestions(@Req() request: AuthenticatedRequest) {
+    return this.recurrenceSuggestionsService.list(request.user.id);
+  }
+
+  @Post('recurrence/suggestions/:id/dismiss')
+  @HttpCode(HttpStatus.OK)
+  dismissRecurrenceSuggestion(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.recurrenceSuggestionsService.dismiss(request.user.id, id);
   }
 
   @Post('voice-reminder-draft')

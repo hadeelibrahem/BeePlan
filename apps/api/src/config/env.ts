@@ -25,6 +25,9 @@ export const envSchema = z.object({
   QWEN_API_KEY: z.string().optional(),
   QWEN_BASE_URL: z.string().url().optional(),
   QWEN_MODEL: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
+  OPENROUTER_BASE_URL: z.string().url().optional(),
+  OPENROUTER_MODEL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
