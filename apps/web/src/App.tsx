@@ -16,13 +16,18 @@ import {
   changeTaskStatus,
   createTask,
   deleteTask,
+  dismissRecurrenceSuggestion,
   getDashboardSummary,
+  getRecurrenceSuggestions,
   getTask,
   getTasks,
   isValidTaskId,
+  recurrenceToApi,
+  saveRecurrence,
   updateTask,
   type ApiTask,
   type DashboardSummary,
+  type RecurrenceSuggestion,
   type TaskPayload,
 } from './lib/tasksApi'
 import AuthScreen from './screens/AuthScreen'
@@ -34,18 +39,25 @@ import CalendarScreen from './screens/CalendarScreen'
 import CreateTaskScreen from './screens/CreateTaskScreen'
 import EditTaskScreen from './screens/EditTaskScreen'
 import FocusScreen from './screens/FocusScreen'
+import FocusSessionScreen from './screens/FocusSessionScreen'
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
 import NotesScreen from './screens/NotesScreen'
 import ResetPasswordScreen from './screens/ResetPasswordScreen'
 import TaskDetailsScreen from './screens/TaskDetailsScreen'
 import TasksDashboardScreen from './screens/TasksDashboardScreen'
 import { ThemeProvider } from './theme/ThemeContext'
+import {
+  TaskRecurrenceModal,
+  type RecurrenceSettings,
+} from './components/TaskRecurrenceModal'
+import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
 
 type AuthScreenState = 'auth' | 'forgot' | 'reset'
 type AppScreen =
   | 'dashboard'
   | 'tasks'
   | 'focus'
+  | 'focusSession'
   | 'planner'
   | 'createTask'
   | 'aiPlanTask'
@@ -77,7 +89,10 @@ export default function App() {
 
 function ThemedApp() {
   const [authScreen, setAuthScreen] = useState<AuthScreenState>(() => getAuthScreenFromPath())
-  const [screen, setScreen] = useState<AppScreen>('dashboard')
+  // Restore the full-screen focus workspace if a session was live on refresh.
+  const [screen, setScreen] = useState<AppScreen>(() =>
+    hasPersistedFocusSession() ? 'focusSession' : 'dashboard',
+  )
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [tasks, setTasks] = useState<ApiTask[]>([])
   const [tasksLoading, setTasksLoading] = useState(false)
@@ -85,6 +100,8 @@ function ThemedApp() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState('')
+  const [recurrenceSuggestions, setRecurrenceSuggestions] = useState<RecurrenceSuggestion[]>([])
+  const [activeRecurrenceSuggestion, setActiveRecurrenceSuggestion] = useState<RecurrenceSuggestion | null>(null)
   const [plannerRefreshKey, setPlannerRefreshKey] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
@@ -133,10 +150,23 @@ function ThemedApp() {
       .finally(() => setSummaryLoading(false))
   }, [accessToken])
 
+  const refreshRecurrenceSuggestions = useCallback(() => {
+    if (!accessToken) return
+
+    getRecurrenceSuggestions(accessToken)
+      .then((response) => setRecurrenceSuggestions(response.suggestions))
+      .catch(() => setRecurrenceSuggestions([]))
+  }, [accessToken])
+
   useEffect(() => {
     if (!user || !accessToken) return
     refreshSummary()
   }, [accessToken, user, refreshSummary])
+
+  useEffect(() => {
+    if (!user || !accessToken || tasksLoading) return
+    refreshRecurrenceSuggestions()
+  }, [accessToken, user, tasksLoading, tasks.length, refreshRecurrenceSuggestions])
 
   function navigateAuth(nextScreen: AuthScreenState) {
     const path =
@@ -276,6 +306,43 @@ function ThemedApp() {
     refreshPlanner()
   }
 
+  async function handleDismissRecurrenceSuggestion(suggestion: RecurrenceSuggestion) {
+    setRecurrenceSuggestions((current) => current.filter((item) => item.id !== suggestion.id))
+    if (!accessToken) return
+
+    try {
+      await dismissRecurrenceSuggestion(accessToken, suggestion.id)
+    } catch {
+      refreshRecurrenceSuggestions()
+    }
+  }
+
+  async function handleSaveSuggestionRecurrence(recurrence: RecurrenceSettings | null) {
+    if (!accessToken || !activeRecurrenceSuggestion || !recurrence) {
+      setActiveRecurrenceSuggestion(null)
+      return
+    }
+
+    const payload = recurrenceToApi(recurrence)
+    if (!payload) {
+      setActiveRecurrenceSuggestion(null)
+      return
+    }
+
+    const updatedTask = await saveRecurrence(
+      accessToken,
+      activeRecurrenceSuggestion.sourceTaskId,
+      payload,
+    )
+    handleTaskUpdated(updatedTask)
+    setRecurrenceSuggestions((current) =>
+      current.filter((item) => item.id !== activeRecurrenceSuggestion.id),
+    )
+    await dismissRecurrenceSuggestion(accessToken, activeRecurrenceSuggestion.id).catch(() => undefined)
+    setActiveRecurrenceSuggestion(null)
+    refreshRecurrenceSuggestions()
+  }
+
   async function refreshSelectedTask(taskId: string) {
     if (!accessToken) return
     if (!isValidTaskId(taskId)) {
@@ -288,6 +355,18 @@ function ThemedApp() {
     setTasks((current) => current.map((task) => (task.id === taskId ? refreshedTask : task)))
   }
 
+  const focus = useFocusSession({
+    accessToken: accessToken ?? '',
+    onSessionFinished: (taskId) => {
+      if (taskId && accessToken && isValidTaskId(taskId)) {
+        void refreshSelectedTask(taskId)
+      }
+      refreshSummary()
+      invalidateTaskFilters()
+      refreshPlanner()
+    },
+  })
+
   useEffect(() => {
     if (screen !== 'taskDetails' || !selectedTaskId || !accessToken) return
 
@@ -297,6 +376,12 @@ function ThemedApp() {
   }, [accessToken, screen, selectedTaskId])
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null
+  const selectedTaskRecurrenceSuggestions = selectedTask
+    ? recurrenceSuggestions.filter((suggestion) => suggestion.sourceTaskId === selectedTask.id)
+    : []
+  const suggestedRecurrence = activeRecurrenceSuggestion
+    ? recurrenceSuggestionToSettings(activeRecurrenceSuggestion)
+    : null
 
   const sidebarNav = {
     onNavigateDashboard: () => setScreen('dashboard'),
@@ -307,6 +392,22 @@ function ThemedApp() {
     onNavigateCalendar: () => setScreen('calendar'),
     onNavigateNotes: () => setScreen('notes'),
     onNavigateAnalytics: () => setScreen('analytics'),
+  }
+
+  function renderWithRecurrenceSuggestionModal(content: ReactNode) {
+    return (
+      <>
+        {content}
+        <TaskRecurrenceModal
+          open={Boolean(activeRecurrenceSuggestion)}
+          mode={activeRecurrenceSuggestion ? 'edit' : 'create'}
+          recurrence={suggestedRecurrence}
+          accessToken={accessToken ?? ''}
+          onClose={() => setActiveRecurrenceSuggestion(null)}
+          onSave={(recurrence) => void handleSaveSuggestionRecurrence(recurrence)}
+        />
+      </>
+    )
   }
 
   if (loading) {
@@ -330,7 +431,7 @@ function ThemedApp() {
   }
 
   if (screen === 'dashboard') {
-    return (
+    return renderWithRecurrenceSuggestionModal(
       <TasksDashboardScreen
         reminders={reminders}
         tasks={tasks}
@@ -338,22 +439,25 @@ function ThemedApp() {
         summaryLoading={summaryLoading}
         summaryError={summaryError}
         tasksLoading={tasksLoading}
+        recurrenceSuggestions={recurrenceSuggestions}
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
         onViewTaskDetails={openTaskDetails}
+        onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}
+        onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
         onSignOut={() => void handleSignOut()}
-      />
+      />,
     )
   }
 
   if (screen === 'tasks') {
-    return (
+    return renderWithRecurrenceSuggestionModal(
       <AllTasksScreen
         onBackDashboard={() => setScreen('dashboard')}
         onCreateTask={() => setScreen('createTask')}
@@ -361,8 +465,11 @@ function ThemedApp() {
         onViewTaskDetails={openTaskDetails}
         accessToken={accessToken}
         tasks={tasks}
+        recurrenceSuggestions={recurrenceSuggestions}
         loading={tasksLoading}
         error={tasksError}
+        onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}
+        onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
@@ -370,6 +477,19 @@ function ThemedApp() {
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
         onSignOut={() => void handleSignOut()}
+      />,
+    )
+  }
+
+  if (screen === 'focusSession') {
+    // Rendered OUTSIDE AppLayout: no sidebar, header, or navigation — a
+    // dedicated distraction-free execution surface.
+    return (
+      <FocusSessionScreen
+        accessToken={accessToken ?? ''}
+        focus={focus}
+        tasks={tasks}
+        onExit={() => setScreen('focus')}
       />
     )
   }
@@ -380,6 +500,10 @@ function ThemedApp() {
         onBackDashboard={() => setScreen('dashboard')}
         onViewTaskDetails={openTaskDetails}
         tasks={tasks}
+        accessToken={accessToken ?? ''}
+        focus={focus}
+        onTaskUpdated={handleTaskUpdated}
+        onOpenWorkspace={() => setScreen('focusSession')}
         onNavigateTasks={sidebarNav.onNavigateTasks}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
@@ -458,16 +582,19 @@ function ThemedApp() {
   }
 
   if (screen === 'taskDetails' && selectedTask) {
-    return (
+    return renderWithRecurrenceSuggestionModal(
       <TaskDetailsScreen
         task={selectedTask}
         tasks={tasks}
         accessToken={accessToken ?? ''}
+        recurrenceSuggestions={selectedTaskRecurrenceSuggestions}
         onTaskUpdated={handleTaskUpdated}
         onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('tasks')}
         onEdit={() => void openEditTask(selectedTask.id)}
         onDelete={() => void handleDeleteTask(selectedTask.id)}
+        onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}
+        onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
         onMarkDone={async () => {
           if (!accessToken) return
           if (!isValidTaskId(selectedTask.id)) {
@@ -491,7 +618,7 @@ function ThemedApp() {
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
-      />
+      />,
     )
   }
 
@@ -592,6 +719,63 @@ function renderShell(content: ReactNode, overlay?: ReactNode) {
       </div>
     </div>
   )
+}
+
+function recurrenceSuggestionToSettings(suggestion: RecurrenceSuggestion): RecurrenceSettings {
+  const endType =
+    suggestion.endCondition === 'onDate'
+      ? 'onDate'
+      : suggestion.endCondition === 'afterOccurrences'
+        ? 'after'
+        : 'never'
+
+  const base: RecurrenceSettings = {
+    frequency: 'Never',
+    weekdays: suggestion.daysOfWeek,
+    monthlyMode: suggestion.repeat === 'monthly' && suggestion.daysOfWeek.length ? 'firstWeekday' : 'sameDay',
+    customInterval: Math.max(suggestion.interval, 1),
+    customUnit: suggestion.repeat === 'daily' ? 'days' : suggestion.repeat === 'monthly' ? 'months' : 'weeks',
+    endType,
+    endDate: suggestion.endDate ?? '',
+    occurrences: suggestion.occurrences ?? 1,
+  }
+
+  if (suggestion.repeat === 'daily') {
+    return {
+      ...base,
+      frequency: suggestion.interval === 1 ? 'Daily' : 'Custom',
+      weekdays: [],
+      customUnit: 'days',
+    }
+  }
+
+  if (suggestion.repeat === 'weekly') {
+    return {
+      ...base,
+      frequency: suggestion.interval === 1 ? 'Weekly' : 'Custom',
+      customUnit: 'weeks',
+    }
+  }
+
+  if (suggestion.repeat === 'monthly') {
+    return {
+      ...base,
+      frequency: suggestion.interval === 1 ? 'Monthly' : 'Custom',
+      customUnit: 'months',
+    }
+  }
+
+  if (suggestion.repeat === 'yearly') {
+    return {
+      ...base,
+      frequency: suggestion.interval === 1 ? 'Yearly' : 'Custom',
+      weekdays: [],
+      customUnit: 'months',
+      customInterval: Math.max(suggestion.interval * 12, 1),
+    }
+  }
+
+  return base
 }
 
 

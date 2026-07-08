@@ -13,10 +13,11 @@ import {
   TopActionBar,
   type SidebarNavHandlers,
 } from '../components/layout'
+import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import type { Reminder } from '../features/reminders'
-import type { ApiTask, DashboardSummary } from '../lib/tasksApi'
+import type { ApiTask, DashboardSummary, RecurrenceSuggestion } from '../lib/tasksApi'
 
 type TasksDashboardScreenProps = SidebarNavHandlers & {
   reminders: Reminder[]
@@ -25,10 +26,13 @@ type TasksDashboardScreenProps = SidebarNavHandlers & {
   summaryLoading?: boolean
   summaryError?: string
   tasksLoading?: boolean
+  recurrenceSuggestions?: RecurrenceSuggestion[]
   onRetrySummary?: () => void
   onViewReminders: () => void
   onViewTasks: () => void
   onViewTaskDetails?: (taskId: string) => void
+  onMakeRecurringSuggestion?: (suggestion: RecurrenceSuggestion) => void
+  onDismissRecurrenceSuggestion?: (suggestion: RecurrenceSuggestion) => void
   onSignOut?: () => void
 }
 
@@ -39,10 +43,13 @@ export default function TasksDashboardScreen({
   summaryLoading = false,
   summaryError = '',
   tasksLoading = false,
+  recurrenceSuggestions = [],
   onRetrySummary,
   onViewReminders,
   onViewTasks,
   onViewTaskDetails,
+  onMakeRecurringSuggestion,
+  onDismissRecurrenceSuggestion,
   onSignOut,
   ...nav
 }: TasksDashboardScreenProps) {
@@ -100,6 +107,19 @@ export default function TasksDashboardScreen({
               {summaryLoading ? 'Retrying...' : 'Retry'}
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {recurrenceSuggestions.length ? (
+        <div className="mb-4 grid gap-3 lg:grid-cols-2">
+          {recurrenceSuggestions.map((suggestion) => (
+            <RecurrenceSuggestionCard
+              key={suggestion.id}
+              suggestion={suggestion}
+              onMakeRecurring={(item) => onMakeRecurringSuggestion?.(item)}
+              onDismiss={(item) => onDismissRecurrenceSuggestion?.(item)}
+            />
+          ))}
         </div>
       ) : null}
 

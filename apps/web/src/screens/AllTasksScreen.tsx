@@ -12,6 +12,7 @@ import {
   TopActionBar,
   type SidebarNavHandlers,
 } from '../components/layout'
+import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import {
@@ -21,6 +22,7 @@ import {
   toUiStatus,
   type ApiTask,
   type ApiTaskStatus,
+  type RecurrenceSuggestion,
   type TaskDueFilter,
   type TaskFilters,
 } from '../lib/tasksApi'
@@ -33,8 +35,11 @@ type AllTasksScreenProps = SidebarNavHandlers & {
   onSignOut?: () => void
   accessToken?: string | null
   tasks?: ApiTask[]
+  recurrenceSuggestions?: RecurrenceSuggestion[]
   loading?: boolean
   error?: string
+  onMakeRecurringSuggestion?: (suggestion: RecurrenceSuggestion) => void
+  onDismissRecurrenceSuggestion?: (suggestion: RecurrenceSuggestion) => void
 }
 
 type Task = {
@@ -80,8 +85,11 @@ export default function AllTasksScreen({
   onSignOut,
   accessToken,
   tasks: apiTasks = [],
+  recurrenceSuggestions = [],
   loading = false,
   error = '',
+  onMakeRecurringSuggestion,
+  onDismissRecurrenceSuggestion,
   ...nav
 }: AllTasksScreenProps) {
   const [search, setSearch] = useState('')
@@ -221,6 +229,19 @@ export default function AllTasksScreen({
         }
         pageActions={<SecondaryButton>Sort: Due Date</SecondaryButton>}
       />
+
+      {recurrenceSuggestions.length ? (
+        <div className="mb-4 grid gap-3 lg:grid-cols-2">
+          {recurrenceSuggestions.map((suggestion) => (
+            <RecurrenceSuggestionCard
+              key={suggestion.id}
+              suggestion={suggestion}
+              onMakeRecurring={(item) => onMakeRecurringSuggestion?.(item)}
+              onDismiss={(item) => onDismissRecurrenceSuggestion?.(item)}
+            />
+          ))}
+        </div>
+      ) : null}
 
       <div className="mb-4">
         <FilterTabs tabs={FILTERS} active={statusFilter} onChange={setStatusFilter} />

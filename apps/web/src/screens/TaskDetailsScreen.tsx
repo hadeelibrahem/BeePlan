@@ -2,8 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import { DangerButton, OutlineButton, PrimaryButton } from '../components/layout/Buttons'
 import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
+import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
-import { createRecurrenceSummary, getNextOccurrenceLabel } from '../components/TaskRecurrenceModal'
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
@@ -19,18 +19,23 @@ import {
   type ApiTaskActivity,
   type ApiSubtask,
   type ApiTaskAttachment,
+  type RecurrenceSuggestion,
+  type UiRecurrence,
 } from '../lib/tasksApi'
 
 type TaskDetailsScreenProps = SidebarNavHandlers & {
   task?: ApiTask | null
   tasks?: ApiTask[]
   accessToken?: string
+  recurrenceSuggestions?: RecurrenceSuggestion[]
   onTaskUpdated?: (task: ApiTask) => void
   onRefresh?: () => void
   onBack?: () => void
   onEdit?: () => void
   onDelete?: () => void
   onMarkDone?: () => void
+  onMakeRecurringSuggestion?: (suggestion: RecurrenceSuggestion) => void
+  onDismissRecurrenceSuggestion?: (suggestion: RecurrenceSuggestion) => void
   onSignOut?: () => void
 }
 
@@ -38,10 +43,13 @@ export default function TaskDetailsScreen({
   task,
   tasks = [],
   accessToken = '',
+  recurrenceSuggestions = [],
   onTaskUpdated,
   onBack,
   onEdit,
   onDelete,
+  onMakeRecurringSuggestion,
+  onDismissRecurrenceSuggestion,
   onSignOut,
   ...nav
 }: TaskDetailsScreenProps) {
@@ -75,11 +83,6 @@ export default function TaskDetailsScreen({
     [dependencies],
   )
   const isBlocked = dependencies.length > 0 && !dependenciesComplete
-  const recurrenceSummary = task?.recurrence?.summary ?? createRecurrenceSummary(recurrence)
-  const nextOccurrence =
-    task?.recurrence?.nextOccurrenceDate
-      ? `Next occurrence: ${formatDate(task.recurrence.nextOccurrenceDate)}`
-      : getNextOccurrenceLabel(recurrence)
   const reminderText = task?.reminderEnabled
     ? `${task.reminderBeforeMinutes ?? 30} minutes before due date`
     : 'No reminder set'
@@ -290,6 +293,19 @@ export default function TaskDetailsScreen({
           </div>
         </section>
 
+        {recurrenceSuggestions.length ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {recurrenceSuggestions.map((suggestion) => (
+              <RecurrenceSuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                onMakeRecurring={(item) => onMakeRecurringSuggestion?.(item)}
+                onDismiss={(item) => onDismissRecurrenceSuggestion?.(item)}
+              />
+            ))}
+          </div>
+        ) : null}
+
         <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_240px]">
           <section className="space-y-4">
             <SectionBlock title="Progress">
@@ -343,11 +359,18 @@ export default function TaskDetailsScreen({
               </SectionBlock>
             </div>
 
+            <SectionBlock title="Recurring">
+              <RecurrenceDetails
+                recurrence={recurrence}
+                nextOccurrenceDate={task?.recurrence?.nextOccurrenceDate}
+                dueTime={task?.dueTime}
+              />
+            </SectionBlock>
+
             <div className="grid gap-4 lg:grid-cols-2">
               <SectionBlock title="Automation">
                 <div className="divide-y divide-[var(--bp-border)]">
                   <AutomationRow label="Reminder" value={reminderText} />
-                  <AutomationRow label="Recurring" value={`${recurrenceSummary}${recurrence ? ` - ${nextOccurrence}` : ''}`} />
                   <AutomationRow label="Focus" value={focusText} />
                 </div>
               </SectionBlock>
@@ -486,6 +509,72 @@ function EmptyBlock({ title, description }: { title: string; description: string
       <p className="mt-1 text-xs text-slate-500">{description}</p>
     </div>
   )
+}
+
+function RecurrenceDetails({
+  recurrence,
+  nextOccurrenceDate,
+  dueTime,
+}: {
+  recurrence: UiRecurrence | null
+  nextOccurrenceDate?: string | null
+  dueTime?: string
+}) {
+  if (!recurrence || recurrence.frequency === 'Never') {
+    return (
+      <EmptyBlock
+        title="Not a recurring task"
+        description="Set a repeat schedule from Edit Task to see it here."
+      />
+    )
+  }
+
+  const daysValue = formatRecurrenceWeekdays(recurrence.weekdays)
+  const nextOccurrence = formatOccurrence(nextOccurrenceDate, dueTime)
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <InfoBox title="Frequency" value={formatRecurrenceFrequency(recurrence)} />
+      {daysValue ? <InfoBox title="Days" value={daysValue} /> : null}
+      <InfoBox title="Ends" value={formatRecurrenceEnd(recurrence)} />
+      <InfoBox title="Next occurrence" value={nextOccurrence || 'No upcoming occurrences'} />
+    </div>
+  )
+}
+
+const WEEKDAY_ORDER = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+]
+
+function formatRecurrenceFrequency(recurrence: UiRecurrence) {
+  if (recurrence.frequency === 'Custom') {
+    const unit =
+      recurrence.customInterval === 1 ? recurrence.customUnit.replace(/s$/, '') : recurrence.customUnit
+    return `Every ${recurrence.customInterval} ${unit}`
+  }
+  return recurrence.frequency
+}
+
+function formatRecurrenceWeekdays(weekdays: string[]) {
+  return [...weekdays]
+    .sort((a, b) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b))
+    .join(' • ')
+}
+
+function formatRecurrenceEnd(recurrence: UiRecurrence) {
+  if (recurrence.endType === 'onDate' && recurrence.endDate) {
+    return formatLocaleDate(recurrence.endDate) || 'Never ends'
+  }
+  if (recurrence.endType === 'after' && recurrence.occurrences > 0) {
+    return `After ${recurrence.occurrences} occurrence${recurrence.occurrences === 1 ? '' : 's'}`
+  }
+  return 'Never ends'
 }
 
 function AutomationRow({ label, value }: { label: string; value: string }) {
@@ -703,6 +792,47 @@ function formatDate(value?: string) {
     month: '2-digit',
     day: '2-digit',
   }).format(date)
+}
+
+// Anchor date-only strings (YYYY-MM-DD) to local midnight so locale formatting
+// doesn't shift them across a day boundary in the user's timezone.
+function toLocalDate(value?: string | null) {
+  if (!value) return null
+  const raw = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value
+  const date = new Date(raw)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatLocaleDate(value?: string | null) {
+  const date = toLocalDate(value)
+  if (!date) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+}
+
+function formatClockTime(time?: string) {
+  if (!time) return ''
+  const match = /^(\d{1,2}):(\d{2})/.exec(time)
+  if (!match) return ''
+  const date = new Date()
+  date.setHours(Number(match[1]), Number(match[2]), 0, 0)
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date)
+}
+
+function formatOccurrence(value?: string | null, time?: string) {
+  const date = toLocalDate(value)
+  if (!date) return ''
+  const datePart = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+  const timePart = formatClockTime(time)
+  return timePart ? `${datePart} • ${timePart}` : datePart
 }
 
 function formatActivityDateTime(value?: string) {

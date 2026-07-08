@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -13,6 +13,17 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { toApiDate } from '../../ai/recurrence-parser';
+
+// Defensive normalization for recurrence end dates: even if a client sends a
+// display/localized date ("Aug 31, 2026", "August", "08/31/2026") or an empty
+// string, coerce it to an ISO date (YYYY-MM-DD) before validation. Unparseable
+// non-empty values are passed through so @IsISO8601 rejects them with a clear
+// message.
+function normalizeEndDateInput(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return toApiDate(value) ?? (typeof value === 'string' ? value : undefined);
+}
 
 export const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 export const TASK_STATUSES = ['todo', 'in_progress', 'done', 'missed'] as const;
@@ -98,8 +109,8 @@ export class TaskRecurrenceDto {
   weekdays?: string[];
 
   @IsOptional()
-  @IsIn(['sameDay', 'lastDay'])
-  monthlyMode?: 'sameDay' | 'lastDay';
+  @IsIn(['sameDay', 'lastDay', 'firstWeekday'])
+  monthlyMode?: 'sameDay' | 'lastDay' | 'firstWeekday';
 
   @IsOptional()
   @IsInt()
@@ -114,7 +125,11 @@ export class TaskRecurrenceDto {
   endType!: RecurrenceEndType;
 
   @IsOptional()
-  @IsISO8601()
+  @Transform(({ value }) => normalizeEndDateInput(value))
+  @IsISO8601(
+    {},
+    { message: 'Recurrence end date must be a valid date (YYYY-MM-DD).' },
+  )
   endDate?: string;
 
   @IsOptional()

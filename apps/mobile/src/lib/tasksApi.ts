@@ -59,7 +59,7 @@ export type ApiDependency = {
 export type ApiRecurrence = {
   frequency: 'Never' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly' | 'Custom';
   weekdays: string[];
-  monthlyMode: 'sameDay' | 'lastDay';
+  monthlyMode: 'sameDay' | 'lastDay' | 'firstWeekday';
   customInterval: number;
   customUnit: 'days' | 'weeks' | 'months';
   endType: 'never' | 'date' | 'occurrences';

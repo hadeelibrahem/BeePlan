@@ -22,10 +22,12 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureUsersAuthColumns();
     await this.ensurePasswordResetCodesTable();
     await this.ensureTasksTables();
+    await this.ensureRecurrenceSuggestionDismissalsTable();
     await this.ensureRemindersTable();
     await this.ensureGoogleLoginApprovalsTable();
     await this.ensureStandaloneNotesTable();
     await this.ensurePlannerPreferencesTable();
+    await this.ensureFocusSessionsTable();
   }
 
   async healthCheck() {
@@ -298,6 +300,23 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     `);
   }
 
+  private async ensureRecurrenceSuggestionDismissalsTable() {
+    await this.getPool().query(`
+      create table if not exists task_recurrence_suggestion_dismissals (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        suggestion_id varchar(80) not null,
+        task_title varchar(255),
+        dismissed_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      create unique index if not exists task_recurrence_suggestion_dismissals_unique
+        on task_recurrence_suggestion_dismissals (user_id, suggestion_id)
+    `);
+  }
+
   private async ensureStandaloneNotesTable() {
     await this.getPool().query(`
       create table if not exists standalone_notes (
@@ -338,6 +357,37 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         created_at timestamp default now() not null,
         updated_at timestamp default now() not null
       )
+    `);
+  }
+
+  private async ensureFocusSessionsTable() {
+    await this.getPool().query(`
+      create table if not exists focus_sessions (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        task_id uuid references tasks(id) on delete set null,
+        started_at timestamp default now() not null,
+        ended_at timestamp,
+        planned_minutes integer not null default 25,
+        actual_minutes integer,
+        status varchar(20) not null default 'active',
+        session_type varchar(20) not null default 'pomodoro',
+        notes text,
+        created_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_focus_sessions_user_id
+        on focus_sessions (user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_focus_sessions_started_at
+        on focus_sessions (started_at)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_focus_sessions_task_id
+        on focus_sessions (task_id)
     `);
   }
 
