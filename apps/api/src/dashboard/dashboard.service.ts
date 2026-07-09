@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import { reminders, tasks } from '../db/schema';
+import { getUtcDayBoundaries } from './dashboard-date.util';
 
 export type DashboardSummary = {
   todayTasks: number;
@@ -42,13 +43,7 @@ export class DashboardService {
     // round-tripping of JS Date values through it is only consistent in UTC —
     // using local `setHours()` here caused tasks due "yesterday" evening to
     // be miscounted as "today" whenever the local UTC offset was positive.
-    const now = new Date();
-    const startOfToday = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
-    const startOfTomorrow = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
-    );
+    const { startOfToday, startOfTomorrow } = getUtcDayBoundaries();
 
     const totalTasks = userTasks.length;
     const completedTasks = userTasks.filter(
