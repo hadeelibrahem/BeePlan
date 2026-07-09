@@ -10,6 +10,8 @@ import { PlannerPreferencesService } from './planner/planner-preferences.service
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
 import { PlannerRuleEngine } from './planner/planner-rule-engine';
 import { PlannerSchedulerEngine } from './planner/planner-scheduler-engine';
+import { RecurrenceParseService } from './recurrence-parse.service';
+import { RecurrenceSuggestionsService } from './recurrence-suggestions.service';
 import { TaskPlanChatService } from './task-plan-chat.service';
 
 @Module({
@@ -19,6 +21,8 @@ import { TaskPlanChatService } from './task-plan-chat.service';
     AiService,
     AiPlannerService,
     TaskPlanChatService,
+    RecurrenceParseService,
+    RecurrenceSuggestionsService,
     PlannerRuleEngine,
     PlannerReasoningEngine,
     PlannerSchedulerEngine,

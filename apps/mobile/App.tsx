@@ -2,7 +2,7 @@ import './global.css';
 
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
@@ -24,8 +24,10 @@ import AllTasksScreen from './src/screens/AllTasksScreen';
 import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import EditTaskScreen from './src/screens/EditTaskScreen';
 import FocusScreen from './src/screens/FocusScreen';
+import FocusSessionScreen from './src/screens/FocusSessionScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
+import { useFocusSession } from './src/lib/useFocusSession';
 import TaskDetailsScreen from './src/screens/TaskDetailsScreen';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
@@ -51,6 +53,7 @@ type AppScreen =
   | 'dashboard'
   | 'tasks'
   | 'focus'
+  | 'focusSession'
   | 'createTask'
   | 'aiPlanTask'
   | 'taskDetails'
@@ -156,6 +159,32 @@ function ThemedApp() {
       })
       .finally(() => setSummaryLoading(false));
   }, [accessToken]);
+
+  // Single shared focus-session instance so the Focus page and the full-screen
+  // workspace stay in sync (AsyncStorage writes are async, so a per-screen
+  // instance would race on the start → navigate hand-off).
+  const focus = useFocusSession({
+    accessToken: accessToken ?? '',
+    onSessionFinished: (taskId, markedDone) => {
+      if (taskId && markedDone) {
+        setTasks((current) =>
+          current.map((task) => (task.id === taskId ? { ...task, status: 'done', progress: 100 } : task)),
+        );
+      }
+      invalidateTaskFilters();
+      loadDashboardSummary();
+    },
+  });
+
+  // Restore the full-screen workspace once if a session was live at launch.
+  const focusRestoredRef = useRef(false);
+  useEffect(() => {
+    if (focusRestoredRef.current) return;
+    if (user && focus.hydrated && focus.hasSession) {
+      focusRestoredRef.current = true;
+      setScreen('focusSession');
+    }
+  }, [user, focus.hydrated, focus.hasSession]);
 
   useEffect(() => {
     if (!user || !accessToken) return;
@@ -347,6 +376,8 @@ function ThemedApp() {
           loading={tasksLoading}
           error={tasksError}
         />
+      ) : screen === 'focusSession' ? (
+        <FocusSessionScreen focus={focus} tasks={tasks} onExit={() => setScreen('focus')} />
       ) : screen === 'focus' ? (
         <FocusScreen
           onBackDashboard={() => setScreen('dashboard')}
@@ -356,6 +387,10 @@ function ThemedApp() {
             setScreen('taskDetails');
           }}
           tasks={tasks}
+          accessToken={accessToken ?? ''}
+          onTaskUpdated={handleTaskUpdated}
+          focus={focus}
+          onOpenWorkspace={() => setScreen('focusSession')}
         />
       ) : screen === 'createTask' ? (
         <CreateTaskScreen

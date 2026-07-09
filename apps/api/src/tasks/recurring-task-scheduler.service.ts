@@ -268,7 +268,7 @@ export class RecurringTaskSchedulerService {
         return this.nextWeekday(reference, weekdays, 1);
 
       case 'Monthly':
-        return this.addMonths(reference, 1, rule.monthlyMode);
+        return this.addMonths(reference, 1, rule.monthlyMode, weekdays);
 
       case 'Yearly':
         next.setUTCFullYear(next.getUTCFullYear() + 1);
@@ -281,7 +281,12 @@ export class RecurringTaskSchedulerService {
           return next;
         }
         if (rule.customUnit === 'months') {
-          return this.addMonths(reference, interval, rule.monthlyMode);
+          return this.addMonths(
+            reference,
+            interval,
+            rule.monthlyMode,
+            weekdays,
+          );
         }
         // weeks (default)
         if (weekdays.length) {
@@ -335,10 +340,22 @@ export class RecurringTaskSchedulerService {
     reference: Date,
     months: number,
     monthlyMode: string | null,
+    weekdays: string[] = [],
   ): Date {
     const next = new Date(reference);
     const originalDay = next.getUTCDate();
     next.setUTCMonth(next.getUTCMonth() + months);
+
+    if (monthlyMode === 'firstWeekday') {
+      const weekdayIndex = WEEKDAY_INDEXES[weekdays[0]];
+      if (weekdayIndex !== undefined) {
+        return this.firstWeekdayOfMonth(
+          next.getUTCFullYear(),
+          next.getUTCMonth(),
+          weekdayIndex,
+        );
+      }
+    }
 
     if (monthlyMode === 'lastDay') {
       next.setUTCMonth(next.getUTCMonth() + 1, 0); // day 0 of next month = last day of target month
@@ -351,5 +368,16 @@ export class RecurringTaskSchedulerService {
     }
 
     return next;
+  }
+
+  private firstWeekdayOfMonth(
+    year: number,
+    month: number,
+    weekdayIndex: number,
+  ) {
+    const first = new Date(Date.UTC(year, month, 1));
+    const offset = (weekdayIndex - first.getUTCDay() + 7) % 7;
+    first.setUTCDate(1 + offset);
+    return first;
   }
 }

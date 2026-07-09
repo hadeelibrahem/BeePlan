@@ -656,9 +656,11 @@ export default function EditTaskScreen({
         open={isRecurrenceModalOpen}
         mode={recurrence ? 'edit' : 'create'}
         recurrence={recurrence}
+        accessToken={accessToken}
         onClose={() => setIsRecurrenceModalOpen(false)}
         onSave={setRecurrence}
         onRemove={() => setRecurrence(null)}
+        onApplyTime={setDueTime}
       />
       <AttachmentPreviewModal
         open={Boolean(previewAttachment && accessToken)}

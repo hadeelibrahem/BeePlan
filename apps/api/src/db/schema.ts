@@ -285,6 +285,37 @@ export const taskActivities = pgTable('task_activities', {
   createdAt: createdAt(),
 });
 
+export const focusSessions = pgTable(
+  'focus_sessions',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Nullable so a session survives its task being deleted (kept for stats).
+    taskId: uuid('task_id').references(() => tasks.id, {
+      onDelete: 'set null',
+    }),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+    endedAt: timestamp('ended_at'),
+    plannedMinutes: integer('planned_minutes').notNull().default(25),
+    actualMinutes: integer('actual_minutes'),
+    // active | paused | completed | cancelled
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    // pomodoro | deep | long | break | custom
+    sessionType: varchar('session_type', { length: 20 })
+      .notNull()
+      .default('pomodoro'),
+    notes: text('notes'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_focus_sessions_user_id').on(table.userId),
+    index('idx_focus_sessions_started_at').on(table.startedAt),
+    index('idx_focus_sessions_task_id').on(table.taskId),
+  ],
+);
+
 export const reminders = pgTable('reminders', {
   id: id(),
   userId: uuid('user_id')

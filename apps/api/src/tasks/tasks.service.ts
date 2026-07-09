@@ -1122,6 +1122,7 @@ export class TasksService {
   private createRecurrenceSummary(recurrence: {
     frequency: string;
     weekdays?: string[];
+    monthlyMode?: string | null;
     customInterval?: number;
     customUnit?: string;
     endType?: string;
@@ -1137,12 +1138,30 @@ export class TasksService {
         ? `Every ${recurrence.weekdays.join(', ')}`
         : 'Every week';
     }
-    if (recurrence.frequency === 'Monthly') summary = 'Every month';
+    if (recurrence.frequency === 'Monthly') {
+      if (recurrence.monthlyMode === 'lastDay') {
+        summary = 'Every last day of the month';
+      } else if (
+        recurrence.monthlyMode === 'firstWeekday' &&
+        recurrence.weekdays?.length
+      ) {
+        summary = `Every first ${recurrence.weekdays[0]} of the month`;
+      } else {
+        summary = 'Every month';
+      }
+    }
     if (recurrence.frequency === 'Yearly') summary = 'Every year';
     if (recurrence.frequency === 'Custom') {
       summary = `Every ${recurrence.customInterval ?? 1} ${recurrence.customUnit ?? 'weeks'}`;
       if (recurrence.customUnit === 'weeks' && recurrence.weekdays?.length) {
         summary += ` on ${recurrence.weekdays.join(', ')}`;
+      }
+      if (
+        recurrence.customUnit === 'months' &&
+        recurrence.monthlyMode === 'firstWeekday' &&
+        recurrence.weekdays?.length
+      ) {
+        summary += ` on the first ${recurrence.weekdays[0]}`;
       }
     }
 
@@ -1289,6 +1308,17 @@ export class TasksService {
     ) {
       throw new BadRequestException(
         'Weekly custom recurrence must include at least one weekday.',
+      );
+    }
+
+    if (
+      (dto.frequency === 'Monthly' ||
+        (dto.frequency === 'Custom' && dto.customUnit === 'months')) &&
+      dto.monthlyMode === 'firstWeekday' &&
+      !dto.weekdays?.length
+    ) {
+      throw new BadRequestException(
+        'First-weekday monthly recurrence must include a weekday.',
       );
     }
 
