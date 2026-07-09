@@ -9,6 +9,7 @@ import {
   taskRecurrenceSuggestionDismissals,
   tasks,
 } from '../db/schema';
+import { buildRecurrenceSuggestionCopyPrompt } from './prompts/recurrence-suggestions.prompt';
 import {
   detectRecurrenceSuggestions,
   type RecurrenceSuggestion,
@@ -167,25 +168,25 @@ export class RecurrenceSuggestionsService {
     if (!this.client || suggestions.length === 0) return suggestions;
 
     try {
+      const payload = suggestions.map((suggestion) => ({
+        id: suggestion.id,
+        taskTitle: suggestion.taskTitle,
+        reason: suggestion.reason,
+        preview: suggestion.preview,
+      }));
+      const prompt = buildRecurrenceSuggestionCopyPrompt(payload);
+
       const response = await this.client.chat.completions.create(
         {
           model: this.model,
           messages: [
             {
               role: 'system',
-              content:
-                'You polish BeePlan recurrence suggestion copy. Return JSON only: {"suggestions":[{"id":string,"reason":string,"preview":string}]}. Keep reason friendly, concise, and truthful. Do not change ids or recurrence details.',
+              content: prompt.system,
             },
             {
               role: 'user',
-              content: JSON.stringify(
-                suggestions.map((suggestion) => ({
-                  id: suggestion.id,
-                  taskTitle: suggestion.taskTitle,
-                  reason: suggestion.reason,
-                  preview: suggestion.preview,
-                })),
-              ),
+              content: prompt.user,
             },
           ],
           response_format: { type: 'json_object' },

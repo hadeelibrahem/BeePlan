@@ -41,6 +41,7 @@ import {
   TaskAttachmentsService,
 } from './task-attachments.service';
 import { TasksService } from './tasks.service';
+import { formatContentDisposition } from './utils/content-disposition.util';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
@@ -330,7 +331,7 @@ export class TasksController {
 
     return new StreamableFile(stream, {
       type: mimeType,
-      disposition: contentDisposition(fileName, 'attachment'),
+      disposition: formatContentDisposition(fileName, 'attachment'),
     });
   }
 
@@ -349,7 +350,7 @@ export class TasksController {
 
     return new StreamableFile(stream, {
       type: mimeType,
-      disposition: contentDisposition(fileName, 'inline'),
+      disposition: formatContentDisposition(fileName, 'inline'),
     });
   }
 
@@ -362,22 +363,4 @@ export class TasksController {
   ) {
     await this.taskAttachmentsService.remove(request.user.id, id, attachmentId);
   }
-}
-
-function contentDisposition(
-  fileName: string,
-  dispositionType: 'inline' | 'attachment',
-) {
-  const fallbackFileName =
-    fileName
-      .replace(/[\r\n"]/g, '_')
-      .replace(/[^\x20-\x7E]/g, '_')
-      .trim() || 'attachment';
-  const encodedFileName = encodeURIComponent(fileName).replace(
-    /['()*]/g,
-    (character) =>
-      `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-
-  return `${dispositionType}; filename="${fallbackFileName}"; filename*=UTF-8''${encodedFileName}`;
 }
