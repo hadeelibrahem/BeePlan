@@ -252,6 +252,25 @@ export const taskRecurrenceRules = pgTable('task_recurrence_rules', {
   updatedAt: updatedAt(),
 });
 
+export const taskRecurrenceSuggestionDismissals = pgTable(
+  'task_recurrence_suggestion_dismissals',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    suggestionId: varchar('suggestion_id', { length: 80 }).notNull(),
+    taskTitle: varchar('task_title', { length: 255 }),
+    dismissedAt: timestamp('dismissed_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('task_recurrence_suggestion_dismissals_user_idx').on(table.userId),
+    index('task_recurrence_suggestion_dismissals_suggestion_idx').on(
+      table.suggestionId,
+    ),
+  ],
+);
+
 export const taskActivities = pgTable('task_activities', {
   id: id(),
   taskId: uuid('task_id')
