@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseModule } from '../db/database.module';
 import { RecurringTaskSchedulerService } from './recurring-task-scheduler.service';
+import { SubtaskAttachmentsService } from './subtask-attachments.service';
 import { TaskAttachmentsService } from './task-attachments.service';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
@@ -26,6 +27,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
     TasksService,
     RecurringTaskSchedulerService,
     TaskAttachmentsService,
+    SubtaskAttachmentsService,
     JwtAuthGuard,
   ],
 })

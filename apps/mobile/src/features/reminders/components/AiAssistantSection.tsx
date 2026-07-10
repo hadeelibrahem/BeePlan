@@ -10,13 +10,27 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { OutlineButton, PrimaryButton, SectionCard } from '../../../components/layout';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme } from '../../../theme/useTheme';
+import { parsePersonReminder } from '../../social/api/social.api';
+import type { ParsePersonReminderResult } from '../../social/types/social.types';
 import { createVoiceReminderDraft, parseReminderText } from '../api/reminders.api';
 import type { AiAssistantMode, AiAssistantState, ReminderDraft } from '../types/aiAssistant.types';
 
 type Props = {
   onApplyDraft: (draft: ReminderDraft) => void;
+  onApplyPersonDraft: (result: ParsePersonReminderResult) => void;
   accessToken: string;
 };
+
+// Above this, a parse-person-reminder result is routed to the Person form.
+const PERSON_CONFIDENCE_THRESHOLD = 0.5;
+
+// Module-level so the AI prompt survives navigating to People (to add a missing
+// friend) and back — there's no sessionStorage in React Native.
+let persistedAiText = '';
+
+export function clearAiReminderText() {
+  persistedAiText = '';
+}
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -25,6 +39,9 @@ const TYPE_LABEL_KEYS: Record<ReminderDraft['reminderType'], string> = {
   location: 'reminders.typeLocation',
   context: 'reminders.typeContext',
   checklist: 'reminders.typeChecklist',
+  // The standard AI assistant never emits 'person' (person reminders are
+  // created via the AI-first People flow), but ReminderType includes it.
+  person: 'reminders.typePerson',
 };
 
 function friendlyErrorKey(error: unknown): string {
@@ -64,17 +81,23 @@ function buildSummaryLines(draft: ReminderDraft, t: Translate): { label: string;
   return lines;
 }
 
-export function AiAssistantSection({ onApplyDraft, accessToken }: Props) {
+export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessToken }: Props) {
   const { t } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
 
   const [mode, setMode] = useState<AiAssistantMode>('text');
   const [state, setState] = useState<AiAssistantState>('idle');
-  const [text, setText] = useState('');
+  const [text, setTextState] = useState(persistedAiText);
   const [transcript, setTranscript] = useState('');
   const [draft, setDraft] = useState<ReminderDraft | null>(null);
+  const [personResult, setPersonResult] = useState<ParsePersonReminderResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const setText = (value: string) => {
+    persistedAiText = value;
+    setTextState(value);
+  };
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -84,6 +107,7 @@ export function AiAssistantSection({ onApplyDraft, accessToken }: Props) {
   const reset = () => {
     setState('idle');
     setDraft(null);
+    setPersonResult(null);
     setTranscript('');
     setErrorMessage('');
   };
@@ -94,13 +118,26 @@ export function AiAssistantSection({ onApplyDraft, accessToken }: Props) {
     setState('error');
   };
 
+  // Person detection runs first: when parse-person-reminder confidently
+  // identifies a person reminder we skip the generic parser and route to the
+  // Person form. Otherwise fall back to the standard draft mapping.
   const handleFillWithAi = async () => {
     if (!text.trim() || busy) return;
     setErrorMessage('');
     setState('processing');
     try {
-      const result = await parseReminderText(text.trim(), accessToken);
+      const trimmed = text.trim();
+      const person = await parsePersonReminder(trimmed);
+      if (person.isPersonReminder && person.confidence >= PERSON_CONFIDENCE_THRESHOLD) {
+        setTranscript('');
+        setDraft(null);
+        setPersonResult(person);
+        setState('draft_ready');
+        return;
+      }
+      const result = await parseReminderText(trimmed, accessToken);
       setTranscript('');
+      setPersonResult(null);
       setDraft(result);
       setState('draft_ready');
     } catch (error) {
@@ -134,6 +171,20 @@ export function AiAssistantSection({ onApplyDraft, accessToken }: Props) {
       if (!uri) throw new Error('Recording failed.');
       const result = await createVoiceReminderDraft({ uri, name: 'recording.m4a', type: 'audio/m4a' }, accessToken);
       setTranscript(result.transcript);
+      // Re-check the transcript for person intent so voice and text produce the
+      // same analysis. Falls back to the generic draft on any failure.
+      try {
+        const person = await parsePersonReminder(result.transcript);
+        if (person.isPersonReminder && person.confidence >= PERSON_CONFIDENCE_THRESHOLD) {
+          setDraft(null);
+          setPersonResult(person);
+          setState('draft_ready');
+          return;
+        }
+      } catch {
+        // best-effort — keep the generic draft
+      }
+      setPersonResult(null);
       setDraft(result.draft);
       setState('draft_ready');
     } catch (error) {
@@ -234,6 +285,64 @@ export function AiAssistantSection({ onApplyDraft, accessToken }: Props) {
         <Text className="mt-3 text-xs font-semibold" style={{ color: colors.error }}>
           {errorMessage}
         </Text>
+      )}
+
+      {state === 'draft_ready' && personResult && (
+        <View className="mt-4 gap-3 rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
+          {!!transcript && (
+            <View>
+              <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                {t('reminders.aiAssistant.transcript')}
+              </Text>
+              <Text className="mt-1 text-sm" style={{ color: colors.text }}>{transcript}</Text>
+            </View>
+          )}
+          <View>
+            <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+              {t('reminders.aiAssistant.detectedType')}
+            </Text>
+            <Text className="mt-1 text-sm font-bold" style={{ color: colors.text }}>{t('reminders.typePerson')}</Text>
+          </View>
+          <View>
+            <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+              {t('reminders.title')}
+            </Text>
+            <Text className="mt-1 text-sm" style={{ color: colors.text }}>
+              {personResult.draft.title || personResult.draft.person.message || t('reminders.person.defaultTitle')}
+            </Text>
+          </View>
+          <View>
+            <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+              {t('reminders.person.friend')}
+            </Text>
+            <Text className="mt-1 text-sm" style={{ color: colors.text }}>
+              {personResult.matchedFriendName || personResult.draft.person.personName || t('reminders.person.notMatched')}
+            </Text>
+          </View>
+          <View>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                {t('reminders.person.confidence')}
+              </Text>
+              <Text className="text-xs font-black" style={{ color: colors.accent }}>{Math.round(personResult.confidence * 100)}%</Text>
+            </View>
+            <View className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: colors.border }}>
+              <View className="h-full rounded-full" style={{ width: `${Math.round(personResult.confidence * 100)}%`, backgroundColor: colors.accent }} />
+            </View>
+          </View>
+          <View className="mt-2 flex-row gap-2">
+            <View className="flex-1">
+              <PrimaryButton onPress={() => onApplyPersonDraft(personResult)} fullWidth>
+                {t('reminders.aiAssistant.applyToForm')}
+              </PrimaryButton>
+            </View>
+            <View className="flex-1">
+              <OutlineButton onPress={reset} fullWidth>
+                {t('reminders.aiAssistant.clear')}
+              </OutlineButton>
+            </View>
+          </View>
+        </View>
       )}
 
       {state === 'draft_ready' && draft && (

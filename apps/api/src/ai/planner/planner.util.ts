@@ -32,8 +32,39 @@ export function currentTimeString(): string {
   return timeString(new Date());
 }
 
+/** Local YYYY-MM-DD for the current day. */
+export function todayString(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Convert an HH:mm..HH:mm window into the minute ranges it occupies within a
+ * single day. A window whose end is not after its start is treated as crossing
+ * midnight and yields two ranges (start→end-of-day and start-of-day→end).
+ * Ranges are returned in [start, end) minutes-from-midnight.
+ */
+export function windowToDayRanges(start: string, end: string): { start: number; end: number }[] {
+  if (!isTime(start) || !isTime(end)) return [];
+  const startMin = toMinutes(start);
+  const endMin = toMinutes(end);
+  if (endMin > startMin) return [{ start: startMin, end: endMin }];
+  // Crosses midnight: e.g. 23:00 → 07:00.
+  const ranges: { start: number; end: number }[] = [];
+  if (endMin > 0) ranges.push({ start: 0, end: endMin });
+  if (startMin < 24 * 60) ranges.push({ start: startMin, end: 24 * 60 });
+  return ranges;
+}
+
 export function isSameLocalDate(value: Date | null | undefined, date: string): boolean {
   return Boolean(value && value.toISOString().slice(0, 10) === date);
+}
+
+/** Add whole days to a YYYY-MM-DD string, returning YYYY-MM-DD. */
+export function addDays(date: string, days: number): string {
+  const base = new Date(`${date}T00:00:00.000Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
 }
 
 /** Whole days between `date` (YYYY-MM-DD) and a Date, positive when `value` is later. */

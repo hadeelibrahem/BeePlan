@@ -26,6 +26,9 @@ export class Reminder {
   location?: ReminderLocationDto;
   context?: ReminderContextDto;
   checklistItems?: ReminderChecklistItemDto[];
+  // Present only for `type = 'person'` proximity reminders. Opaque config
+  // stored/managed by the social module — see src/social/person-reminders.service.ts.
+  person?: Record<string, unknown>;
   createdAt!: string;
   updatedAt!: string;
 }

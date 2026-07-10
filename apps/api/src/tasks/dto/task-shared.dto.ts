@@ -27,6 +27,15 @@ function normalizeEndDateInput(value: unknown): string | undefined {
 
 export const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 export const TASK_STATUSES = ['todo', 'in_progress', 'done', 'missed'] as const;
+export const SUBTASK_STATUSES = [
+  'todo',
+  'in_progress',
+  'done',
+  'blocked',
+  'missed',
+] as const;
+export const SUBTASK_PRIORITIES = TASK_PRIORITIES;
+export const DURATION_SOURCES = ['user', 'ai'] as const;
 export const RECURRENCE_FREQUENCIES = [
   'Never',
   'Daily',
@@ -49,6 +58,8 @@ export const WEEKDAYS = [
 
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+export type SubtaskStatus = (typeof SUBTASK_STATUSES)[number];
+export type DurationSource = (typeof DURATION_SOURCES)[number];
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
 export type RecurrenceEndType = (typeof RECURRENCE_END_TYPES)[number];
 export type RecurrenceCustomUnit = (typeof RECURRENCE_CUSTOM_UNITS)[number];
@@ -156,12 +167,71 @@ export class SubtaskDto {
   assignee?: string;
 
   @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsIn(SUBTASK_PRIORITIES)
+  priority?: TaskPriority;
+
+  @IsOptional()
+  @IsIn(SUBTASK_STATUSES)
+  status?: SubtaskStatus;
+
+  @IsOptional()
+  @IsISO8601()
+  startDate?: string;
+
+  @IsOptional()
   @IsISO8601()
   dueDate?: string;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedDurationMinutes?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  actualDurationMinutes?: number;
+
+  @IsOptional()
+  @IsIn(DURATION_SOURCES)
+  estimatedDurationSource?: DurationSource;
+
+  @IsOptional()
+  @IsBoolean()
+  reminderEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  reminderMinutesBeforeDue?: number;
+
+  @IsOptional()
+  @IsISO8601()
+  reminderTime?: string;
+
+  @IsOptional()
   @IsString()
-  status?: string;
+  notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  dependencyIds?: string[];
+}
+
+export class SubtaskDependencyDto {
+  @IsArray()
+  @IsUUID('4', { each: true })
+  dependsOnSubtaskIds!: string[];
 }
 
 export class TaskCoreDto {

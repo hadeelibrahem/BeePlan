@@ -10,6 +10,7 @@ import {
   toggleReminderStatus,
   type Reminder,
 } from './features/reminders'
+import { SocialScreen } from './features/social'
 import { useAuth } from './hooks/useAuth'
 import { LanguageProvider } from './i18n/LanguageContext'
 import {
@@ -70,6 +71,7 @@ type AppScreen =
   | 'calendar'
   | 'notes'
   | 'analytics'
+  | 'social'
 
 function getAuthScreenFromPath(): AuthScreenState {
   if (window.location.pathname === '/reset-password') return 'reset'
@@ -389,6 +391,7 @@ function ThemedApp() {
     onNavigateFocus: () => setScreen('focus'),
     onNavigatePlanner: () => setScreen('planner'),
     onNavigateReminders: () => setScreen('list'),
+    onNavigatePeople: () => setScreen('social'),
     onNavigateCalendar: () => setScreen('calendar'),
     onNavigateNotes: () => setScreen('notes'),
     onNavigateAnalytics: () => setScreen('analytics'),
@@ -448,6 +451,7 @@ function ThemedApp() {
         onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -473,6 +477,7 @@ function ThemedApp() {
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -507,6 +512,7 @@ function ThemedApp() {
         onNavigateTasks={sidebarNav.onNavigateTasks}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -543,6 +549,10 @@ function ThemedApp() {
     return <NotesScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
   }
 
+  if (screen === 'social') {
+    return <SocialScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
+  }
+
   if (screen === 'analytics') {
     return <AnalyticsScreen {...sidebarNav} tasks={tasks} reminders={reminders} onSignOut={() => void handleSignOut()} />
   }
@@ -574,6 +584,7 @@ function ThemedApp() {
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -615,6 +626,7 @@ function ThemedApp() {
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -639,6 +651,7 @@ function ThemedApp() {
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
         onNavigateCalendar={sidebarNav.onNavigateCalendar}
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
@@ -651,6 +664,7 @@ function ThemedApp() {
       <CreateReminderScreen
         accessToken={accessToken ?? ''}
         onCancel={() => setScreen('list')}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
         onCreated={(reminder) => {
           setReminders((current) => [reminder, ...current])
           setSelectedId(reminder.id)
@@ -703,6 +717,7 @@ function ThemedApp() {
       onNavigateTasks={sidebarNav.onNavigateTasks}
       onNavigateFocus={sidebarNav.onNavigateFocus}
       onNavigatePlanner={sidebarNav.onNavigatePlanner}
+      onNavigatePeople={sidebarNav.onNavigatePeople}
       onNavigateCalendar={sidebarNav.onNavigateCalendar}
       onNavigateNotes={sidebarNav.onNavigateNotes}
       onNavigateAnalytics={sidebarNav.onNavigateAnalytics}

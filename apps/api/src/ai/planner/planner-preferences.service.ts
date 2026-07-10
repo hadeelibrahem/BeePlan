@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { DatabaseService } from '../../db/database.service';
 import { plannerPreferences } from '../../db/schema';
 import { isTime, toMinutes } from './planner.util';
-import type { EnergyLevel, PlannerPreferences } from './planner.types';
+import type { EnergyLevel, PlannerPreferences, TimeWindow } from './planner.types';
 
 type PreferencesRow = typeof plannerPreferences.$inferSelect;
 
@@ -11,6 +11,9 @@ const NOTE_MAX_LENGTH = 1000;
 const WORK_BLOCK_RANGE = { min: 15, max: 120 } as const;
 const BREAK_RANGE = { min: 5, max: 30 } as const;
 const BUFFER_RANGE = { min: 0, max: 60 } as const;
+const MAX_DAILY_WORK_RANGE = { min: 60, max: 16 * 60 } as const;
+const EMERGENCY_BUFFER_RANGE = { min: 0, max: 180 } as const;
+const MAX_UNAVAILABLE_WINDOWS = 12;
 
 export const DEFAULT_PLANNER_PREFERENCES: PlannerPreferences = {
   focusStartTime: '08:00',
@@ -23,6 +26,11 @@ export const DEFAULT_PLANNER_PREFERENCES: PlannerPreferences = {
   groupSimilarTasks: true,
   bufferBeforeMeetings: true,
   bufferMinutes: 15,
+  maxDailyWorkMinutes: 480,
+  emergencyBufferMinutes: 30,
+  sleep: { start: '23:00', end: '07:00' },
+  lunch: { start: '13:00', end: '13:45' },
+  unavailableHours: [],
   note: '',
 };
 
@@ -61,6 +69,13 @@ export class PlannerPreferencesService {
       groupSimilarTasks: preferences.groupSimilarTasks,
       bufferBeforeMeetings: preferences.bufferBeforeMeetings,
       bufferMinutes: preferences.bufferMinutes,
+      maxDailyWorkMinutes: preferences.maxDailyWorkMinutes,
+      emergencyBufferMinutes: preferences.emergencyBufferMinutes,
+      sleepStartTime: preferences.sleep.start,
+      sleepEndTime: preferences.sleep.end,
+      lunchStartTime: preferences.lunch.start,
+      lunchEndTime: preferences.lunch.end,
+      unavailableHours: preferences.unavailableHours,
       note: preferences.note,
       updatedAt: new Date(),
     };
@@ -91,8 +106,39 @@ function rowToPreferences(row: PreferencesRow): PlannerPreferences {
     groupSimilarTasks: row.groupSimilarTasks,
     bufferBeforeMeetings: row.bufferBeforeMeetings,
     bufferMinutes: row.bufferMinutes,
+    maxDailyWorkMinutes: row.maxDailyWorkMinutes ?? DEFAULT_PLANNER_PREFERENCES.maxDailyWorkMinutes,
+    emergencyBufferMinutes: row.emergencyBufferMinutes ?? DEFAULT_PLANNER_PREFERENCES.emergencyBufferMinutes,
+    sleep: readWindow(row.sleepStartTime, row.sleepEndTime, DEFAULT_PLANNER_PREFERENCES.sleep),
+    lunch: readWindow(row.lunchStartTime, row.lunchEndTime, DEFAULT_PLANNER_PREFERENCES.lunch),
+    unavailableHours: normalizeWindows(row.unavailableHours),
     note: row.note ?? '',
   };
+}
+
+/** A stored window falls back to the default when either bound is missing/invalid. */
+function readWindow(start: unknown, end: unknown, fallback: TimeWindow): TimeWindow {
+  return isTime(start as string) && isTime(end as string)
+    ? { start: start as string, end: end as string }
+    : { ...fallback };
+}
+
+/**
+ * Coerce arbitrary input into a clean list of HH:mm windows. Silently drops
+ * entries that are malformed or zero-length so bad data never breaks planning.
+ */
+function normalizeWindows(value: unknown): TimeWindow[] {
+  if (!Array.isArray(value)) return [];
+  const windows: TimeWindow[] = [];
+  for (const entry of value) {
+    if (windows.length >= MAX_UNAVAILABLE_WINDOWS) break;
+    const row = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    const start = row.start;
+    const end = row.end;
+    if (!isTime(start as string) || !isTime(end as string)) continue;
+    if (toMinutes(end as string) <= toMinutes(start as string)) continue; // no midnight-crossing here
+    windows.push({ start: start as string, end: end as string });
+  }
+  return windows;
 }
 
 /**
@@ -116,6 +162,17 @@ export function normalizePreferences(input: unknown): PlannerPreferences {
 
   const energyInput = body.energy && typeof body.energy === 'object' ? (body.energy as Record<string, unknown>) : {};
 
+  // Sleep may legitimately cross midnight (e.g. 23:00 → 07:00), so we don't
+  // require start < end. Lunch is a same-day window and must be ordered. These
+  // mirror the nested shape returned by getPreferences (like `energy`).
+  const sleepInput = body.sleep && typeof body.sleep === 'object' ? (body.sleep as Record<string, unknown>) : {};
+  const lunchInput = body.lunch && typeof body.lunch === 'object' ? (body.lunch as Record<string, unknown>) : {};
+  const sleep = readWindow(sleepInput.start, sleepInput.end, defaults.sleep);
+  const lunch = readWindow(lunchInput.start, lunchInput.end, defaults.lunch);
+  if (toMinutes(lunch.start) >= toMinutes(lunch.end)) {
+    throw new BadRequestException('lunch start must be before lunch end.');
+  }
+
   return {
     focusStartTime,
     focusEndTime,
@@ -132,6 +189,11 @@ export function normalizePreferences(input: unknown): PlannerPreferences {
     groupSimilarTasks: readBool(body.groupSimilarTasks, defaults.groupSimilarTasks),
     bufferBeforeMeetings: readBool(body.bufferBeforeMeetings, defaults.bufferBeforeMeetings),
     bufferMinutes: clampInt(body.bufferMinutes, defaults.bufferMinutes, BUFFER_RANGE),
+    maxDailyWorkMinutes: clampInt(body.maxDailyWorkMinutes, defaults.maxDailyWorkMinutes, MAX_DAILY_WORK_RANGE),
+    emergencyBufferMinutes: clampInt(body.emergencyBufferMinutes, defaults.emergencyBufferMinutes, EMERGENCY_BUFFER_RANGE),
+    sleep,
+    lunch,
+    unavailableHours: normalizeWindows(body.unavailableHours),
     note,
   };
 }

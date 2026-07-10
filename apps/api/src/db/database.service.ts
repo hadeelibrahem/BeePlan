@@ -28,6 +28,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureStandaloneNotesTable();
     await this.ensurePlannerPreferencesTable();
     await this.ensureFocusSessionsTable();
+    await this.ensureSocialTables();
   }
 
   async healthCheck() {
@@ -107,6 +108,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists location jsonb,
         add column if not exists context jsonb,
         add column if not exists checklist_items jsonb,
+        add column if not exists person jsonb,
         add column if not exists updated_at timestamp default now() not null,
         add column if not exists is_orphaned boolean default false not null,
         alter column user_id drop not null,
@@ -232,7 +234,56 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists due_date timestamp,
         add column if not exists status varchar(30) not null default 'todo',
         add column if not exists created_at timestamp default now() not null,
-        add column if not exists updated_at timestamp default now() not null
+        add column if not exists updated_at timestamp default now() not null,
+        add column if not exists description text,
+        add column if not exists priority varchar(20) not null default 'medium',
+        add column if not exists start_date timestamp,
+        add column if not exists estimated_duration_minutes integer,
+        add column if not exists actual_duration_minutes integer,
+        add column if not exists estimated_duration_source varchar(10) not null default 'user',
+        add column if not exists reminder_enabled boolean not null default false,
+        add column if not exists reminder_minutes_before_due integer,
+        add column if not exists reminder_time timestamp,
+        add column if not exists reminder_sent_at timestamp,
+        add column if not exists reminder_status varchar(20) not null default 'none',
+        add column if not exists notes text,
+        add column if not exists tags jsonb,
+        add column if not exists completed_at timestamp
+    `);
+
+    await this.getPool().query(`
+      create table if not exists subtask_dependencies (
+        subtask_id uuid not null references subtasks(id) on delete cascade,
+        depends_on_subtask_id uuid not null references subtasks(id) on delete cascade,
+        created_at timestamp default now() not null,
+        primary key (subtask_id, depends_on_subtask_id)
+      )
+    `);
+
+    await this.getPool().query(`
+      create table if not exists subtask_attachments (
+        id uuid primary key default gen_random_uuid() not null,
+        subtask_id uuid not null references subtasks(id) on delete cascade,
+        task_id uuid not null references tasks(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        file_name varchar(255) not null,
+        storage_key text not null,
+        mime_type varchar(120) not null,
+        size_bytes integer not null,
+        created_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_subtask_attachments_subtask_id
+        on subtask_attachments (subtask_id)
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_subtasks_status on subtasks (status)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_subtasks_due_date on subtasks (due_date)
     `);
 
     await this.getPool().query(`
@@ -358,6 +409,20 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         updated_at timestamp default now() not null
       )
     `);
+
+    // Daily-capacity controls added after the table's first release. Existing
+    // rows get sensible defaults so the planner always has a full preferences
+    // object to work with (see migration 0006_planner_capacity_preferences).
+    await this.getPool().query(`
+      alter table planner_preferences
+        add column if not exists max_daily_work_minutes integer not null default 480,
+        add column if not exists emergency_buffer_minutes integer not null default 30,
+        add column if not exists sleep_start_time varchar(5) not null default '23:00',
+        add column if not exists sleep_end_time varchar(5) not null default '07:00',
+        add column if not exists lunch_start_time varchar(5) not null default '13:00',
+        add column if not exists lunch_end_time varchar(5) not null default '13:45',
+        add column if not exists unavailable_hours jsonb not null default '[]'::jsonb
+    `);
   }
 
   private async ensureFocusSessionsTable() {
@@ -388,6 +453,64 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists idx_focus_sessions_task_id
         on focus_sessions (task_id)
+    `);
+  }
+
+  private async ensureSocialTables() {
+    await this.getPool().query(`
+      create table if not exists friendships (
+        id uuid primary key default gen_random_uuid() not null,
+        requester_id uuid not null references users(id) on delete cascade,
+        addressee_id uuid not null references users(id) on delete cascade,
+        status varchar(20) not null default 'pending',
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null,
+        unique (requester_id, addressee_id)
+      )
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_friendships_requester
+        on friendships (requester_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_friendships_addressee
+        on friendships (addressee_id)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists location_sharing_permissions (
+        id uuid primary key default gen_random_uuid() not null,
+        owner_id uuid not null references users(id) on delete cascade,
+        viewer_id uuid not null references users(id) on delete cascade,
+        mode varchar(20) not null default 'proximity',
+        status varchar(20) not null default 'pending',
+        expires_at timestamp,
+        responded_at timestamp,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_location_sharing_owner
+        on location_sharing_permissions (owner_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_location_sharing_viewer
+        on location_sharing_permissions (viewer_id)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists user_location_snapshots (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null unique references users(id) on delete cascade,
+        latitude decimal(10, 7) not null,
+        longitude decimal(10, 7) not null,
+        accuracy_meters integer,
+        captured_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
     `);
   }
 

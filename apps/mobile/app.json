@@ -11,7 +11,7 @@
       "bundleIdentifier": "com.beeplan.app",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "BeePlan uses your location to show nearby place examples for category-based location reminders."
+        "NSLocationWhenInUseUsageDescription": "BeePlan uses your location for category-based location reminders and to alert you when you are near a friend for a person reminder. Your location is shared only as proximity — never exact coordinates."
       }
     },
     "android": {
@@ -37,7 +37,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "BeePlan uses your location to show nearby place examples for category-based location reminders."
+          "locationWhenInUsePermission": "BeePlan uses your location for category-based location reminders and to alert you when you are near a friend for a person reminder. Your location is shared only as proximity — never exact coordinates."
         }
       ],
       [

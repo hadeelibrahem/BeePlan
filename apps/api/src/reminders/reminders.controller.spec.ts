@@ -2,6 +2,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DatabaseService } from '../db/database.service';
+import { LocationSharingService } from '../social/location-sharing.service';
 import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
 
@@ -16,6 +17,10 @@ describe('RemindersController', () => {
         JwtAuthGuard,
         { provide: DatabaseService, useValue: {} },
         { provide: JwtService, useValue: {} },
+        {
+          provide: LocationSharingService,
+          useValue: { getViewerPermissionStatuses: jest.fn().mockResolvedValue(new Map()) },
+        },
       ],
     }).compile();
 

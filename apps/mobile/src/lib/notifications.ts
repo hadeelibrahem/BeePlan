@@ -48,9 +48,13 @@ export class NotificationPermissionDeniedError extends Error {
 export async function requestNotificationPermission(): Promise<boolean> {
   try {
     const current = await getPermissionsAsync();
-    if (current.granted) return true;
+    if (current.granted) {
+      if (__DEV__) console.log('[notifications] permission already granted');
+      return true;
+    }
 
     const requested = await requestPermissionsAsync();
+    if (__DEV__) console.log(`[notifications] permission ${requested.granted ? 'granted' : 'denied'}`);
     return requested.granted;
   } catch (error) {
     console.error('[notifications] failed to request notification permission:', error);
@@ -121,6 +125,49 @@ export async function scheduleReminderNotification({
       channelId: Platform.OS === 'android' ? 'reminders' : undefined,
     },
   });
+}
+
+/**
+ * Fires an IMMEDIATE local notification for a person-nearby proximity match.
+ * Unlike scheduleReminderNotification (which uses a future DATE trigger), this
+ * shows right away (`trigger: null`) because the backend nearby-check already
+ * decided the friend is within range and the cooldown has elapsed. Never sends
+ * any location data — it only carries the reminder's title/message text.
+ * Silently no-ops (returns null) if notification permission is not granted, so
+ * a denied permission can't crash the proximity monitor.
+ */
+export async function showPersonNearbyNotification({
+  title,
+  body,
+}: {
+  title: string;
+  body?: string;
+}): Promise<string | null> {
+  const granted = await requestNotificationPermission();
+  if (!granted) {
+    if (__DEV__) console.log('[notifications] person-nearby notification suppressed — permission denied');
+    return null;
+  }
+
+  if (Platform.OS === 'android') {
+    await setNotificationChannelAsync('reminders', {
+      name: 'Reminders',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+    });
+  }
+
+  const id = await scheduleNotificationAsync({
+    content: {
+      title,
+      body: body || DEFAULT_NOTIFICATION_BODY,
+      sound: 'default',
+    },
+    // null trigger = deliver immediately (foreground person-nearby alert).
+    trigger: null,
+  });
+  if (__DEV__) console.log(`[notifications] person-nearby notification scheduled (id=${id})`);
+  return id;
 }
 
 /**

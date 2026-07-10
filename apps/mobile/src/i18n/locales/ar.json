@@ -1,7 +1,11 @@
 {
   "common": {
     "brand_name": "BeePlan",
-    "languageToggle": "English"
+    "languageToggle": "English",
+    "somethingWentWrong": "حدث خطأ ما. حاول مرة أخرى.",
+    "error": "خطأ",
+    "done": "تم",
+    "cancel": "إلغاء"
   },
   "dashboard": {
     "activeReminders": "{{count}} تذكيرات نشطة",
@@ -105,6 +109,35 @@
     "locationHelp": "حدّد المكان الذي يجب أن يذكّرك فيه {{brand_name}}.",
     "contextHelp": "صف الحالة التي يجب أن تطلق هذا التذكير.",
     "checklistHelp": "أضف الخطوات التي يجب أن يتابعها هذا التذكير.",
+    "personHelp": "احصل على تنبيه عندما يكون صديقك قريبًا. يجب أن يوافق على مشاركة الموقع أولًا — أنت ترى القرب فقط وليس موقعه.",
+    "person": {
+      "friend": "الصديق",
+      "selectFriend": "اختر صديقًا",
+      "noFriends": "ليس لديك أصدقاء بعد. أضف صديقًا لإنشاء تذكير بشخص.",
+      "addFriend": "إضافة صديق",
+      "trigger": "المُشغِّل",
+      "triggerNearby": "عندما يكون قريبًا",
+      "triggerNearbyNamed": "عندما يكون {{name}} قريبًا",
+      "radius": "نطاق المسافة",
+      "meters": "متر",
+      "permission": "الإذن",
+      "willRequest": "سنطلب من {{name}} الموافقة على مشاركة الموقع.",
+      "selectToContinue": "اختر صديقًا للمتابعة.",
+      "proximityNote": "لا تشارك BeePlan الموقع المباشر أبدًا — فقط أحداث القرب.",
+      "confidence": "درجة الثقة",
+      "whichPerson": "أي {{name}} تقصد؟",
+      "noMatch": "لم نتمكن من العثور على {{name}} ضمن أصدقائك.",
+      "thatPerson": "ذلك الشخص",
+      "notMatched": "غير مطابق",
+      "defaultTitle": "التحدث مع صديق",
+      "status": {
+        "pending": "بانتظار الموافقة",
+        "active": "نشط",
+        "expired": "انتهت صلاحية الإذن",
+        "revoked": "تم إلغاء الإذن",
+        "rejected": "تم رفض الطلب"
+      }
+    },
     "locationName": "اسم الموقع",
     "locationPlaceholder": "مكتبة الجامعة",
     "radiusMeters": "نطاق الموقع بالمتر",
@@ -149,6 +182,8 @@
     "typeContextHint": "عند تحقق الشرط",
     "typeChecklist": "تذكير بقائمة مهام",
     "typeChecklistHint": "متابعة خطوات صغيرة",
+    "typePerson": "تذكير بشخص",
+    "typePersonHint": "عند اقتراب صديق",
     "repeat": "التكرار",
     "every": "كل",
     "dateTime": "التاريخ والوقت",
@@ -236,6 +271,66 @@
       "summaryWhere": "المكان",
       "summaryCondition": "الشرط",
       "summaryItems": "العناصر"
+    }
+  },
+  "people": {
+    "title": "الأشخاص",
+    "subtitle": "الأصدقاء وأذونات مشاركة الموقع.",
+    "searchPlaceholder": "ابحث عن الأصدقاء",
+    "panelTitle": "ابقَ على تواصل",
+    "panelCaption": "{{count}} صديق متصل.",
+    "errors": {
+      "load": "تعذّر تحميل الأشخاص."
+    },
+    "friends": {
+      "title": "أصدقاؤك",
+      "remove": "إزالة",
+      "removeConfirm": "إزالة {{name}} من أصدقائك؟",
+      "removed": "تمت إزالة الصديق.",
+      "empty": "لا يوجد أصدقاء بعد. أضف صديقًا للبدء.",
+      "noMatch": "لا يوجد أصدقاء يطابقون بحثك."
+    },
+    "addFriend": {
+      "title": "إضافة صديق",
+      "placeholder": "friend@email.com",
+      "send": "إرسال الطلب",
+      "invalidEmail": "أدخل بريدًا إلكترونيًا صحيحًا.",
+      "sent": "تم إرسال طلب الصداقة."
+    },
+    "requests": {
+      "title": "طلبات الصداقة",
+      "incoming": "الواردة",
+      "outgoing": "الصادرة",
+      "accept": "قبول",
+      "decline": "رفض",
+      "pending": "قيد الانتظار",
+      "cancel": "إلغاء",
+      "cancelled": "تم إلغاء الطلب.",
+      "added": "تمت إضافة الصديق.",
+      "noIncoming": "لا توجد طلبات واردة.",
+      "noOutgoing": "لا توجد طلبات صادرة."
+    },
+    "sharing": {
+      "title": "طلبات مشاركة الموقع",
+      "explainer": "تشارك القرب فقط — وليس موقعك الدقيق أبدًا.",
+      "empty": "لا شيء للمراجعة.",
+      "approve": "سماح",
+      "reject": "رفض",
+      "revoke": "إلغاء",
+      "approved": "تم تفعيل المشاركة",
+      "revoked": "تم إلغاء المشاركة.",
+      "aFriend": "صديق",
+      "approvedGranted": "تتم مشاركة قربك الآن. أبقِ BeePlan مفتوحًا حتى يتم إرسال تحديثات موقعك.",
+      "approvedNoLocation": "تم تفعيل المشاركة، لكن إذن الموقع متوقف — فعّله ليتمكن صديقك من تنبيهك عند الاقتراب."
+    },
+    "permissions": {
+      "title": "أذوناتي",
+      "granted": "أذونات منحتها",
+      "requested": "أذونات طلبتها",
+      "noneGranted": "لم تمنح أي أذونات.",
+      "noneRequested": "لم تُطلب أي أذونات بعد.",
+      "radius": "نطاق المسافة",
+      "lastActivity": "آخر نشاط"
     }
   }
 }

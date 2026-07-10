@@ -17,6 +17,16 @@ import {
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowSheet';
 import { createRecurrenceSummary, getNextOccurrenceLabel, type RecurrenceSettings } from '../components/TaskRecurrenceSheet';
 import { TaskStatusWorkflowSheet, type TaskStatus } from '../components/TaskStatusWorkflowSheet';
+import SubtaskDetailSheet from '../components/SubtaskDetailSheet';
+import {
+  formatDuration,
+  getSubtaskIndicator,
+  syncTaskSubtaskReminders,
+  SUBTASK_INDICATOR_COLOR,
+  SUBTASK_PRIORITY_COLOR,
+  SUBTASK_PRIORITY_LABEL,
+  SUBTASK_STATUS_LABEL,
+} from '../lib/subtasks';
 import {
   AppScreen,
   BottomActionBar,
@@ -53,6 +63,7 @@ export default function TaskDetailsScreen({
   const [progress, setProgress] = useState(task?.progress ?? 0);
   const [isStatusSheetVisible, setIsStatusSheetVisible] = useState(false);
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? []);
+  const [detailSubtaskId, setDetailSubtaskId] = useState<string | null>(null);
   const [dependencyItems, setDependencyItems] = useState<DependencyTask[]>(
     toDependencyTasks(task?.dependencies),
   );
@@ -106,6 +117,19 @@ export default function TaskDetailsScreen({
       cancelled = true;
     };
   }, [task, accessToken]);
+
+  // Reconcile local subtask reminder notifications whenever the subtask set
+  // changes (initial load, toggle, or detail-sheet edit). Fire-and-forget:
+  // scheduling failures must never block the UI.
+  useEffect(() => {
+    if (!subtaskItems.length) return;
+    void syncTaskSubtaskReminders(subtaskItems);
+  }, [subtaskItems]);
+
+  const detailSubtask = useMemo(
+    () => subtaskItems.find((item) => item.id === detailSubtaskId) ?? null,
+    [subtaskItems, detailSubtaskId],
+  );
 
   const handleOpenAttachment = useCallback(
     async (attachment: ApiTaskAttachment) => {
@@ -272,7 +296,12 @@ export default function TaskDetailsScreen({
       <Card title="Subtasks">
         {subtaskItems.length ? (
           subtaskItems.map((item) => (
-            <SubtaskRow key={item.id} item={item} onToggle={handleToggleSubtask} />
+            <SubtaskRow
+              key={item.id}
+              item={item}
+              onToggle={handleToggleSubtask}
+              onOpen={(subtask) => setDetailSubtaskId(subtask.id)}
+            />
           ))
         ) : (
           <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
@@ -375,6 +404,26 @@ export default function TaskDetailsScreen({
         onClose={() => setIsStatusSheetVisible(false)}
         onSave={(next) => void saveStatus(next)}
       />
+      {task ? (
+        <SubtaskDetailSheet
+          visible={detailSubtaskId !== null}
+          task={{ ...task, subtasks: subtaskItems }}
+          subtask={detailSubtask}
+          accessToken={accessToken}
+          onClose={() => setDetailSubtaskId(null)}
+          onEdit={() => {
+            setDetailSubtaskId(null);
+            onEdit?.();
+          }}
+          onTaskUpdated={(updated) => {
+            setSubtaskItems(updated.subtasks);
+            setProgress(updated.progress);
+            setStatus(toTaskStatus(updated));
+            setActivityItems(updated.activities);
+            onTaskUpdated?.(updated);
+          }}
+        />
+      ) : null}
     </AppScreen>
   );
 }
@@ -546,35 +595,89 @@ function ProgressBar({ value, color }: { value: number; color: string }) {
 const SubtaskRow = memo(function SubtaskRow({
   item,
   onToggle,
+  onOpen,
 }: {
   item: ApiSubtask;
   onToggle: (item: ApiSubtask) => void;
+  onOpen: (item: ApiSubtask) => void;
 }) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const done = item.isDone || item.status === 'done';
+  const indicator = getSubtaskIndicator(item);
+  const estimate = formatDuration(item.estimatedDurationMinutes);
+  const due = formatSubtaskDue(item.dueDate);
 
   return (
-    <View className="mb-2 flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: colors.background }}>
+    <Pressable
+      onPress={() => onOpen(item)}
+      className="mb-2 flex-row items-start gap-3 rounded-xl p-3"
+      style={{ backgroundColor: colors.background }}
+    >
       <Pressable
         onPress={() => onToggle(item)}
         accessibilityRole="button"
-        accessibilityLabel={item.isDone ? 'Mark subtask as not done' : 'Mark subtask as done'}
-        className="h-5 w-5 items-center justify-center rounded-md border"
-        style={{ borderColor: item.isDone ? colors.success : colors.border, backgroundColor: item.isDone ? colors.success : 'transparent' }}
+        accessibilityLabel={done ? 'Mark subtask as not done' : 'Mark subtask as done'}
+        className="mt-0.5 h-5 w-5 items-center justify-center rounded-md border"
+        style={{ borderColor: done ? colors.success : colors.border, backgroundColor: done ? colors.success : 'transparent' }}
       >
-        {item.isDone ? <Text className="text-[10px] font-black" style={{ color: colors.accentText }}>✓</Text> : null}
+        {done ? <Text className="text-[10px] font-black" style={{ color: colors.accentText }}>✓</Text> : null}
       </Pressable>
 
-      <Text className={`flex-1 text-sm font-bold ${item.isDone ? 'line-through' : ''}`} style={{ color: item.isDone ? colors.secondaryText : colors.text }}>
-        {item.title}
-      </Text>
+      <View className="flex-1">
+        <View className="flex-row items-center gap-2">
+          <View className="h-2 w-2 rounded-full" style={{ backgroundColor: SUBTASK_INDICATOR_COLOR[indicator] }} />
+          <Text
+            className={`flex-1 text-sm font-bold ${done ? 'line-through' : ''}`}
+            style={{ color: done ? colors.secondaryText : colors.text }}
+          >
+            {item.title}
+          </Text>
+        </View>
 
-      <Text className="text-xs font-bold" style={{ color: item.isDone ? colors.success : colors.secondaryText }}>
-        {item.isDone ? 'Done' : 'Open'}
-      </Text>
-    </View>
+        {(due || estimate) && !done ? (
+          <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
+            {due}
+            {due && estimate ? ' • ' : ''}
+            {estimate ? `Est. ${estimate}` : ''}
+          </Text>
+        ) : null}
+
+        <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
+          <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${SUBTASK_PRIORITY_COLOR[item.priority]}22` }}>
+            <Text className="text-[10px] font-bold" style={{ color: SUBTASK_PRIORITY_COLOR[item.priority] }}>
+              {SUBTASK_PRIORITY_LABEL[item.priority]}
+            </Text>
+          </View>
+          <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.secondaryText}18` }}>
+            <Text className="text-[10px] font-bold" style={{ color: colors.secondaryText }}>
+              {SUBTASK_STATUS_LABEL[item.status]}
+            </Text>
+          </View>
+          {item.estimatedDurationSource === 'ai' && item.estimatedDurationMinutes ? (
+            <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
+              <Text className="text-[10px] font-bold" style={{ color: colors.accent }}>AI Estimate</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
   );
 });
+
+function formatSubtaskDue(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return `Today • ${time}`;
+  return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • ${time}`;
+}
 
 const DependencyRow = memo(function DependencyRow({ item }: { item: DependencyTask }) {
   const { theme } = useTheme();

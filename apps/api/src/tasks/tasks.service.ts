@@ -19,6 +19,7 @@ import {
 } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import {
+  subtaskDependencies,
   subtasks,
   taskActivities,
   taskDependencies,
@@ -30,8 +31,10 @@ import type { TaskQueryDto } from './dto/task-query.dto';
 import {
   type DependencyTaskIdsDto,
   type ReplaceDependencyDto,
+  type SubtaskDependencyDto,
   type SubtaskDto,
   type SubtaskReorderDto,
+  type SubtaskStatus,
   type TaskLabelDto,
   type TaskProgressDto,
   type TaskRecurrenceDto,
@@ -72,6 +75,8 @@ type TaskRelatedRows = {
   dependencies: DependencyEntity[];
   recurrence: RecurrenceRow | undefined;
   activities: ActivityRow[];
+  // subtaskId -> ids of the sibling subtasks it depends on.
+  subtaskDepsBySubtaskId?: Map<string, string[]>;
 };
 
 @Injectable()
@@ -222,6 +227,10 @@ export class TasksService {
       dependencyTaskRows.map((row) => [row.id, row]),
     );
 
+    const subtaskDepsBySubtaskId = await this.getSubtaskDepsMap(
+      allSubtasks.map((row) => row.id),
+    );
+
     const subtasksByTaskId = this.groupByTaskId(allSubtasks);
     const dependencyLinksByTaskId = this.groupByTaskId(dependencyLinks);
     const recurrenceByTaskId = new Map(
@@ -239,6 +248,7 @@ export class TasksService {
             .map((depTask) => this.toDependencyEntity(depTask)),
           recurrence: recurrenceByTaskId.get(row.id),
           activities: activitiesByTaskId.get(row.id) ?? [],
+          subtaskDepsBySubtaskId,
         }),
       ),
     );
@@ -607,11 +617,21 @@ export class TasksService {
       .from(subtasks)
       .where(eq(subtasks.taskId, taskId));
 
-    await this.db
+    const [created] = await this.db
       .insert(subtasks)
       .values(
         this.toSubtaskInsert(taskId, dto, dto.orderIndex ?? existing.length),
+      )
+      .returning();
+
+    if (dto.dependencyIds?.length) {
+      await this.replaceSubtaskDependencies(
+        taskId,
+        created.id,
+        dto.dependencyIds,
       );
+    }
+
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(userId, taskId, 'subtask_added', 'Subtask added');
 
@@ -625,36 +645,213 @@ export class TasksService {
     dto: Partial<SubtaskDto>,
   ) {
     await this.getTaskForUser(userId, taskId);
-    await this.getSubtaskForTask(taskId, subtaskId);
+    const current = await this.getSubtaskForTask(taskId, subtaskId);
+
+    // Resolve the target status. `isDone` remains the legacy checkbox source
+    // of truth, so keep the two in sync in both directions.
+    let nextStatus: SubtaskStatus =
+      (dto.status as SubtaskStatus | undefined) ??
+      (dto.isDone === true
+        ? 'done'
+        : dto.isDone === false
+          ? 'todo'
+          : (current.status as SubtaskStatus));
+
+    // Smart behavior: a subtask cannot be started or completed while any of
+    // its dependencies are still open. It is forced/kept in "blocked" instead.
+    if (nextStatus === 'in_progress' || nextStatus === 'done') {
+      const blocked = await this.hasOpenDependencies(subtaskId);
+      if (blocked) {
+        throw new BadRequestException(
+          'Complete this subtask’s dependencies before starting it.',
+        );
+      }
+    }
+
+    const nextIsDone = nextStatus === 'done';
+    const wasDone = current.isDone;
+
+    // Reminder lifecycle. Backend owns the status field; the mobile client
+    // schedules/cancels the actual local notification off these values.
+    let reminderStatus = current.reminderStatus;
+    let reminderSentAt: Date | null | undefined = undefined;
+    const reminderEnabled = dto.reminderEnabled ?? current.reminderEnabled;
+    const dueChanged =
+      dto.dueDate !== undefined &&
+      new Date(dto.dueDate).getTime() !== (current.dueDate?.getTime() ?? NaN);
+    const reminderConfigChanged =
+      dto.reminderMinutesBeforeDue !== undefined ||
+      dto.reminderTime !== undefined ||
+      dto.reminderEnabled !== undefined ||
+      dueChanged;
+
+    if (nextIsDone && !wasDone && current.reminderStatus === 'scheduled') {
+      // Completed before the reminder fired — cancel it.
+      reminderStatus = 'cancelled';
+    } else if (reminderEnabled && reminderConfigChanged && !nextIsDone) {
+      // (Re)schedule whenever the due date or reminder config changes.
+      reminderStatus = 'scheduled';
+      reminderSentAt = null;
+    } else if (!reminderEnabled) {
+      reminderStatus = 'none';
+    }
 
     await this.db
       .update(subtasks)
       .set({
         title: dto.title?.trim(),
-        isDone: dto.isDone,
+        isDone: dto.isDone ?? nextIsDone,
         orderIndex: dto.orderIndex,
         assignee: dto.assignee,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-        status:
-          dto.status ??
-          (dto.isDone === true
-            ? 'done'
-            : dto.isDone === false
-              ? 'todo'
-              : undefined),
+        description: dto.description,
+        priority: dto.priority,
+        status: nextStatus,
+        startDate:
+          dto.startDate !== undefined
+            ? dto.startDate
+              ? new Date(dto.startDate)
+              : null
+            : undefined,
+        dueDate:
+          dto.dueDate !== undefined
+            ? dto.dueDate
+              ? new Date(dto.dueDate)
+              : null
+            : undefined,
+        estimatedDurationMinutes: dto.estimatedDurationMinutes,
+        actualDurationMinutes: dto.actualDurationMinutes,
+        estimatedDurationSource: dto.estimatedDurationSource,
+        reminderEnabled: dto.reminderEnabled,
+        reminderMinutesBeforeDue: dto.reminderMinutesBeforeDue,
+        reminderTime:
+          dto.reminderTime !== undefined
+            ? dto.reminderTime
+              ? new Date(dto.reminderTime)
+              : null
+            : undefined,
+        reminderStatus,
+        reminderSentAt,
+        notes: dto.notes,
+        tags: dto.tags,
+        // Stamp/clear completion time on the done<->not-done transition only.
+        completedAt: nextIsDone
+          ? wasDone
+            ? undefined
+            : new Date()
+          : null,
         updatedAt: new Date(),
       })
       .where(and(eq(subtasks.id, subtaskId), eq(subtasks.taskId, taskId)));
+
+    if (dto.dependencyIds !== undefined) {
+      await this.replaceSubtaskDependencies(
+        taskId,
+        subtaskId,
+        dto.dependencyIds,
+      );
+    }
 
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(
       userId,
       taskId,
-      dto.isDone === true ? 'subtask_completed' : 'subtask_updated',
-      dto.isDone === true ? 'Subtask completed' : 'Subtask updated',
+      nextIsDone && !wasDone ? 'subtask_completed' : 'subtask_updated',
+      nextIsDone && !wasDone ? 'Subtask completed' : 'Subtask updated',
     );
 
     return this.findOne(userId, taskId);
+  }
+
+  async setSubtaskDependencies(
+    userId: string,
+    taskId: string,
+    subtaskId: string,
+    dto: SubtaskDependencyDto,
+  ) {
+    await this.getTaskForUser(userId, taskId);
+    await this.getSubtaskForTask(taskId, subtaskId);
+    await this.replaceSubtaskDependencies(
+      taskId,
+      subtaskId,
+      dto.dependsOnSubtaskIds,
+    );
+    await this.addActivity(
+      userId,
+      taskId,
+      'subtask_updated',
+      'Subtask dependencies updated',
+    );
+
+    return this.findOne(userId, taskId);
+  }
+
+  /**
+   * Replaces the dependency set for one subtask. Validates that every
+   * dependency is a sibling subtask of the same parent task and rejects
+   * self-references and direct cycles.
+   */
+  private async replaceSubtaskDependencies(
+    taskId: string,
+    subtaskId: string,
+    dependsOnIds: string[],
+  ) {
+    const unique = [...new Set(dependsOnIds)].filter((id) => id !== subtaskId);
+
+    if (unique.length) {
+      const siblings = await this.db
+        .select({ id: subtasks.id })
+        .from(subtasks)
+        .where(and(eq(subtasks.taskId, taskId), inArray(subtasks.id, unique)));
+
+      if (siblings.length !== unique.length) {
+        throw new BadRequestException(
+          'Dependencies must be subtasks of the same task.',
+        );
+      }
+
+      // Reject a direct cycle: A depends on B while B already depends on A.
+      const reverse = await this.db
+        .select()
+        .from(subtaskDependencies)
+        .where(
+          and(
+            eq(subtaskDependencies.dependsOnSubtaskId, subtaskId),
+            inArray(subtaskDependencies.subtaskId, unique),
+          ),
+        );
+      if (reverse.length) {
+        throw new BadRequestException(
+          'Circular subtask dependencies are not allowed.',
+        );
+      }
+    }
+
+    await this.db
+      .delete(subtaskDependencies)
+      .where(eq(subtaskDependencies.subtaskId, subtaskId));
+
+    if (unique.length) {
+      await this.db.insert(subtaskDependencies).values(
+        unique.map((dependsOnSubtaskId) => ({
+          subtaskId,
+          dependsOnSubtaskId,
+        })),
+      );
+    }
+  }
+
+  /** True when the subtask has at least one dependency that isn't done yet. */
+  private async hasOpenDependencies(subtaskId: string): Promise<boolean> {
+    const deps = await this.db
+      .select({ status: subtasks.status })
+      .from(subtaskDependencies)
+      .innerJoin(
+        subtasks,
+        eq(subtasks.id, subtaskDependencies.dependsOnSubtaskId),
+      )
+      .where(eq(subtaskDependencies.subtaskId, subtaskId));
+
+    return deps.some((dep) => dep.status !== 'done');
   }
 
   async reorderSubtasks(
@@ -908,16 +1105,27 @@ export class TasksService {
           .orderBy(desc(taskActivities.createdAt)),
       ]);
 
+    const subtaskDepsBySubtaskId = await this.getSubtaskDepsMap(
+      subtaskRows.map((row) => row.id),
+    );
+
     return this.assembleEntity(task, {
       subtaskRows,
       dependencies,
       recurrence,
       activities,
+      subtaskDepsBySubtaskId,
     });
   }
 
   private async assembleEntity(task: TaskRow, related: TaskRelatedRows) {
-    const { subtaskRows, dependencies, recurrence, activities } = related;
+    const {
+      subtaskRows,
+      dependencies,
+      recurrence,
+      activities,
+      subtaskDepsBySubtaskId,
+    } = related;
 
     const dependenciesComplete =
       dependencies.length > 0 &&
@@ -969,7 +1177,9 @@ export class TasksService {
         dependencies.length > 0 &&
         dependencies.some((dependency) => dependency.status !== 'done'),
       dependenciesComplete,
-      subtasks: subtaskRows.map((row) => this.toSubtaskEntity(row)),
+      subtasks: subtaskRows.map((row) =>
+        this.toSubtaskEntity(row, subtaskDepsBySubtaskId?.get(row.id) ?? []),
+      ),
       dependencies,
       recurrence: recurrence ? this.toRecurrenceEntity(recurrence) : null,
       activities: activities.map((row) => this.toActivityEntity(row)),
@@ -978,7 +1188,7 @@ export class TasksService {
     };
   }
 
-  private toSubtaskEntity(row: SubtaskRow) {
+  private toSubtaskEntity(row: SubtaskRow, dependencyIds: string[] = []) {
     return {
       id: row.id,
       taskId: row.taskId,
@@ -986,11 +1196,51 @@ export class TasksService {
       isDone: row.isDone,
       orderIndex: row.orderIndex,
       assignee: row.assignee ?? '',
-      dueDate: row.dueDate?.toISOString(),
+      description: row.description ?? '',
+      priority: row.priority,
       status: row.status,
+      startDate: row.startDate?.toISOString(),
+      dueDate: row.dueDate?.toISOString(),
+      estimatedDurationMinutes: row.estimatedDurationMinutes ?? undefined,
+      actualDurationMinutes: row.actualDurationMinutes ?? undefined,
+      estimatedDurationSource: row.estimatedDurationSource,
+      reminderEnabled: row.reminderEnabled,
+      reminderMinutesBeforeDue: row.reminderMinutesBeforeDue ?? undefined,
+      reminderTime: row.reminderTime?.toISOString(),
+      reminderSentAt: row.reminderSentAt?.toISOString(),
+      reminderStatus: row.reminderStatus,
+      notes: row.notes ?? '',
+      tags: (row.tags as string[] | null) ?? [],
+      dependencyIds,
+      completedAt: row.completedAt?.toISOString(),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Batch-loads subtask dependency links for a set of subtask ids and returns
+   * a map of subtaskId -> ids of the sibling subtasks it depends on. Avoids an
+   * N+1 when assembling task lists.
+   */
+  private async getSubtaskDepsMap(
+    subtaskIds: string[],
+  ): Promise<Map<string, string[]>> {
+    const map = new Map<string, string[]>();
+    if (!subtaskIds.length) return map;
+
+    const links = await this.db
+      .select()
+      .from(subtaskDependencies)
+      .where(inArray(subtaskDependencies.subtaskId, subtaskIds));
+
+    for (const link of links) {
+      const existing = map.get(link.subtaskId);
+      if (existing) existing.push(link.dependsOnSubtaskId);
+      else map.set(link.subtaskId, [link.dependsOnSubtaskId]);
+    }
+
+    return map;
   }
 
   private toRecurrenceEntity(row: RecurrenceRow) {
@@ -1257,14 +1507,30 @@ export class TasksService {
   }
 
   private toSubtaskInsert(taskId: string, dto: SubtaskDto, index: number) {
+    const status: SubtaskStatus =
+      dto.status ?? (dto.isDone ? 'done' : 'todo');
+    const isDone = dto.isDone ?? status === 'done';
     return {
       taskId,
       title: dto.title.trim(),
-      isDone: dto.isDone ?? false,
+      isDone,
       orderIndex: dto.orderIndex ?? index,
       assignee: dto.assignee?.trim() || null,
+      description: dto.description?.trim() || null,
+      priority: dto.priority ?? 'medium',
+      status,
+      startDate: dto.startDate ? new Date(dto.startDate) : null,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-      status: dto.status ?? (dto.isDone ? 'done' : 'todo'),
+      estimatedDurationMinutes: dto.estimatedDurationMinutes ?? null,
+      actualDurationMinutes: dto.actualDurationMinutes ?? null,
+      estimatedDurationSource: dto.estimatedDurationSource ?? 'user',
+      reminderEnabled: dto.reminderEnabled ?? false,
+      reminderMinutesBeforeDue: dto.reminderMinutesBeforeDue ?? null,
+      reminderTime: dto.reminderTime ? new Date(dto.reminderTime) : null,
+      reminderStatus: dto.reminderEnabled ? 'scheduled' : 'none',
+      notes: dto.notes?.trim() || null,
+      tags: dto.tags?.length ? dto.tags : null,
+      completedAt: isDone ? new Date() : null,
     };
   }
 
@@ -1356,13 +1622,18 @@ export class TasksService {
 
     if (subtaskRows.length) {
       const completed = subtaskRows.filter((row) => row.isDone).length;
+      const allComplete = completed === subtaskRows.length;
       const progress = Math.round((completed / subtaskRows.length) * 100);
-      const correctedStatus: TaskStatus | undefined =
-        task.status === 'done' && completed < subtaskRows.length
-          ? completed > 0
-            ? 'in_progress'
-            : 'todo'
-          : undefined;
+
+      // Smart behavior: promote the parent to "done" once every subtask is
+      // complete, and demote a stale "done" back to in_progress/todo when a
+      // subtask is reopened.
+      let correctedStatus: TaskStatus | undefined;
+      if (allComplete && task.status !== 'done') {
+        correctedStatus = 'done';
+      } else if (task.status === 'done' && !allComplete) {
+        correctedStatus = completed > 0 ? 'in_progress' : 'todo';
+      }
 
       await this.setTaskProgress(taskId, progress, correctedStatus);
       return;

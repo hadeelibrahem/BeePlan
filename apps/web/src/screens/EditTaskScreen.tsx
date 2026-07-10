@@ -3,7 +3,7 @@ import DeleteSubtaskModal from '../components/DeleteSubtaskModal'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import TaskAttachmentPicker from '../components/TaskAttachmentPicker'
 import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
-import SubtaskFormModal, { type SubtaskFormValues } from '../components/SubtaskFormModal'
+import SubtaskFormModal from '../components/SubtaskFormModal'
 import {
   TaskRecurrenceModal,
   createRecurrenceSummary,
@@ -32,6 +32,7 @@ import {
   type ApiSubtask,
   type ApiTask,
   type ApiTaskAttachment,
+  type SubtaskPayload,
   type TaskPayload,
 } from '../lib/tasksApi'
 
@@ -144,11 +145,11 @@ export default function EditTaskScreen({
     onTaskUpdated?.(updatedTask)
   }
 
-  async function handleAddSubtask(values: SubtaskFormValues) {
-    if (!accessToken) return
+  async function handleAddSubtask(payload: SubtaskPayload) {
+    if (!accessToken || !payload.title?.trim()) return
 
     try {
-      const updatedTask = await addSubtask(accessToken, task.id, { title: values.title.trim() })
+      const updatedTask = await addSubtask(accessToken, task.id, { ...payload, title: payload.title.trim() })
       applyUpdatedTask(updatedTask)
       setAddingSubtask(false)
     } catch (subtaskError) {
@@ -156,11 +157,11 @@ export default function EditTaskScreen({
     }
   }
 
-  async function handleEditSubtask(values: SubtaskFormValues) {
+  async function handleEditSubtask(payload: SubtaskPayload) {
     if (!accessToken || editingSubtaskId === null) return
 
     try {
-      const updatedTask = await updateSubtask(accessToken, task.id, editingSubtaskId, { title: values.title.trim() })
+      const updatedTask = await updateSubtask(accessToken, task.id, editingSubtaskId, payload)
       applyUpdatedTask(updatedTask)
       setEditingSubtaskId(null)
     } catch (subtaskError) {
@@ -608,23 +609,25 @@ export default function EditTaskScreen({
       {addingSubtask ? (
         <SubtaskFormModal
           mode="add"
+          siblings={subtasks}
           onCancel={() => setAddingSubtask(false)}
           onBack={() => setAddingSubtask(false)}
-          onSubmit={(values) => void handleAddSubtask(values)}
+          onSubmit={(payload) => void handleAddSubtask(payload)}
         />
       ) : null}
 
       {editingSubtaskId !== null ? (
         <SubtaskFormModal
           mode="edit"
-          initialValues={{ title: subtasks.find((item) => item.id === editingSubtaskId)?.title }}
+          siblings={subtasks.filter((item) => item.id !== editingSubtaskId)}
+          initialSubtask={subtasks.find((item) => item.id === editingSubtaskId)}
           onCancel={() => setEditingSubtaskId(null)}
           onBack={() => setEditingSubtaskId(null)}
           onDelete={() => {
             setDeletingSubtaskId(editingSubtaskId)
             setEditingSubtaskId(null)
           }}
-          onSubmit={(values) => void handleEditSubtask(values)}
+          onSubmit={(payload) => void handleEditSubtask(payload)}
         />
       ) : null}
 

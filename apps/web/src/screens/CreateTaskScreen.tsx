@@ -10,7 +10,7 @@ import {
   TaskDependenciesWorkflowModal,
   type DependencyTask,
 } from '../components/TaskDependenciesWorkflowModal'
-import SubtaskFormModal, { type SubtaskFormValues } from '../components/SubtaskFormModal'
+import SubtaskFormModal from '../components/SubtaskFormModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import {
@@ -21,6 +21,7 @@ import {
   toUiPriority,
   toUiStatus,
   type ApiTask,
+  type SubtaskPayload,
   type TaskPayload,
 } from '../lib/tasksApi'
 
@@ -54,7 +55,7 @@ export default function CreateTaskScreen({
   const [dueDate, setDueDate] = useState('')
   const [dueTime, setDueTime] = useState('')
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30)
-  const [subtasks, setSubtasks] = useState<{ title: string; isDone?: boolean }[]>([])
+  const [subtasks, setSubtasks] = useState<(SubtaskPayload & { title: string })[]>([])
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false)
   const [dependencyModalOpen, setDependencyModalOpen] = useState(false)
   const [dependencies, setDependencies] = useState<DependencyTask[]>([])
@@ -387,8 +388,9 @@ export default function CreateTaskScreen({
           mode="add"
           onBack={() => setIsSubtaskModalOpen(false)}
           onCancel={() => setIsSubtaskModalOpen(false)}
-          onSubmit={(values: SubtaskFormValues) => {
-            setSubtasks((current) => [...current, { title: values.title.trim(), isDone: false }])
+          onSubmit={(payload) => {
+            if (!payload.title?.trim()) return
+            setSubtasks((current) => [...current, { ...payload, title: payload.title!.trim() }])
             setIsSubtaskModalOpen(false)
           }}
         />

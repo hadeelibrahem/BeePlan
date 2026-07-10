@@ -2,7 +2,18 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import { DangerButton, OutlineButton, PrimaryButton } from '../components/layout/Buttons'
 import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
+import SubtaskDetailModal from '../components/SubtaskDetailModal'
+import SubtaskFormModal from '../components/SubtaskFormModal'
 import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
+import {
+  formatDuration,
+  getSubtaskIndicator,
+  SUBTASK_INDICATOR_META,
+  SUBTASK_PRIORITY_CLASS,
+  SUBTASK_PRIORITY_LABEL,
+  SUBTASK_STATUS_CLASS,
+  SUBTASK_STATUS_LABEL,
+} from '../lib/subtaskDisplay'
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -64,6 +75,8 @@ export default function TaskDetailsScreen({
   )
   const [recurrence, setRecurrence] = useState(task ? recurrenceToUi(task.recurrence) : null)
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? [])
+  const [detailSubtaskId, setDetailSubtaskId] = useState<string | null>(null)
+  const [editSubtaskId, setEditSubtaskId] = useState<string | null>(null)
   const [activityItems, setActivityItems] = useState<ApiTaskActivity[]>(task?.activities ?? [])
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([])
   const [previewAttachment, setPreviewAttachment] = useState<ApiTaskAttachment | null>(null)
@@ -77,6 +90,23 @@ export default function TaskDetailsScreen({
   const completedSubtasksCount = useMemo(
     () => subtaskItems.filter((subtask) => subtask.isDone).length,
     [subtaskItems],
+  )
+  const detailSubtask = useMemo(
+    () => subtaskItems.find((item) => item.id === detailSubtaskId) ?? null,
+    [subtaskItems, detailSubtaskId],
+  )
+  const editSubtask = useMemo(
+    () => subtaskItems.find((item) => item.id === editSubtaskId) ?? null,
+    [subtaskItems, editSubtaskId],
+  )
+  const syncTaskFromModal = useCallback(
+    (updated: ApiTask) => {
+      setSubtaskItems(updated.subtasks)
+      setProgress(updated.progress)
+      setStatus(toTaskStatus(updated))
+      onTaskUpdated?.(updated)
+    },
+    [onTaskUpdated],
   )
   const dependenciesComplete = useMemo(
     () => dependencies.length > 0 && dependencies.every((item) => item.status === 'Done'),
@@ -136,8 +166,10 @@ export default function TaskDetailsScreen({
       const nextIsDone = !subtask.isDone
       const previousSubtaskItems = subtaskItems
       const previousProgress = progress
-      const optimisticSubtasks = subtaskItems.map((item) =>
-        item.id === subtask.id ? { ...item, isDone: nextIsDone, status: nextIsDone ? 'done' : 'todo' } : item,
+      const optimisticSubtasks: ApiSubtask[] = subtaskItems.map((item) =>
+        item.id === subtask.id
+          ? { ...item, isDone: nextIsDone, status: nextIsDone ? 'done' : 'todo' }
+          : item,
       )
       const optimisticProgress = optimisticSubtasks.length
         ? Math.round((optimisticSubtasks.filter((item) => item.isDone).length / optimisticSubtasks.length) * 100)
@@ -323,9 +355,14 @@ export default function TaskDetailsScreen({
             <div className="grid gap-4 lg:grid-cols-2">
               <SectionBlock title="Subtasks" subtitle={`${completedSubtasksCount} of ${subtaskItems.length} completed`}>
                 {subtaskItems.length ? (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {subtaskItems.map((item) => (
-                      <Subtask key={item.id} subtask={item} onToggle={handleToggleSubtask} />
+                      <Subtask
+                        key={item.id}
+                        subtask={item}
+                        onToggle={handleToggleSubtask}
+                        onOpen={() => setDetailSubtaskId(item.id)}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -457,6 +494,37 @@ export default function TaskDetailsScreen({
         onClose={() => setPreviewAttachment(null)}
         onError={setError}
       />
+      {task && detailSubtask ? (
+        <SubtaskDetailModal
+          task={{ ...task, subtasks: subtaskItems }}
+          subtask={detailSubtask}
+          accessToken={accessToken}
+          onClose={() => setDetailSubtaskId(null)}
+          onEdit={() => {
+            setEditSubtaskId(detailSubtask.id)
+            setDetailSubtaskId(null)
+          }}
+          onTaskUpdated={syncTaskFromModal}
+        />
+      ) : null}
+      {task && editSubtask ? (
+        <SubtaskFormModal
+          mode="edit"
+          siblings={subtaskItems.filter((item) => item.id !== editSubtask.id)}
+          initialSubtask={editSubtask}
+          onCancel={() => setEditSubtaskId(null)}
+          onBack={() => setEditSubtaskId(null)}
+          onSubmit={async (payload) => {
+            try {
+              const updated = await updateSubtask(accessToken, task.id, editSubtask.id, payload)
+              syncTaskFromModal(updated)
+              setEditSubtaskId(null)
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Unable to update subtask.')
+            }
+          }}
+        />
+      ) : null}
     </>
   )
 }
@@ -589,33 +657,88 @@ function AutomationRow({ label, value }: { label: string; value: string }) {
 const Subtask = memo(function Subtask({
   subtask,
   onToggle,
+  onOpen,
 }: {
   subtask: ApiSubtask
   onToggle: (subtask: ApiSubtask) => void
+  onOpen: () => void
 }) {
-  const done = subtask.isDone
+  const done = subtask.isDone || subtask.status === 'done'
+  const indicator = getSubtaskIndicator(subtask)
+  const meta = SUBTASK_INDICATOR_META[indicator]
+  const estimate = formatDuration(subtask.estimatedDurationMinutes)
+  const due = formatSubtaskDue(subtask.dueDate)
+
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-[var(--bp-bg)] px-3 py-2">
+    <div className="group flex items-start gap-3 rounded-xl bg-[var(--bp-bg)] px-3 py-2.5">
       <button
         type="button"
         onClick={() => onToggle(subtask)}
-        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[8px] font-black ${
+        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[8px] font-black ${
           done ? 'border-green-400 bg-green-400 text-black' : 'border-slate-500'
         }`}
         aria-label={done ? 'Mark subtask incomplete' : 'Mark subtask complete'}
       >
         {done ? '✓' : ''}
       </button>
-      <p className={`min-w-0 flex-1 truncate text-sm ${done ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}>
-        {subtask.title}
-      </p>
-      <p className="shrink-0 text-xs text-slate-500">{formatDate(subtask.dueDate) || 'No due date'}</p>
-      <span className={`shrink-0 text-xs font-bold ${done ? 'text-green-400' : 'text-slate-500'}`}>
-        {done ? 'Done' : 'Open'}
-      </span>
+
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-start">
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${meta.dot}`} aria-hidden title={meta.label} />
+          <span
+            className={`truncate text-sm font-semibold ${done ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}
+          >
+            {subtask.title}
+          </span>
+        </div>
+
+        {(due || estimate) && !done ? (
+          <p className="mt-1 text-xs text-slate-400">
+            {due}
+            {due && estimate ? ' • ' : ''}
+            {estimate ? `Est. ${estimate}` : ''}
+          </p>
+        ) : null}
+
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${SUBTASK_PRIORITY_CLASS[subtask.priority]}`}>
+            {SUBTASK_PRIORITY_LABEL[subtask.priority]}
+          </span>
+          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${SUBTASK_STATUS_CLASS[subtask.status]}`}>
+            {SUBTASK_STATUS_LABEL[subtask.status]}
+          </span>
+          {subtask.estimatedDurationSource === 'ai' && subtask.estimatedDurationMinutes ? (
+            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[var(--bp-accent)]">
+              AI Estimate
+            </span>
+          ) : null}
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={onOpen}
+        className="shrink-0 self-center rounded-lg border border-[var(--bp-border)] px-2.5 py-1 text-xs font-bold text-slate-400 opacity-0 transition group-hover:opacity-100 hover:text-[var(--bp-text)]"
+      >
+        Open
+      </button>
     </div>
   )
 })
+
+function formatSubtaskDue(value?: string) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  if (sameDay) return `Today • ${time}`
+  return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • ${time}`
+}
 
 const Dependency = memo(function Dependency({ task }: { task: DependencyTask }) {
   return (

@@ -1,14 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { findSlot } from './planner-rule-engine';
-import { fromMinutes, toMinutes } from './planner.util';
+import { addDays, fromMinutes, toMinutes } from './planner.util';
 import type {
+  CapacitySummary,
   DailyPlan,
   DailyPlanItem,
   FixedBlock,
   PlannerConstraints,
   PlannerContext,
+  PlannerTask,
+  PostponeReasonCode,
+  PostponeStatus,
   ReasoningResult,
   SectionKey,
+  TaskType,
   UnscheduledItem,
   WorkingHours,
 } from './planner.types';
@@ -17,6 +22,10 @@ const EMPTY_SECTIONS = (): DailyPlan['sections'] => ({ morning: [], afternoon: [
 const ENERGY_RANK = { high: 3, medium: 2, low: 1 } as const;
 const WORK_BLOCK_RANGE = { min: 15, max: 120 } as const;
 const BREAK_RANGE = { min: 5, max: 30 } as const;
+const MIN_TASK_MINUTES = 15;
+
+/** Work that belongs in high-energy focus windows. */
+const HARD_TASK_TYPES: ReadonlySet<TaskType> = new Set(['deep', 'learning', 'creative']);
 
 type Slot = { start: number; end: number };
 type Window = { start: number; end: number };
@@ -24,11 +33,15 @@ type Window = { start: number; end: number };
 /**
  * Layer 3 — Scheduler Engine.
  *
- * Converts the reasoning layer's ordered decisions into an actual timeline. It
- * personalizes placement using the user's preferences — deep/hard work lands in
- * the focus window and high-energy periods, work blocks and breaks follow the
- * preferred lengths — but always defers to the fixed blocks and working hours
- * the Rule Engine produced.
+ * Converts the reasoning layer's ordered decisions into an actual timeline
+ * while respecting the day's real capacity:
+ *   - never schedules before "now" (past time is reserved busy),
+ *   - never exceeds the daily work budget (free time − emergency buffer, capped
+ *     by max daily work hours) so the day is never packed minute-to-minute,
+ *   - matches task type to energy (deep/creative/learning in focus windows,
+ *     admin/errand/light later),
+ *   - splits long tasks into focus blocks separated by breaks,
+ *   - and postpones whatever doesn't fit with a precise, human reason.
  */
 @Injectable()
 export class PlannerSchedulerEngine {
@@ -38,41 +51,77 @@ export class PlannerSchedulerEngine {
     context: PlannerContext,
     source: 'ai' | 'fallback',
   ): DailyPlan {
-    const { workingHours, preferences } = constraints;
+    const { workingHours, preferences, capacity } = constraints;
     const items: DailyPlanItem[] = constraints.fixedBlocks.map(fixedBlockToItem);
-    const busy: Slot[] = constraints.fixedBlocks.map((block) => ({ start: block.startMinutes, end: block.endMinutes }));
+    // Seed "busy" with fixed blocks AND non-rendered reservations (past time).
+    const busy: Slot[] = [
+      ...constraints.fixedBlocks.map((block) => ({ start: block.startMinutes, end: block.endMinutes })),
+      ...constraints.reservedBusy,
+    ];
+
     const unscheduled: UnscheduledItem[] = constraints.blockedTasks.map((entry) => ({
       taskId: entry.task.id,
       title: entry.task.title,
       reason: entry.reason,
+      status: entry.status,
+      reasonCode: entry.reasonCode,
+      estimatedMinutes: entry.task.estimatedMinutes,
+      priority: entry.task.priority,
+      deadline: entry.task.dueDate,
+      suggestedDate: addDays(context.date, 1),
     }));
 
     const tasksById = new Map(constraints.schedulableTasks.map((task) => [task.id, task]));
     const workBlock = clamp(preferences.workBlockMinutes, WORK_BLOCK_RANGE);
     const breakLength = clamp(preferences.breakMinutes, BREAK_RANGE);
-    const preferredWindows = buildPreferredWindows(constraints, workingHours);
+    const preferredHardWindows = buildPreferredWindows(constraints, workingHours, 'hard');
+    const preferredSoftWindows = buildPreferredWindows(constraints, workingHours, 'soft');
+    const suggestedDate = addDays(context.date, 1);
+
+    // Which limit set the work budget decides how we phrase capacity postpones.
+    const budgetBoundByMaxDaily =
+      capacity.freeMinutes - preferences.emergencyBufferMinutes > preferences.maxDailyWorkMinutes;
+
+    let scheduledWorkMinutes = 0;
+    let scheduledTaskCount = 0;
+    let postponedTaskCount = 0;
+    let postponedMinutes = 0;
 
     for (const decision of reasoning.order) {
       const task = tasksById.get(decision.taskId);
       if (!task) continue;
 
-      // Difficult work prefers the focus window / high-energy periods.
-      const isHard =
-        task.isFocusTask ||
-        (preferences.scheduleHardTasksInFocus && (task.priority === 'high' || task.priority === 'urgent'));
+      const budgetRemaining = capacity.workBudgetMinutes - scheduledWorkMinutes;
 
-      let remaining = Math.max(30, task.estimatedMinutes || 45);
+      // No budget left at all — the day is full. Everything from here is a
+      // deliberate capacity postponement to a later day.
+      if (budgetRemaining < MIN_TASK_MINUTES) {
+        unscheduled.push(
+          capacityPostpone(task, task.estimatedMinutes, suggestedDate, budgetBoundByMaxDaily),
+        );
+        postponedTaskCount += 1;
+        postponedMinutes += task.estimatedMinutes;
+        continue;
+      }
+
+      const hard = isHardTask(task, preferences.scheduleHardTasksInFocus);
+      const windows = hard ? preferredHardWindows : preferredSoftWindows;
+
+      // Cap this task's placement at the remaining budget; the overflow (if any)
+      // is postponed for capacity rather than dropped.
+      const placeable = Math.min(task.estimatedMinutes, budgetRemaining);
+      const overBudget = task.estimatedMinutes - placeable;
+
+      let remaining = placeable;
+      let placedForTask = 0;
       const segments: DailyPlanItem[] = [];
-      let placedAny = false;
-      let ranOut = false;
+      let noSlot = false;
 
-      while (remaining > 0) {
+      while (remaining >= 1) {
         const duration = Math.min(remaining, workBlock);
-        const slot = isHard
-          ? findSlotPreferred(workingHours, busy, duration, preferredWindows)
-          : findSlot(workingHours, busy, duration);
+        const slot = findSlotPreferred(workingHours, busy, duration, windows);
         if (!slot) {
-          ranOut = true;
+          noSlot = true;
           break;
         }
 
@@ -91,12 +140,12 @@ export class PlannerSchedulerEngine {
           rationale: decision.rationale,
         });
         busy.push(slot);
-        placedAny = true;
+        placedForTask += duration;
         remaining -= duration;
 
-        // Insert a break of the user's preferred length between consecutive
-        // work blocks, so we never chain long sessions back to back.
-        if (remaining > 0) {
+        // Insert a break of the preferred length between consecutive work
+        // blocks so we never chain long sessions back to back.
+        if (remaining >= 1) {
           const breakSlot = findSlot(workingHours, busy, breakLength);
           if (breakSlot && breakSlot.start === slot.end) {
             items.push(breakBlock(breakSlot, breakLength));
@@ -112,16 +161,36 @@ export class PlannerSchedulerEngine {
       }
       items.push(...segments);
 
-      if (ranOut) {
-        unscheduled.push({
-          taskId: task.id,
-          title: task.title,
-          reason: placedAny
-            ? "Only part of it fit — the rest ran past today's available time."
-            : 'No available free time left today.',
-        });
+      scheduledWorkMinutes += placedForTask;
+      if (placedForTask > 0) scheduledTaskCount += 1;
+
+      // Account for whatever couldn't be placed: budget overflow first, then a
+      // genuine "no free slot" reason for the part the timeline couldn't hold.
+      const leftover = task.estimatedMinutes - placedForTask;
+      if (leftover > 0) {
+        postponedTaskCount += 1;
+        postponedMinutes += leftover;
+        if (overBudget > 0 && !noSlot) {
+          unscheduled.push(capacityPostpone(task, leftover, suggestedDate, budgetBoundByMaxDaily, placedForTask > 0));
+        } else {
+          unscheduled.push(
+            noSlotPostpone(task, leftover, suggestedDate, busy, workingHours, workBlock, placedForTask > 0),
+          );
+        }
       }
     }
+
+    const capacitySummary: CapacitySummary = {
+      availableMinutes: capacity.workBudgetMinutes,
+      requestedMinutes: constraints.schedulableTasks.reduce((sum, task) => sum + task.estimatedMinutes, 0),
+      scheduledMinutes: scheduledWorkMinutes,
+      postponedMinutes,
+      scheduledTaskCount,
+      postponedTaskCount,
+      freeMinutes: capacity.freeMinutes,
+      maxDailyWorkMinutes: preferences.maxDailyWorkMinutes,
+      emergencyBufferMinutes: preferences.emergencyBufferMinutes,
+    };
 
     return {
       date: context.date,
@@ -131,22 +200,116 @@ export class PlannerSchedulerEngine {
       summary: reasoning.summary,
       sections: groupSections(items),
       unscheduled,
+      capacity: capacitySummary,
     };
   }
 }
 
-/**
- * Ordered list of windows a difficult task should try before falling back to
- * "anywhere": the focus window first, then day parts by descending energy.
- */
-function buildPreferredWindows(constraints: PlannerConstraints, workingHours: WorkingHours): Window[] {
-  const windows: Window[] = [];
-  if (constraints.focusWindow) {
-    windows.push({ start: constraints.focusWindow.startMinutes, end: constraints.focusWindow.endMinutes });
+function isHardTask(task: PlannerTask, scheduleHardTasksInFocus: boolean): boolean {
+  if (task.isFocusTask) return true;
+  if (HARD_TASK_TYPES.has(task.taskType)) return true;
+  return scheduleHardTasksInFocus && (task.priority === 'high' || task.priority === 'urgent');
+}
+
+/** Build a capacity-postponement entry (whole task or budget overflow). */
+function capacityPostpone(
+  task: PlannerTask,
+  minutes: number,
+  suggestedDate: string,
+  boundByMaxDaily: boolean,
+  partial = false,
+): UnscheduledItem {
+  const reasonCode: PostponeReasonCode = boundByMaxDaily ? 'max_daily_work_limit' : 'insufficient_capacity';
+  const limit = boundByMaxDaily ? 'your maximum daily work hours' : "today's available time";
+  const reason = partial
+    ? `Part of it fit today; the remaining ${minutes} min was moved to ${suggestedDate} to stay within ${limit}.`
+    : `Moved to ${suggestedDate} — today is already full to ${limit}.`;
+  return {
+    taskId: task.id,
+    title: task.title,
+    reason,
+    status: 'POSTPONED_CAPACITY',
+    reasonCode,
+    estimatedMinutes: minutes,
+    priority: task.priority,
+    deadline: task.dueDate,
+    suggestedDate,
+  };
+}
+
+/** Build a "no valid slot" entry, distinguishing too-large from fragmentation. */
+function noSlotPostpone(
+  task: PlannerTask,
+  minutes: number,
+  suggestedDate: string,
+  busy: Slot[],
+  workingHours: WorkingHours,
+  workBlock: number,
+  partial: boolean,
+): UnscheduledItem {
+  const largestGap = largestFreeGap(workingHours, busy);
+  const blockNeeded = Math.min(minutes, workBlock, MIN_TASK_MINUTES);
+  const tooLarge = blockNeeded > largestGap;
+  const reasonCode: PostponeReasonCode = tooLarge ? 'task_too_large' : 'meeting_reminder_conflict';
+  const reason = partial
+    ? `Only part of it fit — the rest couldn't find a free block today and moves to ${suggestedDate}.`
+    : tooLarge
+      ? `No free block long enough today (largest gap ${largestGap} min); moved to ${suggestedDate}.`
+      : `Your fixed blocks left no free slot today; moved to ${suggestedDate}.`;
+  return {
+    taskId: task.id,
+    title: task.title,
+    reason,
+    status: 'NO_VALID_TIME_SLOT',
+    reasonCode,
+    estimatedMinutes: minutes,
+    priority: task.priority,
+    deadline: task.dueDate,
+    suggestedDate,
+  };
+}
+
+/** Largest single free gap remaining inside working hours. */
+function largestFreeGap(workingHours: WorkingHours, busy: Slot[]): number {
+  const dayStart = toMinutes(workingHours.start);
+  const dayEnd = toMinutes(workingHours.end);
+  const sorted = [...busy]
+    .map((slot) => ({ start: Math.max(dayStart, slot.start), end: Math.min(dayEnd, slot.end) }))
+    .filter((slot) => slot.end > slot.start)
+    .sort((a, b) => a.start - b.start);
+  let cursor = dayStart;
+  let largest = 0;
+  for (const slot of sorted) {
+    if (slot.start > cursor) largest = Math.max(largest, slot.start - cursor);
+    cursor = Math.max(cursor, slot.end);
   }
+  if (dayEnd > cursor) largest = Math.max(largest, dayEnd - cursor);
+  return largest;
+}
+
+/**
+ * Ordered windows a task should try before falling back to "anywhere".
+ *
+ * `hard` (deep/creative/learning/focus) work prefers the focus window, then the
+ * remaining day parts by *descending* energy, so difficult work lands in peak
+ * hours. `soft` (admin/errand/light) work simply takes the earliest available
+ * slot (empty windows → the caller falls through to "anywhere"); the reasoning
+ * layer has already front-loaded the important work, so deep tasks claim the
+ * peak hours first and light work fills in around them.
+ */
+function buildPreferredWindows(
+  constraints: PlannerConstraints,
+  workingHours: WorkingHours,
+  kind: 'hard' | 'soft',
+): Window[] {
+  if (kind === 'soft') return [];
 
   const dayStart = toMinutes(workingHours.start);
   const dayEnd = toMinutes(workingHours.end);
+  const focus = constraints.focusWindow;
+  const windows: Window[] = [];
+  if (focus) windows.push({ start: focus.startMinutes, end: focus.endMinutes });
+
   const bounds: Record<SectionKey, Window> = {
     morning: { start: dayStart, end: Math.min(dayEnd, 12 * 60) },
     afternoon: { start: Math.max(dayStart, 12 * 60), end: Math.min(dayEnd, 17 * 60) },

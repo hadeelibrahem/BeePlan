@@ -72,6 +72,15 @@ export class AiController {
     return this.recurrenceSuggestionsService.dismiss(request.user.id, id);
   }
 
+  @Post('parse-person-reminder')
+  @HttpCode(HttpStatus.OK)
+  parsePersonReminder(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: ParseReminderDto,
+  ) {
+    return this.aiService.parsePersonReminder(request.user.id, dto.text);
+  }
+
   @Post('voice-reminder-draft')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('audio', audioMulterOptions))
