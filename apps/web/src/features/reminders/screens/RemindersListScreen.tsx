@@ -36,6 +36,7 @@ export function RemindersListScreen({
   onNavigateTasks,
   onNavigateFocus,
   onNavigatePlanner,
+  onNavigatePeople,
   onNavigateCalendar,
   onNavigateNotes,
   onNavigateAnalytics,
@@ -49,6 +50,7 @@ export function RemindersListScreen({
     { value: 'all', label: t('filters.all') },
     { value: 'time', label: t('filters.time') },
     { value: 'location', label: t('filters.location') },
+    { value: 'person', label: 'People' },
     { value: 'checklist', label: t('filters.checklist') },
     { value: 'context', label: t('filters.context') },
     { value: 'completed', label: t('filters.completed') },
@@ -85,6 +87,7 @@ export function RemindersListScreen({
       onNavigateTasks={onNavigateTasks}
       onNavigateFocus={onNavigateFocus}
       onNavigatePlanner={onNavigatePlanner}
+      onNavigatePeople={onNavigatePeople}
       onNavigateCalendar={onNavigateCalendar}
       onNavigateNotes={onNavigateNotes}
       onNavigateAnalytics={onNavigateAnalytics}
@@ -137,18 +140,37 @@ export function RemindersListScreen({
         />
       </section>
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
+        {onNavigatePeople && (
+          <button
+            type="button"
+            onClick={onNavigatePeople}
+            className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-300 transition hover:bg-sky-400/20"
+          >
+            {'👤 Create Person Reminder'}
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState
-          icon={<RemindersIcon className="h-5 w-5" />}
-          title={search ? t('dashboard.noResults') : t('dashboard.noReminders')}
-          description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
-          actionLabel={search ? undefined : t('dashboard.newReminder')}
-          onAction={search ? undefined : onCreate}
-        />
+        activeTab === 'person' ? (
+          <EmptyState
+            icon={<RemindersIcon className="h-5 w-5" />}
+            title="No person reminders yet"
+            description="Create one to be reminded when someone is nearby."
+            actionLabel={onNavigatePeople ? 'Create Person Reminder' : undefined}
+            onAction={onNavigatePeople}
+          />
+        ) : (
+          <EmptyState
+            icon={<RemindersIcon className="h-5 w-5" />}
+            title={search ? t('dashboard.noResults') : t('dashboard.noReminders')}
+            description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
+            actionLabel={search ? undefined : t('dashboard.newReminder')}
+            onAction={search ? undefined : onCreate}
+          />
+        )
       ) : (
         <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {filtered.map((reminder) => (

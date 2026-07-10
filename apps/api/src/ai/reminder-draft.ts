@@ -4,6 +4,16 @@ export type ReminderDraftRepeat = 'none' | 'daily' | 'weekly' | 'monthly';
 export type ReminderDraftLocationMode = 'none' | 'specific' | 'general';
 export type ReminderDraftLocationTrigger = 'arrive' | 'leave';
 
+// Additive, optional block describing a "person nearby" reminder (e.g. "remind
+// me to talk to Ahmad when I see him"). Detected by the parser but ignored by
+// the generic reminder flow, so /ai/parse-reminder stays backward compatible.
+export interface ReminderDraftPerson {
+  isPersonReminder: boolean;
+  personName: string;
+  message: string;
+  confidence: number;
+}
+
 export interface ReminderDraft {
   title: string;
   description: string;
@@ -26,6 +36,7 @@ export interface ReminderDraft {
     condition: string;
   };
   checklist: string[];
+  person: ReminderDraftPerson;
 }
 
 const REMINDER_TYPES: ReminderDraftType[] = [
@@ -65,6 +76,12 @@ export function createEmptyReminderDraft(): ReminderDraft {
     },
     context: { condition: '' },
     checklist: [],
+    person: {
+      isPersonReminder: false,
+      personName: '',
+      message: '',
+      confidence: 0,
+    },
   };
 }
 
@@ -128,5 +145,17 @@ export function normalizeReminderDraft(input: unknown): ReminderDraft {
     checklist: Array.isArray(obj.checklist)
       ? obj.checklist.filter((item): item is string => typeof item === 'string')
       : [],
+    person: normalizePerson(asRecord(obj.person)),
+  };
+}
+
+function normalizePerson(person: Record<string, unknown>): ReminderDraftPerson {
+  const rawConfidence = asNumber(person.confidence, 0);
+  return {
+    isPersonReminder: person.isPersonReminder === true,
+    personName: asString(person.personName),
+    message: asString(person.message),
+    // Clamp to [0, 1] so a malformed model value can't produce a weird score.
+    confidence: Math.max(0, Math.min(1, rawConfidence)),
   };
 }

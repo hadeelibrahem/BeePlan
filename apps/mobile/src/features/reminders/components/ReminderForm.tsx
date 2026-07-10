@@ -3,9 +3,11 @@ import { Text, View } from 'react-native';
 import { InputField, PrimaryButton } from '../../../components/layout';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme } from '../../../theme/useTheme';
+import type { FriendSummary } from '../../social/types/social.types';
 import type {
   ChecklistItem,
   ChecklistReminderTrigger,
+  PersonReminderConfig,
   Reminder,
   ReminderFormValues,
   ReminderPriority,
@@ -16,10 +18,17 @@ import { ChecklistInput } from './ChecklistInput';
 import { ChecklistReminderSection } from './ChecklistReminderSection';
 import { DateTimeSection } from './DateTimeSection';
 import { LocationReminderFields } from './LocationReminderFields';
+import { PersonReminderFields } from './PersonReminderFields';
 import { PrioritySelector } from './PrioritySelector';
 import { ReminderTypeSelector } from './ReminderTypeSelector';
 
 const defaultRepeatRule: RepeatRule = { frequency: 'none', interval: 1 };
+
+const defaultPerson: PersonReminderConfig = {
+  radiusMeters: 100,
+  cooldownMinutes: 30,
+  expiration: '1w',
+};
 
 const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
   title: reminder?.title ?? '',
@@ -36,15 +45,20 @@ const createInitialValues = (reminder?: Reminder): ReminderFormValues => ({
     time: { type: 'none' },
     location: { type: 'none' },
   },
+  person: reminder?.person ?? defaultPerson,
 });
 
 type Props = {
   initialReminder?: Reminder;
   submitLabel: string;
   onSubmit: (values: ReminderFormValues) => Promise<void> | void;
+  /** Accepted friends, needed for the Person reminder friend selector. */
+  friends?: FriendSummary[];
+  /** Called from the Person fields when the user wants to add a friend. */
+  onAddFriend?: () => void;
 };
 
-export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) {
+export function ReminderForm({ initialReminder, submitLabel, onSubmit, friends = [], onAddFriend }: Props) {
   const [values, setValues] = useState<ReminderFormValues>(() => createInitialValues(initialReminder));
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -103,10 +117,14 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
 
       return true;
     }
+    if (values.type === 'person') {
+      return Boolean(values.person?.targetUserId);
+    }
     return true;
   }, [values]);
 
   const setType = (type: ReminderType) => setValues((current) => ({ ...current, type }));
+  const setPerson = (person: PersonReminderConfig) => setValues((current) => ({ ...current, person }));
   const setPriority = (priority: ReminderPriority) =>
     setValues((current) => ({ ...current, priority }));
   const setRepeatRule = (repeatRule: RepeatRule) =>
@@ -144,6 +162,7 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
     location: t('reminders.locationHelp', { brand_name: t('common.brand_name') }),
     context: t('reminders.contextHelp'),
     checklist: t('reminders.checklistHelp'),
+    person: t('reminders.personHelp'),
   }[values.type];
 
   return (
@@ -218,6 +237,15 @@ export function ReminderForm({ initialReminder, submitLabel, onSubmit }: Props) 
               onChange={setChecklistReminderTrigger}
             />
           </View>
+        )}
+
+        {values.type === 'person' && (
+          <PersonReminderFields
+            value={values.person ?? defaultPerson}
+            onChange={setPerson}
+            friends={friends}
+            onAddFriend={onAddFriend}
+          />
         )}
       </View>
 

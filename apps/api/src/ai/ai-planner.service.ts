@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { and, eq, ne } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import { reminders, taskDependencies, tasks } from '../db/schema';
+import { PlannerDurationEstimator, type EstimatorResult } from './planner/planner-duration-estimator';
 import { PlannerPreferencesService } from './planner/planner-preferences.service';
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
 import { PlannerRuleEngine, normalizePriority } from './planner/planner-rule-engine';
@@ -60,6 +61,7 @@ export class AiPlannerService {
     private readonly ruleEngine: PlannerRuleEngine,
     private readonly reasoningEngine: PlannerReasoningEngine,
     private readonly schedulerEngine: PlannerSchedulerEngine,
+    private readonly durationEstimator: PlannerDurationEstimator,
     private readonly preferencesService: PlannerPreferencesService,
   ) {}
 
@@ -116,6 +118,19 @@ export class AiPlannerService {
       this.preferencesService.getPreferences(userId),
     ]);
 
+    // Estimate durations + classify task type for tasks with no set duration,
+    // instead of falling back on a single fixed default. Known durations are
+    // kept verbatim; only their type is classified.
+    const estimates = await this.durationEstimator.estimate(
+      taskRows.map((task) => ({
+        id: task.id,
+        title: task.title,
+        category: task.category,
+        isFocusTask: task.isFocusTask,
+        knownMinutes: task.remainingTimeMinutes || task.estimatedTimeMinutes || 0,
+      })),
+    );
+
     return {
       userId,
       date,
@@ -123,7 +138,7 @@ export class AiPlannerService {
       workingHours,
       breaks,
       lockedItems: request.lockedItems ?? [],
-      tasks: taskRows.map((task) => toPlannerTask(task, dependencyRows)),
+      tasks: taskRows.map((task) => toPlannerTask(task, dependencyRows, estimates.get(task.id))),
       reminders: reminderRows.map((reminder) => toPlannerReminder(reminder, date)),
       preferences,
     };
@@ -151,7 +166,8 @@ function normalizeWorkingHours(value?: { start?: string; end?: string }): Workin
   };
 }
 
-function toPlannerTask(task: TaskRow, dependencyRows: DependencyRow[]): PlannerTask {
+function toPlannerTask(task: TaskRow, dependencyRows: DependencyRow[], estimate?: EstimatorResult): PlannerTask {
+  const known = task.remainingTimeMinutes || task.estimatedTimeMinutes || 0;
   return {
     id: task.id,
     title: task.title,
@@ -160,7 +176,14 @@ function toPlannerTask(task: TaskRow, dependencyRows: DependencyRow[]): PlannerT
     dueDate: task.dueDate?.toISOString(),
     dueTime: task.dueTime,
     category: task.category,
-    estimatedMinutes: task.remainingTimeMinutes || task.estimatedTimeMinutes || 45,
+    // Prefer the estimator's number (it echoes a known duration verbatim, or
+    // estimates a realistic one); fall back to the stored value if estimation
+    // was somehow unavailable for this task.
+    estimatedMinutes: estimate?.minutes ?? known,
+    durationEstimated: estimate?.estimated ?? false,
+    durationConfidence: estimate?.confidence ?? 'medium',
+    durationReason: estimate?.reason ?? '',
+    taskType: estimate?.taskType ?? (task.isFocusTask ? 'deep' : 'light'),
     spentMinutes: task.spentTimeMinutes,
     progress: task.progress,
     isFocusTask: task.isFocusTask,

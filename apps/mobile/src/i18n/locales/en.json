@@ -1,7 +1,11 @@
 {
   "common": {
     "brand_name": "BeePlan",
-    "languageToggle": "العربية"
+    "languageToggle": "العربية",
+    "somethingWentWrong": "Something went wrong. Please try again.",
+    "error": "Error",
+    "done": "Done",
+    "cancel": "Cancel"
   },
   "dashboard": {
     "activeReminders": "{{count}} active reminder{{plural}}",
@@ -105,6 +109,35 @@
     "locationHelp": "Set where {{brand_name}} should remind you.",
     "contextHelp": "Describe the situation that should trigger this.",
     "checklistHelp": "Add the steps this reminder should track.",
+    "personHelp": "Get a nudge when a friend is nearby. They must approve location sharing first — you only see proximity, never their location.",
+    "person": {
+      "friend": "Friend",
+      "selectFriend": "Select a friend",
+      "noFriends": "You have no friends yet. Add one to create a person reminder.",
+      "addFriend": "Add friend",
+      "trigger": "Trigger",
+      "triggerNearby": "When they're nearby",
+      "triggerNearbyNamed": "When {{name}} is nearby",
+      "radius": "Radius",
+      "meters": "meters",
+      "permission": "Permission",
+      "willRequest": "We'll ask {{name}} to approve location sharing.",
+      "selectToContinue": "Select a friend to continue.",
+      "proximityNote": "BeePlan never shares live location — only proximity events.",
+      "confidence": "Confidence",
+      "whichPerson": "Which {{name}} did you mean?",
+      "noMatch": "We couldn't find {{name}} in your friends.",
+      "thatPerson": "that person",
+      "notMatched": "Not matched",
+      "defaultTitle": "Talk to friend",
+      "status": {
+        "pending": "Waiting for approval",
+        "active": "Active",
+        "expired": "Permission expired",
+        "revoked": "Permission revoked",
+        "rejected": "Request declined"
+      }
+    },
     "locationName": "Location name",
     "locationPlaceholder": "Campus library",
     "radiusMeters": "Radius meters",
@@ -149,6 +182,8 @@
     "typeContextHint": "When condition fits",
     "typeChecklist": "Checklist Reminder",
     "typeChecklistHint": "Track small steps",
+    "typePerson": "Person Reminder",
+    "typePersonHint": "When a friend is nearby",
     "repeat": "Repeat",
     "every": "Every",
     "dateTime": "Date and time",
@@ -236,6 +271,66 @@
       "summaryWhere": "Where",
       "summaryCondition": "Condition",
       "summaryItems": "Items"
+    }
+  },
+  "people": {
+    "title": "People",
+    "subtitle": "Friends and location-sharing permissions.",
+    "searchPlaceholder": "Search friends",
+    "panelTitle": "Stay in touch",
+    "panelCaption": "{{count}} friends connected.",
+    "errors": {
+      "load": "Unable to load your people."
+    },
+    "friends": {
+      "title": "Your friends",
+      "remove": "Remove",
+      "removeConfirm": "Remove {{name}} from your friends?",
+      "removed": "Friend removed.",
+      "empty": "No friends yet. Add one to get started.",
+      "noMatch": "No friends match your search."
+    },
+    "addFriend": {
+      "title": "Add a friend",
+      "placeholder": "friend@email.com",
+      "send": "Send request",
+      "invalidEmail": "Enter a valid email address.",
+      "sent": "Friend request sent."
+    },
+    "requests": {
+      "title": "Friend requests",
+      "incoming": "Incoming",
+      "outgoing": "Outgoing",
+      "accept": "Accept",
+      "decline": "Decline",
+      "pending": "Pending",
+      "cancel": "Cancel",
+      "cancelled": "Request cancelled.",
+      "added": "Friend added.",
+      "noIncoming": "No incoming requests.",
+      "noOutgoing": "No outgoing requests."
+    },
+    "sharing": {
+      "title": "Location sharing requests",
+      "explainer": "You share proximity only — never your exact location.",
+      "empty": "Nothing to review.",
+      "approve": "Allow",
+      "reject": "Deny",
+      "revoke": "Revoke",
+      "approved": "Sharing enabled",
+      "revoked": "Sharing revoked.",
+      "aFriend": "A friend",
+      "approvedGranted": "Your proximity is now shared. Keep BeePlan open so your location updates can be sent.",
+      "approvedNoLocation": "Sharing enabled, but location permission is off — enable it so your friend can be alerted when nearby."
+    },
+    "permissions": {
+      "title": "My permissions",
+      "granted": "Permissions I granted",
+      "requested": "Permissions I requested",
+      "noneGranted": "You haven't granted any permissions.",
+      "noneRequested": "No permissions requested yet.",
+      "radius": "Radius",
+      "lastActivity": "Last activity"
     }
   }
 }

@@ -7,6 +7,23 @@ const TYPE_META = {
   location: { icon: 'L', color: 'text-emerald-300', bg: 'bg-emerald-300/15', label: 'Location' },
   context: { icon: 'C', color: 'text-violet-300', bg: 'bg-violet-300/15', label: 'Context' },
   checklist: { icon: 'K', color: 'text-rose-300', bg: 'bg-rose-300/15', label: 'Checklist' },
+  person: { icon: '👤', color: 'text-sky-300', bg: 'bg-sky-300/15', label: 'Person' },
+}
+
+const PERSON_PERMISSION_LABEL: Record<string, string> = {
+  pending: 'Waiting for approval',
+  active: 'Active',
+  expired: 'Permission expired',
+  revoked: 'Permission revoked',
+  rejected: 'Request declined',
+}
+
+const PERSON_PERMISSION_CLASS: Record<string, string> = {
+  pending: 'border-amber-400/35 bg-amber-400/15 text-amber-300',
+  active: 'border-emerald-400/35 bg-emerald-400/15 text-emerald-300',
+  expired: 'border-slate-400/35 bg-slate-400/15 text-slate-300',
+  revoked: 'border-rose-400/35 bg-rose-400/15 text-rose-300',
+  rejected: 'border-rose-400/35 bg-rose-400/15 text-rose-300',
 }
 
 const STATUS_BADGE: Record<Reminder['status'], string> = {
@@ -91,13 +108,31 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
               </span>
             )}
 
-            <span className="mt-2 flex items-center gap-2">
+            <span className="mt-2 flex flex-wrap items-center gap-2">
               <span
                 className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_BADGE[reminder.status]}`}
               >
                 {t(`status.${reminder.status}`)}
               </span>
+              {reminder.type === 'person' && reminder.person?.permissionStatus && (
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                    PERSON_PERMISSION_CLASS[reminder.person.permissionStatus] ?? PERSON_PERMISSION_CLASS.pending
+                  }`}
+                >
+                  {PERSON_PERMISSION_LABEL[reminder.person.permissionStatus] ?? reminder.person.permissionStatus}
+                </span>
+              )}
             </span>
+
+            {reminder.type === 'person' && reminder.person && (
+              <span className="mt-1.5 block text-[11px] text-slate-500">
+                {`Radius ${reminder.person.radiusMeters ?? 100}m`}
+                {reminder.person.lastNotifiedAt
+                  ? ` · Last alerted ${new Date(reminder.person.lastNotifiedAt).toLocaleString()}`
+                  : ' · Not alerted yet'}
+              </span>
+            )}
           </span>
 
           <span className="mt-1 shrink-0 text-slate-500">{isRTL ? '<' : '>'}</span>
@@ -117,5 +152,9 @@ function getSubtitle(reminder: Reminder) {
     return `${done}/${reminder.checklistItems.length} items completed`
   }
   if (reminder.type === 'context' && reminder.context) return reminder.context.condition
+  if (reminder.type === 'person' && reminder.person) {
+    const name = reminder.person.targetFriendName ?? reminder.person.targetName ?? 'your friend'
+    return `When ${name} is nearby`
+  }
   return ''
 }

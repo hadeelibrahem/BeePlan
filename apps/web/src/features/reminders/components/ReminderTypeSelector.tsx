@@ -6,6 +6,7 @@ const TYPES: Array<{ value: ReminderType; labelKey: string; hintKey: string }> =
   { value: 'location', labelKey: 'reminders.typeLocation', hintKey: 'reminders.typeLocationHint' },
   { value: 'context', labelKey: 'reminders.typeContext', hintKey: 'reminders.typeContextHint' },
   { value: 'checklist', labelKey: 'reminders.typeChecklist', hintKey: 'reminders.typeChecklistHint' },
+  { value: 'person', labelKey: 'reminders.typePerson', hintKey: 'reminders.typePersonHint' },
 ]
 
 type Props = {
@@ -19,7 +20,7 @@ export function ReminderTypeSelector({ value, onChange }: Props) {
   return (
     <section>
       <p className="mb-3 text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">{t('reminders.reminderType')}</p>
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-1.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-1.5 sm:grid-cols-3 lg:grid-cols-5">
         {TYPES.map((type) => {
           const selected = value === type.value
           return (

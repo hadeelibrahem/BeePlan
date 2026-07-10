@@ -36,15 +36,59 @@ export type ApiTaskActivity = {
   createdAt: string;
 };
 
+export type ApiSubtaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'missed';
+export type ApiSubtaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
 export type ApiSubtask = {
   id: string;
+  taskId?: string;
   title: string;
   isDone: boolean;
   orderIndex: number;
   assignee?: string;
+  description?: string;
+  priority: ApiSubtaskPriority;
+  status: ApiSubtaskStatus;
+  startDate?: string;
   dueDate?: string;
-  status: string;
+  estimatedDurationMinutes?: number;
+  actualDurationMinutes?: number;
+  estimatedDurationSource: 'user' | 'ai';
+  reminderEnabled: boolean;
+  reminderMinutesBeforeDue?: number;
+  reminderTime?: string;
+  reminderSentAt?: string;
+  reminderStatus: 'none' | 'scheduled' | 'sent' | 'cancelled';
+  notes?: string;
+  tags: string[];
+  dependencyIds: string[];
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
+
+export type SubtaskPayload = Partial<
+  Pick<
+    ApiSubtask,
+    | 'title'
+    | 'isDone'
+    | 'orderIndex'
+    | 'assignee'
+    | 'description'
+    | 'priority'
+    | 'status'
+    | 'startDate'
+    | 'dueDate'
+    | 'estimatedDurationMinutes'
+    | 'actualDurationMinutes'
+    | 'estimatedDurationSource'
+    | 'reminderEnabled'
+    | 'reminderMinutesBeforeDue'
+    | 'reminderTime'
+    | 'notes'
+    | 'tags'
+  >
+> & { dependencyIds?: string[] };
 
 export type ApiDependency = {
   id: string;
@@ -278,7 +322,7 @@ export function getSubtasks(accessToken: string, taskId: string) {
 export function addSubtask(
   accessToken: string,
   taskId: string,
-  payload: { title: string; isDone?: boolean; dueDate?: string; assignee?: string },
+  payload: SubtaskPayload & { title: string },
 ) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks`, {
     method: 'POST',
@@ -297,7 +341,7 @@ export function updateSubtask(
   accessToken: string,
   taskId: string,
   subtaskId: string,
-  payload: Partial<ApiSubtask>,
+  payload: SubtaskPayload,
 ) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}`, {
     method: 'PATCH',
@@ -307,6 +351,59 @@ export function updateSubtask(
 
 export function deleteSubtask(accessToken: string, taskId: string, subtaskId: string) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'DELETE' });
+}
+
+export function setSubtaskDependencies(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+  dependsOnSubtaskIds: string[],
+) {
+  return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}/dependencies`, {
+    method: 'PUT',
+    body: JSON.stringify({ dependsOnSubtaskIds }),
+  });
+}
+
+export function getSubtaskAttachments(accessToken: string, taskId: string, subtaskId: string) {
+  return request<ApiTaskAttachment[]>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}/attachments`);
+}
+
+export async function uploadSubtaskAttachment(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+  file: { uri: string; name: string; type?: string },
+) {
+  const path = `/tasks/${taskId}/subtasks/${subtaskId}/attachments`;
+  const url = `${API_BASE_URL}${path}`;
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.type ?? 'application/octet-stream',
+  } as never);
+
+  const response = await apiFetch(path, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: formData,
+  });
+
+  return readJsonOrThrow<ApiTaskAttachment>(response, url);
+}
+
+export function deleteSubtaskAttachment(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+  attachmentId: string,
+) {
+  return request<void>(
+    accessToken,
+    `/tasks/${taskId}/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export function getDependencies(accessToken: string, taskId: string) {

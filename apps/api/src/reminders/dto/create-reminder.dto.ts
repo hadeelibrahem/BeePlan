@@ -18,6 +18,7 @@ import {
   ReminderChecklistItemDto,
   ReminderContextDto,
   ReminderLocationDto,
+  ReminderPersonDto,
 } from './reminder-shared.dto';
 import type {
   ReminderPriority,
@@ -84,4 +85,12 @@ export class CreateReminderDto {
   @ValidateNested({ each: true })
   @Type(() => ReminderChecklistItemDto)
   checklistItems?: ReminderChecklistItemDto[];
+
+  // Only honoured on PATCH /reminders/:id for existing person reminders (merged
+  // onto the stored config). Ignored on create — person reminders are created
+  // via POST /person-reminders.
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ReminderPersonDto)
+  person?: ReminderPersonDto;
 }

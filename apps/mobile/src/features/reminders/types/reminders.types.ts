@@ -1,4 +1,32 @@
-export type ReminderType = 'time' | 'location' | 'context' | 'checklist';
+import type {
+  FriendSummary,
+  PersonReminderMatchStatus,
+  SharingExpiration,
+} from '../../social/types/social.types';
+
+export type ReminderType = 'time' | 'location' | 'context' | 'checklist' | 'person';
+
+export type PersonPermissionStatus = 'pending' | 'active' | 'rejected' | 'revoked' | 'expired';
+
+/** Person ("when I see them") reminder config, mirrored from reminders.person on the API. */
+export type PersonReminderConfig = {
+  targetUserId?: string;
+  targetName?: string;
+  targetFriendName?: string;
+  message?: string;
+  radiusMeters?: number;
+  cooldownMinutes?: number;
+  permissionId?: string | null;
+  lastNotifiedAt?: string | null;
+  permissionStatus?: PersonPermissionStatus;
+  /** Sharing consent window requested when the reminder is created (default '1w'). */
+  expiration?: SharingExpiration;
+  // AI-only hints that drive the friend-match UI. Never persisted to the backend.
+  confidence?: number;
+  matchStatus?: PersonReminderMatchStatus;
+  candidates?: FriendSummary[];
+  aiPersonName?: string;
+};
 
 export type ReminderStatus = 'active' | 'done' | 'missed' | 'snoozed';
 
@@ -132,6 +160,7 @@ export type Reminder = {
   };
   checklistItems?: ChecklistItem[];
   checklistReminderTrigger?: ChecklistReminderTrigger;
+  person?: PersonReminderConfig;
   createdAt: string;
   updatedAt: string;
 };

@@ -15,6 +15,9 @@ import {
   type Reminder,
 } from './src/features/reminders';
 import { AddTaskSheet } from './src/components/AddTaskSheet';
+import { PeopleScreen } from './src/features/social';
+import { getLocationSharing } from './src/features/social/api/social.api';
+import { startProximityMonitor, stopProximityMonitor } from './src/services/proximityMonitor';
 import { useAuth } from './src/hooks/useAuth';
 import { LanguageProvider } from './src/i18n/LanguageContext';
 import { AuthProvider } from './src/providers/AuthProvider';
@@ -61,7 +64,8 @@ type AppScreen =
   | 'reminders'
   | 'create'
   | 'details'
-  | 'edit';
+  | 'edit'
+  | 'social';
 
 export default function App() {
   return (
@@ -131,6 +135,56 @@ function ThemedApp() {
         Alert.alert('Failed to load reminders', message);
       });
   }, [user, accessToken]);
+
+  // Run the foreground proximity monitor when the user needs to post location
+  // snapshots — i.e. they either (a) have an active person reminder (they are
+  // the VIEWER, waiting to be alerted when near a friend) OR (b) have granted a
+  // friend an active location-sharing permission (they are the OWNER, whose
+  // location the friend's reminder needs). Case (b) is essential: without it
+  // the target friend never posts a snapshot, so the viewer's nearby check can
+  // never find them and no notification ever fires. Snapshots go only to
+  // BeePlan's own endpoint — never to any AI service.
+  useEffect(() => {
+    if (!user || !accessToken) {
+      stopProximityMonitor();
+      return;
+    }
+
+    const hasActivePersonReminder = reminders.some(
+      (reminder) => (reminder.type as string) === 'person' && reminder.status === 'active',
+    );
+
+    let cancelled = false;
+    void (async () => {
+      let sharingAsOwnerActive = false;
+      try {
+        const permissions = await getLocationSharing();
+        // direction 'incoming' === this user is the owner being observed.
+        sharingAsOwnerActive = permissions.some(
+          (p) => p.direction === 'incoming' && p.status === 'active',
+        );
+      } catch (error) {
+        console.log('[App] could not load location-sharing for monitor decision:', error);
+      }
+      if (cancelled) return;
+
+      const shouldMonitor = hasActivePersonReminder || sharingAsOwnerActive;
+      console.log(
+        `[App] proximity monitor decision — personReminder=${hasActivePersonReminder} ownerSharing=${sharingAsOwnerActive} => ${
+          shouldMonitor ? 'START' : 'STOP'
+        }`,
+      );
+      if (shouldMonitor) {
+        void startProximityMonitor();
+      } else {
+        stopProximityMonitor();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reminders, user, accessToken]);
 
   useEffect(() => {
     if (!user || !accessToken) return;
@@ -432,6 +486,7 @@ function ThemedApp() {
         <CreateReminderScreen
           accessToken={accessToken ?? ''}
           onCancel={() => setScreen('reminders')}
+          onNavigatePeople={() => setScreen('social')}
           onCreated={(reminder) => {
             setReminders((current) => [reminder, ...current]);
             setSelectedId(reminder.id);
@@ -455,6 +510,11 @@ function ThemedApp() {
             setScreen('details');
           }}
         />
+      ) : screen === 'social' ? (
+        <PeopleScreen
+          onBack={() => setScreen('reminders')}
+          onSignOut={() => void handleSignOut()}
+        />
       ) : (
         <RemindersListScreen
           reminders={reminders}
@@ -466,6 +526,7 @@ function ThemedApp() {
           onToggle={handleToggle}
           onSignOut={() => void handleSignOut()}
           onBack={() => setScreen('dashboard')}
+          onViewPeople={() => setScreen('social')}
         />
       )}
 

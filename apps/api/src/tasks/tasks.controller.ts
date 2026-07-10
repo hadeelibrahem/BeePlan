@@ -26,6 +26,7 @@ import { TaskQueryDto } from './dto/task-query.dto';
 import {
   DependencyTaskIdsDto,
   ReplaceDependencyDto,
+  SubtaskDependencyDto,
   SubtaskDto,
   SubtaskReorderDto,
   TaskLabelDto,
@@ -36,6 +37,7 @@ import {
 } from './dto/task-shared.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { RecurringTaskSchedulerService } from './recurring-task-scheduler.service';
+import { SubtaskAttachmentsService } from './subtask-attachments.service';
 import {
   MAX_ATTACHMENT_SIZE_BYTES,
   TaskAttachmentsService,
@@ -50,6 +52,7 @@ export class TasksController {
     private readonly tasksService: TasksService,
     private readonly recurringTaskSchedulerService: RecurringTaskSchedulerService,
     private readonly taskAttachmentsService: TaskAttachmentsService,
+    private readonly subtaskAttachmentsService: SubtaskAttachmentsService,
   ) {}
 
   @Post()
@@ -214,6 +217,21 @@ export class TasksController {
     return this.tasksService.deleteSubtask(request.user.id, id, subtaskId);
   }
 
+  @Put(':id/subtasks/:subtaskId/dependencies')
+  setSubtaskDependencies(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('subtaskId', ParseUUIDPipe) subtaskId: string,
+    @Body() dto: SubtaskDependencyDto,
+  ) {
+    return this.tasksService.setSubtaskDependencies(
+      request.user.id,
+      id,
+      subtaskId,
+      dto,
+    );
+  }
+
   @Post(':id/dependencies')
   addDependencies(
     @Req() request: AuthenticatedRequest,
@@ -362,5 +380,94 @@ export class TasksController {
     @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
   ) {
     await this.taskAttachmentsService.remove(request.user.id, id, attachmentId);
+  }
+
+  @Get(':id/subtasks/:subtaskId/attachments')
+  listSubtaskAttachments(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('subtaskId', ParseUUIDPipe) subtaskId: string,
+  ) {
+    return this.subtaskAttachmentsService.list(request.user.id, id, subtaskId);
+  }
+
+  @Post(':id/subtasks/:subtaskId/attachments')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_ATTACHMENT_SIZE_BYTES },
+    }),
+  )
+  uploadSubtaskAttachment(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('subtaskId', ParseUUIDPipe) subtaskId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.subtaskAttachmentsService.upload(
+      request.user.id,
+      id,
+      subtaskId,
+      file,
+    );
+  }
+
+  @Get(':id/subtasks/:subtaskId/attachments/:attachmentId/download')
+  async downloadSubtaskAttachment(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('subtaskId', ParseUUIDPipe) subtaskId: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+  ) {
+    const { stream, fileName, mimeType } =
+      await this.subtaskAttachmentsService.getFile(
+        request.user.id,
+        id,
+        subtaskId,
+        attachmentId,
+      );
+
+    return new StreamableFile(stream, {
+      type: mimeType,
+      disposition: formatContentDisposition(fileName, 'attachment'),
+    });
+  }
+
+  @Get(':id/subtasks/:subtaskId/attachments/:attachmentId/preview')
+  async previewSubtaskAttachment(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('subtaskId', ParseUUIDPipe) subtaskId: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+  ) {
+    const { stream, fileName, mimeType } =
+      await this.subtaskAttachmentsService.getFile(
+        request.user.id,
+        id,
+        subtaskId,
+        attachmentId,
+      );
+
+    return new StreamableFile(stream, {
+      type: mimeType,
+      disposition: formatContentDisposition(fileName, 'inline'),
+    });
+  }
+
+  @Delete(':id/subtasks/:subtaskId/attachments/:attachmentId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeSubtaskAttachment(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('subtaskId', ParseUUIDPipe) subtaskId: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+  ) {
+    await this.subtaskAttachmentsService.remove(
+      request.user.id,
+      id,
+      subtaskId,
+      attachmentId,
+    );
   }
 }

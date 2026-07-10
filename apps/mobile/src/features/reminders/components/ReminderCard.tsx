@@ -9,6 +9,15 @@ const TYPE_ICON: Record<Reminder['type'], string> = {
   location: 'L',
   context: 'C',
   checklist: 'K',
+  person: '👤',
+};
+
+const PERSON_PERMISSION_LABEL: Record<string, string> = {
+  pending: 'Waiting for approval',
+  active: 'Active',
+  expired: 'Permission expired',
+  revoked: 'Permission revoked',
+  rejected: 'Request declined',
 };
 
 type Props = {
@@ -21,7 +30,13 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
   const { formatPercent, t } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
-  const meta = theme.categoryAvatars[reminder.type];
+  // categoryAvatars doesn't include 'person'; give it a distinct sky-tinted
+  // avatar and let the other types use the themed category colors.
+  const PERSON_ACCENT = '#38bdf8';
+  const meta =
+    reminder.type === 'person'
+      ? { backgroundColor: 'rgba(56, 189, 248, 0.14)', color: PERSON_ACCENT }
+      : theme.categoryAvatars[reminder.type];
   const completed = reminder.status === 'done';
   const subtitle = getSubtitle(reminder);
   const progress =
@@ -106,14 +121,32 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
               </View>
             )}
 
-            <View className="mt-2 flex-row items-center gap-2">
+            <View className="mt-2 flex-row flex-wrap items-center gap-2">
               <Text
                 className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
                 style={{ backgroundColor: statusBadge.bg, color: statusBadge.color }}
               >
                 {t(`status.${reminder.status}`)}
               </Text>
+              {reminder.type === 'person' && reminder.person?.permissionStatus && (
+                <Text
+                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                  style={{ backgroundColor: colors.surfaceElevated, color: colors.secondaryText }}
+                >
+                  {PERSON_PERMISSION_LABEL[reminder.person.permissionStatus] ?? reminder.person.permissionStatus}
+                </Text>
+              )}
             </View>
+
+            {reminder.type === 'person' && reminder.person && (
+              <Text className="mt-1.5 text-[11px]" style={{ color: colors.textSubtle }}>
+                {`Radius ${reminder.person.radiusMeters ?? 100}m · ${
+                  reminder.person.lastNotifiedAt
+                    ? `Last alerted ${new Date(reminder.person.lastNotifiedAt).toLocaleString()}`
+                    : 'Not alerted yet'
+                }`}
+              </Text>
+            )}
           </View>
 
           <Text className="mt-1 shrink-0 text-lg" style={{ color: colors.secondaryText }}>{'>'}</Text>
@@ -133,5 +166,9 @@ function getSubtitle(reminder: Reminder) {
     return `${done}/${reminder.checklistItems.length} items completed`;
   }
   if (reminder.type === 'context' && reminder.context) return reminder.context.condition;
+  if (reminder.type === 'person' && reminder.person) {
+    const name = reminder.person.targetFriendName ?? reminder.person.targetName ?? 'your friend';
+    return `When ${name} is nearby`;
+  }
   return '';
 }

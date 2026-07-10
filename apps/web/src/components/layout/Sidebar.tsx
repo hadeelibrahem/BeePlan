@@ -7,12 +7,22 @@ import {
   DashboardIcon,
   FocusIcon,
   NotesIcon,
+  PeopleIcon,
   PlannerIcon,
   RemindersIcon,
   TasksIcon,
 } from './icons'
 
-export type SidebarPage = 'dashboard' | 'tasks' | 'focus' | 'planner' | 'reminders' | 'calendar' | 'notes' | 'analytics'
+export type SidebarPage =
+  | 'dashboard'
+  | 'tasks'
+  | 'focus'
+  | 'planner'
+  | 'reminders'
+  | 'people'
+  | 'calendar'
+  | 'notes'
+  | 'analytics'
 
 export type SidebarNavHandlers = {
   onNavigateDashboard?: () => void
@@ -20,6 +30,7 @@ export type SidebarNavHandlers = {
   onNavigateFocus?: () => void
   onNavigatePlanner?: () => void
   onNavigateReminders?: () => void
+  onNavigatePeople?: () => void
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
   onNavigateAnalytics?: () => void
@@ -40,6 +51,7 @@ const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon;
   { page: 'focus', label: 'Focus', Icon: FocusIcon, handler: 'onNavigateFocus' },
   { page: 'planner', label: 'AI Planner', Icon: PlannerIcon, handler: 'onNavigatePlanner' },
   { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
+  { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
   { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
   { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
   { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },

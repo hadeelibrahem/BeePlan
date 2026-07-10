@@ -34,6 +34,7 @@ type ReminderResponse = {
   checklistItems?: { id?: string; title: string; isDone?: boolean }[];
   items?: { id?: string; title: string; isDone?: boolean }[];
   reminderTrigger?: Reminder['checklistReminderTrigger'];
+  person?: Reminder['person'];
   createdAt: string;
   updatedAt: string;
 };
@@ -191,9 +192,29 @@ function toRequestBody(values: ReminderFormValues) {
   };
 }
 
+// Person reminders are *created* via POST /person-reminders (social api). This
+// body is only used to *edit* an existing one via PATCH /reminders/:id — the
+// backend merges the `person` patch onto the stored config, so target/permission
+// fields are preserved.
+function toPersonRequestBody(values: ReminderFormValues) {
+  return {
+    title: values.title,
+    type: 'person',
+    repeat: 'none',
+    priority: normalizePriority(values.priority),
+    notes: values.description || undefined,
+    person: {
+      message: values.description || values.person?.message || undefined,
+      radiusMeters: values.person?.radiusMeters,
+      cooldownMinutes: values.person?.cooldownMinutes,
+    },
+  };
+}
+
 function toRequestBodyFor(values: ReminderFormValues) {
   if (values.type === 'checklist') return toChecklistRequestBody(values);
   if (values.type === 'location') return toLocationRequestBody(values);
+  if (values.type === 'person') return toPersonRequestBody(values);
   return toRequestBody(values);
 }
 
@@ -221,6 +242,7 @@ function fromResponse(data: ReminderResponse): Reminder {
       isDone: item.isDone ?? false,
     })),
     checklistReminderTrigger: data.reminderTrigger,
+    person: data.person,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };

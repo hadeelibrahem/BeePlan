@@ -13,6 +13,7 @@ import { DatabaseModule } from './db/database.module';
 import { FocusModule } from './focus/focus.module';
 import { NotesModule } from './notes/notes.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { SocialModule } from './social/social.module';
 import { SpeechModule } from './speech/speech.module';
 import { TasksModule } from './tasks/tasks.module';
 
@@ -33,6 +34,7 @@ import { TasksModule } from './tasks/tasks.module';
     DatabaseModule,
     AuthModule,
     RemindersModule,
+    SocialModule,
     SpeechModule,
     AiModule,
     TasksModule,

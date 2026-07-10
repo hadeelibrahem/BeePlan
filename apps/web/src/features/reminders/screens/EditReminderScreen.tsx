@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useLanguage } from '../../../i18n/LanguageContext'
+import { getFriends } from '../../social/api/social.api'
+import type { FriendSummary } from '../../social/types/social.types'
 import { updateReminder } from '../api/reminders.api'
 import { ReminderForm } from '../components/ReminderForm'
 import type { Reminder } from '../types/reminders.types'
@@ -12,6 +15,14 @@ type Props = {
 
 export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }: Props) {
   const { t, isRTL } = useLanguage()
+  const [friends, setFriends] = useState<FriendSummary[]>([])
+
+  useEffect(() => {
+    if (!accessToken || reminder.type !== 'person') return
+    void getFriends(accessToken)
+      .then(setFriends)
+      .catch(() => setFriends([]))
+  }, [accessToken, reminder.type])
 
   return (
     <main className="min-h-screen bg-[var(--bp-bg)] px-4 pb-6 pt-4 text-[var(--bp-text)]">
@@ -33,6 +44,7 @@ export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }:
         </p>
         <ReminderForm
           initialReminder={reminder}
+          friends={friends}
           submitLabel={t('reminders.saveChanges')}
           onSubmit={async (values) => {
             const updated = await updateReminder(reminder.id, values, accessToken)

@@ -6,10 +6,13 @@ import {
   generateDailyPlan,
   getPlannerPreferences,
   updatePlannerPreferences,
+  type CapacitySummary,
   type DailyPlan,
   type DailyPlanItem,
   type EnergyLevel,
   type PlannerPreferences,
+  type PostponeStatus,
+  type UnscheduledItem,
 } from '../lib/plannerApi'
 import { useTheme } from '../theme/ThemeContext'
 
@@ -271,6 +274,9 @@ export default function AiPlannerScreen({
 
       {plan ? (
         <div className="space-y-4">
+          {/* CAPACITY SUMMARY — scheduled vs postponed ------------------ */}
+          <CapacitySummaryCard capacity={plan.capacity} />
+
           {/* SCHEDULE — always visible ---------------------------------- */}
           {(Object.keys(SECTION_META) as SectionKey[]).map((section) => {
             const rawItems = plan.sections[section].filter((item) => matchesSearch(item, search))
@@ -328,35 +334,7 @@ export default function AiPlannerScreen({
             )
           })}
 
-          {plan.unscheduled.length ? (
-            <section className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-4 shadow-xl">
-              <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
-                <span>📥</span> Could not fit these tasks today
-              </h3>
-              <p className="mb-3 mt-1 text-xs text-slate-400">
-                {plan.unscheduled.length} task{plan.unscheduled.length > 1 ? 's' : ''} left unscheduled by the planner.
-              </p>
-              <div className="space-y-2">
-                {plan.unscheduled.map((item, index) => {
-                  const category = unscheduledCategory(item.reason)
-                  return (
-                    <div
-                      key={`${item.taskId ?? item.reminderId ?? index}`}
-                      className="rounded-xl border border-dashed border-amber-500/30 bg-[var(--bp-bg)] p-3"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-bold text-[var(--bp-text)]">{item.title}</p>
-                        <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase ${category.tone}`}>
-                          <span>{category.emoji}</span> {category.label}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">{item.reason}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          ) : null}
+          {plan.unscheduled.length ? <PostponedList items={plan.unscheduled} /> : null}
 
           {/* DETAILED VIEW — explainability, collapsed by default -------- */}
           {detailed ? (
@@ -488,13 +466,43 @@ function PlanningPreferencesCard({
     setMessage(null)
   }
 
+  function updateWindow(key: 'sleep' | 'lunch', field: 'start' | 'end', value: string) {
+    setDraft((current) => ({ ...current, [key]: { ...current[key], [field]: value } }))
+    setMessage(null)
+  }
+
+  function addUnavailable() {
+    setDraft((current) => ({ ...current, unavailableHours: [...current.unavailableHours, { start: '18:00', end: '19:00' }] }))
+    setMessage(null)
+  }
+
+  function updateUnavailable(index: number, field: 'start' | 'end', value: string) {
+    setDraft((current) => ({
+      ...current,
+      unavailableHours: current.unavailableHours.map((window, i) => (i === index ? { ...window, [field]: value } : window)),
+    }))
+    setMessage(null)
+  }
+
+  function removeUnavailable(index: number) {
+    setDraft((current) => ({ ...current, unavailableHours: current.unavailableHours.filter((_, i) => i !== index) }))
+    setMessage(null)
+  }
+
   const start = toMinutes(draft.focusStartTime)
   const end = toMinutes(draft.focusEndTime)
   const invalidFocus = start != null && end != null && start >= end
+  const lunchStart = toMinutes(draft.lunch.start)
+  const lunchEnd = toMinutes(draft.lunch.end)
+  const invalidLunch = lunchStart != null && lunchEnd != null && lunchStart >= lunchEnd
 
   async function handleSave() {
     if (invalidFocus) {
       setMessage({ ok: false, text: 'Focus start time must be before focus end time.' })
+      return
+    }
+    if (invalidLunch) {
+      setMessage({ ok: false, text: 'Lunch start time must be before lunch end time.' })
       return
     }
     setSaving(true)
@@ -548,6 +556,62 @@ function PlanningPreferencesCard({
           ) : null}
         </PrefGroup>
 
+        <PrefGroup title="Daily capacity" hint="How much real work a day can hold, and the slack always left free.">
+          <div className="flex items-end gap-2">
+            <PrefNumber label="Max work / day (min)" value={draft.maxDailyWorkMinutes} min={60} max={960} onChange={(value) => update('maxDailyWorkMinutes', value)} />
+            <PrefNumber label="Emergency buffer (min)" value={draft.emergencyBufferMinutes} min={0} max={180} onChange={(value) => update('emergencyBufferMinutes', value)} />
+          </div>
+        </PrefGroup>
+
+        <PrefGroup title="Sleep & lunch" hint="Protected hours the planner never schedules work into.">
+          <div className="space-y-2">
+            <div>
+              <p className="mb-1 text-[11px] font-bold text-slate-500">Sleep (can cross midnight)</p>
+              <div className="flex items-end gap-2">
+                <PrefTime label="From" value={draft.sleep.start} onChange={(value) => updateWindow('sleep', 'start', value)} />
+                <PrefTime label="To" value={draft.sleep.end} onChange={(value) => updateWindow('sleep', 'end', value)} />
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-bold text-slate-500">Lunch</p>
+              <div className="flex items-end gap-2">
+                <PrefTime label="From" value={draft.lunch.start} onChange={(value) => updateWindow('lunch', 'start', value)} />
+                <PrefTime label="To" value={draft.lunch.end} onChange={(value) => updateWindow('lunch', 'end', value)} />
+              </div>
+              {invalidLunch ? <p className="mt-1 text-[11px] font-bold text-red-300">Lunch start must be before end.</p> : null}
+            </div>
+          </div>
+        </PrefGroup>
+
+        <PrefGroup title="Unavailable hours" hint="Commute, gym, prayer, family — windows you're never available." className="md:col-span-2">
+          {draft.unavailableHours.length ? (
+            <div className="space-y-2">
+              {draft.unavailableHours.map((window, index) => (
+                <div key={index} className="flex items-end gap-2">
+                  <PrefTime label="From" value={window.start} onChange={(value) => updateUnavailable(index, 'start', value)} />
+                  <PrefTime label="To" value={window.end} onChange={(value) => updateUnavailable(index, 'end', value)} />
+                  <button
+                    type="button"
+                    onClick={() => removeUnavailable(index)}
+                    className="mb-0.5 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-black text-red-300 transition hover:bg-red-500/25"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500">No unavailable windows yet.</p>
+          )}
+          <button
+            type="button"
+            onClick={addUnavailable}
+            className="mt-2 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-2.5 py-1.5 text-xs font-black text-[var(--bp-text)] transition hover:border-[var(--bp-accent)]/40"
+          >
+            + Add window
+          </button>
+        </PrefGroup>
+
         <PrefGroup title="Personal note" hint="Anything else about how you like your day planned." className="md:col-span-2">
           <textarea
             value={draft.note}
@@ -562,7 +626,7 @@ function PlanningPreferencesCard({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <PrimaryButton size="sm" onClick={handleSave} loading={saving} disabled={invalidFocus}>
+        <PrimaryButton size="sm" onClick={handleSave} loading={saving} disabled={invalidFocus || invalidLunch}>
           Save Preferences
         </PrimaryButton>
         {message ? (
@@ -570,6 +634,95 @@ function PlanningPreferencesCard({
         ) : null}
       </div>
     </CollapsibleSection>
+  )
+}
+
+function CapacitySummaryCard({ capacity }: { capacity: CapacitySummary }) {
+  const requested = Math.max(1, capacity.requestedMinutes)
+  const scheduledPct = Math.min(100, Math.round((capacity.scheduledMinutes / requested) * 100))
+  const usedPct = Math.min(100, Math.round((capacity.scheduledMinutes / Math.max(1, capacity.availableMinutes)) * 100))
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 shadow-xl">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
+          <span>📊</span> Today&apos;s capacity
+        </h3>
+        <span className="text-[11px] font-bold text-slate-500">
+          {usedPct}% of {formatDuration(capacity.availableMinutes)} budget used
+        </span>
+      </div>
+
+      {/* requested = scheduled + postponed */}
+      <div className="mb-3 h-2.5 w-full overflow-hidden rounded-full bg-[var(--bp-border)]">
+        <div className="flex h-full w-full">
+          <div className="h-full bg-[var(--bp-accent)] transition-all duration-500" style={{ width: `${scheduledPct}%` }} />
+          <div className="h-full bg-amber-400/70 transition-all duration-500" style={{ width: `${100 - scheduledPct}%` }} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <CapacityStat label="Available" value={formatDuration(capacity.availableMinutes)} tone="text-sky-300" />
+        <CapacityStat label="Requested" value={formatDuration(capacity.requestedMinutes)} tone="text-[var(--bp-text)]" />
+        <CapacityStat label="Scheduled" value={formatDuration(capacity.scheduledMinutes)} tone="text-green-300" />
+        <CapacityStat label="Postponed" value={formatDuration(capacity.postponedMinutes)} tone="text-amber-300" />
+        <CapacityStat label="Tasks scheduled" value={String(capacity.scheduledTaskCount)} tone="text-green-300" />
+        <CapacityStat label="Tasks postponed" value={String(capacity.postponedTaskCount)} tone="text-amber-300" />
+      </div>
+      <p className="mt-3 text-[11px] text-slate-500">
+        Keeps a {formatDuration(capacity.emergencyBufferMinutes)} emergency buffer free and never plans past your max daily work of{' '}
+        {formatDuration(capacity.maxDailyWorkMinutes)}.
+      </p>
+    </section>
+  )
+}
+
+function CapacityStat({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/60 p-2.5">
+      <p className="text-[10px] font-black uppercase text-slate-500">{label}</p>
+      <p className={`mt-0.5 text-base font-black ${tone}`}>{value}</p>
+    </div>
+  )
+}
+
+function PostponedList({ items }: { items: UnscheduledItem[] }) {
+  return (
+    <section className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-4 shadow-xl">
+      <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
+        <span>📥</span> Not scheduled today
+      </h3>
+      <p className="mb-3 mt-1 text-xs text-slate-400">
+        {items.length} task{items.length > 1 ? 's' : ''} moved out of today — nothing is silently dropped.
+      </p>
+      <div className="space-y-2">
+        {items.map((item, index) => {
+          const meta = postponeMeta(item.status)
+          return (
+            <div
+              key={`${item.taskId ?? item.reminderId ?? index}`}
+              className="rounded-xl border border-dashed border-amber-500/30 bg-[var(--bp-bg)] p-3"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-bold text-[var(--bp-text)]">{item.title}</p>
+                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase ${meta.tone}`}>
+                  <span>{meta.emoji}</span> {meta.label}
+                </span>
+                {item.priority ? <Badge tone={priorityTone(item.priority)}>{item.priority}</Badge> : null}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">{item.reason}</p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                {item.estimatedMinutes ? <span>⏱️ {formatDuration(item.estimatedMinutes)}</span> : null}
+                {item.deadline ? <span>📅 Due {formatShortDate(item.deadline)}</span> : null}
+                {item.suggestedDate ? (
+                  <span className="font-bold text-[var(--bp-accent)]">➡️ Suggested: {formatShortDate(item.suggestedDate)}</span>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -1414,12 +1567,19 @@ function buildValidation(plan: DailyPlan | null, lockedItems: Record<string, Dai
   return { noOverlaps, breaksInserted: breaks > 0, breaks, lockedCount, dependencyBlocked }
 }
 
-function unscheduledCategory(reason: string): { label: string; emoji: string; tone: string } {
-  const value = reason.toLowerCase()
-  if (value.includes('depend')) return { label: 'Blocked by dependency', emoji: '🔗', tone: 'bg-purple-500/15 text-purple-300' }
-  if (value.includes('hour') || value.includes('working')) return { label: 'Outside working hours', emoji: '🕘', tone: 'bg-sky-500/15 text-sky-300' }
-  if (value.includes('time') || value.includes('fit')) return { label: 'Not enough time', emoji: '⌛', tone: 'bg-amber-500/15 text-amber-300' }
-  return { label: 'Unscheduled', emoji: '📥', tone: 'bg-slate-500/15 text-slate-300' }
+function postponeMeta(status: PostponeStatus): { label: string; emoji: string; tone: string } {
+  switch (status) {
+    case 'POSTPONED_CAPACITY':
+      return { label: 'Postponed — day full', emoji: '⌛', tone: 'bg-amber-500/15 text-amber-300' }
+    case 'BLOCKED_DEPENDENCY':
+      return { label: 'Blocked by dependency', emoji: '🔗', tone: 'bg-purple-500/15 text-purple-300' }
+    case 'NO_VALID_TIME_SLOT':
+      return { label: 'No free slot today', emoji: '🕘', tone: 'bg-sky-500/15 text-sky-300' }
+    case 'INVALID_TASK_DATA':
+      return { label: 'Needs a duration', emoji: '⚠️', tone: 'bg-red-500/15 text-red-300' }
+    default:
+      return { label: 'Not scheduled', emoji: '📥', tone: 'bg-slate-500/15 text-slate-300' }
+  }
 }
 
 function priorityRank(priority: DailyPlanItem['priority']) {
@@ -1498,4 +1658,11 @@ function formatLongDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`)
   if (Number.isNaN(date.getTime())) return iso
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+function formatShortDate(iso: string): string {
+  // Accepts either YYYY-MM-DD or a full ISO timestamp (deadlines are ISO).
+  const date = new Date(iso.length <= 10 ? `${iso}T00:00:00` : iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }

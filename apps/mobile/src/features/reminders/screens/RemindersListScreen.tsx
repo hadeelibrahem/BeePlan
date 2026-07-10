@@ -22,9 +22,10 @@ type Props = {
   onToggle: (id: string) => void;
   onSignOut?: () => void;
   onBack?: () => void;
+  onViewPeople?: () => void;
 };
 
-export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, onSignOut, onBack }: Props) {
+export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, onSignOut, onBack, onViewPeople }: Props) {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const { formatNumber, t } = useLanguage();
@@ -34,6 +35,7 @@ export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, o
     { value: 'all', label: t('filters.all') },
     { value: 'time', label: t('filters.time') },
     { value: 'location', label: t('filters.location') },
+    { value: 'person', label: 'People' },
     { value: 'checklist', label: t('filters.checklist') },
     { value: 'context', label: t('filters.context') },
     { value: 'completed', label: t('filters.completed') },
@@ -79,16 +81,52 @@ export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, o
         </Pressable>
       )}
 
+      {onViewPeople && (
+        <Pressable
+          onPress={onViewPeople}
+          accessibilityRole="button"
+          accessibilityLabel="People and proximity reminders"
+          className="mb-3 flex-row items-center justify-between rounded-2xl border px-4 py-3 active:opacity-80"
+          style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.surface }}
+        >
+          <Text className="text-sm font-bold" style={{ color: theme.colors.text }}>
+            {'👥  People & proximity reminders'}
+          </Text>
+          <Text className="text-base font-black" style={{ color: theme.colors.accent }}>{'›'}</Text>
+        </Pressable>
+      )}
+
       <SearchInput value={search} onChangeText={setSearch} placeholder={t('dashboard.searchPlaceholder')} />
 
       <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
+      {activeTab === 'person' && onViewPeople && (
+        <Pressable
+          onPress={onViewPeople}
+          accessibilityRole="button"
+          className="mb-3 flex-row items-center justify-center rounded-2xl border px-4 py-3 active:opacity-80"
+          style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}
+        >
+          <Text className="text-sm font-bold" style={{ color: theme.colors.accent }}>
+            {'👤  Create Person Reminder'}
+          </Text>
+        </Pressable>
+      )}
+
       {filtered.length === 0 ? (
-        <EmptyState
-          icon="🔔"
-          title={search ? t('dashboard.noResults') : t('dashboard.noReminders')}
-          description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
-        />
+        activeTab === 'person' ? (
+          <EmptyState
+            icon="👥"
+            title="No person reminders yet"
+            description="Create one to be reminded when someone is nearby."
+          />
+        ) : (
+          <EmptyState
+            icon="🔔"
+            title={search ? t('dashboard.noResults') : t('dashboard.noReminders')}
+            description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
+          />
+        )
       ) : (
         <View className="gap-2">
           {filtered.map((reminder) => (

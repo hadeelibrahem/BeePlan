@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../db/database.service';
 import { AiPlannerService, type DailyPlan, type DailyPlanItem } from './ai-planner.service';
+import { PlannerDurationEstimator } from './planner/planner-duration-estimator';
 import { PlannerPreferencesService, DEFAULT_PLANNER_PREFERENCES } from './planner/planner-preferences.service';
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
 import { PlannerRuleEngine } from './planner/planner-rule-engine';
@@ -114,6 +115,7 @@ function buildService(
     new PlannerRuleEngine(),
     reasoning,
     new PlannerSchedulerEngine(),
+    new PlannerDurationEstimator(config),
     preferences,
   );
   return { service, reasoning, preferences };
@@ -336,6 +338,79 @@ describe('AiPlannerService (3-layer pipeline)', () => {
 
       const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
       expect(taskItems(plan)[0].taskId).toBe('fresh');
+    });
+  });
+
+  /* ---- capacity, current time & duration estimation --------------------- */
+
+  describe('capacity summary', () => {
+    it('always reports a capacity block (available/requested/scheduled/postponed)', async () => {
+      const rows = [makeTask('a', { estimatedTimeMinutes: 60 })];
+      const { service } = buildService(rows);
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+
+      expect(plan.capacity).toBeDefined();
+      expect(plan.capacity.availableMinutes).toBeGreaterThan(0);
+      expect(plan.capacity.requestedMinutes).toBe(60);
+      expect(plan.capacity.scheduledMinutes).toBe(60);
+      expect(plan.capacity.postponedMinutes).toBe(0);
+      expect(plan.capacity.scheduledTaskCount).toBe(1);
+    });
+  });
+
+  describe('daily capacity: smart postponement', () => {
+    it('postpones the lowest-priority work when the day exceeds max daily work hours', async () => {
+      const rows = [
+        makeTask('big-a', { priority: 'high', estimatedTimeMinutes: 120 }),
+        makeTask('big-b', { priority: 'medium', estimatedTimeMinutes: 120 }),
+        makeTask('big-c', { priority: 'low', estimatedTimeMinutes: 120 }),
+      ];
+      const { service, preferences } = buildService(rows);
+      // Only ~3h of real work allowed today; 6h requested.
+      jest.spyOn(preferences, 'getPreferences').mockResolvedValue(
+        withPreferences({ maxDailyWorkMinutes: 180, emergencyBufferMinutes: 30 }),
+      );
+
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+      const postponed = plan.unscheduled.filter((item) => item.status === 'POSTPONED_CAPACITY');
+
+      expect(postponed.length).toBeGreaterThan(0);
+      // The low-priority task is the one pushed to a later day.
+      expect(postponed.some((item) => item.taskId === 'big-c')).toBe(true);
+      expect(postponed[0].suggestedDate).toBeDefined();
+      expect(plan.capacity.postponedMinutes).toBeGreaterThan(0);
+      expect(plan.capacity.availableMinutes).toBeLessThanOrEqual(180);
+    });
+  });
+
+  describe('respects the current time when planning today', () => {
+    it('never schedules a task before the current time', async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const rows = [makeTask('a', { estimatedTimeMinutes: 45 })];
+      const { service } = buildService(rows);
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: today,
+        currentTime: '15:00',
+        breaks: [],
+      });
+
+      for (const item of taskItems(plan)) {
+        expect(toMin(item.startTime)).toBeGreaterThanOrEqual(toMin('15:00'));
+      }
+    });
+  });
+
+  describe('duration estimation', () => {
+    it('estimates a realistic duration for a task with no set duration', async () => {
+      const rows = [makeTask('errand', { title: 'Buy groceries', estimatedTimeMinutes: 0, remainingTimeMinutes: 0 })];
+      const { service } = buildService(rows);
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+
+      const item = taskItems(plan).find((entry) => entry.taskId === 'errand');
+      expect(item).toBeDefined();
+      // Not the old fixed 45-min default: an errand is estimated shorter.
+      expect(item!.durationMinutes).toBeGreaterThan(0);
+      expect(item!.durationMinutes).toBeLessThan(45);
     });
   });
 

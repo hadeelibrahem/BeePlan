@@ -8,6 +8,7 @@ const TYPES: Array<{ value: ReminderType; labelKey: string; hintKey: string }> =
   { value: 'location', labelKey: 'reminders.typeLocation', hintKey: 'reminders.typeLocationHint' },
   { value: 'context', labelKey: 'reminders.typeContext', hintKey: 'reminders.typeContextHint' },
   { value: 'checklist', labelKey: 'reminders.typeChecklist', hintKey: 'reminders.typeChecklistHint' },
+  { value: 'person', labelKey: 'reminders.typePerson', hintKey: 'reminders.typePersonHint' },
 ];
 
 type Props = {

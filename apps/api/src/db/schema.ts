@@ -97,6 +97,17 @@ export const plannerPreferences = pgTable('planner_preferences', {
   groupSimilarTasks: boolean('group_similar_tasks').notNull().default(true),
   bufferBeforeMeetings: boolean('buffer_before_meetings').notNull().default(true),
   bufferMinutes: integer('buffer_minutes').notNull().default(15),
+  // Daily-capacity controls: how much real work a day can hold, protected
+  // recovery/rest windows, and the emergency slack the planner always leaves.
+  maxDailyWorkMinutes: integer('max_daily_work_minutes').notNull().default(480),
+  emergencyBufferMinutes: integer('emergency_buffer_minutes').notNull().default(30),
+  sleepStartTime: varchar('sleep_start_time', { length: 5 }).notNull().default('23:00'),
+  sleepEndTime: varchar('sleep_end_time', { length: 5 }).notNull().default('07:00'),
+  lunchStartTime: varchar('lunch_start_time', { length: 5 }).notNull().default('13:00'),
+  lunchEndTime: varchar('lunch_end_time', { length: 5 }).notNull().default('13:45'),
+  // Extra fixed windows the user is never available (e.g. commute, prayer,
+  // gym): a JSON array of { start: 'HH:mm', end: 'HH:mm' }.
+  unavailableHours: jsonb('unavailable_hours').notNull().default([]),
   note: varchar('note', { length: 1000 }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -205,15 +216,89 @@ export const subtasks = pgTable(
       .notNull()
       .references(() => tasks.id, { onDelete: 'cascade' }),
     title: varchar('title', { length: 255 }).notNull(),
+    // Kept in sync with `status === 'done'` for backward compatibility with
+    // existing callers/UI that only toggle a checkbox.
     isDone: boolean('is_done').notNull().default(false),
     orderIndex: integer('order_index').notNull().default(0),
     assignee: varchar('assignee', { length: 80 }),
-    dueDate: timestamp('due_date'),
+    description: text('description'),
+    // low | medium | high | urgent
+    priority: varchar('priority', { length: 20 }).notNull().default('medium'),
+    // todo | in_progress | done | blocked | missed
     status: varchar('status', { length: 30 }).notNull().default('todo'),
+    startDate: timestamp('start_date'),
+    dueDate: timestamp('due_date'),
+    estimatedDurationMinutes: integer('estimated_duration_minutes'),
+    actualDurationMinutes: integer('actual_duration_minutes'),
+    // 'user' when the estimate was entered by a person, 'ai' when inferred by
+    // the planner — the UI shows an "AI Estimate" badge for the latter.
+    estimatedDurationSource: varchar('estimated_duration_source', {
+      length: 10,
+    })
+      .notNull()
+      .default('user'),
+    // Lightweight per-subtask reminder config. Not a standalone reminder
+    // entity yet — future-ready to be promoted without a schema redesign.
+    reminderEnabled: boolean('reminder_enabled').notNull().default(false),
+    reminderMinutesBeforeDue: integer('reminder_minutes_before_due'),
+    reminderTime: timestamp('reminder_time'),
+    reminderSentAt: timestamp('reminder_sent_at'),
+    // none | scheduled | sent | cancelled
+    reminderStatus: varchar('reminder_status', { length: 20 })
+      .notNull()
+      .default('none'),
+    notes: text('notes'),
+    tags: jsonb('tags'),
+    completedAt: timestamp('completed_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [index('idx_subtasks_task_id').on(table.taskId)],
+  (table) => [
+    index('idx_subtasks_task_id').on(table.taskId),
+    index('idx_subtasks_status').on(table.status),
+    index('idx_subtasks_due_date').on(table.dueDate),
+  ],
+);
+
+// Intra-task subtask ordering constraints: `subtaskId` cannot be started until
+// `dependsOnSubtaskId` is complete. Both must belong to the same parent task
+// (enforced in the service layer).
+export const subtaskDependencies = pgTable(
+  'subtask_dependencies',
+  {
+    subtaskId: uuid('subtask_id')
+      .notNull()
+      .references(() => subtasks.id, { onDelete: 'cascade' }),
+    dependsOnSubtaskId: uuid('depends_on_subtask_id')
+      .notNull()
+      .references(() => subtasks.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.subtaskId, table.dependsOnSubtaskId] }),
+  ],
+);
+
+export const subtaskAttachments = pgTable(
+  'subtask_attachments',
+  {
+    id: id(),
+    subtaskId: uuid('subtask_id')
+      .notNull()
+      .references(() => subtasks.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    storageKey: text('storage_key').notNull(),
+    mimeType: varchar('mime_type', { length: 120 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index('idx_subtask_attachments_subtask_id').on(table.subtaskId)],
 );
 
 // Note: task_dependencies.taskId is already served by the composite primary
@@ -335,6 +420,12 @@ export const reminders = pgTable('reminders', {
   location: jsonb('location'),
   context: jsonb('context'),
   checklistItems: jsonb('checklist_items'),
+  // Config for `type = 'person'` proximity reminders. Shape:
+  // { targetUserId, targetName, message, radiusMeters, cooldownMinutes,
+  //   permissionId, lastNotifiedAt }. `lastNotifiedAt` is stamped server-side
+  //   by the nearby check to enforce the notification cooldown. Null for all
+  //   non-person reminder types. See src/social/person-reminders.service.ts.
+  person: jsonb('person'),
   // True when `userId` is null - i.e. this row predates auth being
   // required on reminder creation and has no determinable owner. Kept
   // instead of deleted so the data isn't lost; see DatabaseService.
@@ -512,6 +603,78 @@ export const deviceTokens = pgTable('device_tokens', {
   token: text('token').notNull(),
   platform: varchar('platform', { length: 20 }).notNull(),
   createdAt: createdAt(),
+});
+
+// A directional friend request that becomes a mutual friendship once accepted.
+// `requesterId` sent the request to `addresseeId`. Uniqueness is enforced on
+// the ordered pair; the service also blocks a reverse-direction duplicate.
+export const friendships = pgTable(
+  'friendships',
+  {
+    id: id(),
+    requesterId: uuid('requester_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    addresseeId: uuid('addressee_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // pending | accepted | rejected
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_friendships_requester').on(table.requesterId),
+    index('idx_friendships_addressee').on(table.addresseeId),
+  ],
+);
+
+// Consent for one user (`ownerId`, who shares their location) to have their
+// proximity observed by another (`viewerId`, who created a person reminder).
+// Default mode is proximity-only: the viewer never sees the owner's exact
+// coordinates. The owner accepts/rejects and can revoke at any time.
+export const locationSharingPermissions = pgTable(
+  'location_sharing_permissions',
+  {
+    id: id(),
+    // The friend who agrees to share their location.
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // The user who gets notified when they are near the owner.
+    viewerId: uuid('viewer_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // proximity | live_location  (live_location reserved; never exposes coords yet)
+    mode: varchar('mode', { length: 20 }).notNull().default('proximity'),
+    // pending | active | rejected | revoked | expired
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    // Null means "always" (no expiration).
+    expiresAt: timestamp('expires_at'),
+    respondedAt: timestamp('responded_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_location_sharing_owner').on(table.ownerId),
+    index('idx_location_sharing_viewer').on(table.viewerId),
+  ],
+);
+
+// Latest known coarse location per user (one upserted row each). Only used to
+// compute proximity between consenting users; never returned to clients as
+// coordinates. Written only while the user has an active person reminder.
+export const userLocationSnapshots = pgTable('user_location_snapshots', {
+  id: id(),
+  userId: uuid('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  latitude: decimal('latitude', { precision: 10, scale: 7 }).notNull(),
+  longitude: decimal('longitude', { precision: 10, scale: 7 }).notNull(),
+  accuracyMeters: integer('accuracy_meters'),
+  capturedAt: timestamp('captured_at').defaultNow().notNull(),
+  updatedAt: updatedAt(),
 });
 
 export const dailyUserStats = pgTable('daily_user_stats', {

@@ -13,6 +13,10 @@ export const REMINDER_TYPES = [
   'location',
   'context',
   'checklist',
+  // Proximity ("person nearby") reminders. Created via the social module
+  // (POST /person-reminders), not the generic reminders endpoint, but listed
+  // alongside other reminders — see src/social/person-reminders.service.ts.
+  'person',
 ] as const;
 export type ReminderType = (typeof REMINDER_TYPES)[number];
 
@@ -111,4 +115,27 @@ export class ReminderChecklistItemDto {
   @IsOptional()
   @IsBoolean()
   isDone?: boolean;
+}
+
+/**
+ * Editable subset of a person reminder's config. Person reminders are *created*
+ * via POST /person-reminders (which also provisions the sharing permission);
+ * this DTO only carries the fields the generic PATCH /reminders/:id may edit
+ * (title/notes handled separately). Target friend changes are intentionally not
+ * supported here — they would require a new sharing permission.
+ */
+export class ReminderPersonDto {
+  @IsOptional()
+  @IsString()
+  message?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  radiusMeters?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  cooldownMinutes?: number;
 }

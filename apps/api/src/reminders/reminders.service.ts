@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import { reminders as remindersTable } from '../db/schema';
+import { LocationSharingService } from '../social/location-sharing.service';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 import type {
   ReminderChecklistItemDto,
@@ -13,15 +14,52 @@ import { Reminder } from './entities/reminder.entity';
 
 type ReminderRow = typeof remindersTable.$inferSelect;
 
+type PersonConfig = {
+  targetUserId?: string;
+  targetName?: string;
+  message?: string;
+  radiusMeters?: number;
+  cooldownMinutes?: number;
+  permissionId?: string | null;
+  lastNotifiedAt?: string | null;
+};
+
 @Injectable()
 export class RemindersService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly locationSharingService: LocationSharingService,
+  ) {}
 
   private get db() {
     return this.databaseService.db;
   }
 
-  private toEntity(row: ReminderRow): Reminder {
+  /**
+   * Enriches a person reminder's stored config with its live location-sharing
+   * permission status plus a convenience `targetFriendName` alias, so the
+   * Reminders page can render everything it needs without a second request.
+   */
+  private toEntity(
+    row: ReminderRow,
+    permissionStatuses?: Map<string, string>,
+  ): Reminder {
+    let person: Record<string, unknown> | undefined =
+      (row.person as Record<string, unknown> | null) ?? undefined;
+
+    if (row.type === 'person' && person) {
+      const config = person as PersonConfig;
+      const status =
+        (config.targetUserId
+          ? permissionStatuses?.get(config.targetUserId)
+          : undefined) ?? 'pending';
+      person = {
+        ...person,
+        targetFriendName: config.targetName,
+        permissionStatus: status,
+      };
+    }
+
     return {
       id: row.id,
       title: row.title,
@@ -39,6 +77,7 @@ export class RemindersService {
       context: (row.context as ReminderContextDto | null) ?? undefined,
       checklistItems:
         (row.checklistItems as ReminderChecklistItemDto[] | null) ?? undefined,
+      person,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -79,7 +118,14 @@ export class RemindersService {
       .from(remindersTable)
       .where(eq(remindersTable.userId, userId));
 
-    return rows.map((row) => this.toEntity(row));
+    // Only pay for the permission lookup when the user actually has person
+    // reminders — every other reminder type is unaffected.
+    const hasPersonReminder = rows.some((row) => row.type === 'person');
+    const permissionStatuses = hasPersonReminder
+      ? await this.locationSharingService.getViewerPermissionStatuses(userId)
+      : undefined;
+
+    return rows.map((row) => this.toEntity(row, permissionStatuses));
   }
 
   async findOne(userId: string, id: string): Promise<Reminder> {
@@ -92,7 +138,12 @@ export class RemindersService {
       throw new NotFoundException(`Reminder with id ${id} not found`);
     }
 
-    return this.toEntity(row);
+    const permissionStatuses =
+      row.type === 'person'
+        ? await this.locationSharingService.getViewerPermissionStatuses(userId)
+        : undefined;
+
+    return this.toEntity(row, permissionStatuses);
   }
 
   async update(
@@ -100,12 +151,32 @@ export class RemindersService {
     id: string,
     dto: UpdateReminderDto,
   ): Promise<Reminder> {
-    await this.findOne(userId, id);
+    const existing = await this.findOne(userId, id);
+
+    // Person config is a partial patch: merge onto the stored config so
+    // permission/targeting fields (permissionId, targetUserId, lastNotifiedAt)
+    // survive an edit that only changes radius/notes/cooldown. Ignored for
+    // non-person reminders.
+    const { person: personPatch, ...rest } = dto;
+    let mergedPerson: PersonConfig | undefined;
+    if (personPatch && existing.type === 'person') {
+      const [raw] = await this.db
+        .select({ person: remindersTable.person })
+        .from(remindersTable)
+        .where(
+          and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)),
+        );
+      mergedPerson = {
+        ...((raw?.person as PersonConfig | null) ?? {}),
+        ...personPatch,
+      };
+    }
 
     const [row] = await this.db
       .update(remindersTable)
       .set({
-        ...dto,
+        ...rest,
+        ...(mergedPerson ? { person: mergedPerson } : {}),
         triggerDateTime: dto.triggerDateTime
           ? new Date(dto.triggerDateTime)
           : undefined,

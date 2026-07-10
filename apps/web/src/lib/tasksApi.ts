@@ -17,15 +17,59 @@ export type ApiTaskLabel = {
   name: string
 }
 
+export type ApiSubtaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'missed'
+export type ApiSubtaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+
 export type ApiSubtask = {
   id: string
+  taskId?: string
   title: string
   isDone: boolean
   orderIndex: number
   assignee?: string
+  description?: string
+  priority: ApiSubtaskPriority
+  status: ApiSubtaskStatus
+  startDate?: string
   dueDate?: string
-  status: string
+  estimatedDurationMinutes?: number
+  actualDurationMinutes?: number
+  estimatedDurationSource: 'user' | 'ai'
+  reminderEnabled: boolean
+  reminderMinutesBeforeDue?: number
+  reminderTime?: string
+  reminderSentAt?: string
+  reminderStatus: 'none' | 'scheduled' | 'sent' | 'cancelled'
+  notes?: string
+  tags: string[]
+  dependencyIds: string[]
+  completedAt?: string
+  createdAt?: string
+  updatedAt?: string
 }
+
+export type SubtaskPayload = Partial<
+  Pick<
+    ApiSubtask,
+    | 'title'
+    | 'isDone'
+    | 'orderIndex'
+    | 'assignee'
+    | 'description'
+    | 'priority'
+    | 'status'
+    | 'startDate'
+    | 'dueDate'
+    | 'estimatedDurationMinutes'
+    | 'actualDurationMinutes'
+    | 'estimatedDurationSource'
+    | 'reminderEnabled'
+    | 'reminderMinutesBeforeDue'
+    | 'reminderTime'
+    | 'notes'
+    | 'tags'
+  >
+> & { dependencyIds?: string[] }
 
 export type ApiDependency = {
   id: string
@@ -171,7 +215,7 @@ export type TaskPayload = Partial<
     | 'recurrence'
   >
 > & {
-  subtasks?: { title: string; isDone?: boolean; orderIndex?: number; assignee?: string; dueDate?: string; status?: string }[]
+  subtasks?: (SubtaskPayload & { title: string })[]
 }
 
 function authHeaders(accessToken: string) {
@@ -485,7 +529,7 @@ export function getSubtasks(accessToken: string, taskId: string) {
 export function addSubtask(
   accessToken: string,
   taskId: string,
-  payload: { title: string; isDone?: boolean; dueDate?: string; assignee?: string },
+  payload: SubtaskPayload & { title: string },
 ) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks`, {
     method: 'POST',
@@ -504,7 +548,7 @@ export function updateSubtask(
   accessToken: string,
   taskId: string,
   subtaskId: string,
-  payload: Partial<ApiSubtask>,
+  payload: SubtaskPayload,
 ) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}`, {
     method: 'PATCH',
@@ -514,6 +558,102 @@ export function updateSubtask(
 
 export function deleteSubtask(accessToken: string, taskId: string, subtaskId: string) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'DELETE' })
+}
+
+export function setSubtaskDependencies(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+  dependsOnSubtaskIds: string[],
+) {
+  return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}/dependencies`, {
+    method: 'PUT',
+    body: JSON.stringify({ dependsOnSubtaskIds }),
+  })
+}
+
+// ---- Subtask attachments (mirror task attachments) ----
+
+export function getSubtaskAttachments(accessToken: string, taskId: string, subtaskId: string) {
+  return request<ApiTaskAttachment[]>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}/attachments`)
+}
+
+export async function uploadSubtaskAttachment(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+  file: File,
+): Promise<ApiTaskAttachment> {
+  const path = `/tasks/${taskId}/subtasks/${subtaskId}/attachments`
+  const url = `${apiUrl}${path}`
+  const formData = new FormData()
+  formData.append('file', file)
+
+  let response: Response
+  try {
+    // See uploadAttachment(): FormData must set its own multipart boundary.
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: formData,
+    })
+  } catch (error) {
+    console.error('[BeePlan Tasks API] Network request failed', { url, error })
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+  }
+
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
+    throw new Error(message ?? 'Attachment upload failed. Please try again.')
+  }
+
+  return data as ApiTaskAttachment
+}
+
+export function deleteSubtaskAttachment(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+  attachmentId: string,
+) {
+  return request<void>(
+    accessToken,
+    `/tasks/${taskId}/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function downloadSubtaskAttachment(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+  attachment: ApiTaskAttachment,
+) {
+  const path = attachment.id
+    ? `/tasks/${taskId}/subtasks/${subtaskId}/attachments/${attachment.id}/download`
+    : (attachment.downloadUrl ?? attachment.fileUrl ?? attachment.url ?? '')
+  if (!path) throw new Error('Unable to download attachment. Please try again.')
+
+  let response: Response
+  try {
+    response = await fetch(attachmentRequestUrl(path), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  } catch {
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+  }
+  if (!response.ok) throw new Error('Unable to download attachment. Please try again.')
+
+  const blob = await response.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = blobUrl
+  link.download = attachment.fileName ?? attachment.name ?? 'attachment'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000)
 }
 
 export function addDependencies(accessToken: string, taskId: string, dependencyTaskIds: string[]) {

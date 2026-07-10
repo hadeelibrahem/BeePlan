@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { daysBetween, isTime, minutesBetween, toMinutes } from './planner.util';
+import { daysBetween, isTime, minutesBetween, toMinutes, todayString, windowToDayRanges } from './planner.util';
 import type {
   BlockedTask,
   DailyPlan,
@@ -39,6 +39,22 @@ export class PlannerRuleEngine {
     const lockedReminderIds = new Set<string>();
     const fixedBlocks: FixedBlock[] = [];
 
+    // Push a fixed block only if it fits inside working hours and does not
+    // overlap one that's already reserved. Blocks are added in priority order
+    // (locked > reminders > sleep/lunch > unavailable > breaks > buffers) so a
+    // lower-priority reservation politely yields to a higher-priority one
+    // instead of producing an overlap the validator would later reject.
+    const pushIfFree = (block: FixedBlock): boolean => {
+      const start = Math.max(dayStart, block.startMinutes);
+      const end = Math.min(dayEnd, block.endMinutes);
+      if (end <= start) return false;
+      const clamped = { ...block, startMinutes: start, endMinutes: end };
+      const collides = fixedBlocks.some((existing) => start < existing.endMinutes && end > existing.startMinutes);
+      if (collides) return false;
+      fixedBlocks.push(clamped);
+      return true;
+    };
+
     // 1. Locked items are immovable and take precedence over everything else.
     for (const locked of context.lockedItems) {
       if (!isTime(locked.startTime) || !isTime(locked.endTime)) continue;
@@ -47,6 +63,8 @@ export class PlannerRuleEngine {
       const reminder = locked.reminderId ? context.reminders.find((row) => row.id === locked.reminderId) : undefined;
       if (locked.taskId) lockedTaskIds.add(locked.taskId);
       if (locked.reminderId) lockedReminderIds.add(locked.reminderId);
+      // Locked items bypass pushIfFree: they must land exactly where the user
+      // placed them, even if that means clamping is skipped.
       fixedBlocks.push({
         id: `locked-${locked.taskId ?? locked.reminderId}`,
         type: locked.taskId ? 'task' : 'reminder',
@@ -68,7 +86,7 @@ export class PlannerRuleEngine {
       if (lockedReminderIds.has(reminder.id)) continue;
       if (!reminder.startTime || !isTime(reminder.startTime)) continue;
       const start = toMinutes(reminder.startTime);
-      fixedBlocks.push({
+      pushIfFree({
         id: `reminder-${reminder.id}`,
         type: 'reminder',
         reminderId: reminder.id,
@@ -83,11 +101,39 @@ export class PlannerRuleEngine {
       });
     }
 
-    // 3. Breaks are reserved recovery blocks.
+    // 3. Protected rest windows: sleep and lunch. Sleep may cross midnight, so
+    //    each window can contribute one or two same-day ranges — only the parts
+    //    that fall inside working hours matter.
+    for (const range of windowToDayRanges(preferences.sleep.start, preferences.sleep.end)) {
+      pushIfFree(restBlock('sleep', 'Sleep', 'Protected sleep — kept clear for rest.', range));
+    }
+    for (const range of windowToDayRanges(preferences.lunch.start, preferences.lunch.end)) {
+      pushIfFree(restBlock('lunch', 'Lunch', 'Protected lunch break.', range));
+    }
+
+    // 4. User-defined unavailable windows (commute, prayer, gym, etc.).
+    preferences.unavailableHours.forEach((window, index) => {
+      for (const range of windowToDayRanges(window.start, window.end)) {
+        pushIfFree({
+          id: `unavailable-${index}-${range.start}`,
+          type: 'break',
+          title: 'Unavailable',
+          startMinutes: range.start,
+          endMinutes: range.end,
+          priority: 'medium',
+          category: 'Unavailable',
+          isFocusTask: false,
+          locked: false,
+          rationale: 'You marked this time as unavailable.',
+        });
+      }
+    });
+
+    // 5. Configured recovery breaks.
     for (const breakItem of context.breaks) {
       if (!isTime(breakItem.start) || !isTime(breakItem.end)) continue;
       if (toMinutes(breakItem.end) <= toMinutes(breakItem.start)) continue;
-      fixedBlocks.push({
+      pushIfFree({
         id: `break-${breakItem.start}`,
         type: 'break',
         title: breakItem.title ?? 'Break',
@@ -101,18 +147,15 @@ export class PlannerRuleEngine {
       });
     }
 
-    // 4. When the user wants a buffer before meetings, reserve time right
-    //    before each reminder — but only if it doesn't collide with an already
-    //    fixed block (locked item, other reminder, or break).
+    // 6. When the user wants a buffer before meetings, reserve time right
+    //    before each reminder — pushIfFree drops it if it would collide.
     if (preferences.bufferBeforeMeetings && preferences.bufferMinutes > 0) {
       const reminderBlocks = fixedBlocks.filter((block) => block.type === 'reminder' && !block.locked);
       for (const reminderBlock of reminderBlocks) {
         const start = reminderBlock.startMinutes;
         const bufferStart = start - preferences.bufferMinutes;
         if (bufferStart < dayStart) continue;
-        const collides = fixedBlocks.some((block) => bufferStart < block.endMinutes && start > block.startMinutes);
-        if (collides) continue;
-        fixedBlocks.push({
+        pushIfFree({
           id: `buffer-${reminderBlock.reminderId}`,
           type: 'break',
           title: `Buffer before ${reminderBlock.title}`,
@@ -148,27 +191,63 @@ export class PlannerRuleEngine {
 
       const openDependency = task.dependencyTaskIds.find((depId) => activeIds.has(depId));
       if (openDependency) {
-        blockedTasks.push({ task, reason: 'Waiting for a dependency to be completed first.' });
+        blockedTasks.push({
+          task,
+          reason: 'Waiting for a dependency to be completed first.',
+          status: 'BLOCKED_DEPENDENCY',
+          reasonCode: 'dependency_not_completed',
+        });
+        continue;
+      }
+
+      // Guard against unusable durations so the scheduler never has to guess.
+      if (!Number.isFinite(task.estimatedMinutes) || task.estimatedMinutes <= 0) {
+        blockedTasks.push({
+          task,
+          reason: 'Could not determine how long this task takes.',
+          status: 'INVALID_TASK_DATA',
+          reasonCode: 'invalid_task_data',
+        });
         continue;
       }
 
       schedulableTasks.push(task);
     }
 
-    // 6. Derive the deep-work window from preferences, clamped to working hours.
+    // Derive the deep-work window from preferences, clamped to working hours.
     const focusStart = Math.max(dayStart, toMinutes(preferences.focusStartTime));
     const focusEnd = Math.min(dayEnd, toMinutes(preferences.focusEndTime));
     const focusWindow = focusEnd > focusStart ? { startMinutes: focusStart, endMinutes: focusEnd } : null;
 
+    // Respect the current time: when planning *today*, work can only start from
+    // now (rounded up to the next 5 minutes) — the past is reserved as busy so
+    // nothing is ever scheduled behind the clock. For any other date the whole
+    // working day is available.
+    const planningToday = date === todayString();
+    const nowMinutes = planningToday && isTime(context.currentTime) ? roundUpTo5(toMinutes(context.currentTime)) : dayStart;
+    const effectiveStartMinutes = Math.min(dayEnd, Math.max(dayStart, nowMinutes));
+    const reservedBusy = effectiveStartMinutes > dayStart ? [{ start: dayStart, end: effectiveStartMinutes }] : [];
+
+    // Capacity: free minutes remaining in the working day after fixed blocks,
+    // then the real work budget once the emergency buffer and the max-daily-work
+    // cap are applied. This is what the scheduler is allowed to fill.
+    const freeMinutes = freeMinutesInWindow(effectiveStartMinutes, dayEnd, fixedBlocks);
+    const workBudgetMinutes = Math.max(
+      0,
+      Math.min(freeMinutes - preferences.emergencyBufferMinutes, preferences.maxDailyWorkMinutes),
+    );
+
     return {
       workingHours: context.workingHours,
       fixedBlocks,
+      reservedBusy,
       lockedTaskIds,
       schedulableTasks,
       blockedTasks,
       overdueTaskIds,
       dueTodayTaskIds,
       focusWindow,
+      capacity: { effectiveStartMinutes, freeMinutes, workBudgetMinutes },
       preferences,
     };
   }
@@ -244,6 +323,48 @@ export class PlannerRuleEngine {
 export function normalizePriority(value: unknown): Priority {
   if (value === 'urgent' || value === 'high' || value === 'medium' || value === 'low') return value;
   return 'medium';
+}
+
+/** Build a protected rest block (sleep/lunch) for a same-day minute range. */
+function restBlock(id: string, title: string, rationale: string, range: { start: number; end: number }): FixedBlock {
+  return {
+    id: `${id}-${range.start}`,
+    type: 'break',
+    title,
+    startMinutes: range.start,
+    endMinutes: range.end,
+    priority: 'medium',
+    category: title,
+    isFocusTask: false,
+    locked: false,
+    rationale,
+  };
+}
+
+function roundUpTo5(minutes: number): number {
+  return Math.ceil(minutes / 5) * 5;
+}
+
+/** Free minutes in [start, end) after subtracting the given fixed blocks. */
+function freeMinutesInWindow(
+  start: number,
+  end: number,
+  fixedBlocks: { startMinutes: number; endMinutes: number }[],
+): number {
+  if (end <= start) return 0;
+  let busy = 0;
+  const sorted = [...fixedBlocks]
+    .map((block) => ({ start: Math.max(start, block.startMinutes), end: Math.min(end, block.endMinutes) }))
+    .filter((block) => block.end > block.start)
+    .sort((a, b) => a.start - b.start);
+  // Merge overlaps so shared minutes aren't double-counted.
+  let cursor = -1;
+  for (const block of sorted) {
+    const from = Math.max(block.start, cursor);
+    if (block.end > from) busy += block.end - from;
+    cursor = Math.max(cursor, block.end);
+  }
+  return Math.max(0, end - start - busy);
 }
 
 // Re-exported so tests and other layers can share the same time-window search.

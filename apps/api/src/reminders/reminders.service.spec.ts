@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../db/database.service';
+import { LocationSharingService } from '../social/location-sharing.service';
 import { RemindersService } from './reminders.service';
 
 const USER_A = '11111111-1111-1111-1111-111111111111';
@@ -59,6 +60,10 @@ describe('RemindersService (per-user ownership)', () => {
       providers: [
         RemindersService,
         { provide: DatabaseService, useValue: { db } },
+        {
+          provide: LocationSharingService,
+          useValue: { getViewerPermissionStatuses: jest.fn().mockResolvedValue(new Map()) },
+        },
       ],
     }).compile();
 
