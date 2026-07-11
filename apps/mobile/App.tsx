@@ -16,6 +16,7 @@ import {
 } from './src/features/reminders';
 import { AddTaskSheet } from './src/components/AddTaskSheet';
 import { PeopleScreen } from './src/features/social';
+import { NotificationsScreen } from './src/features/collaboration';
 import { getLocationSharing } from './src/features/social/api/social.api';
 import { startProximityMonitor, stopProximityMonitor } from './src/services/proximityMonitor';
 import { useAuth } from './src/hooks/useAuth';
@@ -65,7 +66,8 @@ type AppScreen =
   | 'create'
   | 'details'
   | 'edit'
-  | 'social';
+  | 'social'
+  | 'notifications';
 
 export default function App() {
   return (
@@ -200,6 +202,16 @@ function ThemedApp() {
       .finally(() => setTasksLoading(false));
   }, [accessToken, user]);
 
+  // Ids of tasks shared *with* the user (accepted member) — drives the
+  // "👥 Shared" badge in lists. Refreshed whenever the task list changes.
+  const [sharedTaskIds, setSharedTaskIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!user || !accessToken) return;
+    getTasks(accessToken, { shared: true })
+      .then((shared) => setSharedTaskIds(new Set(shared.map((t) => t.id))))
+      .catch(() => setSharedTaskIds(new Set()));
+  }, [accessToken, user, tasks]);
+
   const loadDashboardSummary = useCallback(() => {
     if (!accessToken) return;
 
@@ -298,6 +310,39 @@ function ThemedApp() {
   function handleTaskCreated(task: ApiTask) {
     setSelectedTask(task);
     setScreen('taskDetails');
+  }
+
+  // Re-fetch the open task (with collaboration context) after member/role
+  // changes so the details screen reflects the new state.
+  async function refreshSelectedTask() {
+    if (!accessToken || !selectedTask?.id) return;
+    try {
+      const all = await getTasks(accessToken);
+      setTasks(all);
+      const fresh = all.find((item) => item.id === selectedTask.id);
+      if (fresh) setSelectedTask(fresh);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  // Opens a task from a notification/invitation — the shared task may not be in
+  // the current list yet, so refresh from the server first, then select it.
+  async function openTaskFromNotification(taskId: string) {
+    if (!accessToken) return;
+    try {
+      const all = await getTasks(accessToken);
+      setTasks(all);
+      const target = all.find((item) => item.id === taskId);
+      if (target) {
+        setSelectedTask(target);
+        setScreen('taskDetails');
+      } else {
+        setScreen('tasks');
+      }
+    } catch {
+      setScreen('tasks');
+    }
   }
 
   async function handleUpdateTask(taskId: string, payload: TaskPayload) {
@@ -409,6 +454,8 @@ function ThemedApp() {
           onViewTasks={() => setScreen('tasks')}
           onViewFocus={() => setScreen('focus')}
           onViewReminders={() => setScreen('reminders')}
+          onViewNotifications={() => setScreen('notifications')}
+          sharedTaskIds={sharedTaskIds}
           onCreateTask={() => setAddTaskSheetVisible(true)}
           onViewTaskDetails={(task) => {
             setSelectedTask(task);
@@ -466,11 +513,13 @@ function ThemedApp() {
           task={selectedTask}
           tasks={tasks}
           accessToken={accessToken ?? ''}
+          currentUserId={user?.id ?? ''}
           onBack={() => setScreen('tasks')}
           onEdit={() => setScreen('editTask')}
           onDelete={() => void handleDeleteTask()}
           onMarkDone={() => void handleMarkTaskDone()}
           onTaskUpdated={handleTaskUpdated}
+          onRefresh={() => void refreshSelectedTask()}
         />
       ) : screen === 'editTask' ? (
         <EditTaskScreen
@@ -514,6 +563,12 @@ function ThemedApp() {
         <PeopleScreen
           onBack={() => setScreen('reminders')}
           onSignOut={() => void handleSignOut()}
+        />
+      ) : screen === 'notifications' ? (
+        <NotificationsScreen
+          onBack={() => setScreen('dashboard')}
+          onSignOut={() => void handleSignOut()}
+          onOpenTask={(taskId) => void openTaskFromNotification(taskId)}
         />
       ) : (
         <RemindersListScreen

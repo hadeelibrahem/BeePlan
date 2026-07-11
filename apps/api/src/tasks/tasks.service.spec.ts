@@ -1,6 +1,8 @@
 import { ConflictException } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
+import { TaskAccessService } from '../collaboration/task-access.service'
 import { DatabaseService } from '../db/database.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import { TasksService } from './tasks.service'
 
 const USER_ID = '11111111-1111-1111-1111-111111111111'
@@ -58,7 +60,26 @@ describe('TasksService.changeStatus', () => {
     }
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TasksService, { provide: DatabaseService, useValue: { db } }],
+      providers: [
+        TasksService,
+        { provide: DatabaseService, useValue: { db } },
+        // Personal-task tests only: the task is owner-only, so access always
+        // resolves to owner and the recipient list is just the owner (which
+        // makes member notification fan-out a no-op).
+        {
+          provide: TaskAccessService,
+          useValue: {
+            require: jest
+              .fn()
+              .mockResolvedValue({ task: baseTask, role: 'owner', isShared: false }),
+            getRecipientIds: jest.fn().mockResolvedValue([USER_ID]),
+          },
+        },
+        {
+          provide: NotificationsService,
+          useValue: { create: jest.fn(), createMany: jest.fn() },
+        },
+      ],
     }).compile()
 
     service = module.get<TasksService>(TasksService)

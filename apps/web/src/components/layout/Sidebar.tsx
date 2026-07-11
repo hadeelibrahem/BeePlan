@@ -20,6 +20,7 @@ export type SidebarPage =
   | 'planner'
   | 'reminders'
   | 'people'
+  | 'notifications'
   | 'calendar'
   | 'notes'
   | 'analytics'
@@ -31,9 +32,18 @@ export type SidebarNavHandlers = {
   onNavigatePlanner?: () => void
   onNavigateReminders?: () => void
   onNavigatePeople?: () => void
+  onNavigateNotifications?: () => void
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
   onNavigateAnalytics?: () => void
+}
+
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px]" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" />
+    </svg>
+  )
 }
 
 type SidebarProps = SidebarNavHandlers & {
@@ -52,6 +62,7 @@ const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon;
   { page: 'planner', label: 'AI Planner', Icon: PlannerIcon, handler: 'onNavigatePlanner' },
   { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
   { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
+  { page: 'notifications', label: 'Notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
   { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
   { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
   { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },

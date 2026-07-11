@@ -37,12 +37,16 @@ import {
   SectionCard,
 } from '../components/layout';
 import { useTheme } from '../theme/useTheme';
+import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel';
+import { SharedBadge } from '../features/collaboration/components/SharedBadge';
 
 type Props = {
   task?: ApiTask | null;
   tasks?: ApiTask[];
   accessToken?: string;
+  currentUserId?: string;
   onTaskUpdated?: (task: ApiTask) => void;
+  onRefresh?: () => void;
   onBack: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -52,7 +56,9 @@ type Props = {
 export default function TaskDetailsScreen({
   task,
   accessToken = '',
+  currentUserId = '',
   onTaskUpdated,
+  onRefresh,
   onBack,
   onEdit,
   onDelete,
@@ -64,6 +70,8 @@ export default function TaskDetailsScreen({
   const [isStatusSheetVisible, setIsStatusSheetVisible] = useState(false);
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? []);
   const [detailSubtaskId, setDetailSubtaskId] = useState<string | null>(null);
+  const [sharedMemberCount, setSharedMemberCount] = useState(0);
+  const [collabNotice, setCollabNotice] = useState('');
   const [dependencyItems, setDependencyItems] = useState<DependencyTask[]>(
     toDependencyTasks(task?.dependencies),
   );
@@ -265,10 +273,13 @@ export default function TaskDetailsScreen({
       {error ? <Text className="mb-3 text-sm font-bold text-red-300">{error}</Text> : null}
 
       <SectionCard className="mb-3">
-        <View className="mb-2 flex-row flex-wrap gap-1.5">
+        <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
           <Badge label={status} color={getStatusColor(status, colors)} />
           <Badge label={`${toUiPriority(task.priority)} Priority`} color={colors.error} />
           <Badge label={task.category || 'General'} color={colors.accent} />
+          {task.isShared || sharedMemberCount > 1 ? (
+            <SharedBadge memberCount={sharedMemberCount || undefined} />
+          ) : null}
         </View>
 
         <Text className="text-xl font-black leading-7" style={{ color: colors.text }}>{task.title}</Text>
@@ -282,6 +293,28 @@ export default function TaskDetailsScreen({
           <InfoRow label="Due Date" value={`${formatDate(task.dueDate) || 'No due date'}${task.dueTime ? ` - ${task.dueTime}` : ''}`} />
         </View>
       </SectionCard>
+
+      {collabNotice ? (
+        <View className="mb-3 rounded-xl px-3 py-2" style={{ backgroundColor: `${colors.success}26` }}>
+          <Text style={{ color: colors.success }} className="text-xs font-semibold">
+            ✓ {collabNotice}
+          </Text>
+        </View>
+      ) : null}
+
+      {currentUserId ? (
+        <CollaborationPanel
+          task={task}
+          currentUserId={currentUserId}
+          onMembersLoaded={setSharedMemberCount}
+          onRefresh={onRefresh}
+          onNotice={(m) => {
+            setCollabNotice(m);
+            setTimeout(() => setCollabNotice(''), 3000);
+          }}
+          onError={setError}
+        />
+      ) : null}
 
       <Card title="Progress">
         <View className="mb-2 flex-row items-center justify-between">

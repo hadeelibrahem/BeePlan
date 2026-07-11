@@ -189,7 +189,16 @@ export type ApiTask = {
   activities: ApiTaskActivity[]
   createdAt: string
   updatedAt: string
+  // Collaboration context (present on GET /tasks/:id). Optional so personal
+  // tasks and list payloads that omit them stay valid. Defaults treat a task
+  // as personal + owner-controlled.
+  isShared?: boolean
+  viewerRole?: 'owner' | 'editor' | 'viewer'
+  canEdit?: boolean
+  canManageMembers?: boolean
 }
+
+export type TaskRole = 'owner' | 'editor' | 'viewer'
 
 export type TaskPayload = Partial<
   Pick<
@@ -295,6 +304,7 @@ export type TaskFilters = {
   focus?: boolean
   completed?: boolean
   hasReminder?: boolean
+  shared?: boolean
   search?: string
 }
 
@@ -321,6 +331,7 @@ function buildTaskQuery(filters?: TaskFilters) {
   if (filters.focus) params.set('focus', 'true')
   if (filters.completed) params.set('completed', 'true')
   if (filters.hasReminder) params.set('hasReminder', 'true')
+  if (filters.shared) params.set('shared', 'true')
   if (filters.search) params.set('search', filters.search)
 
   const query = params.toString()

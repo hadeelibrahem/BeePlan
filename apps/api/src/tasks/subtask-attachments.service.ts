@@ -8,8 +8,12 @@ import { and, eq } from 'drizzle-orm';
 import { createReadStream } from 'fs';
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import { extname, join } from 'path';
+import {
+  TaskAccessService,
+  type TaskRole,
+} from '../collaboration/task-access.service';
 import { DatabaseService } from '../db/database.service';
-import { subtaskAttachments, subtasks, tasks } from '../db/schema';
+import { subtaskAttachments, subtasks } from '../db/schema';
 import { MAX_ATTACHMENT_SIZE_BYTES } from './task-attachments.service';
 import {
   isAllowedTaskAttachmentMimeType,
@@ -28,7 +32,10 @@ const UPLOAD_ROOT = join(process.cwd(), 'apps', 'api', 'uploads', 'subtasks');
 
 @Injectable()
 export class SubtaskAttachmentsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly access: TaskAccessService,
+  ) {}
 
   private get db() {
     return this.databaseService.db;
@@ -38,17 +45,16 @@ export class SubtaskAttachmentsService {
     userId: string,
     taskId: string,
     subtaskId: string,
+    minRole: TaskRole = 'viewer',
   ) {
+    // Task-level authorization (owner or accepted member of the required role).
+    await this.access.require(userId, taskId, minRole);
+
     const [row] = await this.db
       .select({ id: subtasks.id })
       .from(subtasks)
-      .innerJoin(tasks, eq(tasks.id, subtasks.taskId))
       .where(
-        and(
-          eq(subtasks.id, subtaskId),
-          eq(subtasks.taskId, taskId),
-          eq(tasks.userId, userId),
-        ),
+        and(eq(subtasks.id, subtaskId), eq(subtasks.taskId, taskId)),
       );
 
     if (!row) {
@@ -98,7 +104,7 @@ export class SubtaskAttachmentsService {
     subtaskId: string,
     file: Express.Multer.File | undefined,
   ) {
-    await this.getSubtaskForUser(userId, taskId, subtaskId);
+    await this.getSubtaskForUser(userId, taskId, subtaskId, 'editor');
 
     if (!file) {
       throw new BadRequestException('No file was uploaded.');
@@ -141,7 +147,7 @@ export class SubtaskAttachmentsService {
     subtaskId: string,
     attachmentId: string,
   ) {
-    await this.getSubtaskForUser(userId, taskId, subtaskId);
+    await this.getSubtaskForUser(userId, taskId, subtaskId, 'editor');
 
     const [row] = await this.db
       .select()

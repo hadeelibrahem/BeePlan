@@ -13,6 +13,8 @@ import {
   type SidebarNavHandlers,
 } from '../components/layout'
 import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
+import { SharedBadge } from '../features/collaboration/components/SharedBadge'
+import { useSharedTaskIds } from '../features/collaboration/useSharedTaskIds'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import {
@@ -128,6 +130,8 @@ export default function AllTasksScreen({
     queryFn: () => getTasks(accessToken ?? '', filters),
     enabled: Boolean(accessToken),
   })
+
+  const sharedTaskIds = useSharedTaskIds(accessToken)
 
   const summaryQuery = useQuery({
     queryKey: ['tasks', 'filter-summary'],
@@ -294,7 +298,7 @@ export default function AllTasksScreen({
               }
             />
           ) : (
-            <TaskGroup title="Tasks" count={`${filteredTasks.length} tasks`} tasks={filteredTasks} onViewTaskDetails={onViewTaskDetails} />
+            <TaskGroup title="Tasks" count={`${filteredTasks.length} tasks`} tasks={filteredTasks} sharedTaskIds={sharedTaskIds} onViewTaskDetails={onViewTaskDetails} />
           )}
         </section>
 
@@ -424,11 +428,13 @@ function TaskGroup({
   title,
   count,
   tasks,
+  sharedTaskIds,
   onViewTaskDetails,
 }: {
   title: string
   count: string
   tasks: Task[]
+  sharedTaskIds?: Set<string>
   onViewTaskDetails?: (taskId: string) => void
 }) {
   return (
@@ -439,7 +445,12 @@ function TaskGroup({
 
       <div className="overflow-hidden rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)]">
         {tasks.map((task) => (
-          <TaskRow key={task.id} task={task} onViewTaskDetails={onViewTaskDetails} />
+          <TaskRow
+            key={task.id}
+            task={task}
+            isShared={sharedTaskIds?.has(task.id) ?? false}
+            onViewTaskDetails={onViewTaskDetails}
+          />
         ))}
       </div>
     </div>
@@ -448,9 +459,11 @@ function TaskGroup({
 
 function TaskRow({
   task,
+  isShared,
   onViewTaskDetails,
 }: {
   task: Task
+  isShared?: boolean
   onViewTaskDetails?: (taskId: string) => void
 }) {
   const { isRTL } = useLanguage()
@@ -463,8 +476,11 @@ function TaskRow({
     >
       <div className={`h-4 w-4 rounded border ${task.done ? 'border-green-400 bg-green-400' : 'border-slate-500'}`} />
 
-      <div>
-        <p className={`text-sm font-semibold text-[var(--bp-text)] ${task.done ? 'text-slate-500 line-through' : ''}`}>{task.title}</p>
+      <div className="min-w-0">
+        <p className={`flex items-center gap-1.5 text-sm font-semibold text-[var(--bp-text)] ${task.done ? 'text-slate-500 line-through' : ''}`}>
+          <span className="truncate">{task.title}</span>
+          {isShared ? <SharedBadge /> : null}
+        </p>
         <p className="text-xs text-slate-400">{task.category} - {task.due}</p>
       </div>
 

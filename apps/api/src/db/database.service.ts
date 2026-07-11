@@ -29,6 +29,8 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensurePlannerPreferencesTable();
     await this.ensureFocusSessionsTable();
     await this.ensureSocialTables();
+    await this.ensureNotificationsTable();
+    await this.ensureCollaborationTables();
   }
 
   async healthCheck() {
@@ -511,6 +513,153 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         captured_at timestamp default now() not null,
         updated_at timestamp default now() not null
       )
+    `);
+  }
+
+  // In-app notifications (invites, comments, mentions, task changes). The
+  // table is defined in schema.ts but was never created by an ensure method,
+  // so collaboration features would fail without this. Kept separate from the
+  // reminder-notification pipeline, which only writes rows here.
+  private async ensureNotificationsTable() {
+    await this.getPool().query(`
+      create table if not exists notifications (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        reminder_id uuid references reminders(id) on delete set null,
+        title varchar(255) not null,
+        body text not null,
+        notification_type varchar(50) not null,
+        is_read boolean not null default false,
+        sent_at timestamp default now() not null
+      )
+    `);
+
+    // Newer collaboration notifications carry a task reference and an optional
+    // action payload (e.g. { taskId, commentId, memberId }) so the client can
+    // deep-link and render Accept/Decline affordances.
+    await this.getPool().query(`
+      alter table notifications
+        add column if not exists task_id uuid references tasks(id) on delete cascade,
+        add column if not exists actor_id uuid references users(id) on delete set null,
+        add column if not exists data jsonb
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_notifications_user_unread
+        on notifications (user_id, is_read)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_notifications_sent_at
+        on notifications (sent_at)
+    `);
+  }
+
+  // Shared-task collaboration: owner/creator split, member links (which double
+  // as invitations), comments + mentions, and per-user personal preferences.
+  private async ensureCollaborationTables() {
+    // Owner/creator split on tasks. `creator_id` is backfilled to the current
+    // owner so existing personal tasks report a sensible creator.
+    await this.getPool().query(`
+      alter table tasks
+        add column if not exists creator_id uuid references users(id) on delete set null
+    `);
+    await this.getPool().query(`
+      update tasks set creator_id = user_id where creator_id is null
+    `);
+
+    // Task reminders + shared/personal audience.
+    await this.getPool().query(`
+      alter table reminders
+        add column if not exists task_id uuid references tasks(id) on delete cascade,
+        add column if not exists audience varchar(20) not null default 'personal'
+    `);
+
+    await this.getPool().query(`
+      create table if not exists task_members (
+        id uuid primary key default gen_random_uuid() not null,
+        task_id uuid not null references tasks(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        role varchar(20) not null default 'viewer',
+        status varchar(20) not null default 'pending',
+        invited_by_id uuid references users(id) on delete set null,
+        invited_at timestamp default now() not null,
+        accepted_at timestamp,
+        joined_at timestamp,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+    await this.getPool().query(`
+      create unique index if not exists uq_task_members_task_user
+        on task_members (task_id, user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_task_members_task on task_members (task_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_task_members_user on task_members (user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_task_members_status on task_members (status)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists task_comments (
+        id uuid primary key default gen_random_uuid() not null,
+        task_id uuid not null references tasks(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        message text not null,
+        edited_at timestamp,
+        deleted_at timestamp,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_task_comments_task on task_comments (task_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_task_comments_created on task_comments (created_at)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists task_comment_mentions (
+        id uuid primary key default gen_random_uuid() not null,
+        comment_id uuid not null references task_comments(id) on delete cascade,
+        mentioned_user_id uuid not null references users(id) on delete cascade,
+        created_at timestamp default now() not null
+      )
+    `);
+    await this.getPool().query(`
+      create unique index if not exists uq_task_comment_mentions
+        on task_comment_mentions (comment_id, mentioned_user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_task_comment_mentions_user
+        on task_comment_mentions (mentioned_user_id)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists personal_task_preferences (
+        id uuid primary key default gen_random_uuid() not null,
+        task_id uuid not null references tasks(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        is_pinned boolean not null default false,
+        is_favorite boolean not null default false,
+        is_focus_queued boolean not null default false,
+        personal_reminder_minutes_before integer,
+        notifications_muted boolean not null default false,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+    await this.getPool().query(`
+      create unique index if not exists uq_personal_task_prefs
+        on personal_task_preferences (task_id, user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_personal_task_prefs_user
+        on personal_task_preferences (user_id)
     `);
   }
 

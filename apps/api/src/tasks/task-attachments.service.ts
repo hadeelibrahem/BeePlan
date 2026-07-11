@@ -8,8 +8,13 @@ import { and, eq } from 'drizzle-orm';
 import { createReadStream } from 'fs';
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import { extname, join } from 'path';
+import {
+  TaskAccessService,
+  type TaskRole,
+} from '../collaboration/task-access.service';
 import { DatabaseService } from '../db/database.service';
-import { taskAttachments, tasks } from '../db/schema';
+import { taskAttachments } from '../db/schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   isAllowedTaskAttachmentMimeType,
   resolveAttachmentMimeType,
@@ -47,7 +52,11 @@ export const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 @Injectable()
 export class TaskAttachmentsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly access: TaskAccessService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private get db() {
     return this.databaseService.db;
@@ -57,16 +66,14 @@ export class TaskAttachmentsService {
     return isAllowedTaskAttachmentMimeType(mimeType);
   }
 
-  private async getTaskForUser(userId: string, taskId: string) {
-    const [task] = await this.db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
-
-    if (!task) {
-      throw new NotFoundException('Task not found.');
-    }
-
+  // Reads (list/preview/download) require viewer; uploads/removals require
+  // editor — so any collaborator with edit rights can manage attachments.
+  private async getTaskForUser(
+    userId: string,
+    taskId: string,
+    minRole: TaskRole = 'viewer',
+  ) {
+    const { task } = await this.access.require(userId, taskId, minRole);
     return task;
   }
 
@@ -107,7 +114,7 @@ export class TaskAttachmentsService {
     taskId: string,
     file: Express.Multer.File | undefined,
   ) {
-    await this.getTaskForUser(userId, taskId);
+    await this.getTaskForUser(userId, taskId, 'editor');
 
     if (!file) {
       throw new BadRequestException('No file was uploaded.');
@@ -140,11 +147,32 @@ export class TaskAttachmentsService {
       })
       .returning();
 
+    await this.notifyAttachmentAdded(userId, taskId, file.originalname);
     return this.toEntity(row);
   }
 
+  private async notifyAttachmentAdded(
+    actorId: string,
+    taskId: string,
+    fileName: string,
+  ) {
+    const recipients = await this.access.getRecipientIds(taskId);
+    if (recipients.length <= 1) return;
+    await this.notifications.createMany(
+      recipients.map((userId) => ({
+        userId,
+        type: 'attachment_added' as const,
+        actorId,
+        taskId,
+        title: 'New attachment',
+        body: `A new file "${fileName}" was added.`,
+      })),
+      actorId,
+    );
+  }
+
   async remove(userId: string, taskId: string, attachmentId: string) {
-    await this.getTaskForUser(userId, taskId);
+    await this.getTaskForUser(userId, taskId, 'editor');
 
     const [row] = await this.db
       .select()
