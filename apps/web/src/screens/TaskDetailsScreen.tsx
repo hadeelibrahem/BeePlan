@@ -18,6 +18,8 @@ import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
+import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel'
+import { SharedBadge } from '../features/collaboration/components/SharedBadge'
 import {
   changeTaskStatus,
   getAttachments,
@@ -38,6 +40,7 @@ type TaskDetailsScreenProps = SidebarNavHandlers & {
   task?: ApiTask | null
   tasks?: ApiTask[]
   accessToken?: string
+  currentUserId?: string
   recurrenceSuggestions?: RecurrenceSuggestion[]
   onTaskUpdated?: (task: ApiTask) => void
   onRefresh?: () => void
@@ -54,8 +57,10 @@ export default function TaskDetailsScreen({
   task,
   tasks = [],
   accessToken = '',
+  currentUserId = '',
   recurrenceSuggestions = [],
   onTaskUpdated,
+  onRefresh,
   onBack,
   onEdit,
   onDelete,
@@ -80,6 +85,7 @@ export default function TaskDetailsScreen({
   const [activityItems, setActivityItems] = useState<ApiTaskActivity[]>(task?.activities ?? [])
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([])
   const [previewAttachment, setPreviewAttachment] = useState<ApiTaskAttachment | null>(null)
+  const [sharedMemberCount, setSharedMemberCount] = useState(0)
   const [error, setError] = useState('')
 
   const latestActivity = useMemo(
@@ -297,10 +303,13 @@ export default function TaskDetailsScreen({
         <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="mb-2 flex flex-wrap gap-1.5">
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <Badge color={statusColor(status)}>{status}</Badge>
                 <Badge color="red">{task ? toUiPriority(task.priority) : 'Medium'}</Badge>
                 <Badge color="yellow">{task?.category || 'Uncategorized'}</Badge>
+                {task?.isShared || sharedMemberCount > 1 ? (
+                  <SharedBadge memberCount={sharedMemberCount || undefined} />
+                ) : null}
               </div>
               <h2 className="mb-1.5 text-lg font-black">{task?.title ?? 'No task selected'}</h2>
               <p className="max-w-3xl text-sm leading-6 text-slate-400">
@@ -324,6 +333,18 @@ export default function TaskDetailsScreen({
             />
           </div>
         </section>
+
+        {task && accessToken && currentUserId ? (
+          <div className="mt-4">
+            <CollaborationPanel
+              task={task}
+              accessToken={accessToken}
+              currentUserId={currentUserId}
+              onMembersLoaded={setSharedMemberCount}
+              onRefresh={onRefresh}
+            />
+          </div>
+        ) : null}
 
         {recurrenceSuggestions.length ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-2">

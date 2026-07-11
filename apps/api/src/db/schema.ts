@@ -11,6 +11,7 @@ import {
   text,
   time,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -139,9 +140,18 @@ export const tasks = pgTable(
   'tasks',
   {
     id: id(),
+    // The task owner. Retained as `user_id` (not renamed to `owner_id`) so
+    // every existing single-user query keeps working unchanged — a personal
+    // task is simply a task whose owner has no other accepted members.
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    // Who originally created the task. Defaults to the owner and only differs
+    // once ownership is transferred. Nullable for rows created before this
+    // column existed (backfilled to `user_id` on boot).
+    creatorId: uuid('creator_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     title: varchar('title', { length: 255 }).notNull(),
     description: text('description'),
     priority: varchar('priority', { length: 20 }).notNull().default('medium'),
@@ -417,6 +427,12 @@ export const reminders = pgTable('reminders', {
   notes: text('notes'),
   priority: varchar('priority', { length: 20 }).notNull().default('medium'),
   status: varchar('status', { length: 20 }).notNull().default('active'),
+  // Optional link to a task. When set, the reminder is a task reminder.
+  taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+  // 'personal' (default) — visible/firing only for `userId`. 'shared' — every
+  // accepted member of `taskId` receives it. Non-task reminders are always
+  // personal. See RemindersService and the collaboration notification fan-out.
+  audience: varchar('audience', { length: 20 }).notNull().default('personal'),
   location: jsonb('location'),
   context: jsonb('context'),
   checklistItems: jsonb('checklist_items'),
@@ -580,20 +596,35 @@ export const sharedTasks = pgTable('shared_tasks', {
   }),
 });
 
-export const notifications = pgTable('notifications', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  reminderId: uuid('reminder_id').references(() => reminders.id, {
-    onDelete: 'set null',
-  }),
-  title: varchar('title', { length: 255 }).notNull(),
-  body: text('body').notNull(),
-  notificationType: varchar('notification_type', { length: 50 }).notNull(),
-  isRead: boolean('is_read').notNull().default(false),
-  sentAt: timestamp('sent_at').defaultNow().notNull(),
-});
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    reminderId: uuid('reminder_id').references(() => reminders.id, {
+      onDelete: 'set null',
+    }),
+    // Collaboration notifications reference the task they concern and the user
+    // who triggered them; `data` carries a client action payload
+    // (e.g. { commentId, memberId, invitationId } for deep-linking / buttons).
+    taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+    actorId: uuid('actor_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    data: jsonb('data'),
+    title: varchar('title', { length: 255 }).notNull(),
+    body: text('body').notNull(),
+    notificationType: varchar('notification_type', { length: 50 }).notNull(),
+    isRead: boolean('is_read').notNull().default(false),
+    sentAt: timestamp('sent_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_notifications_user_unread').on(table.userId, table.isRead),
+    index('idx_notifications_sent_at').on(table.sentAt),
+  ],
+);
 
 export const deviceTokens = pgTable('device_tokens', {
   id: id(),
@@ -688,3 +719,121 @@ export const dailyUserStats = pgTable('daily_user_stats', {
   completedHabits: integer('completed_habits').notNull().default(0),
   missedReminders: integer('missed_reminders').notNull().default(0),
 });
+
+// ---------------------------------------------------------------------------
+// Collaborative (shared) tasks
+// ---------------------------------------------------------------------------
+
+// One row per (task, user) collaboration link. A `pending` row IS the pending
+// invitation — there is no separate invitations table, which keeps a single
+// source of truth for "who is on this task and in what state". The task owner
+// always has an implicit owner role via tasks.userId and is NOT required to
+// have a row here (though a row may exist after an ownership transfer).
+export const taskMembers = pgTable(
+  'task_members',
+  {
+    id: id(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // owner | editor | viewer
+    role: varchar('role', { length: 20 }).notNull().default('viewer'),
+    // pending | accepted | declined
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    invitedById: uuid('invited_by_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    invitedAt: timestamp('invited_at').defaultNow().notNull(),
+    acceptedAt: timestamp('accepted_at'),
+    joinedAt: timestamp('joined_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // A user can appear at most once per task; also blocks duplicate invites.
+    uniqueIndex('uq_task_members_task_user').on(table.taskId, table.userId),
+    // "members of this task" lookups (task details, notification fan-out).
+    index('idx_task_members_task').on(table.taskId),
+    // "tasks shared with me" lookups (dashboard/all-tasks visibility, invites).
+    index('idx_task_members_user').on(table.userId),
+    index('idx_task_members_status').on(table.status),
+  ],
+);
+
+export const taskComments = pgTable(
+  'task_comments',
+  {
+    id: id(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    message: text('message').notNull(),
+    // Set on first edit; null means never edited.
+    editedAt: timestamp('edited_at'),
+    // Soft delete so mention notifications / activity keep referential context.
+    deletedAt: timestamp('deleted_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_task_comments_task').on(table.taskId),
+    index('idx_task_comments_created').on(table.createdAt),
+  ],
+);
+
+export const taskCommentMentions = pgTable(
+  'task_comment_mentions',
+  {
+    id: id(),
+    commentId: uuid('comment_id')
+      .notNull()
+      .references(() => taskComments.id, { onDelete: 'cascade' }),
+    mentionedUserId: uuid('mentioned_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_task_comment_mentions').on(
+      table.commentId,
+      table.mentionedUserId,
+    ),
+    index('idx_task_comment_mentions_user').on(table.mentionedUserId),
+  ],
+);
+
+// Per-user, per-task settings that must NEVER be shared across collaborators:
+// pin, favorite, focus-queue membership, and personal reminder/notification
+// preferences. One row per (task, user); created lazily on first write.
+export const personalTaskPreferences = pgTable(
+  'personal_task_preferences',
+  {
+    id: id(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    isPinned: boolean('is_pinned').notNull().default(false),
+    isFavorite: boolean('is_favorite').notNull().default(false),
+    isFocusQueued: boolean('is_focus_queued').notNull().default(false),
+    // Per-user override for the task reminder lead time (minutes). Null = use
+    // the task's shared reminder settings.
+    personalReminderMinutesBefore: integer('personal_reminder_minutes_before'),
+    // Per-user mute of collaboration notifications for this task.
+    notificationsMuted: boolean('notifications_muted').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_personal_task_prefs').on(table.taskId, table.userId),
+    index('idx_personal_task_prefs_user').on(table.userId),
+  ],
+);

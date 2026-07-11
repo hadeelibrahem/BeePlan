@@ -7,11 +7,13 @@ import { AiModule } from './ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CollaborationModule } from './collaboration/collaboration.module';
 import { validateEnv } from './config/env';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './db/database.module';
 import { FocusModule } from './focus/focus.module';
 import { NotesModule } from './notes/notes.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { SocialModule } from './social/social.module';
 import { SpeechModule } from './speech/speech.module';
@@ -35,6 +37,8 @@ import { TasksModule } from './tasks/tasks.module';
     AuthModule,
     RemindersModule,
     SocialModule,
+    NotificationsModule,
+    CollaborationModule,
     SpeechModule,
     AiModule,
     TasksModule,

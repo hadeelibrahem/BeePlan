@@ -43,6 +43,13 @@ export class TaskQueryDto {
   @IsBoolean()
   hasReminder?: boolean;
 
+  // "Shared with me / collaborative" quick filter — limits the list to tasks
+  // the user is an accepted member of (not their own personal tasks).
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  shared?: boolean;
+
   @IsOptional()
   @IsString()
   search?: string;

@@ -15,17 +15,26 @@ import {
   isNotNull,
   lt,
   ne,
+  or,
   sql,
 } from 'drizzle-orm';
+import {
+  TaskAccessService,
+  type TaskRole,
+} from '../collaboration/task-access.service';
 import { DatabaseService } from '../db/database.service';
 import {
   subtaskDependencies,
   subtasks,
   taskActivities,
   taskDependencies,
+  taskMembers,
   taskRecurrenceRules,
   tasks,
+  users,
 } from '../db/schema';
+import type { NotificationType } from '../notifications/notification-types';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { CreateTaskDto } from './dto/create-task.dto';
 import type { TaskQueryDto } from './dto/task-query.dto';
 import {
@@ -81,7 +90,11 @@ type TaskRelatedRows = {
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly access: TaskAccessService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private get db() {
     return this.databaseService.db;
@@ -146,7 +159,23 @@ export class TasksService {
   }
 
   async findAll(userId: string, query?: TaskQueryDto) {
-    const conditions = [eq(tasks.userId, userId)];
+    // Shared visibility: the list spans tasks the user owns AND tasks they have
+    // accepted an invitation to. Every other filter (status, due, search, …) is
+    // ANDed on top, so shared tasks behave exactly like personal ones in every
+    // view (All Tasks, Dashboard, Calendar, Upcoming, Search, filters).
+    const sharedTaskIds = await this.getAcceptedMemberTaskIds(userId);
+    const ownershipCondition = sharedTaskIds.length
+      ? or(eq(tasks.userId, userId), inArray(tasks.id, sharedTaskIds))!
+      : eq(tasks.userId, userId);
+    const conditions = [ownershipCondition];
+
+    // "Shared only" quick filter.
+    if (query?.shared && sharedTaskIds.length) {
+      conditions.push(inArray(tasks.id, sharedTaskIds));
+    } else if (query?.shared) {
+      // User has no shared tasks — force an empty result set.
+      conditions.push(eq(tasks.id, sql`'00000000-0000-0000-0000-000000000000'`));
+    }
 
     if (query?.status) conditions.push(eq(tasks.status, query.status));
     if (query?.priority) conditions.push(eq(tasks.priority, query.priority));
@@ -336,8 +365,17 @@ export class TasksService {
   }
 
   async findOne(userId: string, taskId: string) {
-    const task = await this.getTaskForUser(userId, taskId);
-    return this.toEntity(task);
+    const access = await this.access.require(userId, taskId, 'viewer');
+    const entity = await this.toEntity(access.task);
+    return {
+      ...entity,
+      // Collaboration context for the client: the caller's role, whether the
+      // task is shared, and (for personal tasks) an unchanged shape.
+      isShared: access.isShared,
+      viewerRole: access.role,
+      canEdit: access.role === 'owner' || access.role === 'editor',
+      canManageMembers: access.role === 'owner',
+    };
   }
 
   async update(userId: string, taskId: string, dto: UpdateTaskDto) {
@@ -414,7 +452,7 @@ export class TasksService {
     await this.db
       .update(tasks)
       .set(updateData)
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      .where(eq(tasks.id, taskId));
 
     if (dto.recurrence !== undefined) {
       if (!dto.recurrence || dto.recurrence.frequency === 'Never') {
@@ -426,15 +464,15 @@ export class TasksService {
 
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(userId, taskId, 'updated', 'Task updated');
+    await this.notifyMembersOfChange(userId, existingTask, dto);
 
     return this.findOne(userId, taskId);
   }
 
   async remove(userId: string, taskId: string) {
-    await this.getTaskForUser(userId, taskId);
-    await this.db
-      .delete(tasks)
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+    // Deleting a task is owner-only (spec: editors cannot delete).
+    await this.getTaskForUser(userId, taskId, 'owner');
+    await this.db.delete(tasks).where(eq(tasks.id, taskId));
   }
 
   async changeStatus(userId: string, taskId: string, dto: TaskStatusDto) {
@@ -457,7 +495,7 @@ export class TasksService {
         status: dto.status,
         updatedAt: new Date(),
       })
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      .where(eq(tasks.id, taskId));
 
     await this.recalculateProgress(userId, taskId);
 
@@ -471,6 +509,7 @@ export class TasksService {
         completionDate: dto.completionDate,
       },
     );
+    await this.notifyMembersOfChange(userId, task, { status: dto.status });
 
     return this.findOne(userId, taskId);
   }
@@ -480,7 +519,7 @@ export class TasksService {
     await this.db
       .update(tasks)
       .set({ progress: dto.progress, updatedAt: new Date() })
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      .where(eq(tasks.id, taskId));
     await this.addActivity(
       userId,
       taskId,
@@ -492,7 +531,7 @@ export class TasksService {
   }
 
   async listLabels(userId: string, taskId: string) {
-    const task = await this.getTaskForUser(userId, taskId);
+    const task = await this.getTaskForUser(userId, taskId, 'viewer');
     return this.toLabelEntities(task.labels);
   }
 
@@ -522,7 +561,7 @@ export class TasksService {
         labels: updatedLabels.map((label) => label.name),
         updatedAt: new Date(),
       })
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      .where(eq(tasks.id, taskId));
 
     await this.addActivity(
       userId,
@@ -554,7 +593,7 @@ export class TasksService {
         labels: updatedLabels.map((label) => label.name),
         updatedAt: new Date(),
       })
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      .where(eq(tasks.id, taskId));
 
     await this.addActivity(userId, taskId, 'label_removed', 'Label removed');
 
@@ -583,7 +622,7 @@ export class TasksService {
         remainingTimeMinutes,
         updatedAt: new Date(),
       })
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      .where(eq(tasks.id, taskId));
 
     await this.addActivity(
       userId,
@@ -758,6 +797,24 @@ export class TasksService {
       nextIsDone && !wasDone ? 'subtask_completed' : 'subtask_updated',
       nextIsDone && !wasDone ? 'Subtask completed' : 'Subtask updated',
     );
+
+    if (nextIsDone && !wasDone) {
+      const recipients = await this.access.getRecipientIds(taskId);
+      if (recipients.length > 1) {
+        const name = await this.getActorName(userId);
+        await this.notifications.createMany(
+          recipients.map((recipientId) => ({
+            userId: recipientId,
+            type: 'subtask_completed' as const,
+            actorId: userId,
+            taskId,
+            title: 'Subtask completed',
+            body: `${name} completed the subtask "${current.title}".`,
+          })),
+          userId,
+        );
+      }
+    }
 
     return this.findOne(userId, taskId);
   }
@@ -962,7 +1019,7 @@ export class TasksService {
     dto: ReplaceDependencyDto,
   ) {
     await this.getTaskForUser(userId, taskId);
-    await this.getTaskForUser(userId, dependencyTaskId);
+    await this.getTaskForUser(userId, dependencyTaskId, 'viewer');
     await this.assertCanAddDependency(userId, taskId, dto.replacementTaskId);
 
     await this.db
@@ -986,7 +1043,7 @@ export class TasksService {
     dependencyTaskId: string,
   ) {
     await this.getTaskForUser(userId, taskId);
-    await this.getTaskForUser(userId, dependencyTaskId);
+    await this.getTaskForUser(userId, dependencyTaskId, 'viewer');
     await this.db
       .delete(taskDependencies)
       .where(
@@ -1045,32 +1102,45 @@ export class TasksService {
   }
 
   async listActivity(userId: string, taskId: string) {
-    await this.getTaskForUser(userId, taskId);
+    // Any member (viewer+) sees the full shared timeline — activity is no
+    // longer filtered to the caller's own actions.
+    await this.getTaskForUser(userId, taskId, 'viewer');
     const activities = await this.db
       .select()
       .from(taskActivities)
-      .where(
-        and(
-          eq(taskActivities.taskId, taskId),
-          eq(taskActivities.userId, userId),
-        ),
-      )
+      .where(eq(taskActivities.taskId, taskId))
       .orderBy(desc(taskActivities.createdAt));
 
     return activities.map((row) => this.toActivityEntity(row));
   }
 
-  private async getTaskForUser(userId: string, taskId: string) {
-    const [task] = await this.db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
-
-    if (!task) {
-      throw new NotFoundException('Task not found.');
-    }
-
+  /**
+   * Authorizes the caller for a task and returns the row. Access now spans the
+   * owner AND accepted collaborators: `minRole` gates the action (viewer for
+   * reads, editor for edits, owner for delete/transfer). A personal task's
+   * owner satisfies every role, so single-user behaviour is unchanged.
+   */
+  private async getTaskForUser(
+    userId: string,
+    taskId: string,
+    minRole: TaskRole = 'editor',
+  ) {
+    const { task } = await this.access.require(userId, taskId, minRole);
     return task;
+  }
+
+  /** Task ids the user has accepted an invitation to (shared with them). */
+  private async getAcceptedMemberTaskIds(userId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ taskId: taskMembers.taskId })
+      .from(taskMembers)
+      .where(
+        and(
+          eq(taskMembers.userId, userId),
+          eq(taskMembers.status, 'accepted'),
+        ),
+      );
+    return rows.map((row) => row.taskId);
   }
 
   private async getSubtaskForTask(taskId: string, subtaskId: string) {
@@ -1691,7 +1761,7 @@ export class TasksService {
       throw new BadRequestException('A task cannot depend on itself.');
     }
 
-    await this.getTaskForUser(userId, dependencyTaskId);
+    await this.getTaskForUser(userId, dependencyTaskId, 'viewer');
 
     const [existing] = await this.db
       .select()
@@ -1777,5 +1847,73 @@ export class TasksService {
       description,
       metadata: metadata ?? null,
     });
+  }
+
+  private async getActorName(userId: string): Promise<string> {
+    const [user] = await this.db
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, userId));
+    return user?.fullName ?? 'A collaborator';
+  }
+
+  /**
+   * Fans out change notifications to every OTHER accepted member of a shared
+   * task. A no-op for personal tasks (the actor is the only recipient), so
+   * single-user flows never touch the notifications table.
+   */
+  private async notifyMembersOfChange(
+    actorId: string,
+    task: TaskRow,
+    dto: Partial<UpdateTaskDto>,
+  ) {
+    const recipients = await this.access.getRecipientIds(task.id);
+    if (recipients.length <= 1) return;
+
+    const name = await this.getActorName(actorId);
+    const events: { type: NotificationType; body: string }[] = [];
+
+    if (dto.status === 'done' && task.status !== 'done') {
+      events.push({
+        type: 'task_completed',
+        body: `${name} completed "${task.title}".`,
+      });
+    }
+    if (dto.dueDate !== undefined) {
+      const next = dto.dueDate ? new Date(dto.dueDate).getTime() : null;
+      const prev = task.dueDate ? task.dueDate.getTime() : null;
+      if (next !== prev) {
+        events.push({
+          type: 'due_date_changed',
+          body: `${name} changed the due date of "${task.title}".`,
+        });
+      }
+    }
+    if (dto.priority !== undefined && dto.priority !== task.priority) {
+      events.push({
+        type: 'priority_changed',
+        body: `${name} set the priority of "${task.title}" to ${dto.priority}.`,
+      });
+    }
+    if (!events.length) {
+      events.push({
+        type: 'task_updated',
+        body: `${name} updated "${task.title}".`,
+      });
+    }
+
+    await this.notifications.createMany(
+      events.flatMap((event) =>
+        recipients.map((userId) => ({
+          userId,
+          type: event.type,
+          actorId,
+          taskId: task.id,
+          title: 'Task update',
+          body: event.body,
+        })),
+      ),
+      actorId,
+    );
   }
 }

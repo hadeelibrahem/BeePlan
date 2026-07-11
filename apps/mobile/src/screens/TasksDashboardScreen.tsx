@@ -7,6 +7,7 @@ import {
   StatsCard,
 } from '../components/layout'
 import type { ApiTask, DashboardSummary } from '../lib/tasksApi'
+import { SharedBadge } from '../features/collaboration/components/SharedBadge'
 import { useTheme } from '../theme/useTheme'
 
 type Props = {
@@ -15,8 +16,10 @@ type Props = {
   onViewTasks: () => void
   onViewFocus?: () => void
   onViewReminders: () => void
+  onViewNotifications?: () => void
   onCreateTask: () => void
   onViewTaskDetails?: (task: ApiTask) => void
+  sharedTaskIds?: Set<string>
   tasks?: ApiTask[]
   summary?: DashboardSummary | null
   summaryLoading?: boolean
@@ -31,8 +34,10 @@ export default function TasksDashboardScreen({
   onViewTasks,
   onViewFocus,
   onViewReminders,
+  onViewNotifications,
   onCreateTask,
   onViewTaskDetails,
+  sharedTaskIds,
   tasks = [],
   summary = null,
   summaryLoading = false,
@@ -117,7 +122,12 @@ export default function TasksDashboardScreen({
           <Text className="py-6 text-center text-sm" style={{ color: colors.secondaryText }}>Loading focus tasks...</Text>
         ) : focusTasks.length ? (
           focusTasks.map((task) => (
-            <FocusTask key={task.id} task={task} onPress={onViewTaskDetails ? () => onViewTaskDetails(task) : undefined} />
+            <FocusTask
+              key={task.id}
+              task={task}
+              isShared={sharedTaskIds?.has(task.id) ?? false}
+              onPress={onViewTaskDetails ? () => onViewTaskDetails(task) : undefined}
+            />
           ))
         ) : (
           <View className="items-center justify-center py-6">
@@ -140,7 +150,7 @@ export default function TasksDashboardScreen({
         <View className="gap-2">
           <ActionCard icon="➕" title="New Task" desc="Create a new task" onPress={onCreateTask} />
           <ActionCard icon="🔔" title="New Reminder" desc="Add a reminder" onPress={onViewReminders} />
-          <ActionCard icon="📅" title="View Calendar" desc="See your schedule" />
+          <ActionCard icon="👥" title="Notifications" desc="Invitations & updates" onPress={onViewNotifications} />
           <ActionCard icon="📂" title="All Tasks" desc="View all tasks" onPress={onViewTasks} />
         </View>
       </SectionCard>
@@ -148,7 +158,7 @@ export default function TasksDashboardScreen({
   )
 }
 
-function FocusTask({ task, onPress }: { task: ApiTask; onPress?: () => void }) {
+function FocusTask({ task, isShared, onPress }: { task: ApiTask; isShared?: boolean; onPress?: () => void }) {
   const { theme } = useTheme()
   const { colors } = theme
   const reason = getPrimaryFocusReason(task)
@@ -166,9 +176,12 @@ function FocusTask({ task, onPress }: { task: ApiTask; onPress?: () => void }) {
     >
       <View className="h-4 w-4 rounded-full border" style={{ borderColor: colors.border }} />
       <View className="min-w-0 flex-1">
-        <Text className="truncate text-sm font-semibold" style={{ color: colors.text }}>
-          {task.title}
-        </Text>
+        <View className="flex-row items-center gap-1.5">
+          <Text className="flex-shrink text-sm font-semibold" style={{ color: colors.text }} numberOfLines={1}>
+            {task.title}
+          </Text>
+          {isShared ? <SharedBadge /> : null}
+        </View>
         <Text className="truncate text-xs" style={{ color: colors.secondaryText }}>
           {task.category || 'General'}
           {dueLabel ? ` • ${dueLabel}` : ''}

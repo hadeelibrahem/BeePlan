@@ -14,6 +14,7 @@ import {
   type SidebarNavHandlers,
 } from '../components/layout'
 import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
+import { SharedBadge } from '../features/collaboration/components/SharedBadge'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import type { Reminder } from '../features/reminders'
@@ -27,6 +28,7 @@ type TasksDashboardScreenProps = SidebarNavHandlers & {
   summaryError?: string
   tasksLoading?: boolean
   recurrenceSuggestions?: RecurrenceSuggestion[]
+  sharedTaskIds?: Set<string>
   onRetrySummary?: () => void
   onViewReminders: () => void
   onViewTasks: () => void
@@ -44,6 +46,7 @@ export default function TasksDashboardScreen({
   summaryError = '',
   tasksLoading = false,
   recurrenceSuggestions = [],
+  sharedTaskIds,
   onRetrySummary,
   onViewReminders,
   onViewTasks,
@@ -168,7 +171,14 @@ export default function TasksDashboardScreen({
           {isFocusLoading ? (
             <p className="py-8 text-center text-sm text-slate-400">Loading focus tasks...</p>
           ) : focusTasks.length ? (
-            focusTasks.map((task) => <FocusTask key={task.id} task={task} onClick={onViewTaskDetails} />)
+            focusTasks.map((task) => (
+              <FocusTask
+                key={task.id}
+                task={task}
+                isShared={sharedTaskIds?.has(task.id) ?? false}
+                onClick={onViewTaskDetails}
+              />
+            ))
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">
@@ -197,7 +207,15 @@ export default function TasksDashboardScreen({
   )
 }
 
-function FocusTask({ task, onClick }: { task: ApiTask; onClick?: (taskId: string) => void }) {
+function FocusTask({
+  task,
+  isShared,
+  onClick,
+}: {
+  task: ApiTask
+  isShared?: boolean
+  onClick?: (taskId: string) => void
+}) {
   const reason = getPrimaryFocusReason(task)
   const dueLabel = formatFocusDue(task)
   const reasonColor =
@@ -210,7 +228,10 @@ function FocusTask({ task, onClick }: { task: ApiTask; onClick?: (taskId: string
     >
       <div className="h-4 w-4 shrink-0 rounded-full border border-slate-500" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[var(--bp-text)]">{task.title}</p>
+        <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-[var(--bp-text)]">
+          <span className="truncate">{task.title}</span>
+          {isShared ? <SharedBadge /> : null}
+        </p>
         <p className="truncate text-xs text-slate-400">
           {task.category || 'General'}
           {dueLabel ? ` • ${dueLabel}` : ''}
