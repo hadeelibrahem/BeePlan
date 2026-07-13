@@ -41,14 +41,21 @@ import {
   createTask,
   deleteTask,
   getDashboardSummary,
+  getTask,
   getTasks,
   updateTask,
   type ApiTask,
   type DashboardSummary,
   type TaskPayload,
 } from './src/lib/tasksApi';
+import { queryKeys } from './src/lib/queryKeys';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, gcTime: 5 * 60_000, refetchOnReconnect: true, retry: 1 },
+    mutations: { retry: 0 },
+  },
+});
 
 type AppScreen =
   | 'auth'
@@ -93,6 +100,7 @@ function ThemedApp() {
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState('');
+  const [taskDetailsNotice, setTaskDetailsNotice] = useState('');
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
@@ -103,7 +111,7 @@ function ThemedApp() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const invalidateTaskFilters = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
     [queryClient],
   );
 
@@ -194,13 +202,16 @@ function ThemedApp() {
     setTasksLoading(true);
     setTasksError('');
     getTasks(accessToken)
-      .then(setTasks)
+      .then((loadedTasks) => {
+        setTasks(loadedTasks);
+        queryClient.setQueryData(queryKeys.tasks.list({}), loadedTasks);
+      })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Could not load tasks.';
         setTasksError(message);
       })
       .finally(() => setTasksLoading(false));
-  }, [accessToken, user]);
+  }, [accessToken, user, queryClient]);
 
   // Ids of tasks shared *with* the user (accepted member) — drives the
   // "👥 Shared" badge in lists. Refreshed whenever the task list changes.
@@ -298,6 +309,9 @@ function ThemedApp() {
     try {
       const createdTask = await createTask(accessToken, payload);
       setTasks((current) => [createdTask, ...current]);
+      queryClient.setQueryData<ApiTask[]>(queryKeys.tasks.list({}), (current = []) =>
+        current.some((task) => task.id === createdTask.id) ? current : [createdTask, ...current],
+      );
       invalidateTaskFilters();
       loadDashboardSummary();
       return createdTask;
@@ -312,34 +326,45 @@ function ThemedApp() {
     setScreen('taskDetails');
   }
 
-  // Re-fetch the open task (with collaboration context) after member/role
-  // changes so the details screen reflects the new state.
+  // Re-fetch the open task (with collaboration context — viewerRole/canEdit
+  // — so the details/edit screens reflect the caller's actual permissions)
+  // after member/role changes, and whenever the details/edit screen opens.
   async function refreshSelectedTask() {
     if (!accessToken || !selectedTask?.id) return;
     try {
-      const all = await getTasks(accessToken);
-      setTasks(all);
-      const fresh = all.find((item) => item.id === selectedTask.id);
-      if (fresh) setSelectedTask(fresh);
+      const fresh = await getTask(accessToken, selectedTask.id);
+      setTasks((current) => current.map((item) => (item.id === fresh.id ? fresh : item)));
+      setSelectedTask(fresh);
+      return fresh;
     } catch {
       /* non-fatal */
+      return undefined;
     }
   }
+
+  function canEditTask(task: ApiTask) {
+    return task.viewerRole === 'owner' || task.viewerRole === 'editor' || task.canEdit === true;
+  }
+
+  useEffect(() => {
+    if ((screen !== 'taskDetails' && screen !== 'editTask') || !selectedTask?.id || !accessToken) return;
+    void refreshSelectedTask();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, selectedTask?.id, accessToken]);
 
   // Opens a task from a notification/invitation — the shared task may not be in
   // the current list yet, so refresh from the server first, then select it.
   async function openTaskFromNotification(taskId: string) {
     if (!accessToken) return;
     try {
-      const all = await getTasks(accessToken);
-      setTasks(all);
-      const target = all.find((item) => item.id === taskId);
-      if (target) {
-        setSelectedTask(target);
-        setScreen('taskDetails');
-      } else {
-        setScreen('tasks');
-      }
+      const target = await getTask(accessToken, taskId);
+      setTasks((current) =>
+        current.some((item) => item.id === taskId)
+          ? current.map((item) => (item.id === taskId ? target : item))
+          : [target, ...current],
+      );
+      setSelectedTask(target);
+      setScreen('taskDetails');
     } catch {
       setScreen('tasks');
     }
@@ -349,6 +374,7 @@ function ThemedApp() {
     if (!accessToken) return;
     const updatedTask = await updateTask(accessToken, taskId, payload);
     setTasks((current) => current.map((item) => (item.id === taskId ? updatedTask : item)));
+    syncTaskQueryCaches(updatedTask);
     invalidateTaskFilters();
     loadDashboardSummary();
     return updatedTask;
@@ -368,6 +394,9 @@ function ThemedApp() {
     try {
       await deleteTask(accessToken, selectedTask.id);
       setTasks((current) => current.filter((task) => task.id !== selectedTask.id));
+      queryClient.setQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all }, (current) =>
+        Array.isArray(current) ? current.filter((task) => task.id !== selectedTask.id) : current,
+      );
       setSelectedTask(null);
       setScreen('tasks');
       invalidateTaskFilters();
@@ -388,6 +417,7 @@ function ThemedApp() {
       const updatedTask = await changeTaskStatus(accessToken, selectedTask.id, { status: 'done' });
       setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
       setSelectedTask(updatedTask);
+      syncTaskQueryCaches(updatedTask);
       setScreen('tasks');
       invalidateTaskFilters();
       loadDashboardSummary();
@@ -400,8 +430,18 @@ function ThemedApp() {
   function handleTaskUpdated(updatedTask: ApiTask) {
     setTasks((current) => current.map((item) => (item.id === updatedTask.id ? updatedTask : item)));
     setSelectedTask(updatedTask);
+    syncTaskQueryCaches(updatedTask);
     invalidateTaskFilters();
     loadDashboardSummary();
+  }
+
+  function syncTaskQueryCaches(updatedTask: ApiTask) {
+    queryClient.setQueryData(queryKeys.tasks.detail(updatedTask.id), updatedTask);
+    queryClient.setQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all }, (current) =>
+      Array.isArray(current)
+        ? current.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+        : current,
+    );
   }
 
   if (loading) {
@@ -514,8 +554,16 @@ function ThemedApp() {
           tasks={tasks}
           accessToken={accessToken ?? ''}
           currentUserId={user?.id ?? ''}
+          notice={taskDetailsNotice}
+          onNoticeShown={() => setTaskDetailsNotice('')}
           onBack={() => setScreen('tasks')}
-          onEdit={() => setScreen('editTask')}
+          onEdit={() => {
+            if (selectedTask && !canEditTask(selectedTask)) {
+              setTaskDetailsNotice("You don't have permission to edit this task.");
+              return;
+            }
+            setScreen('editTask');
+          }}
           onDelete={() => void handleDeleteTask()}
           onMarkDone={() => void handleMarkTaskDone()}
           onTaskUpdated={handleTaskUpdated}
@@ -525,11 +573,17 @@ function ThemedApp() {
         <EditTaskScreen
           task={selectedTask}
           accessToken={accessToken ?? ''}
+          currentUserId={user?.id ?? ''}
+          onRefresh={() => void refreshSelectedTask()}
           onBack={() => setScreen('taskDetails')}
           onCancel={() => setScreen('taskDetails')}
           onDelete={() => void handleDeleteTask()}
           onSave={(payload) => (selectedTask ? handleUpdateTask(selectedTask.id, payload) : undefined)}
           onSaved={handleTaskSaved}
+          onPermissionDenied={() => {
+            setTaskDetailsNotice("You don't have permission to edit this task.");
+            setScreen('taskDetails');
+          }}
         />
       ) : screen === 'create' ? (
         <CreateReminderScreen

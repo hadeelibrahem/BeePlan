@@ -250,7 +250,24 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists reminder_status varchar(20) not null default 'none',
         add column if not exists notes text,
         add column if not exists tags jsonb,
-        add column if not exists completed_at timestamp
+        add column if not exists completed_at timestamp,
+        add column if not exists assignee_user_id uuid references users(id) on delete set null,
+        add column if not exists source varchar(40),
+        add column if not exists source_plan_id uuid,
+        add column if not exists source_proposal_id varchar(64),
+        add column if not exists semantic_type varchar(30),
+        add column if not exists subject_keys jsonb,
+        add column if not exists shared_session_group_id varchar(64),
+        add column if not exists is_shared boolean not null default false
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_subtasks_assignee_user_id
+        on subtasks (assignee_user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_subtasks_task_source
+        on subtasks (task_id, source)
     `);
 
     await this.getPool().query(`

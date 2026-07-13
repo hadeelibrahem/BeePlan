@@ -73,6 +73,58 @@ export function getSubtaskIndicator(subtask: ApiSubtask, now: Date = new Date())
   return 'upcoming'
 }
 
+// ---- Assignment / sharing ----
+
+export type SubtaskAssignment = 'shared' | 'personal' | 'unassigned'
+
+/** Derives the assignment kind from structural fields (never the title). */
+export function getSubtaskAssignment(subtask: ApiSubtask): SubtaskAssignment {
+  if (subtask.isShared) return 'shared'
+  if (subtask.assigneeUserId) return 'personal'
+  return 'unassigned'
+}
+
+/**
+ * Strips a leading `Name:` prefix from a subtask's title when it matches the
+ * subtask's own assignee display name (legacy plans embedded the assignee in
+ * the title). Assignment is shown structurally instead. Titles with an
+ * unrelated colon ("Chapter 3: …") are left intact.
+ */
+export function displaySubtaskTitle(subtask: ApiSubtask): string {
+  const title = subtask.title?.trim() ?? ''
+  const name = subtask.assignee?.trim()
+  if (!name) return title
+  const match = title.match(/^([^:]{1,60}):\s*(.+\S)\s*$/)
+  if (match && match[1].trim().toLowerCase() === name.toLowerCase()) {
+    return match[2].trim()
+  }
+  return title
+}
+
+// ---- Client-side visibility filter (over the already role-restricted list) ----
+
+export type SubtaskFilter = 'mine' | 'team' | 'shared' | 'unassigned' | 'member'
+
+export function matchesSubtaskFilter(
+  subtask: ApiSubtask,
+  filter: SubtaskFilter,
+  ctx: { currentUserId?: string; memberId?: string },
+): boolean {
+  switch (filter) {
+    case 'mine':
+      return Boolean(ctx.currentUserId) && subtask.assigneeUserId === ctx.currentUserId
+    case 'shared':
+      return Boolean(subtask.isShared)
+    case 'unassigned':
+      return !subtask.isShared && !subtask.assigneeUserId
+    case 'member':
+      return Boolean(ctx.memberId) && subtask.assigneeUserId === ctx.memberId
+    case 'team':
+    default:
+      return true
+  }
+}
+
 /** "45 min", "1h 30m", or "" when unset. */
 export function formatDuration(minutes?: number | null): string {
   if (!minutes || minutes <= 0) return ''

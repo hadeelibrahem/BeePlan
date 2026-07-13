@@ -14,6 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { toApiDate } from '../../ai/recurrence-parser';
+import { SUBTASK_VIEWS, type SubtaskView } from '../subtask-visibility';
 
 // Defensive normalization for recurrence end dates: even if a client sends a
 // display/localized date ("Aug 31, 2026", "August", "08/31/2026") or an empty
@@ -165,6 +166,16 @@ export class SubtaskDto {
   @IsOptional()
   @IsString()
   assignee?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  assigneeUserId?: string;
+
+  // Explicit shared/team-wide flag. A shared subtask is visible to every
+  // collaborator regardless of assignee (never inferred from the title).
+  @IsOptional()
+  @IsBoolean()
+  isShared?: boolean;
 
   @IsOptional()
   @IsString()
@@ -331,6 +342,18 @@ export class SubtaskReorderDto {
   @IsArray()
   @IsUUID('4', { each: true })
   subtaskIds!: string[];
+}
+
+// Visibility-aware query for GET /tasks/:id/subtasks. `view` refines the
+// role-filtered set; `assigneeId` targets the owner's "by member" filter.
+export class SubtaskListQueryDto {
+  @IsOptional()
+  @IsIn(SUBTASK_VIEWS)
+  view?: SubtaskView;
+
+  @IsOptional()
+  @IsUUID('4')
+  assigneeId?: string;
 }
 
 export class DependencyTaskIdsDto {

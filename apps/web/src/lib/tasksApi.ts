@@ -27,6 +27,8 @@ export type ApiSubtask = {
   isDone: boolean
   orderIndex: number
   assignee?: string
+  assigneeUserId?: string
+  isShared?: boolean
   description?: string
   priority: ApiSubtaskPriority
   status: ApiSubtaskStatus

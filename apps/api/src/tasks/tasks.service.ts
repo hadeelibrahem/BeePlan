@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -52,6 +53,22 @@ import {
   type TaskTimeEstimationDto,
 } from './dto/task-shared.dto';
 import type { UpdateTaskDto } from './dto/update-task.dto';
+import {
+  canModifySubtask,
+  filterVisibleSubtasks,
+  type SubtaskView,
+  type ViewerRole,
+} from './subtask-visibility';
+
+// Who is reading a task and how the embedded subtask list should be filtered.
+// Owner/viewer see all; an editor sees only own/shared/unassigned (enforced in
+// subtask-visibility.ts). `view`/`assigneeId` are optional refinements.
+type SubtaskViewer = {
+  userId: string;
+  role: ViewerRole;
+  view?: SubtaskView;
+  assigneeId?: string | null;
+};
 
 export type TaskFilterSummary = {
   counts: {
@@ -163,7 +180,8 @@ export class TasksService {
     // accepted an invitation to. Every other filter (status, due, search, …) is
     // ANDed on top, so shared tasks behave exactly like personal ones in every
     // view (All Tasks, Dashboard, Calendar, Upcoming, Search, filters).
-    const sharedTaskIds = await this.getAcceptedMemberTaskIds(userId);
+    const memberRoleByTaskId = await this.getAcceptedMemberRoleMap(userId);
+    const sharedTaskIds = [...memberRoleByTaskId.keys()];
     const ownershipCondition = sharedTaskIds.length
       ? or(eq(tasks.userId, userId), inArray(tasks.id, sharedTaskIds))!
       : eq(tasks.userId, userId);
@@ -269,16 +287,26 @@ export class TasksService {
 
     return Promise.all(
       rows.map((row) =>
-        this.assembleEntity(row, {
-          subtaskRows: subtasksByTaskId.get(row.id) ?? [],
-          dependencies: (dependencyLinksByTaskId.get(row.id) ?? [])
-            .map((link) => dependencyTaskById.get(link.dependencyTaskId))
-            .filter((depTask): depTask is TaskRow => Boolean(depTask))
-            .map((depTask) => this.toDependencyEntity(depTask)),
-          recurrence: recurrenceByTaskId.get(row.id),
-          activities: activitiesByTaskId.get(row.id) ?? [],
-          subtaskDepsBySubtaskId,
-        }),
+        this.assembleEntity(
+          row,
+          {
+            subtaskRows: subtasksByTaskId.get(row.id) ?? [],
+            dependencies: (dependencyLinksByTaskId.get(row.id) ?? [])
+              .map((link) => dependencyTaskById.get(link.dependencyTaskId))
+              .filter((depTask): depTask is TaskRow => Boolean(depTask))
+              .map((depTask) => this.toDependencyEntity(depTask)),
+            recurrence: recurrenceByTaskId.get(row.id),
+            activities: activitiesByTaskId.get(row.id) ?? [],
+            subtaskDepsBySubtaskId,
+          },
+          {
+            userId,
+            role:
+              row.userId === userId
+                ? 'owner'
+                : (memberRoleByTaskId.get(row.id) ?? 'viewer'),
+          },
+        ),
       ),
     );
   }
@@ -364,9 +392,18 @@ export class TasksService {
     return map;
   }
 
-  async findOne(userId: string, taskId: string) {
+  async findOne(
+    userId: string,
+    taskId: string,
+    subtaskView?: { view?: SubtaskView; assigneeId?: string | null },
+  ) {
     const access = await this.access.require(userId, taskId, 'viewer');
-    const entity = await this.toEntity(access.task);
+    const entity = await this.toEntity(access.task, {
+      userId,
+      role: access.role,
+      view: subtaskView?.view,
+      assigneeId: subtaskView?.assigneeId,
+    });
     return {
       ...entity,
       // Collaboration context for the client: the caller's role, whether the
@@ -638,15 +675,29 @@ export class TasksService {
     });
   }
 
-  async listSubtasks(userId: string, taskId: string) {
-    await this.getTaskForUser(userId, taskId);
+  async listSubtasks(
+    userId: string,
+    taskId: string,
+    query?: { view?: SubtaskView; assigneeId?: string | null },
+  ) {
+    // Visibility-aware, backend-enforced list. Any accepted collaborator may
+    // call it (min role viewer); the role-based rule + optional refinement
+    // (see subtask-visibility.ts) decide what actually comes back — this is
+    // where the owner's server-side "by member" filter is enforced.
+    const access = await this.access.require(userId, taskId, 'viewer');
     const rows = await this.db
       .select()
       .from(subtasks)
       .where(eq(subtasks.taskId, taskId))
       .orderBy(asc(subtasks.orderIndex), asc(subtasks.createdAt));
 
-    return rows.map((row) => this.toSubtaskEntity(row));
+    const visible = filterVisibleSubtasks(rows, {
+      userId,
+      role: access.role,
+      view: query?.view,
+      assigneeId: query?.assigneeId,
+    });
+    return visible.map((row) => this.toSubtaskEntity(row));
   }
 
   async addSubtask(userId: string, taskId: string, dto: SubtaskDto) {
@@ -683,8 +734,9 @@ export class TasksService {
     subtaskId: string,
     dto: Partial<SubtaskDto>,
   ) {
-    await this.getTaskForUser(userId, taskId);
+    const access = await this.access.require(userId, taskId, 'editor');
     const current = await this.getSubtaskForTask(taskId, subtaskId);
+    this.assertCanModifySubtask(access.role, userId, current);
 
     // Resolve the target status. `isDone` remains the legacy checkbox source
     // of truth, so keep the two in sync in both directions.
@@ -742,6 +794,8 @@ export class TasksService {
         isDone: dto.isDone ?? nextIsDone,
         orderIndex: dto.orderIndex,
         assignee: dto.assignee,
+        assigneeUserId: dto.assigneeUserId,
+        isShared: dto.isShared,
         description: dto.description,
         priority: dto.priority,
         status: nextStatus,
@@ -825,8 +879,9 @@ export class TasksService {
     subtaskId: string,
     dto: SubtaskDependencyDto,
   ) {
-    await this.getTaskForUser(userId, taskId);
-    await this.getSubtaskForTask(taskId, subtaskId);
+    const access = await this.access.require(userId, taskId, 'editor');
+    const current = await this.getSubtaskForTask(taskId, subtaskId);
+    this.assertCanModifySubtask(access.role, userId, current);
     await this.replaceSubtaskDependencies(
       taskId,
       subtaskId,
@@ -954,8 +1009,9 @@ export class TasksService {
   }
 
   async deleteSubtask(userId: string, taskId: string, subtaskId: string) {
-    await this.getTaskForUser(userId, taskId);
-    await this.getSubtaskForTask(taskId, subtaskId);
+    const access = await this.access.require(userId, taskId, 'editor');
+    const current = await this.getSubtaskForTask(taskId, subtaskId);
+    this.assertCanModifySubtask(access.role, userId, current);
     await this.db
       .delete(subtasks)
       .where(and(eq(subtasks.id, subtaskId), eq(subtasks.taskId, taskId)));
@@ -1129,10 +1185,16 @@ export class TasksService {
     return task;
   }
 
-  /** Task ids the user has accepted an invitation to (shared with them). */
-  private async getAcceptedMemberTaskIds(userId: string): Promise<string[]> {
+  /**
+   * Map of taskId -> the user's accepted role, for every task shared *with*
+   * them (i.e. not owned by them). Used both to widen the list query and to
+   * apply per-task subtask visibility in the list view.
+   */
+  private async getAcceptedMemberRoleMap(
+    userId: string,
+  ): Promise<Map<string, ViewerRole>> {
     const rows = await this.db
-      .select({ taskId: taskMembers.taskId })
+      .select({ taskId: taskMembers.taskId, role: taskMembers.role })
       .from(taskMembers)
       .where(
         and(
@@ -1140,7 +1202,31 @@ export class TasksService {
           eq(taskMembers.status, 'accepted'),
         ),
       );
-    return rows.map((row) => row.taskId);
+    return new Map(
+      rows.map((row) => [
+        row.taskId,
+        (row.role === 'editor' || row.role === 'viewer'
+          ? row.role
+          : 'viewer') as ViewerRole,
+      ]),
+    );
+  }
+
+  /**
+   * Write guard: an editor may only mutate shared, unassigned, or their own
+   * personal subtasks — never another member's personal subtask. Owners are
+   * unrestricted. Mirrors the read-side base visibility rule.
+   */
+  private assertCanModifySubtask(
+    role: ViewerRole,
+    userId: string,
+    subtask: SubtaskRow,
+  ) {
+    if (!canModifySubtask(subtask, { userId, role })) {
+      throw new ForbiddenException(
+        'You can only edit shared, unassigned, or your own subtasks.',
+      );
+    }
   }
 
   private async getSubtaskForTask(taskId: string, subtaskId: string) {
@@ -1156,7 +1242,7 @@ export class TasksService {
     return subtask;
   }
 
-  private async toEntity(task: TaskRow) {
+  private async toEntity(task: TaskRow, viewer: SubtaskViewer) {
     const [subtaskRows, dependencies, recurrence, activities] =
       await Promise.all([
         this.db
@@ -1179,16 +1265,24 @@ export class TasksService {
       subtaskRows.map((row) => row.id),
     );
 
-    return this.assembleEntity(task, {
-      subtaskRows,
-      dependencies,
-      recurrence,
-      activities,
-      subtaskDepsBySubtaskId,
-    });
+    return this.assembleEntity(
+      task,
+      {
+        subtaskRows,
+        dependencies,
+        recurrence,
+        activities,
+        subtaskDepsBySubtaskId,
+      },
+      viewer,
+    );
   }
 
-  private async assembleEntity(task: TaskRow, related: TaskRelatedRows) {
+  private async assembleEntity(
+    task: TaskRow,
+    related: TaskRelatedRows,
+    viewer: SubtaskViewer,
+  ) {
     const {
       subtaskRows,
       dependencies,
@@ -1196,6 +1290,11 @@ export class TasksService {
       activities,
       subtaskDepsBySubtaskId,
     } = related;
+
+    // Role-aware visibility: the whole-task status/progress logic below keeps
+    // using the FULL subtaskRows (progress stays authoritative), but only the
+    // subset this viewer is allowed to see is emitted in `subtasks`.
+    const visibleSubtaskRows = filterVisibleSubtasks(subtaskRows, viewer);
 
     const dependenciesComplete =
       dependencies.length > 0 &&
@@ -1247,7 +1346,7 @@ export class TasksService {
         dependencies.length > 0 &&
         dependencies.some((dependency) => dependency.status !== 'done'),
       dependenciesComplete,
-      subtasks: subtaskRows.map((row) =>
+      subtasks: visibleSubtaskRows.map((row) =>
         this.toSubtaskEntity(row, subtaskDepsBySubtaskId?.get(row.id) ?? []),
       ),
       dependencies,
@@ -1266,6 +1365,8 @@ export class TasksService {
       isDone: row.isDone,
       orderIndex: row.orderIndex,
       assignee: row.assignee ?? '',
+      assigneeUserId: row.assigneeUserId ?? undefined,
+      isShared: row.isShared,
       description: row.description ?? '',
       priority: row.priority,
       status: row.status,
@@ -1586,6 +1687,8 @@ export class TasksService {
       isDone,
       orderIndex: dto.orderIndex ?? index,
       assignee: dto.assignee?.trim() || null,
+      assigneeUserId: dto.assigneeUserId ?? null,
+      isShared: dto.isShared ?? false,
       description: dto.description?.trim() || null,
       priority: dto.priority ?? 'medium',
       status,

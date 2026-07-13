@@ -1,0 +1,140 @@
+import { useEffect, useState } from 'react';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { useTheme } from '../../../theme/useTheme';
+import { createPersonalReminder, createSharedReminder, getTaskReminders } from '../api/collaboration.api';
+import { friendlyError } from '../errorMessages';
+import type { TaskReminder } from '../types';
+
+type Props = {
+  taskId: string;
+  canEditShared: boolean;
+  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+};
+
+/**
+ * Shared-vs-personal reminder audience picker, moved from the Task Details
+ * "My Preferences" section into the Edit Task screen's Reminder section so
+ * there is a single place to manage reminders.
+ */
+export function ReminderAudienceSection({ taskId, canEditShared, onError, onNotice }: Props) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const [tab, setTab] = useState<'shared' | 'personal'>(canEditShared ? 'shared' : 'personal');
+  const [minutes, setMinutes] = useState('');
+  const [title, setTitle] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [reminders, setReminders] = useState<TaskReminder[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    getTaskReminders(taskId)
+      .then((rows) => active && setReminders(rows))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [taskId]);
+
+  async function createReminder() {
+    const mins = Number(minutes);
+    if (!minutes || Number.isNaN(mins) || submitting) return;
+    setSubmitting(true);
+    try {
+      const input = { title: title.trim() || undefined, reminderBeforeMinutes: mins };
+      const created = tab === 'shared' ? await createSharedReminder(taskId, input) : await createPersonalReminder(taskId, input);
+      setReminders((prev) => [created, ...prev]);
+      setMinutes('');
+      setTitle('');
+      onNotice(
+        tab === 'shared'
+          ? 'Shared reminder set for everyone on this task.'
+          : 'Personal reminder set — only you will be notified.',
+      );
+    } catch (err) {
+      onError(friendlyError(err, 'Could not create the reminder.'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <View>
+      <View className="mb-2 flex-row items-center justify-between">
+        <Text style={{ color: colors.text }} className="text-xs font-black">
+          🔔 Reminder Audience
+        </Text>
+        <View className="flex-row overflow-hidden rounded-lg border" style={{ borderColor: colors.border }}>
+          {(['shared', 'personal'] as const).map((option) => {
+            const disabled = option === 'shared' && !canEditShared;
+            return (
+              <Pressable
+                key={option}
+                disabled={disabled}
+                onPress={() => setTab(option)}
+                className="px-3 py-1"
+                style={{ backgroundColor: tab === option ? colors.accent : 'transparent', opacity: disabled ? 0.4 : 1 }}
+              >
+                <Text
+                  className="text-[11px] font-bold capitalize"
+                  style={{ color: tab === option ? colors.accentText : colors.secondaryText }}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+      <Text style={{ color: colors.secondaryText }} className="mb-2 text-[11px]">
+        {tab === 'shared' ? 'A shared reminder notifies every member.' : 'A personal reminder notifies only you.'}
+      </Text>
+      <View className="flex-row gap-2">
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Title (optional)"
+          placeholderTextColor={colors.placeholder}
+          className="flex-1 rounded-lg border px-3 py-2 text-xs"
+          style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
+        />
+        <TextInput
+          value={minutes}
+          onChangeText={setMinutes}
+          keyboardType="number-pad"
+          placeholder="Min before"
+          placeholderTextColor={colors.placeholder}
+          className="w-24 rounded-lg border px-3 py-2 text-xs"
+          style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
+        />
+        <Pressable
+          onPress={() => void createReminder()}
+          disabled={!minutes || submitting}
+          className="rounded-lg px-3 py-2"
+          style={{ backgroundColor: colors.accent, opacity: !minutes || submitting ? 0.5 : 1 }}
+        >
+          <Text style={{ color: colors.accentText }} className="text-xs font-black">
+            Set
+          </Text>
+        </Pressable>
+      </View>
+
+      {reminders.length ? (
+        <View className="mt-3 gap-1.5">
+          {reminders.map((reminder) => (
+            <View
+              key={reminder.id}
+              className="flex-row items-center gap-2 rounded-lg border px-3 py-1.5"
+              style={{ borderColor: colors.border }}
+            >
+              <Text>{reminder.audience === 'shared' ? '👥' : '🔒'}</Text>
+              <Text style={{ color: colors.text }} className="flex-1 text-xs" numberOfLines={1}>
+                {reminder.title}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}

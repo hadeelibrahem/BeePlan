@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getTasks } from '../../lib/tasksApi'
+import { queryKeys } from '../../lib/queryKeys'
 
 /**
  * Set of task ids the current user collaborates on as an accepted member
@@ -10,7 +11,7 @@ import { getTasks } from '../../lib/tasksApi'
  */
 export function useSharedTaskIds(accessToken: string | null | undefined): Set<string> {
   const query = useQuery({
-    queryKey: ['tasks', 'shared-ids'],
+    queryKey: queryKeys.tasks.sharedIds,
     queryFn: () => getTasks(accessToken ?? '', { shared: true }),
     enabled: Boolean(accessToken),
     staleTime: 30_000,

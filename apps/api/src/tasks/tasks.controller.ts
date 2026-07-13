@@ -28,6 +28,7 @@ import {
   ReplaceDependencyDto,
   SubtaskDependencyDto,
   SubtaskDto,
+  SubtaskListQueryDto,
   SubtaskReorderDto,
   TaskLabelDto,
   TaskProgressDto,
@@ -184,8 +185,9 @@ export class TasksController {
   listSubtasks(
     @Req() request: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: SubtaskListQueryDto,
   ) {
-    return this.tasksService.listSubtasks(request.user.id, id);
+    return this.tasksService.listSubtasks(request.user.id, id, query);
   }
 
   @Post(':id/subtasks/reorder')

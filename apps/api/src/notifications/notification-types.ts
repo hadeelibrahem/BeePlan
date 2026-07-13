@@ -19,6 +19,7 @@ export const NOTIFICATION_TYPES = [
   'attachment_added',
   'comment_added',
   'mention',
+  'ai_plan_applied',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

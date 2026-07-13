@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import { reminders, tasks } from '../db/schema';
 import { getUtcDayBoundaries } from './dashboard-date.util';
@@ -22,18 +22,22 @@ export class DashboardService {
   }
 
   async getSummary(userId: string): Promise<DashboardSummary> {
-    const [userTasks, userReminders] = await Promise.all([
+    const { startOfToday, startOfTomorrow } = getUtcDayBoundaries();
+    const [taskRows, reminderRows] = await Promise.all([
       this.db
         .select({
-          status: tasks.status,
-          priority: tasks.priority,
-          dueDate: tasks.dueDate,
-          reminderEnabled: tasks.reminderEnabled,
+          total: sql<string>`count(*)`,
+          completed: sql<string>`count(*) filter (where ${tasks.status} = 'done')`,
+          highPriority: sql<string>`count(*) filter (where ${tasks.priority} = 'high')`,
+          today: sql<string>`count(*) filter (where ${tasks.dueDate} >= ${startOfToday} and ${tasks.dueDate} < ${startOfTomorrow})`,
+          taskReminders: sql<string>`count(*) filter (where ${tasks.reminderEnabled} = true)`,
         })
         .from(tasks)
         .where(eq(tasks.userId, userId)),
       this.db
-        .select({ status: reminders.status })
+        .select({
+          active: sql<string>`count(*) filter (where ${reminders.status} = 'active')`,
+        })
         .from(reminders)
         .where(eq(reminders.userId, userId)),
     ]);
@@ -43,32 +47,16 @@ export class DashboardService {
     // round-tripping of JS Date values through it is only consistent in UTC —
     // using local `setHours()` here caused tasks due "yesterday" evening to
     // be miscounted as "today" whenever the local UTC offset was positive.
-    const { startOfToday, startOfTomorrow } = getUtcDayBoundaries();
+    const taskCounts = taskRows[0];
+    const totalTasks = Number(taskCounts?.total ?? 0);
+    const completedTasks = Number(taskCounts?.completed ?? 0);
+    const highPriorityTasks = Number(taskCounts?.highPriority ?? 0);
+    const todayTasks = Number(taskCounts?.today ?? 0);
 
-    const totalTasks = userTasks.length;
-    const completedTasks = userTasks.filter(
-      (task) => task.status === 'done',
-    ).length;
-    const highPriorityTasks = userTasks.filter(
-      (task) => task.priority === 'high',
-    ).length;
-    const todayTasks = userTasks.filter(
-      (task) =>
-        task.dueDate !== null &&
-        task.dueDate >= startOfToday &&
-        task.dueDate < startOfTomorrow,
-    ).length;
-
-    // The `reminders` table has no direct link back to `tasks` (see
-    // DatabaseService.ensureRemindersTable, which drops a legacy `task_id`
-    // column), but a task can have its own independent reminder toggle
-    // (`tasks.reminderEnabled`) — that's the "task reminder" this counts.
-    const taskReminders = userTasks.filter(
-      (task) => task.reminderEnabled,
-    ).length;
-    const activeReminders = userReminders.filter(
-      (reminder) => reminder.status === 'active',
-    ).length;
+    // Standalone active reminders and task-level reminder toggles are separate
+    // concepts, so both contribute to the dashboard reminder count.
+    const taskReminders = Number(taskCounts?.taskReminders ?? 0);
+    const activeReminders = Number(reminderRows[0]?.active ?? 0);
 
     const overallProgress =
       totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);

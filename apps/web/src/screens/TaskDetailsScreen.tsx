@@ -6,14 +6,18 @@ import SubtaskDetailModal from '../components/SubtaskDetailModal'
 import SubtaskFormModal from '../components/SubtaskFormModal'
 import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
 import {
+  displaySubtaskTitle,
   formatDuration,
   getSubtaskIndicator,
+  matchesSubtaskFilter,
   SUBTASK_INDICATOR_META,
   SUBTASK_PRIORITY_CLASS,
   SUBTASK_PRIORITY_LABEL,
   SUBTASK_STATUS_CLASS,
   SUBTASK_STATUS_LABEL,
+  type SubtaskFilter,
 } from '../lib/subtaskDisplay'
+import { SubtaskVisibilityFilter } from '../features/collaboration/components/SubtaskVisibilityFilter'
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -29,7 +33,6 @@ import {
   toUiStatus,
   updateSubtask,
   type ApiTask,
-  type ApiTaskActivity,
   type ApiSubtask,
   type ApiTaskAttachment,
   type RecurrenceSuggestion,
@@ -42,6 +45,8 @@ type TaskDetailsScreenProps = SidebarNavHandlers & {
   accessToken?: string
   currentUserId?: string
   recurrenceSuggestions?: RecurrenceSuggestion[]
+  notice?: string
+  onNoticeShown?: () => void
   onTaskUpdated?: (task: ApiTask) => void
   onRefresh?: () => void
   onBack?: () => void
@@ -59,8 +64,9 @@ export default function TaskDetailsScreen({
   accessToken = '',
   currentUserId = '',
   recurrenceSuggestions = [],
+  notice = '',
+  onNoticeShown,
   onTaskUpdated,
-  onRefresh,
   onBack,
   onEdit,
   onDelete,
@@ -82,20 +88,47 @@ export default function TaskDetailsScreen({
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? [])
   const [detailSubtaskId, setDetailSubtaskId] = useState<string | null>(null)
   const [editSubtaskId, setEditSubtaskId] = useState<string | null>(null)
-  const [activityItems, setActivityItems] = useState<ApiTaskActivity[]>(task?.activities ?? [])
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([])
   const [previewAttachment, setPreviewAttachment] = useState<ApiTaskAttachment | null>(null)
   const [sharedMemberCount, setSharedMemberCount] = useState(0)
   const [error, setError] = useState('')
 
-  const latestActivity = useMemo(
-    () =>
-      [...activityItems].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0],
-    [activityItems],
+  const isOwner = task?.viewerRole === 'owner'
+  const [subtaskFilter, setSubtaskFilter] = useState<SubtaskFilter>(
+    isOwner ? 'team' : 'mine',
   )
+  const [subtaskMemberId, setSubtaskMemberId] = useState('')
+
+  // "By Member" options are just the assignees that actually have subtasks —
+  // no extra fetch, and it always matches what's filterable.
+  const memberOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const item of subtaskItems) {
+      if (item.assigneeUserId && item.assignee && !seen.has(item.assigneeUserId)) {
+        seen.set(item.assigneeUserId, item.assignee)
+      }
+    }
+    return [...seen.entries()].map(([userId, name]) => ({ userId, name }))
+  }, [subtaskItems])
+
+  const visibleSubtasks = useMemo(
+    () =>
+      subtaskItems.filter((item) =>
+        matchesSubtaskFilter(item, subtaskFilter, {
+          currentUserId,
+          memberId: subtaskMemberId,
+        }),
+      ),
+    [subtaskItems, subtaskFilter, currentUserId, subtaskMemberId],
+  )
+
   const completedSubtasksCount = useMemo(
     () => subtaskItems.filter((subtask) => subtask.isDone).length,
     [subtaskItems],
+  )
+  const visibleCompletedCount = useMemo(
+    () => visibleSubtasks.filter((subtask) => subtask.isDone).length,
+    [visibleSubtasks],
   )
   const detailSubtask = useMemo(
     () => subtaskItems.find((item) => item.id === detailSubtaskId) ?? null,
@@ -123,6 +156,15 @@ export default function TaskDetailsScreen({
     ? `${task.reminderBeforeMinutes ?? 30} minutes before due date`
     : 'No reminder set'
   const focusText = task?.isFocusTask ? 'Enabled' : 'Not set'
+  // Read-only until we know otherwise so real owners/editors don't see a
+  // one-render flash of hidden controls while `task.canEdit` is loading.
+  const isViewer = task?.viewerRole === 'viewer' && task?.canEdit !== true
+
+  useEffect(() => {
+    if (!notice) return
+    setError(notice)
+    onNoticeShown?.()
+  }, [notice, onNoticeShown])
 
   useEffect(() => {
     if (!task) return
@@ -132,7 +174,6 @@ export default function TaskDetailsScreen({
     setDependencies(toDependencyTasks(task.dependencies))
     setRecurrence(recurrenceToUi(task.recurrence))
     setSubtaskItems(task.subtasks)
-    setActivityItems(task.activities)
   }, [task])
 
   useEffect(() => {
@@ -191,7 +232,6 @@ export default function TaskDetailsScreen({
           status: nextIsDone ? 'done' : 'todo',
         })
         setSubtaskItems(updatedTask.subtasks)
-        setActivityItems(updatedTask.activities)
         setProgress(updatedTask.progress)
         onTaskUpdated?.(updatedTask)
       } catch (subtaskError) {
@@ -252,7 +292,6 @@ export default function TaskDetailsScreen({
           const updatedTask = await changeTaskStatus(accessToken, task.id, payload)
           setStatus(toTaskStatus(updatedTask))
           setProgress(updatedTask.progress)
-          setActivityItems(updatedTask.activities)
           onTaskUpdated?.(updatedTask)
         } catch (saveError) {
           setStatus(previousStatus)
@@ -317,11 +356,13 @@ export default function TaskDetailsScreen({
               </p>
             </div>
 
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <PrimaryButton size="sm" onClick={onEdit}>Edit Task</PrimaryButton>
-              <OutlineButton size="sm" onClick={() => setIsStatusModalOpen(true)}>Change Status</OutlineButton>
-              <DangerButton size="sm" onClick={onDelete}>Delete Task</DangerButton>
-            </div>
+            {isViewer ? null : (
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <PrimaryButton size="sm" onClick={onEdit}>Edit Task</PrimaryButton>
+                <OutlineButton size="sm" onClick={() => setIsStatusModalOpen(true)}>Change Status</OutlineButton>
+                <DangerButton size="sm" onClick={onDelete}>Delete Task</DangerButton>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -341,7 +382,6 @@ export default function TaskDetailsScreen({
               accessToken={accessToken}
               currentUserId={currentUserId}
               onMembersLoaded={setSharedMemberCount}
-              onRefresh={onRefresh}
             />
           </div>
         ) : null}
@@ -374,18 +414,39 @@ export default function TaskDetailsScreen({
             </SectionBlock>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <SectionBlock title="Subtasks" subtitle={`${completedSubtasksCount} of ${subtaskItems.length} completed`}>
+              <SectionBlock
+                title="Subtasks"
+                subtitle={`${visibleCompletedCount} of ${visibleSubtasks.length} completed`}
+              >
                 {subtaskItems.length ? (
-                  <div className="space-y-2">
-                    {subtaskItems.map((item) => (
-                      <Subtask
-                        key={item.id}
-                        subtask={item}
-                        onToggle={handleToggleSubtask}
-                        onOpen={() => setDetailSubtaskId(item.id)}
+                  <>
+                    <SubtaskVisibilityFilter
+                      filter={subtaskFilter}
+                      onFilterChange={setSubtaskFilter}
+                      isOwner={isOwner}
+                      memberOptions={memberOptions}
+                      memberId={subtaskMemberId}
+                      onMemberChange={setSubtaskMemberId}
+                    />
+                    {visibleSubtasks.length ? (
+                      <div className="space-y-2">
+                        {visibleSubtasks.map((item) => (
+                          <Subtask
+                            key={item.id}
+                            subtask={item}
+                            canEdit={!isViewer}
+                            onToggle={handleToggleSubtask}
+                            onOpen={() => setDetailSubtaskId(item.id)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyBlock
+                        title="No subtasks in this view"
+                        description="Try a different filter to see more subtasks."
                       />
-                    ))}
-                  </div>
+                    )}
+                  </>
                 ) : (
                   <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
                 )}
@@ -458,18 +519,6 @@ export default function TaskDetailsScreen({
                   <EmptyBlock title="No attachments" description="Files added from Edit Task will appear here." />
                 )}
               </SectionBlock>
-
-              <SectionBlock title="Latest Activity">
-                {latestActivity ? (
-                  <Timeline
-                    title={formatActivityTitle(latestActivity.action)}
-                    desc={`${latestActivity.description} - ${formatActivityDateTime(latestActivity.createdAt)}`}
-                    color={activityColor(latestActivity.action)}
-                  />
-                ) : (
-                  <EmptyBlock title="No activity yet" description="Changes will appear here as you update the task." />
-                )}
-              </SectionBlock>
             </div>
           </section>
 
@@ -520,6 +569,7 @@ export default function TaskDetailsScreen({
           task={{ ...task, subtasks: subtaskItems }}
           subtask={detailSubtask}
           accessToken={accessToken}
+          canEdit={!isViewer}
           onClose={() => setDetailSubtaskId(null)}
           onEdit={() => {
             setEditSubtaskId(detailSubtask.id)
@@ -528,7 +578,7 @@ export default function TaskDetailsScreen({
           onTaskUpdated={syncTaskFromModal}
         />
       ) : null}
-      {task && editSubtask ? (
+      {task && editSubtask && !isViewer ? (
         <SubtaskFormModal
           mode="edit"
           siblings={subtaskItems.filter((item) => item.id !== editSubtask.id)}
@@ -677,10 +727,12 @@ function AutomationRow({ label, value }: { label: string; value: string }) {
 
 const Subtask = memo(function Subtask({
   subtask,
+  canEdit = true,
   onToggle,
   onOpen,
 }: {
   subtask: ApiSubtask
+  canEdit?: boolean
   onToggle: (subtask: ApiSubtask) => void
   onOpen: () => void
 }) {
@@ -694,8 +746,9 @@ const Subtask = memo(function Subtask({
     <div className="group flex items-start gap-3 rounded-xl bg-[var(--bp-bg)] px-3 py-2.5">
       <button
         type="button"
+        disabled={!canEdit}
         onClick={() => onToggle(subtask)}
-        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[8px] font-black ${
+        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[8px] font-black disabled:cursor-not-allowed ${
           done ? 'border-green-400 bg-green-400 text-black' : 'border-slate-500'
         }`}
         aria-label={done ? 'Mark subtask incomplete' : 'Mark subtask complete'}
@@ -709,9 +762,16 @@ const Subtask = memo(function Subtask({
           <span
             className={`truncate text-sm font-semibold ${done ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}
           >
-            {subtask.title}
+            {displaySubtaskTitle(subtask)}
           </span>
+          {subtask.isShared ? <SharedBadge /> : null}
         </div>
+
+        {subtask.assigneeUserId && subtask.assignee ? (
+          <p className="mt-1 text-xs text-slate-400">Assigned to {subtask.assignee}</p>
+        ) : !subtask.assigneeUserId && !subtask.isShared ? (
+          <p className="mt-1 text-xs text-slate-500">Unassigned</p>
+        ) : null}
 
         {(due || estimate) && !done ? (
           <p className="mt-1 text-xs text-slate-400">
@@ -827,35 +887,6 @@ function formatFileSize(size?: string | number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-const Timeline = memo(function Timeline({ title, desc, color }: { title: string; desc: string; color: string }) {
-  return (
-    <div className="flex gap-3">
-      <span className={`mt-1 h-4 w-4 shrink-0 rounded-full ${color}`} />
-      <div>
-        <p className="text-sm font-bold text-[var(--bp-text)]">{title}</p>
-        <p className="text-xs text-slate-500">{desc}</p>
-      </div>
-    </div>
-  )
-})
-
-function formatActivityTitle(action: string) {
-  return action
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function activityColor(action: string) {
-  if (action.includes('created')) return 'bg-green-400'
-  if (action.includes('status')) return 'bg-blue-400'
-  if (action.includes('subtask')) return 'bg-purple-400'
-  if (action.includes('dependency')) return 'bg-orange-400'
-  if (action.includes('recurrence')) return 'bg-[var(--bp-accent)]'
-  if (action.includes('label')) return 'bg-pink-400'
-  return 'bg-slate-400'
 }
 
 function attachmentLabel(type?: string, fileName?: string) {
@@ -977,17 +1008,4 @@ function formatOccurrence(value?: string | null, time?: string) {
   }).format(date)
   const timePart = formatClockTime(time)
   return timePart ? `${datePart} • ${timePart}` : datePart
-}
-
-function formatActivityDateTime(value?: string) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
 }

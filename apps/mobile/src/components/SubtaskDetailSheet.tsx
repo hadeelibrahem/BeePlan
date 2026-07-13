@@ -14,6 +14,7 @@ import {
   type ApiTaskAttachment,
 } from '../lib/tasksApi';
 import {
+  displaySubtaskTitle,
   formatDuration,
   getSubtaskWarnings,
   SUBTASK_PRIORITY_COLOR,
@@ -29,6 +30,7 @@ type Props = {
   task: ApiTask;
   subtask: ApiSubtask | null;
   accessToken: string;
+  canEdit?: boolean;
   onClose: () => void;
   onEdit: (subtask: ApiSubtask) => void;
   onTaskUpdated: (task: ApiTask) => void;
@@ -39,6 +41,7 @@ export default function SubtaskDetailSheet({
   task,
   subtask,
   accessToken,
+  canEdit = true,
   onClose,
   onEdit,
   onTaskUpdated,
@@ -140,15 +143,17 @@ export default function SubtaskDetailSheet({
 
           <View className="mb-4 flex-row items-start justify-between gap-3">
             <Text className="flex-1 text-xl font-black" style={{ color: colors.text }}>
-              {subtask.title}
+              {displaySubtaskTitle(subtask)}
             </Text>
-            <Pressable
-              onPress={() => onEdit(subtask)}
-              className="rounded-xl border px-3 py-1.5"
-              style={{ borderColor: colors.border }}
-            >
-              <Text className="text-xs font-bold" style={{ color: colors.text }}>Edit</Text>
-            </Pressable>
+            {canEdit ? (
+              <Pressable
+                onPress={() => onEdit(subtask)}
+                className="rounded-xl border px-3 py-1.5"
+                style={{ borderColor: colors.border }}
+              >
+                <Text className="text-xs font-bold" style={{ color: colors.text }}>Edit</Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
@@ -171,7 +176,7 @@ export default function SubtaskDetailSheet({
                 return (
                   <Pressable
                     key={status}
-                    disabled={busy}
+                    disabled={busy || !canEdit}
                     onPress={() => void changeStatus(status)}
                     className="rounded-full px-3 py-1.5"
                     style={{ backgroundColor: active ? colors.primary : colors.background }}
@@ -238,19 +243,23 @@ export default function SubtaskDetailSheet({
                 <Pressable onPress={() => void openAttachment(accessToken, task.id, a)}>
                   <Text className="text-xs font-bold" style={{ color: colors.primary }}>Open</Text>
                 </Pressable>
-                <Pressable onPress={() => a.id && void handleRemoveAttachment(a.id)}>
-                  <Text className="text-xs font-bold" style={{ color: colors.error }}>Remove</Text>
-                </Pressable>
+                {canEdit ? (
+                  <Pressable onPress={() => a.id && void handleRemoveAttachment(a.id)}>
+                    <Text className="text-xs font-bold" style={{ color: colors.error }}>Remove</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ))}
-            <Pressable
-              disabled={busy}
-              onPress={() => void handleAddAttachment()}
-              className="rounded-xl border border-dashed p-3"
-              style={{ borderColor: colors.border }}
-            >
-              <Text className="text-center text-sm font-bold" style={{ color: colors.secondaryText }}>+ Add Attachment</Text>
-            </Pressable>
+            {canEdit ? (
+              <Pressable
+                disabled={busy}
+                onPress={() => void handleAddAttachment()}
+                className="rounded-xl border border-dashed p-3"
+                style={{ borderColor: colors.border }}
+              >
+                <Text className="text-center text-sm font-bold" style={{ color: colors.secondaryText }}>+ Add Attachment</Text>
+              </Pressable>
+            ) : null}
 
             {/* Activity */}
             <Text className="mb-2 mt-4 text-xs font-black uppercase" style={{ color: colors.secondaryText }}>Activity</Text>

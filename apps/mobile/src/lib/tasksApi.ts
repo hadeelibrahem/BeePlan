@@ -46,6 +46,8 @@ export type ApiSubtask = {
   isDone: boolean;
   orderIndex: number;
   assignee?: string;
+  assigneeUserId?: string;
+  isShared?: boolean;
   description?: string;
   priority: ApiSubtaskPriority;
   status: ApiSubtaskStatus;
@@ -259,6 +261,10 @@ export function getTasks(accessToken: string, filters?: TaskFilters) {
 
 export function getTaskFilterSummary(accessToken: string) {
   return request<TaskFilterSummary>(accessToken, '/tasks/filters/summary');
+}
+
+export function getTask(accessToken: string, taskId: string) {
+  return request<ApiTask>(accessToken, `/tasks/${taskId}`);
 }
 
 export function createTask(accessToken: string, payload: TaskPayload) {

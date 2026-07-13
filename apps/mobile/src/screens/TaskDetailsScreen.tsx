@@ -11,7 +11,6 @@ import {
   updateSubtask,
   type ApiSubtask,
   type ApiTask,
-  type ApiTaskActivity,
   type ApiTaskAttachment,
 } from '../lib/tasksApi';
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowSheet';
@@ -19,13 +18,16 @@ import { createRecurrenceSummary, getNextOccurrenceLabel, type RecurrenceSetting
 import { TaskStatusWorkflowSheet, type TaskStatus } from '../components/TaskStatusWorkflowSheet';
 import SubtaskDetailSheet from '../components/SubtaskDetailSheet';
 import {
+  displaySubtaskTitle,
   formatDuration,
   getSubtaskIndicator,
+  matchesSubtaskFilter,
   syncTaskSubtaskReminders,
   SUBTASK_INDICATOR_COLOR,
   SUBTASK_PRIORITY_COLOR,
   SUBTASK_PRIORITY_LABEL,
   SUBTASK_STATUS_LABEL,
+  type SubtaskFilter,
 } from '../lib/subtasks';
 import {
   AppScreen,
@@ -45,6 +47,8 @@ type Props = {
   tasks?: ApiTask[];
   accessToken?: string;
   currentUserId?: string;
+  notice?: string;
+  onNoticeShown?: () => void;
   onTaskUpdated?: (task: ApiTask) => void;
   onRefresh?: () => void;
   onBack: () => void;
@@ -57,8 +61,9 @@ export default function TaskDetailsScreen({
   task,
   accessToken = '',
   currentUserId = '',
+  notice = '',
+  onNoticeShown,
   onTaskUpdated,
-  onRefresh,
   onBack,
   onEdit,
   onDelete,
@@ -71,16 +76,36 @@ export default function TaskDetailsScreen({
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? []);
   const [detailSubtaskId, setDetailSubtaskId] = useState<string | null>(null);
   const [sharedMemberCount, setSharedMemberCount] = useState(0);
-  const [collabNotice, setCollabNotice] = useState('');
   const [dependencyItems, setDependencyItems] = useState<DependencyTask[]>(
     toDependencyTasks(task?.dependencies),
   );
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(
     task ? recurrenceToUi(task.recurrence) : null,
   );
-  const [activityItems, setActivityItems] = useState<ApiTaskActivity[]>(task?.activities ?? []);
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([]);
   const [error, setError] = useState('');
+
+  const isOwner = task?.viewerRole === 'owner';
+  const [subtaskFilter, setSubtaskFilter] = useState<SubtaskFilter>(isOwner ? 'team' : 'mine');
+  const [subtaskMemberId, setSubtaskMemberId] = useState('');
+
+  const memberOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const item of subtaskItems) {
+      if (item.assigneeUserId && item.assignee && !seen.has(item.assigneeUserId)) {
+        seen.set(item.assigneeUserId, item.assignee);
+      }
+    }
+    return [...seen.entries()].map(([userId, name]) => ({ userId, name }));
+  }, [subtaskItems]);
+
+  const visibleSubtasks = useMemo(
+    () =>
+      subtaskItems.filter((item) =>
+        matchesSubtaskFilter(item, subtaskFilter, { currentUserId, memberId: subtaskMemberId }),
+      ),
+    [subtaskItems, subtaskFilter, currentUserId, subtaskMemberId],
+  );
 
   const completedSubtasks = useMemo(() => subtaskItems.filter((item) => item.isDone).length, [subtaskItems]);
   const dependenciesComplete = useMemo(
@@ -92,10 +117,15 @@ export default function TaskDetailsScreen({
   const nextOccurrence = getNextOccurrenceLabel(recurrence);
   const reminderText = task?.reminderEnabled ? `${task.reminderBeforeMinutes ?? 30} minutes before due date` : 'No reminder set';
   const focusText = task?.isFocusTask ? 'Enabled' : 'Not set';
-  const latestActivity = useMemo(
-    () => [...activityItems].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0],
-    [activityItems],
-  );
+  // Read-only until we know otherwise so real owners/editors don't see a
+  // one-render flash of hidden controls while `task.canEdit` is loading.
+  const isViewer = task?.viewerRole === 'viewer' && task?.canEdit !== true;
+
+  useEffect(() => {
+    if (!notice) return;
+    setError(notice);
+    onNoticeShown?.();
+  }, [notice, onNoticeShown]);
 
   useEffect(() => {
     if (!task) return;
@@ -104,7 +134,6 @@ export default function TaskDetailsScreen({
     setSubtaskItems(task.subtasks);
     setDependencyItems(toDependencyTasks(task.dependencies));
     setRecurrence(recurrenceToUi(task.recurrence));
-    setActivityItems(task.activities);
   }, [task]);
 
   useEffect(() => {
@@ -229,7 +258,6 @@ export default function TaskDetailsScreen({
       try {
         const updated = await updateSubtask(accessToken, task.id, subtask.id, { isDone: nextIsDone });
         setSubtaskItems(updated.subtasks);
-        setActivityItems(updated.activities);
         setProgress(updated.progress);
         onTaskUpdated?.(updated);
       } catch (subtaskError) {
@@ -255,17 +283,19 @@ export default function TaskDetailsScreen({
   return (
     <AppScreen
       footer={
-        <BottomActionBar>
-          <DangerButton size="sm" onPress={onDelete} className="flex-1">
-            Delete
-          </DangerButton>
-          <OutlineButton size="sm" onPress={() => setIsStatusSheetVisible(true)} className="flex-1">
-            Status
-          </OutlineButton>
-          <PrimaryButton size="sm" onPress={onEdit} className="flex-1">
-            Edit Task
-          </PrimaryButton>
-        </BottomActionBar>
+        isViewer ? undefined : (
+          <BottomActionBar>
+            <DangerButton size="sm" onPress={onDelete} className="flex-1">
+              Delete
+            </DangerButton>
+            <OutlineButton size="sm" onPress={() => setIsStatusSheetVisible(true)} className="flex-1">
+              Status
+            </OutlineButton>
+            <PrimaryButton size="sm" onPress={onEdit} className="flex-1">
+              Edit Task
+            </PrimaryButton>
+          </BottomActionBar>
+        )
       }
     >
       <PageHeader title="Task Details" onBack={onBack} />
@@ -294,24 +324,11 @@ export default function TaskDetailsScreen({
         </View>
       </SectionCard>
 
-      {collabNotice ? (
-        <View className="mb-3 rounded-xl px-3 py-2" style={{ backgroundColor: `${colors.success}26` }}>
-          <Text style={{ color: colors.success }} className="text-xs font-semibold">
-            ✓ {collabNotice}
-          </Text>
-        </View>
-      ) : null}
-
       {currentUserId ? (
         <CollaborationPanel
           task={task}
           currentUserId={currentUserId}
           onMembersLoaded={setSharedMemberCount}
-          onRefresh={onRefresh}
-          onNotice={(m) => {
-            setCollabNotice(m);
-            setTimeout(() => setCollabNotice(''), 3000);
-          }}
           onError={setError}
         />
       ) : null}
@@ -328,14 +345,29 @@ export default function TaskDetailsScreen({
 
       <Card title="Subtasks">
         {subtaskItems.length ? (
-          subtaskItems.map((item) => (
-            <SubtaskRow
-              key={item.id}
-              item={item}
-              onToggle={handleToggleSubtask}
-              onOpen={(subtask) => setDetailSubtaskId(subtask.id)}
+          <>
+            <SubtaskFilterRow
+              filter={subtaskFilter}
+              onFilterChange={setSubtaskFilter}
+              isOwner={isOwner}
+              memberOptions={memberOptions}
+              memberId={subtaskMemberId}
+              onMemberChange={setSubtaskMemberId}
             />
-          ))
+            {visibleSubtasks.length ? (
+              visibleSubtasks.map((item) => (
+                <SubtaskRow
+                  key={item.id}
+                  item={item}
+                  canEdit={!isViewer}
+                  onToggle={handleToggleSubtask}
+                  onOpen={(subtask) => setDetailSubtaskId(subtask.id)}
+                />
+              ))
+            ) : (
+              <EmptyBlock title="No subtasks in this view" description="Try a different filter to see more." />
+            )}
+          </>
         ) : (
           <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
         )}
@@ -410,21 +442,6 @@ export default function TaskDetailsScreen({
         )}
       </Card>
 
-      <Card title="Latest Activity">
-        {latestActivity ? (
-          <TimelineRow
-            item={{
-              title: formatActivityTitle(latestActivity.action),
-              detail: latestActivity.description,
-              time: formatActivityDateTime(latestActivity.createdAt),
-            }}
-            color={activityColor(latestActivity.action, colors)}
-          />
-        ) : (
-          <EmptyBlock title="No activity yet" description="Changes will appear here as you update the task." />
-        )}
-      </Card>
-
       <TaskStatusWorkflowSheet
         visible={isStatusSheetVisible}
         status={status}
@@ -443,6 +460,7 @@ export default function TaskDetailsScreen({
           task={{ ...task, subtasks: subtaskItems }}
           subtask={detailSubtask}
           accessToken={accessToken}
+          canEdit={!isViewer}
           onClose={() => setDetailSubtaskId(null)}
           onEdit={() => {
             setDetailSubtaskId(null);
@@ -452,7 +470,6 @@ export default function TaskDetailsScreen({
             setSubtaskItems(updated.subtasks);
             setProgress(updated.progress);
             setStatus(toTaskStatus(updated));
-            setActivityItems(updated.activities);
             onTaskUpdated?.(updated);
           }}
         />
@@ -567,35 +584,6 @@ function attachmentColor(type?: string, fileName?: string) {
   return 'bg-orange-500';
 }
 
-function formatActivityDateTime(value?: string) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function formatActivityTitle(action: string) {
-  return action
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function activityColor(action: string, colors: ReturnType<typeof useTheme>['theme']['colors']) {
-  if (action.includes('created')) return colors.success;
-  if (action.includes('status')) return colors.primary;
-  if (action.includes('subtask')) return colors.accent;
-  if (action.includes('dependency')) return colors.warning;
-  if (action.includes('recurrence')) return colors.accent;
-  return colors.secondaryText;
-}
-
 function getStatusColor(status: TaskStatus, colors: ReturnType<typeof useTheme>['theme']['colors']) {
   if (status === 'Done') return colors.success;
   if (status === 'Missed') return colors.error;
@@ -625,12 +613,80 @@ function ProgressBar({ value, color }: { value: number; color: string }) {
   );
 }
 
+type SubtaskMemberOption = { userId: string; name: string };
+
+function SubtaskFilterRow({
+  filter,
+  onFilterChange,
+  isOwner,
+  memberOptions,
+  memberId,
+  onMemberChange,
+}: {
+  filter: SubtaskFilter;
+  onFilterChange: (filter: SubtaskFilter) => void;
+  isOwner: boolean;
+  memberOptions: SubtaskMemberOption[];
+  memberId: string;
+  onMemberChange: (memberId: string) => void;
+}) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
+  const chips: { value: SubtaskFilter; label: string }[] = [
+    { value: 'mine', label: 'My Tasks' },
+    { value: 'team', label: 'All Team' },
+    { value: 'shared', label: 'Shared' },
+    { value: 'unassigned', label: 'Unassigned' },
+  ];
+
+  const renderChip = (value: SubtaskFilter, label: string, active: boolean, onPress: () => void) => (
+    <Pressable
+      key={`${value}-${label}`}
+      onPress={onPress}
+      className="rounded-full px-3 py-1"
+      style={{
+        backgroundColor: active ? colors.accent : 'transparent',
+        borderWidth: active ? 0 : 1,
+        borderColor: colors.border,
+      }}
+    >
+      <Text className="text-[11px] font-bold" style={{ color: active ? colors.accentText : colors.secondaryText }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+
+  return (
+    <View className="mb-3 flex-row flex-wrap items-center gap-1.5">
+      {chips.map((chip) =>
+        renderChip(chip.value, chip.label, filter === chip.value, () => onFilterChange(chip.value)),
+      )}
+      {isOwner
+        ? memberOptions.map((option) =>
+            renderChip(
+              'member',
+              option.name,
+              filter === 'member' && memberId === option.userId,
+              () => {
+                onMemberChange(option.userId);
+                onFilterChange('member');
+              },
+            ),
+          )
+        : null}
+    </View>
+  );
+}
+
 const SubtaskRow = memo(function SubtaskRow({
   item,
+  canEdit = true,
   onToggle,
   onOpen,
 }: {
   item: ApiSubtask;
+  canEdit?: boolean;
   onToggle: (item: ApiSubtask) => void;
   onOpen: (item: ApiSubtask) => void;
 }) {
@@ -648,7 +704,8 @@ const SubtaskRow = memo(function SubtaskRow({
       style={{ backgroundColor: colors.background }}
     >
       <Pressable
-        onPress={() => onToggle(item)}
+        onPress={() => canEdit && onToggle(item)}
+        disabled={!canEdit}
         accessibilityRole="button"
         accessibilityLabel={done ? 'Mark subtask as not done' : 'Mark subtask as done'}
         className="mt-0.5 h-5 w-5 items-center justify-center rounded-md border"
@@ -664,9 +721,24 @@ const SubtaskRow = memo(function SubtaskRow({
             className={`flex-1 text-sm font-bold ${done ? 'line-through' : ''}`}
             style={{ color: done ? colors.secondaryText : colors.text }}
           >
-            {item.title}
+            {displaySubtaskTitle(item)}
           </Text>
+          {item.isShared ? (
+            <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
+              <Text className="text-[10px] font-black" style={{ color: colors.accent }}>👥 Shared</Text>
+            </View>
+          ) : null}
         </View>
+
+        {item.assigneeUserId && item.assignee ? (
+          <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
+            Assigned to {item.assignee}
+          </Text>
+        ) : !item.assigneeUserId && !item.isShared ? (
+          <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
+            Unassigned
+          </Text>
+        ) : null}
 
         {(due || estimate) && !done ? (
           <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
@@ -750,24 +822,3 @@ function getDependencyStatusColor(
   return colors.secondaryText;
 }
 
-const TimelineRow = memo(function TimelineRow({
-  item,
-  color,
-}: {
-  item: { title: string; detail: string; time: string };
-  color: string;
-}) {
-  const { theme } = useTheme();
-  const { colors } = theme;
-
-  return (
-    <View className="flex-row gap-3">
-      <View className="mt-1 h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-      <View className="flex-1">
-        <Text className="text-sm font-black" style={{ color: colors.text }}>{item.title}</Text>
-        <Text className="mt-0.5 text-xs" style={{ color: colors.secondaryText }}>{item.detail}</Text>
-        <Text className="mt-1 text-xs font-bold" style={{ color: colors.accent }}>{item.time}</Text>
-      </View>
-    </View>
-  );
-});

@@ -28,6 +28,7 @@ type Props = {
   task: ApiTask
   subtask: ApiSubtask
   accessToken: string
+  canEdit?: boolean
   onClose: () => void
   onEdit: () => void
   onTaskUpdated: (task: ApiTask) => void
@@ -37,6 +38,7 @@ export default function SubtaskDetailModal({
   task,
   subtask,
   accessToken,
+  canEdit = true,
   onClose,
   onEdit,
   onTaskUpdated,
@@ -127,13 +129,15 @@ export default function SubtaskDetailModal({
               <h2 className="truncate text-2xl font-black">{subtask.title}</h2>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onEdit}
-            className="shrink-0 rounded-xl border border-[var(--bp-border)] px-4 py-2.5 text-sm font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
-          >
-            Edit
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="shrink-0 rounded-xl border border-[var(--bp-border)] px-4 py-2.5 text-sm font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
+            >
+              Edit
+            </button>
+          ) : null}
         </div>
 
         {error ? (
@@ -159,7 +163,7 @@ export default function SubtaskDetailModal({
             <button
               key={status}
               type="button"
-              disabled={busy}
+              disabled={busy || !canEdit}
               onClick={() => void changeStatus(status)}
               className={`rounded-full px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
                 subtask.status === status
@@ -265,23 +269,27 @@ export default function SubtaskDetailModal({
                 >
                   Download
                 </button>
-                <button
-                  type="button"
-                  onClick={() => a.id && void handleDeleteAttachment(a.id)}
-                  className="text-xs font-bold text-red-400 hover:underline"
-                >
-                  Remove
-                </button>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => a.id && void handleDeleteAttachment(a.id)}
+                    className="text-xs font-bold text-red-400 hover:underline"
+                  >
+                    Remove
+                  </button>
+                ) : null}
               </div>
             ))}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded-xl border border-dashed border-[var(--bp-border)] px-4 py-2.5 text-sm font-bold text-slate-400 hover:text-[var(--bp-text)] disabled:opacity-50"
-            >
-              + Add Attachment
-            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-xl border border-dashed border-[var(--bp-border)] px-4 py-2.5 text-sm font-bold text-slate-400 hover:text-[var(--bp-text)] disabled:opacity-50"
+              >
+                + Add Attachment
+              </button>
+            ) : null}
             <input
               ref={fileInputRef}
               type="file"

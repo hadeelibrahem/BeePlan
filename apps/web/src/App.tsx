@@ -54,6 +54,7 @@ import {
   type RecurrenceSettings,
 } from './components/TaskRecurrenceModal'
 import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
+import { queryKeys } from './lib/queryKeys'
 
 type AuthScreenState = 'auth' | 'forgot' | 'reset'
 type AppScreen =
@@ -102,6 +103,7 @@ function ThemedApp() {
   const [tasks, setTasks] = useState<ApiTask[]>([])
   const [tasksLoading, setTasksLoading] = useState(false)
   const [tasksError, setTasksError] = useState('')
+  const [taskDetailsNotice, setTaskDetailsNotice] = useState('')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState('')
@@ -113,7 +115,7 @@ function ThemedApp() {
   const { accessToken, loading, user, signOut } = useAuth()
   const queryClient = useQueryClient()
   const invalidateTaskFilters = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
     [queryClient],
   )
   const refreshPlanner = useCallback(() => setPlannerRefreshKey((value) => value + 1), [])
@@ -135,12 +137,15 @@ function ThemedApp() {
     setTasksLoading(true)
     setTasksError('')
     getTasks(accessToken)
-      .then(setTasks)
+      .then((loadedTasks) => {
+        setTasks(loadedTasks)
+        queryClient.setQueryData(queryKeys.tasks.list({}), loadedTasks)
+      })
       .catch((error) => {
         setTasksError(error instanceof Error ? error.message : 'Unable to load tasks.')
       })
       .finally(() => setTasksLoading(false))
-  }, [accessToken, user])
+  }, [accessToken, user, queryClient])
 
   const refreshSummary = useCallback(() => {
     if (!accessToken) return
@@ -222,6 +227,9 @@ function ThemedApp() {
     if (!accessToken) return
     const createdTask = await createTask(accessToken, payload)
     setTasks((current) => [createdTask, ...current])
+    queryClient.setQueryData<ApiTask[]>(queryKeys.tasks.list({}), (current = []) =>
+      current.some((task) => task.id === createdTask.id) ? current : [createdTask, ...current],
+    )
     refreshSummary()
     invalidateTaskFilters()
     refreshPlanner()
@@ -276,8 +284,13 @@ function ThemedApp() {
 
     setTasksError('')
     try {
-      await refreshSelectedTask(taskId)
+      const refreshedTask = await refreshSelectedTask(taskId)
       setSelectedTaskId(taskId)
+      if (refreshedTask && !canEditTask(refreshedTask)) {
+        setTaskDetailsNotice("You don't have permission to edit this task.")
+        setScreen('taskDetails')
+        return
+      }
       setScreen('editTask')
     } catch (error) {
       setTasksError(error instanceof Error ? error.message : 'Unable to load this task for editing.')
@@ -294,6 +307,7 @@ function ThemedApp() {
 
     const updatedTask = await updateTask(accessToken, taskId, payload)
     setTasks((current) => current.map((task) => (task.id === taskId ? updatedTask : task)))
+    syncTaskQueryCaches(updatedTask)
     refreshSummary()
     invalidateTaskFilters()
     refreshPlanner()
@@ -320,6 +334,9 @@ function ThemedApp() {
 
     await deleteTask(accessToken, taskId)
     setTasks((current) => current.filter((task) => task.id !== taskId))
+    queryClient.setQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all }, (current) =>
+      Array.isArray(current) ? current.filter((task) => task.id !== taskId) : current,
+    )
     setSelectedTaskId(null)
     setScreen('tasks')
     refreshSummary()
@@ -329,9 +346,19 @@ function ThemedApp() {
 
   function handleTaskUpdated(updatedTask: ApiTask) {
     setTasks((current) => current.map((item) => (item.id === updatedTask.id ? updatedTask : item)))
+    syncTaskQueryCaches(updatedTask)
     refreshSummary()
     invalidateTaskFilters()
     refreshPlanner()
+  }
+
+  function syncTaskQueryCaches(updatedTask: ApiTask) {
+    queryClient.setQueryData(queryKeys.tasks.detail(updatedTask.id), updatedTask)
+    queryClient.setQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all }, (current) =>
+      Array.isArray(current)
+        ? current.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+        : current,
+    )
   }
 
   async function handleDismissRecurrenceSuggestion(suggestion: RecurrenceSuggestion) {
@@ -381,6 +408,11 @@ function ThemedApp() {
 
     const refreshedTask = await getTask(accessToken, taskId)
     setTasks((current) => current.map((task) => (task.id === taskId ? refreshedTask : task)))
+    return refreshedTask
+  }
+
+  function canEditTask(task: ApiTask) {
+    return task.viewerRole === 'owner' || task.viewerRole === 'editor' || task.canEdit === true
   }
 
   const focus = useFocusSession({
@@ -645,6 +677,8 @@ function ThemedApp() {
         accessToken={accessToken ?? ''}
         currentUserId={user.id}
         recurrenceSuggestions={selectedTaskRecurrenceSuggestions}
+        notice={taskDetailsNotice}
+        onNoticeShown={() => setTaskDetailsNotice('')}
         onTaskUpdated={handleTaskUpdated}
         onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('tasks')}
@@ -687,12 +721,18 @@ function ThemedApp() {
         task={selectedTask}
         tasks={tasks}
         accessToken={accessToken ?? ''}
+        currentUserId={user.id}
+        onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('taskDetails')}
         onCancel={() => setScreen('taskDetails')}
         onDelete={() => void handleDeleteTask(selectedTask.id)}
         onSave={(payload) => void handleUpdateTask(selectedTask.id, payload)}
         onTaskUpdated={handleTaskUpdated}
         onSaved={handleTaskSaved}
+        onPermissionDenied={() => {
+          setTaskDetailsNotice("You don't have permission to edit this task.")
+          setScreen('taskDetails')
+        }}
         onSignOut={() => void handleSignOut()}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
         onNavigateFocus={sidebarNav.onNavigateFocus}

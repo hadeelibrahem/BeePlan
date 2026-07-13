@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AiModule } from './ai/ai.module';
+import { AiCollaborationPlannerModule } from './ai/collaboration-planner/ai-collaboration-planner.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -41,6 +42,7 @@ import { TasksModule } from './tasks/tasks.module';
     CollaborationModule,
     SpeechModule,
     AiModule,
+    AiCollaborationPlannerModule,
     TasksModule,
     DashboardModule,
     NotesModule,

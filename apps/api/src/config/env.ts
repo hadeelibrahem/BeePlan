@@ -28,6 +28,10 @@ export const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_BASE_URL: z.string().url().optional(),
   OPENROUTER_MODEL: z.string().optional(),
+  // Provider call timeout for the AI Collaboration Planner only (see
+  // AiCollaborationPlannerService) — a full team + task-context prompt can
+  // take longer than other single-shot AI endpoints to reason about.
+  AI_COLLABORATION_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
 });
 
 export type Env = z.infer<typeof envSchema>;
