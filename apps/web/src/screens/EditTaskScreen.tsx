@@ -12,12 +12,20 @@ import {
 import { TaskDependenciesWorkflowModal, type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
+import { AiCollaborationPlannerModal } from '../features/collaboration/components/AiCollaborationPlannerModal'
+import { SharedBadge } from '../features/collaboration/components/SharedBadge'
+import { displaySubtaskTitle } from '../lib/subtaskDisplay'
+import { ManageMembersSection } from '../features/collaboration/components/ManageMembersSection'
+import { ReminderAudienceSection } from '../features/collaboration/components/ReminderAudienceSection'
+import { FocusAudienceSection } from '../features/collaboration/components/FocusAudienceSection'
+import { Toast } from '../features/collaboration/components/Toast'
 import {
   addDependencies,
   addSubtask,
   deleteAttachment,
   deleteSubtask,
   getAttachments,
+  getTask,
   recurrenceToApi,
   recurrenceToUi,
   removeDependency,
@@ -40,6 +48,8 @@ type EditTaskScreenProps = SidebarNavHandlers & {
   task: ApiTask
   tasks?: ApiTask[]
   accessToken?: string
+  currentUserId?: string
+  onRefresh?: () => void
   onBack?: () => void
   onCancel?: () => void
   onDelete?: () => void
@@ -47,6 +57,7 @@ type EditTaskScreenProps = SidebarNavHandlers & {
   onSaved?: (task: ApiTask) => void
   onTaskUpdated?: (task: ApiTask) => void
   onSignOut?: () => void
+  onPermissionDenied?: () => void
 }
 
 const REMINDER_OPTIONS = [10, 30, 60, 1440]
@@ -55,6 +66,8 @@ export default function EditTaskScreen({
   task,
   tasks = [],
   accessToken,
+  currentUserId = '',
+  onRefresh,
   onBack,
   onCancel,
   onDelete,
@@ -62,6 +75,7 @@ export default function EditTaskScreen({
   onSaved,
   onTaskUpdated,
   onSignOut,
+  onPermissionDenied,
   ...nav
 }: EditTaskScreenProps) {
   const { t, toggleLanguage } = useLanguage()
@@ -77,6 +91,8 @@ export default function EditTaskScreen({
   const [notes, setNotes] = useState(task.notes)
   const [reminderEnabled, setReminderEnabled] = useState(task.reminderEnabled)
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task.reminderBeforeMinutes ?? 30)
+  const [focusEnabled, setFocusEnabled] = useState(task.isFocusTask)
+  const [notice, setNotice] = useState('')
   const [estimatedHours, setEstimatedHours] = useState(String(task.estimatedHours))
   const [spentHours, setSpentHours] = useState(String(task.spentHours))
   const [error, setError] = useState('')
@@ -95,6 +111,7 @@ export default function EditTaskScreen({
   const [selectedDependency, setSelectedDependency] = useState<ApiDependency | null>(null)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(recurrenceToUi(task.recurrence))
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
+  const [isAiPlannerOpen, setIsAiPlannerOpen] = useState(false)
   const recurrenceSummary = createRecurrenceSummary(recurrence)
 
   useEffect(() => {
@@ -110,6 +127,7 @@ export default function EditTaskScreen({
     setNotes(task.notes)
     setReminderEnabled(task.reminderEnabled)
     setReminderBeforeMinutes(task.reminderBeforeMinutes ?? 30)
+    setFocusEnabled(task.isFocusTask)
     setEstimatedHours(String(task.estimatedHours))
     setSpentHours(String(task.spentHours))
     setProgress(task.progress)
@@ -143,6 +161,19 @@ export default function EditTaskScreen({
     setProgress(updatedTask.progress)
     setError('')
     onTaskUpdated?.(updatedTask)
+  }
+
+  async function handleAiPlanApplied() {
+    if (!accessToken) return
+    try {
+      const updatedTask = await getTask(accessToken, task.id)
+      applyUpdatedTask(updatedTask)
+      setNotice('AI plan applied.')
+    } catch {
+      // The apply itself already succeeded server-side; a failed refetch just
+      // means the on-screen list is stale until the next manual refresh.
+    }
+    onRefresh?.()
   }
 
   async function handleAddSubtask(payload: SubtaskPayload) {
@@ -280,6 +311,7 @@ export default function EditTaskScreen({
         remainingTimeMinutes: Math.max(estimatedTimeMinutes - spentTimeMinutes, 0),
         reminderEnabled,
         reminderBeforeMinutes,
+        isFocusTask: focusEnabled,
         recurrence: recurrenceToApi(recurrence),
       })
 
@@ -309,11 +341,27 @@ export default function EditTaskScreen({
     setPreviewAttachment(attachment)
   }
 
+  const canEditShared =
+    task.viewerRole === 'owner' || task.viewerRole === 'editor' || task.canEdit === true
   const reminderMinuteOptions = REMINDER_OPTIONS.includes(reminderBeforeMinutes)
     ? REMINDER_OPTIONS
     : [...REMINDER_OPTIONS, reminderBeforeMinutes].sort((a, b) => a - b)
   const remainingHoursDisplay = Math.max((Number(estimatedHours) || 0) - (Number(spentHours) || 0), 0)
   const completedSubtasksCount = subtasks.filter((item) => item.isDone).length
+
+  // Viewers can never reach this screen intentionally (the Edit button and
+  // the openEditTask() gate both hide it), but this is the last line of
+  // defense: any other path that lands here with a non-editor role bounces
+  // straight back out before rendering an editable form.
+  useEffect(() => {
+    if (!canEditShared) {
+      onPermissionDenied?.()
+    }
+  }, [canEditShared, onPermissionDenied])
+
+  if (!canEditShared) {
+    return null
+  }
 
   return (
     <>
@@ -396,9 +444,19 @@ export default function EditTaskScreen({
                       >
                         {item.isDone ? 'OK' : ''}
                       </button>
-                      <p className={`truncate px-3 py-2 text-sm ${item.isDone ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}>
-                        {item.title}
-                      </p>
+                      <div className="min-w-0 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <p className={`truncate text-sm ${item.isDone ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}>
+                            {displaySubtaskTitle(item)}
+                          </p>
+                          {item.isShared ? <SharedBadge /> : null}
+                        </div>
+                        {item.assigneeUserId && item.assignee ? (
+                          <p className="mt-0.5 text-xs text-slate-400">Assigned to {item.assignee}</p>
+                        ) : !item.assigneeUserId && !item.isShared ? (
+                          <p className="mt-0.5 text-xs text-slate-500">Unassigned</p>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
                         onClick={() => setEditingSubtaskId(item.id)}
@@ -464,6 +522,35 @@ export default function EditTaskScreen({
                   {!attachments.length ? <p className="text-sm text-slate-400">No attachments yet.</p> : null}
                 </div>
               </Card>
+
+              {accessToken &&
+              currentUserId &&
+              (task.viewerRole === 'owner' ||
+                task.viewerRole === 'editor' ||
+                task.canEdit === true ||
+                task.canManageMembers === true) ? (
+                <ManageMembersSection
+                  task={task}
+                  accessToken={accessToken}
+                  currentUserId={currentUserId}
+                  onRefresh={onRefresh}
+                />
+              ) : null}
+
+              {accessToken && currentUserId && task.viewerRole === 'owner' ? (
+                <Card title="AI Collaboration Planner" code="AI">
+                  <p className="mb-3 text-sm text-slate-400">
+                    Let AI propose how to split this task across your team, then review and apply what you approve.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsAiPlannerOpen(true)}
+                    className="w-full rounded-lg bg-[var(--bp-accent)] px-4 py-2 text-sm font-black text-black"
+                  >
+                    Open AI Planner
+                  </button>
+                </Card>
+              ) : null}
             </section>
 
             <aside className="space-y-3">
@@ -522,6 +609,18 @@ export default function EditTaskScreen({
                   ))}
                 </select>
 
+                {accessToken ? (
+                  <div className="mb-3 border-t border-[var(--bp-border)] pt-3">
+                    <ReminderAudienceSection
+                      taskId={task.id}
+                      accessToken={accessToken}
+                      canEditShared={canEditShared}
+                      onError={setError}
+                      onNotice={setNotice}
+                    />
+                  </div>
+                ) : null}
+
                 <FieldLabel label="Recurring" />
                 <button
                   type="button"
@@ -530,6 +629,19 @@ export default function EditTaskScreen({
                 >
                   {recurrenceSummary}
                 </button>
+              </Card>
+
+              <Card title="Focus">
+                {accessToken ? (
+                  <FocusAudienceSection
+                    taskId={task.id}
+                    accessToken={accessToken}
+                    canEditShared={canEditShared}
+                    focusEnabled={focusEnabled}
+                    onFocusEnabledChange={setFocusEnabled}
+                    onError={setError}
+                  />
+                ) : null}
               </Card>
 
               <Card title="Dependencies" action="+ Add" onAction={() => setDependencyModalMode('add')}>
@@ -606,6 +718,8 @@ export default function EditTaskScreen({
           {error ? <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300">{error}</p> : null}
       </AppLayout>
 
+      <Toast message={notice} tone="success" onDone={() => setNotice('')} />
+
       {addingSubtask ? (
         <SubtaskFormModal
           mode="add"
@@ -654,6 +768,15 @@ export default function EditTaskScreen({
         onSaveReplacement={(oldId, replacement) => void handleReplaceDependency(oldId, replacement)}
         onRemove={(dependencyId) => void handleRemoveDependency(dependencyId)}
       />
+
+      {isAiPlannerOpen && accessToken ? (
+        <AiCollaborationPlannerModal
+          task={task}
+          accessToken={accessToken}
+          onClose={() => setIsAiPlannerOpen(false)}
+          onApplied={() => void handleAiPlanApplied()}
+        />
+      ) : null}
 
       <TaskRecurrenceModal
         open={isRecurrenceModalOpen}

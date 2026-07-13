@@ -18,6 +18,10 @@ import {
   type RecurrenceSettings,
 } from '../components/TaskRecurrenceSheet';
 import { useTheme } from '../theme/useTheme';
+import { AiCollaborationPlannerModal } from '../features/collaboration/components/AiCollaborationPlannerModal';
+import { ManageMembersSection } from '../features/collaboration/components/ManageMembersSection';
+import { ReminderAudienceSection } from '../features/collaboration/components/ReminderAudienceSection';
+import { FocusAudienceSection } from '../features/collaboration/components/FocusAudienceSection';
 import {
   deleteAttachment,
   getAttachments,
@@ -36,11 +40,14 @@ import {
 type Props = {
   task: ApiTask | null;
   accessToken?: string;
+  currentUserId?: string;
+  onRefresh?: () => void;
   onBack: () => void;
   onCancel: () => void;
   onDelete: () => void;
   onSave: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void;
   onSaved?: (task: ApiTask) => void;
+  onPermissionDenied?: () => void;
 };
 
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const;
@@ -96,7 +103,18 @@ function attachmentColor(type?: string, fileName?: string) {
   return 'bg-orange-500';
 }
 
-export default function EditTaskScreen({ task, accessToken, onBack, onCancel, onDelete, onSave, onSaved }: Props) {
+export default function EditTaskScreen({
+  task,
+  accessToken,
+  currentUserId = '',
+  onRefresh,
+  onBack,
+  onCancel,
+  onDelete,
+  onSave,
+  onSaved,
+  onPermissionDenied,
+}: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -114,8 +132,11 @@ export default function EditTaskScreen({ task, accessToken, onBack, onCancel, on
     task ? recurrenceToUi(task.recurrence) : null,
   );
   const [isRecurrenceSheetVisible, setIsRecurrenceSheetVisible] = useState(false);
+  const [isAiPlannerVisible, setIsAiPlannerVisible] = useState(false);
   const [iosPicker, setIosPicker] = useState<'date' | 'time' | null>(null);
+  const [focusEnabled, setFocusEnabled] = useState(task?.isFocusTask ?? false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([]);
@@ -140,6 +161,20 @@ export default function EditTaskScreen({ task, accessToken, onBack, onCancel, on
       cancelled = true;
     };
   }, [task, accessToken]);
+
+  // Viewers can never reach this screen intentionally (the Edit button and
+  // the navigation gate both hide it), but this is the last line of
+  // defense: any other path that lands here with a non-editor role bounces
+  // straight back out before rendering an editable form.
+  const canEditShared = task
+    ? task.viewerRole === 'owner' || task.viewerRole === 'editor' || task.canEdit === true
+    : true;
+
+  useEffect(() => {
+    if (task && !canEditShared) {
+      onPermissionDenied?.();
+    }
+  }, [task, canEditShared, onPermissionDenied]);
 
   const openDatePicker = () => {
     if (Platform.OS === 'android') {
@@ -204,6 +239,7 @@ export default function EditTaskScreen({ task, accessToken, onBack, onCancel, on
         estimatedTimeMinutes,
         spentTimeMinutes,
         remainingTimeMinutes: Math.max(estimatedTimeMinutes - spentTimeMinutes, 0),
+        isFocusTask: focusEnabled,
         recurrence: recurrenceToApi(recurrence),
       });
 
@@ -243,6 +279,15 @@ export default function EditTaskScreen({ task, accessToken, onBack, onCancel, on
     );
   }
 
+  if (!canEditShared) {
+    return null;
+  }
+
+  function showNotice(message: string) {
+    setNotice(message);
+    setTimeout(() => setNotice(''), 3000);
+  }
+
   return (
     <AppScreen
       keyboardAvoiding
@@ -265,6 +310,14 @@ export default function EditTaskScreen({ task, accessToken, onBack, onCancel, on
       }
     >
       <PageHeader title="Edit Task" subtitle="Update existing task" onBack={onBack} />
+
+      {notice ? (
+        <View className="mb-3 rounded-xl px-3 py-2" style={{ backgroundColor: `${colors.success}26` }}>
+          <Text style={{ color: colors.success }} className="text-xs font-semibold">
+            ✓ {notice}
+          </Text>
+        </View>
+      ) : null}
 
       <Card title="Task Information">
         <Label text="Task Title" />
@@ -424,6 +477,63 @@ export default function EditTaskScreen({ task, accessToken, onBack, onCancel, on
         <Label text="Repeat" />
         <Select label={recurrenceSummary} onPress={() => setIsRecurrenceSheetVisible(true)} />
       </Card>
+
+      <Card title="Reminder">
+        <ReminderAudienceSection
+          taskId={task.id}
+          canEditShared={canEditShared}
+          onError={setError}
+          onNotice={showNotice}
+        />
+      </Card>
+
+      <Card title="Focus">
+        <FocusAudienceSection
+          taskId={task.id}
+          canEditShared={canEditShared}
+          focusEnabled={focusEnabled}
+          onFocusEnabledChange={setFocusEnabled}
+          onError={setError}
+        />
+      </Card>
+
+      {currentUserId &&
+      task &&
+      (task.viewerRole === 'owner' ||
+        task.viewerRole === 'editor' ||
+        task.canEdit === true ||
+        task.canManageMembers === true) ? (
+        <ManageMembersSection task={task} currentUserId={currentUserId} onRefresh={onRefresh} />
+      ) : null}
+
+      {currentUserId && task && task.viewerRole === 'owner' ? (
+        <Card title="AI Collaboration Planner">
+          <Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>
+            Let AI propose how to split this task across your team, then review and apply what you approve.
+          </Text>
+          <Pressable
+            onPress={() => setIsAiPlannerVisible(true)}
+            className="items-center rounded-lg px-4 py-2.5"
+            style={{ backgroundColor: colors.accent }}
+          >
+            <Text className="font-black" style={{ color: colors.accentText }}>
+              Open AI Planner
+            </Text>
+          </Pressable>
+        </Card>
+      ) : null}
+
+      {task ? (
+        <AiCollaborationPlannerModal
+          visible={isAiPlannerVisible}
+          task={task}
+          onClose={() => setIsAiPlannerVisible(false)}
+          onApplied={() => {
+            showNotice('AI plan applied.');
+            onRefresh?.();
+          }}
+        />
+      ) : null}
 
       <TaskRecurrenceSheet
         visible={isRecurrenceSheetVisible}

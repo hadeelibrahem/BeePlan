@@ -10,6 +10,7 @@ import { GhostButton, OutlineButton, PrimaryButton } from '../../../components/l
 import { FriendAvatar } from '../../social/components/FriendAvatar'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import { useTheme } from '../../../theme/ThemeContext'
+import { queryKeys } from '../../../lib/queryKeys'
 import {
   acceptInvite,
   declineInvite,
@@ -76,7 +77,7 @@ export function NotificationsScreen({ accessToken, onOpenTask, onSignOut, ...nav
         setNotice(`You joined "${invite.taskTitle}".`)
         // The task is now visible to this user everywhere — refresh the cached
         // task lists and the shared-id set so it appears immediately.
-        void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all })
       } else {
         await declineInvite(invite.taskId, accessToken)
         setNotice('Invitation declined.')

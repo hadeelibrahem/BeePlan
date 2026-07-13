@@ -85,27 +85,51 @@ export const plannerPreferences = pgTable('planner_preferences', {
     .notNull()
     .unique()
     .references(() => users.id, { onDelete: 'cascade' }),
-  focusStartTime: varchar('focus_start_time', { length: 5 }).notNull().default('08:00'),
-  focusEndTime: varchar('focus_end_time', { length: 5 }).notNull().default('11:00'),
+  focusStartTime: varchar('focus_start_time', { length: 5 })
+    .notNull()
+    .default('08:00'),
+  focusEndTime: varchar('focus_end_time', { length: 5 })
+    .notNull()
+    .default('11:00'),
   workBlockMinutes: integer('work_block_minutes').notNull().default(50),
   breakMinutes: integer('break_minutes').notNull().default(10),
-  energyMorning: varchar('energy_morning', { length: 10 }).notNull().default('high'),
-  energyAfternoon: varchar('energy_afternoon', { length: 10 }).notNull().default('medium'),
-  energyEvening: varchar('energy_evening', { length: 10 }).notNull().default('low'),
+  energyMorning: varchar('energy_morning', { length: 10 })
+    .notNull()
+    .default('high'),
+  energyAfternoon: varchar('energy_afternoon', { length: 10 })
+    .notNull()
+    .default('medium'),
+  energyEvening: varchar('energy_evening', { length: 10 })
+    .notNull()
+    .default('low'),
   energyNight: varchar('energy_night', { length: 10 }).notNull().default('low'),
-  scheduleHardTasksInFocus: boolean('schedule_hard_tasks_in_focus').notNull().default(true),
+  scheduleHardTasksInFocus: boolean('schedule_hard_tasks_in_focus')
+    .notNull()
+    .default(true),
   finishStartedFirst: boolean('finish_started_first').notNull().default(true),
   groupSimilarTasks: boolean('group_similar_tasks').notNull().default(true),
-  bufferBeforeMeetings: boolean('buffer_before_meetings').notNull().default(true),
+  bufferBeforeMeetings: boolean('buffer_before_meetings')
+    .notNull()
+    .default(true),
   bufferMinutes: integer('buffer_minutes').notNull().default(15),
   // Daily-capacity controls: how much real work a day can hold, protected
   // recovery/rest windows, and the emergency slack the planner always leaves.
   maxDailyWorkMinutes: integer('max_daily_work_minutes').notNull().default(480),
-  emergencyBufferMinutes: integer('emergency_buffer_minutes').notNull().default(30),
-  sleepStartTime: varchar('sleep_start_time', { length: 5 }).notNull().default('23:00'),
-  sleepEndTime: varchar('sleep_end_time', { length: 5 }).notNull().default('07:00'),
-  lunchStartTime: varchar('lunch_start_time', { length: 5 }).notNull().default('13:00'),
-  lunchEndTime: varchar('lunch_end_time', { length: 5 }).notNull().default('13:45'),
+  emergencyBufferMinutes: integer('emergency_buffer_minutes')
+    .notNull()
+    .default(30),
+  sleepStartTime: varchar('sleep_start_time', { length: 5 })
+    .notNull()
+    .default('23:00'),
+  sleepEndTime: varchar('sleep_end_time', { length: 5 })
+    .notNull()
+    .default('07:00'),
+  lunchStartTime: varchar('lunch_start_time', { length: 5 })
+    .notNull()
+    .default('13:00'),
+  lunchEndTime: varchar('lunch_end_time', { length: 5 })
+    .notNull()
+    .default('13:45'),
   // Extra fixed windows the user is never available (e.g. commute, prayer,
   // gym): a JSON array of { start: 'HH:mm', end: 'HH:mm' }.
   unavailableHours: jsonb('unavailable_hours').notNull().default([]),
@@ -203,20 +227,24 @@ export const tasks = pgTable(
   ],
 );
 
-export const taskAttachments = pgTable('task_attachments', {
-  id: id(),
-  taskId: uuid('task_id')
-    .notNull()
-    .references(() => tasks.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  fileName: varchar('file_name', { length: 255 }).notNull(),
-  storageKey: text('storage_key').notNull(),
-  mimeType: varchar('mime_type', { length: 120 }).notNull(),
-  sizeBytes: integer('size_bytes').notNull(),
-  createdAt: createdAt(),
-});
+export const taskAttachments = pgTable(
+  'task_attachments',
+  {
+    id: id(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    storageKey: text('storage_key').notNull(),
+    mimeType: varchar('mime_type', { length: 120 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index('idx_task_attachments_task_id').on(table.taskId)],
+);
 
 export const subtasks = pgTable(
   'subtasks',
@@ -231,6 +259,19 @@ export const subtasks = pgTable(
     isDone: boolean('is_done').notNull().default(false),
     orderIndex: integer('order_index').notNull().default(0),
     assignee: varchar('assignee', { length: 80 }),
+    // Structured link to the collaborator this subtask is assigned to (set by
+    // the AI Collaboration Planner apply step, or manually). Nullable — most
+    // subtasks have no assignee. `assignee` (free text) is kept in sync with
+    // the assignee's display name for backward compatibility with UI that
+    // only reads the string field.
+    assigneeUserId: uuid('assignee_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    // Explicit shared/personal distinction (never inferred from the title). A
+    // subtask is "shared" (team-wide) when isShared, "personal" when it has an
+    // assigneeUserId, and "unassigned" otherwise. Set for genuinely shared
+    // planner work (collapsed shared sessions) and manual shared subtasks.
+    isShared: boolean('is_shared').notNull().default(false),
     description: text('description'),
     // low | medium | high | urgent
     priority: varchar('priority', { length: 20 }).notNull().default('medium'),
@@ -260,6 +301,17 @@ export const subtasks = pgTable(
     notes: text('notes'),
     tags: jsonb('tags'),
     completedAt: timestamp('completed_at'),
+    // --- AI Collaboration Planner provenance -------------------------------
+    // Populated only for subtasks created by POST .../ai/collaboration-plan/apply.
+    // Null for manually-created subtasks. Lets a later apply call identify and
+    // replace its own prior output instead of appending duplicates, and lets
+    // apply-time semantic dedup work off stable fields instead of title text.
+    source: varchar('source', { length: 40 }),
+    sourcePlanId: uuid('source_plan_id'),
+    sourceProposalId: varchar('source_proposal_id', { length: 64 }),
+    semanticType: varchar('semantic_type', { length: 30 }),
+    subjectKeys: jsonb('subject_keys'),
+    sharedSessionGroupId: varchar('shared_session_group_id', { length: 64 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -267,6 +319,8 @@ export const subtasks = pgTable(
     index('idx_subtasks_task_id').on(table.taskId),
     index('idx_subtasks_status').on(table.status),
     index('idx_subtasks_due_date').on(table.dueDate),
+    index('idx_subtasks_assignee_user_id').on(table.assigneeUserId),
+    index('idx_subtasks_task_source').on(table.taskId, table.source),
   ],
 );
 
@@ -366,19 +420,25 @@ export const taskRecurrenceSuggestionDismissals = pgTable(
   ],
 );
 
-export const taskActivities = pgTable('task_activities', {
-  id: id(),
-  taskId: uuid('task_id')
-    .notNull()
-    .references(() => tasks.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  action: varchar('action', { length: 80 }).notNull(),
-  description: text('description').notNull(),
-  metadata: jsonb('metadata'),
-  createdAt: createdAt(),
-});
+export const taskActivities = pgTable(
+  'task_activities',
+  {
+    id: id(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    action: varchar('action', { length: 80 }).notNull(),
+    description: text('description').notNull(),
+    metadata: jsonb('metadata'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_task_activities_task_created').on(table.taskId, table.createdAt),
+  ],
+);
 
 export const focusSessions = pgTable(
   'focus_sessions',
@@ -411,44 +471,51 @@ export const focusSessions = pgTable(
   ],
 );
 
-export const reminders = pgTable('reminders', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  type: varchar('type', { length: 30 }).notNull().default('time'),
-  triggerDateTime: timestamp('trigger_date_time'),
-  reminderBefore: integer('reminder_before'),
-  repeat: varchar('repeat', { length: 20 }).notNull().default('none'),
-  repeatInterval: integer('repeat_interval'),
-  repeatDaysOfWeek: jsonb('repeat_days_of_week'),
-  repeatEndDate: timestamp('repeat_end_date'),
-  notes: text('notes'),
-  priority: varchar('priority', { length: 20 }).notNull().default('medium'),
-  status: varchar('status', { length: 20 }).notNull().default('active'),
-  // Optional link to a task. When set, the reminder is a task reminder.
-  taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
-  // 'personal' (default) — visible/firing only for `userId`. 'shared' — every
-  // accepted member of `taskId` receives it. Non-task reminders are always
-  // personal. See RemindersService and the collaboration notification fan-out.
-  audience: varchar('audience', { length: 20 }).notNull().default('personal'),
-  location: jsonb('location'),
-  context: jsonb('context'),
-  checklistItems: jsonb('checklist_items'),
-  // Config for `type = 'person'` proximity reminders. Shape:
-  // { targetUserId, targetName, message, radiusMeters, cooldownMinutes,
-  //   permissionId, lastNotifiedAt }. `lastNotifiedAt` is stamped server-side
-  //   by the nearby check to enforce the notification cooldown. Null for all
-  //   non-person reminder types. See src/social/person-reminders.service.ts.
-  person: jsonb('person'),
-  // True when `userId` is null - i.e. this row predates auth being
-  // required on reminder creation and has no determinable owner. Kept
-  // instead of deleted so the data isn't lost; see DatabaseService.
-  isOrphaned: boolean('is_orphaned').notNull().default(false),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const reminders = pgTable(
+  'reminders',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    type: varchar('type', { length: 30 }).notNull().default('time'),
+    triggerDateTime: timestamp('trigger_date_time'),
+    reminderBefore: integer('reminder_before'),
+    repeat: varchar('repeat', { length: 20 }).notNull().default('none'),
+    repeatInterval: integer('repeat_interval'),
+    repeatDaysOfWeek: jsonb('repeat_days_of_week'),
+    repeatEndDate: timestamp('repeat_end_date'),
+    notes: text('notes'),
+    priority: varchar('priority', { length: 20 }).notNull().default('medium'),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    // Optional link to a task. When set, the reminder is a task reminder.
+    taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+    // 'personal' (default) — visible/firing only for `userId`. 'shared' — every
+    // accepted member of `taskId` receives it. Non-task reminders are always
+    // personal. See RemindersService and the collaboration notification fan-out.
+    audience: varchar('audience', { length: 20 }).notNull().default('personal'),
+    location: jsonb('location'),
+    context: jsonb('context'),
+    checklistItems: jsonb('checklist_items'),
+    // Config for `type = 'person'` proximity reminders. Shape:
+    // { targetUserId, targetName, message, radiusMeters, cooldownMinutes,
+    //   permissionId, lastNotifiedAt }. `lastNotifiedAt` is stamped server-side
+    //   by the nearby check to enforce the notification cooldown. Null for all
+    //   non-person reminder types. See src/social/person-reminders.service.ts.
+    person: jsonb('person'),
+    // True when `userId` is null - i.e. this row predates auth being
+    // required on reminder creation and has no determinable owner. Kept
+    // instead of deleted so the data isn't lost; see DatabaseService.
+    isOrphaned: boolean('is_orphaned').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_reminders_user_status').on(table.userId, table.status),
+    index('idx_reminders_task_id').on(table.taskId),
+  ],
+);
 
 export const habits = pgTable('habits', {
   id: id(),
@@ -760,6 +827,8 @@ export const taskMembers = pgTable(
     // "tasks shared with me" lookups (dashboard/all-tasks visibility, invites).
     index('idx_task_members_user').on(table.userId),
     index('idx_task_members_status').on(table.status),
+    index('idx_task_members_task_status').on(table.taskId, table.status),
+    index('idx_task_members_user_status').on(table.userId, table.status),
   ],
 );
 

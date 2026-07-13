@@ -24,6 +24,7 @@ import {
 } from '../lib/tasksApi';
 import type { AppTheme } from '../theme/colors';
 import { useTheme } from '../theme/useTheme';
+import { queryKeys } from '../lib/queryKeys';
 
 type TaskListItem = {
   id: string;
@@ -113,13 +114,13 @@ export default function AllTasksScreen({
     Boolean(categoryFilter);
 
   const tasksQuery = useQuery({
-    queryKey: ['tasks', filters],
+    queryKey: queryKeys.tasks.list(filters),
     queryFn: () => getTasks(accessToken ?? '', filters),
     enabled: Boolean(accessToken),
   });
 
   const summaryQuery = useQuery({
-    queryKey: ['tasks', 'filter-summary'],
+    queryKey: queryKeys.tasks.filterSummary,
     queryFn: () => getTaskFilterSummary(accessToken ?? ''),
     enabled: Boolean(accessToken),
   });

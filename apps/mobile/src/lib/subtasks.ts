@@ -75,6 +75,54 @@ export function formatDuration(minutes?: number | null): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+// ---- Assignment / sharing (mirrors web lib/subtaskDisplay.ts) ----
+
+export type SubtaskAssignment = 'shared' | 'personal' | 'unassigned';
+
+export function getSubtaskAssignment(subtask: ApiSubtask): SubtaskAssignment {
+  if (subtask.isShared) return 'shared';
+  if (subtask.assigneeUserId) return 'personal';
+  return 'unassigned';
+}
+
+/**
+ * Strips a leading `Name:` prefix from a title when it matches the subtask's
+ * own assignee display name (legacy plans embedded names). Structural titles
+ * with an unrelated colon are left intact.
+ */
+export function displaySubtaskTitle(subtask: ApiSubtask): string {
+  const title = subtask.title?.trim() ?? '';
+  const name = subtask.assignee?.trim();
+  if (!name) return title;
+  const match = title.match(/^([^:]{1,60}):\s*(.+\S)\s*$/);
+  if (match && match[1].trim().toLowerCase() === name.toLowerCase()) {
+    return match[2].trim();
+  }
+  return title;
+}
+
+export type SubtaskFilter = 'mine' | 'team' | 'shared' | 'unassigned' | 'member';
+
+export function matchesSubtaskFilter(
+  subtask: ApiSubtask,
+  filter: SubtaskFilter,
+  ctx: { currentUserId?: string; memberId?: string },
+): boolean {
+  switch (filter) {
+    case 'mine':
+      return Boolean(ctx.currentUserId) && subtask.assigneeUserId === ctx.currentUserId;
+    case 'shared':
+      return Boolean(subtask.isShared);
+    case 'unassigned':
+      return !subtask.isShared && !subtask.assigneeUserId;
+    case 'member':
+      return Boolean(ctx.memberId) && subtask.assigneeUserId === ctx.memberId;
+    case 'team':
+    default:
+      return true;
+  }
+}
+
 export function getSubtaskWarnings(
   subtask: ApiSubtask,
   opts: { parentDueDate?: string; remainingParentMinutes?: number },

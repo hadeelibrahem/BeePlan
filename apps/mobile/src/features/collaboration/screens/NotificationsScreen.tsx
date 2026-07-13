@@ -14,6 +14,7 @@ import {
 } from '../api/collaboration.api';
 import { friendlyError } from '../errorMessages';
 import { NOTIFICATION_ICON, type AppNotification, type TaskInvitation } from '../types';
+import { queryKeys } from '../../../lib/queryKeys';
 
 type Props = {
   onBack: () => void;
@@ -64,7 +65,7 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
       if (action === 'accept') {
         await acceptInvite(invite.taskId);
         flash('success', `You joined "${invite.taskTitle}".`);
-        void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
       } else {
         await declineInvite(invite.taskId);
         flash('success', 'Invitation declined.');

@@ -28,6 +28,7 @@ import {
   type TaskDueFilter,
   type TaskFilters,
 } from '../lib/tasksApi'
+import { queryKeys } from '../lib/queryKeys'
 
 type AllTasksScreenProps = SidebarNavHandlers & {
   onBackDashboard?: () => void
@@ -126,7 +127,7 @@ export default function AllTasksScreen({
     Boolean(categoryFilter)
 
   const tasksQuery = useQuery({
-    queryKey: ['tasks', filters],
+    queryKey: queryKeys.tasks.list(filters),
     queryFn: () => getTasks(accessToken ?? '', filters),
     enabled: Boolean(accessToken),
   })
@@ -134,7 +135,7 @@ export default function AllTasksScreen({
   const sharedTaskIds = useSharedTaskIds(accessToken)
 
   const summaryQuery = useQuery({
-    queryKey: ['tasks', 'filter-summary'],
+    queryKey: queryKeys.tasks.filterSummary,
     queryFn: () => getTaskFilterSummary(accessToken ?? ''),
     enabled: Boolean(accessToken),
   })

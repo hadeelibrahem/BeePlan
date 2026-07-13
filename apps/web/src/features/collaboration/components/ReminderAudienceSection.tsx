@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react'
 import { PrimaryButton } from '../../../components/layout/Buttons'
-import {
-  createPersonalReminder,
-  createSharedReminder,
-  getPreferences,
-  getTaskReminders,
-  updatePreferences,
-} from '../api/collaboration.api'
+import { createPersonalReminder, createSharedReminder, getTaskReminders } from '../api/collaboration.api'
 import { friendlyError } from '../errorMessages'
-import type { PersonalPreferences, TaskReminder } from '../types'
+import type { TaskReminder } from '../types'
 
 type Props = {
   taskId: string
@@ -18,107 +12,12 @@ type Props = {
   onNotice: (message: string) => void
 }
 
-const TOGGLES: { key: keyof PersonalPreferences; icon: string; label: string; hint: string }[] = [
-  { key: 'isFavorite', icon: '⭐', label: 'Favorite', hint: 'Only you' },
-  { key: 'isPinned', icon: '📌', label: 'Pin', hint: 'Only you' },
-  { key: 'isFocusQueued', icon: '🎯', label: 'Focus Queue', hint: 'Only you' },
-  { key: 'notificationsMuted', icon: '🔕', label: 'Mute notifications', hint: 'Only you' },
-]
-
-export function MyPreferencesSection({ taskId, accessToken, canEditShared, onError, onNotice }: Props) {
-  const [prefs, setPrefs] = useState<PersonalPreferences | null>(null)
-
-  useEffect(() => {
-    let active = true
-    getPreferences(taskId, accessToken)
-      .then((p) => active && setPrefs(p))
-      .catch(() => active && setPrefs(null))
-    return () => {
-      active = false
-    }
-  }, [taskId, accessToken])
-
-  async function toggle(key: keyof PersonalPreferences) {
-    if (!prefs) return
-    const next = !prefs[key]
-    setPrefs({ ...prefs, [key]: next }) // optimistic
-    try {
-      await updatePreferences(taskId, { [key]: next }, accessToken)
-    } catch (err) {
-      setPrefs((cur) => (cur ? { ...cur, [key]: !next } : cur)) // rollback
-      onError(friendlyError(err, 'Could not update your preference.'))
-    }
-  }
-
-  return (
-    <section
-      className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4"
-      aria-label="My preferences"
-    >
-      <div className="mb-1 flex items-center gap-2">
-        <h3 className="text-sm font-black">My Preferences</h3>
-        <span className="rounded-full bg-[var(--bp-accent)]/10 px-2 py-0.5 text-[10px] font-bold text-[var(--bp-accent)]">
-          Private to you
-        </span>
-      </div>
-      <p className="mb-3 text-xs text-slate-400">These settings never change the shared task.</p>
-
-      <div className="grid grid-cols-2 gap-2">
-        {TOGGLES.map((toggleDef) => {
-          const active = Boolean(prefs?.[toggleDef.key])
-          return (
-            <button
-              key={toggleDef.key}
-              type="button"
-              role="switch"
-              aria-checked={active}
-              aria-label={toggleDef.label}
-              disabled={!prefs}
-              onClick={() => void toggle(toggleDef.key)}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition disabled:opacity-50 ${
-                active
-                  ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-text)]'
-                  : 'border-[var(--bp-border)] text-slate-400 hover:border-[var(--bp-accent)]/40'
-              }`}
-            >
-              <span aria-hidden className="text-base">
-                {toggleDef.icon}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate">{toggleDef.label}</span>
-                <span className="block text-[10px] font-normal text-slate-500">
-                  {active ? 'On' : 'Off'} · {toggleDef.hint}
-                </span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-
-      <ReminderSubsection
-        taskId={taskId}
-        accessToken={accessToken}
-        canEditShared={canEditShared}
-        onError={onError}
-        onNotice={onNotice}
-      />
-    </section>
-  )
-}
-
-function ReminderSubsection({
-  taskId,
-  accessToken,
-  canEditShared,
-  onError,
-  onNotice,
-}: {
-  taskId: string
-  accessToken: string
-  canEditShared: boolean
-  onError: (m: string) => void
-  onNotice: (m: string) => void
-}) {
+/**
+ * Shared-vs-personal reminder audience picker, lived inside "My Preferences"
+ * on the Task Details page. Moved into the Edit Task screen's Reminder
+ * section so there is a single place to manage reminders.
+ */
+export function ReminderAudienceSection({ taskId, accessToken, canEditShared, onError, onNotice }: Props) {
   const [tab, setTab] = useState<'shared' | 'personal'>(canEditShared ? 'shared' : 'personal')
   const [when, setWhen] = useState('')
   const [title, setTitle] = useState('')
@@ -160,9 +59,9 @@ function ReminderSubsection({
   }
 
   return (
-    <div className="mt-4 border-t border-[var(--bp-border)] pt-4">
+    <div>
       <div className="mb-2 flex items-center justify-between">
-        <h4 className="text-xs font-black">🔔 Reminders</h4>
+        <h4 className="text-xs font-black">🔔 Reminder Audience</h4>
         <div className="flex overflow-hidden rounded-lg border border-[var(--bp-border)]">
           {(['shared', 'personal'] as const).map((option) => (
             <button
