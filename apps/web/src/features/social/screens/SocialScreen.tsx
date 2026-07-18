@@ -25,6 +25,7 @@ import { FriendListItem } from '../components/FriendListItem'
 import { FriendRequestItem } from '../components/FriendRequestItem'
 import { LocationSharingRequestItem } from '../components/LocationSharingRequestItem'
 import { PermissionCard } from '../components/PermissionCard'
+import { ConfirmDestructiveModal } from '../../../components/ConfirmDestructiveModal'
 import type {
   FriendRequest,
   FriendSummary,
@@ -54,6 +55,10 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
   const [permissions, setPermissions] = useState<LocationSharingPermission[]>([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [permissionToRevoke, setPermissionToRevoke] = useState<LocationSharingPermission | null>(null)
+  const [isRevoking, setIsRevoking] = useState(false)
+  const [friendToRemove, setFriendToRemove] = useState<FriendSummary | null>(null)
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false)
 
   const refresh = useCallback(async () => {
     if (!accessToken) return
@@ -104,8 +109,23 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
   }, [friends, search])
 
   const handleRemoveFriend = (friend: FriendSummary) => {
-    if (!window.confirm(t('people.friends.removeConfirm', { name: friend.fullName }))) return
-    void run(() => removeFriend(friend.userId, accessToken), t('people.friends.removed'))
+    setFriendToRemove(friend)
+  }
+
+  async function confirmRemoveFriend() {
+    if (!friendToRemove || isRemovingFriend) return
+    setIsRemovingFriend(true)
+    await run(() => removeFriend(friendToRemove.userId, accessToken), t('people.friends.removed'))
+    setIsRemovingFriend(false)
+    setFriendToRemove(null)
+  }
+
+  async function confirmRevoke() {
+    if (!permissionToRevoke || isRevoking) return
+    setIsRevoking(true)
+    await run(() => revokeLocationSharing(permissionToRevoke.id, accessToken), t('people.sharing.revoked'))
+    setIsRevoking(false)
+    setPermissionToRevoke(null)
   }
 
   return (
@@ -128,7 +148,8 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />
@@ -203,7 +224,7 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
                 permission={perm}
                 onApprove={(id) => void run(() => acceptLocationSharing(id, accessToken), t('people.sharing.approved'))}
                 onReject={(id) => void run(() => rejectLocationSharing(id, accessToken))}
-                onRevoke={(id) => void run(() => revokeLocationSharing(id, accessToken), t('people.sharing.revoked'))}
+                onRevoke={(id) => setPermissionToRevoke(incomingSharing.find((permission) => permission.id === id) ?? null)}
               />
             ))
           )}
@@ -240,6 +261,8 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
           )}
         </section>
       </div>
+      <ConfirmDestructiveModal open={permissionToRevoke !== null} title="Revoke location sharing?" message={`${permissionToRevoke?.friend?.fullName ?? t('people.sharing.aFriend')} will no longer be able to see your shared location.`} confirmLabel="Revoke access" isConfirming={isRevoking} onCancel={() => !isRevoking && setPermissionToRevoke(null)} onConfirm={() => void confirmRevoke()} />
+      <ConfirmDestructiveModal open={friendToRemove !== null} title="Remove friend?" message={`${friendToRemove?.fullName ?? 'This person'} will no longer be connected to you on BeePlan.`} confirmLabel="Remove friend" isConfirming={isRemovingFriend} onCancel={() => !isRemovingFriend && setFriendToRemove(null)} onConfirm={() => void confirmRemoveFriend()} />
     </AppLayout>
   )
 }

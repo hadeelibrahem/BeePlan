@@ -8,6 +8,9 @@ import type { UseFocusSession } from '../lib/useFocusSession';
 import type { ApiTask } from '../lib/tasksApi';
 import type { AppTheme } from '../theme/colors';
 import { useTheme } from '../theme/useTheme';
+import { MobileIcon } from '../components/layout';
+import { useStrictFocus } from '../features/focus/StrictFocusContext';
+import { StrictStatsSheet } from '../features/focus/StrictStatsSheet';
 
 const FOCUS_SOUND_ASSETS: Record<string, number> = {
   ambient: require('../../assets/focus-sounds/ambient.mp3') as number,
@@ -56,6 +59,31 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
   const [soundsOpen, setSoundsOpen] = useState(false);
   const soundPlayer = useFocusSoundPlayer();
   const stopSound = soundPlayer.stop;
+
+  // --- Strict Mode -----------------------------------------------------------
+  const strict = useStrictFocus();
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [showStrictExit, setShowStrictExit] = useState(false);
+  const strictActive =
+    strict.blocker.status.isActive && strict.blocker.status.sessionId === (active?.sessionId ?? null);
+
+  // End a strict session early with a logged reason, then cancel the focus
+  // session itself. emergencyExit stops native blocking + records the reason.
+  const confirmStrictExit = useCallback(
+    async (reason: string) => {
+      setShowStrictExit(false);
+      await strict.blocker.emergencyExit(reason);
+      await focus.cancel();
+    },
+    [strict.blocker, focus],
+  );
+
+  // Cancel: for a strict session require the deliberate emergency-exit flow;
+  // otherwise keep the existing one-tap cancel behaviour.
+  const handleCancelPress = useCallback(() => {
+    if (strictActive) setShowStrictExit(true);
+    else void focus.cancel();
+  }, [strictActive, focus]);
 
   const activeTask = useMemo(() => tasks.find((task) => task.id === active?.taskId) ?? null, [tasks, active?.taskId]);
 
@@ -145,12 +173,25 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
                   </PrimaryButton>
                 </View>
                 <View className="flex-1">
-                  <DangerButton fullWidth onPress={() => void focus.cancel()}>
+                  <DangerButton fullWidth onPress={handleCancelPress}>
                     Cancel
                   </DangerButton>
                 </View>
               </View>
             </View>
+          ) : null}
+
+          {strictActive || strict.sync.arming || strict.sync.error ? (
+            <StrictStatusCard
+              theme={theme}
+              active={strictActive}
+              arming={strict.sync.arming}
+              error={strict.sync.error}
+              blockedCount={strict.blocker.status.blockedPackages.length}
+              usageAccess={strict.blocker.usageAccess}
+              attempts={strict.blockAttempts}
+              onViewAttempts={() => setStatsOpen(true)}
+            />
           ) : null}
         </View>
 
@@ -181,6 +222,22 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
       <Modal visible={showExitConfirm} transparent animationType="fade">
         <ExitConfirm theme={theme} onStay={() => setShowExitConfirm(false)} onLeave={() => { setShowExitConfirm(false); onExit(); }} />
       </Modal>
+
+      <Modal visible={showStrictExit} transparent animationType="fade">
+        <StrictExitConfirm
+          theme={theme}
+          onStay={() => setShowStrictExit(false)}
+          onExit={(reason) => void confirmStrictExit(reason)}
+        />
+      </Modal>
+
+      <StrictStatsSheet
+        visible={statsOpen}
+        sessionId={active?.sessionId ?? strict.blocker.status.sessionId}
+        focusMinutes={completedMinutes}
+        endReason={strict.lastEndReason}
+        onClose={() => setStatsOpen(false)}
+      />
 
       <FocusSoundsSheet
         visible={soundsOpen}
@@ -367,7 +424,7 @@ function FocusSoundsSheet({
                         <View className="flex-row items-center justify-between gap-3">
                           <View className="flex-1">
                             <View className="flex-row items-center gap-2">
-                              <Text className="text-xl">{sound.icon}</Text>
+                              <MobileIcon name={sound.icon} color={colors.accent} size={20} accessibilityLabel={`${sound.name} sound`} />
                               <Text numberOfLines={1} className="text-sm font-black" style={{ color: colors.text }}>
                                 {sound.name}
                               </Text>
@@ -718,6 +775,140 @@ function Badge({ theme, label, type }: { theme: AppTheme; label: string; type: s
       <Text className="text-[11px] font-bold capitalize" style={{ color }}>
         {label}
       </Text>
+    </View>
+  );
+}
+
+// --- Strict Mode pieces ----------------------------------------------------
+
+function StrictStatusCard({
+  theme,
+  active,
+  arming,
+  error,
+  blockedCount,
+  usageAccess,
+  attempts,
+  onViewAttempts,
+}: {
+  theme: AppTheme;
+  active: boolean;
+  arming: boolean;
+  error: string | null;
+  blockedCount: number;
+  usageAccess: boolean;
+  attempts: number;
+  onViewAttempts: () => void;
+}) {
+  const { colors } = theme;
+
+  if (error) {
+    return (
+      <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.error, backgroundColor: `${colors.error}18` }}>
+        <Text className="text-xs font-black uppercase" style={{ color: colors.error, letterSpacing: 1 }}>
+          App blocking did not activate
+        </Text>
+        <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
+          {error} Your focus timer is still running normally.
+        </Text>
+      </View>
+    );
+  }
+
+  if (arming && !active) {
+    return (
+      <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+        <Text className="text-xs font-semibold" style={{ color: colors.secondaryText }}>
+          Activating app blocking…
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}>
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2">
+          <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.accent }}>
+            <Text className="text-[10px] font-black uppercase" style={{ color: colors.accentText, letterSpacing: 1 }}>
+              Strict Mode active
+            </Text>
+          </View>
+        </View>
+        <Text className="text-xs font-semibold" style={{ color: usageAccess ? colors.success : colors.warning }}>
+          {usageAccess ? 'Usage Access ✓' : 'Permission lost'}
+        </Text>
+      </View>
+
+      <View className="mt-3 flex-row items-center justify-between">
+        <View>
+          <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
+            Blocking
+          </Text>
+          <Text className="text-sm font-black" style={{ color: colors.text }}>
+            {blockedCount} app{blockedCount === 1 ? '' : 's'}
+          </Text>
+        </View>
+        <View>
+          <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
+            Blocked attempts
+          </Text>
+          <Text className="text-sm font-black" style={{ color: colors.text }}>
+            {attempts}
+          </Text>
+        </View>
+        <Pressable onPress={onViewAttempts} accessibilityRole="button" className="rounded-xl px-3 py-2 active:opacity-70" style={{ backgroundColor: colors.surface }}>
+          <Text className="text-xs font-black" style={{ color: colors.primary }}>
+            View details
+          </Text>
+        </Pressable>
+      </View>
+
+      {!usageAccess ? (
+        <Text className="mt-2 text-[11px]" style={{ color: colors.warning }}>
+          Usage Access was revoked — blocking can't enforce until it's re-granted.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function StrictExitConfirm({
+  theme,
+  onStay,
+  onExit,
+}: {
+  theme: AppTheme;
+  onStay: () => void;
+  onExit: (reason: string) => void;
+}) {
+  const { colors } = theme;
+  const reasons = [
+    { key: 'emergency', label: 'Real emergency' },
+    { key: 'need-app', label: 'I need a blocked app' },
+    { key: 'done-early', label: 'Finished early' },
+    { key: 'other', label: 'Other reason' },
+  ];
+  return (
+    <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: '#00000099' }}>
+      <View className="w-full rounded-3xl border p-6" style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}>
+        <Text className="text-center text-lg font-black" style={{ color: colors.text }}>
+          End strict session early?
+        </Text>
+        <Text className="mt-1 text-center text-sm" style={{ color: colors.secondaryText }}>
+          This stops app blocking and ends your focus session. Pick a reason — it's saved to your stats.
+        </Text>
+        <View className="mt-4 gap-2">
+          {reasons.map((reason) => (
+            <DangerButton key={reason.key} fullWidth onPress={() => onExit(reason.key)}>
+              {reason.label}
+            </DangerButton>
+          ))}
+          <SecondaryButton fullWidth onPress={onStay}>
+            Keep focusing
+          </SecondaryButton>
+        </View>
+      </View>
     </View>
   );
 }

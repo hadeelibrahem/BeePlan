@@ -3,7 +3,11 @@ import { eq } from 'drizzle-orm';
 import { DatabaseService } from '../../db/database.service';
 import { plannerPreferences } from '../../db/schema';
 import { isTime, toMinutes } from './planner.util';
-import type { EnergyLevel, PlannerPreferences, TimeWindow } from './planner.types';
+import type {
+  EnergyLevel,
+  PlannerPreferences,
+  TimeWindow,
+} from './planner.types';
 
 type PreferencesRow = typeof plannerPreferences.$inferSelect;
 
@@ -20,7 +24,12 @@ export const DEFAULT_PLANNER_PREFERENCES: PlannerPreferences = {
   focusEndTime: '11:00',
   workBlockMinutes: 50,
   breakMinutes: 10,
-  energy: { morning: 'high', afternoon: 'medium', evening: 'low', night: 'low' },
+  energy: {
+    morning: 'high',
+    afternoon: 'medium',
+    evening: 'low',
+    night: 'low',
+  },
   scheduleHardTasksInFocus: true,
   finishStartedFirst: true,
   groupSimilarTasks: true,
@@ -52,7 +61,10 @@ export class PlannerPreferencesService {
     return row ? rowToPreferences(row) : { ...DEFAULT_PLANNER_PREFERENCES };
   }
 
-  async savePreferences(userId: string, input: unknown): Promise<PlannerPreferences> {
+  async savePreferences(
+    userId: string,
+    input: unknown,
+  ): Promise<PlannerPreferences> {
     const preferences = normalizePreferences(input);
     const values = {
       userId,
@@ -91,8 +103,12 @@ export class PlannerPreferencesService {
 
 function rowToPreferences(row: PreferencesRow): PlannerPreferences {
   return {
-    focusStartTime: isTime(row.focusStartTime) ? row.focusStartTime : DEFAULT_PLANNER_PREFERENCES.focusStartTime,
-    focusEndTime: isTime(row.focusEndTime) ? row.focusEndTime : DEFAULT_PLANNER_PREFERENCES.focusEndTime,
+    focusStartTime: isTime(row.focusStartTime)
+      ? row.focusStartTime
+      : DEFAULT_PLANNER_PREFERENCES.focusStartTime,
+    focusEndTime: isTime(row.focusEndTime)
+      ? row.focusEndTime
+      : DEFAULT_PLANNER_PREFERENCES.focusEndTime,
     workBlockMinutes: row.workBlockMinutes,
     breakMinutes: row.breakMinutes,
     energy: {
@@ -106,17 +122,33 @@ function rowToPreferences(row: PreferencesRow): PlannerPreferences {
     groupSimilarTasks: row.groupSimilarTasks,
     bufferBeforeMeetings: row.bufferBeforeMeetings,
     bufferMinutes: row.bufferMinutes,
-    maxDailyWorkMinutes: row.maxDailyWorkMinutes ?? DEFAULT_PLANNER_PREFERENCES.maxDailyWorkMinutes,
-    emergencyBufferMinutes: row.emergencyBufferMinutes ?? DEFAULT_PLANNER_PREFERENCES.emergencyBufferMinutes,
-    sleep: readWindow(row.sleepStartTime, row.sleepEndTime, DEFAULT_PLANNER_PREFERENCES.sleep),
-    lunch: readWindow(row.lunchStartTime, row.lunchEndTime, DEFAULT_PLANNER_PREFERENCES.lunch),
+    maxDailyWorkMinutes:
+      row.maxDailyWorkMinutes ??
+      DEFAULT_PLANNER_PREFERENCES.maxDailyWorkMinutes,
+    emergencyBufferMinutes:
+      row.emergencyBufferMinutes ??
+      DEFAULT_PLANNER_PREFERENCES.emergencyBufferMinutes,
+    sleep: readWindow(
+      row.sleepStartTime,
+      row.sleepEndTime,
+      DEFAULT_PLANNER_PREFERENCES.sleep,
+    ),
+    lunch: readWindow(
+      row.lunchStartTime,
+      row.lunchEndTime,
+      DEFAULT_PLANNER_PREFERENCES.lunch,
+    ),
     unavailableHours: normalizeWindows(row.unavailableHours),
     note: row.note ?? '',
   };
 }
 
 /** A stored window falls back to the default when either bound is missing/invalid. */
-function readWindow(start: unknown, end: unknown, fallback: TimeWindow): TimeWindow {
+function readWindow(
+  start: unknown,
+  end: unknown,
+  fallback: TimeWindow,
+): TimeWindow {
   return isTime(start as string) && isTime(end as string)
     ? { start: start as string, end: end as string }
     : { ...fallback };
@@ -131,7 +163,10 @@ function normalizeWindows(value: unknown): TimeWindow[] {
   const windows: TimeWindow[] = [];
   for (const entry of value) {
     if (windows.length >= MAX_UNAVAILABLE_WINDOWS) break;
-    const row = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    const row =
+      entry && typeof entry === 'object'
+        ? (entry as Record<string, unknown>)
+        : {};
     const start = row.start;
     const end = row.end;
     if (!isTime(start as string) || !isTime(end as string)) continue;
@@ -146,27 +181,43 @@ function normalizeWindows(value: unknown): TimeWindow[] {
  * (focus order, note length) throw; ranges are clamped to reasonable values.
  */
 export function normalizePreferences(input: unknown): PlannerPreferences {
-  const body = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  const body =
+    input && typeof input === 'object'
+      ? (input as Record<string, unknown>)
+      : {};
   const defaults = DEFAULT_PLANNER_PREFERENCES;
 
   const focusStartTime = readTime(body.focusStartTime, defaults.focusStartTime);
   const focusEndTime = readTime(body.focusEndTime, defaults.focusEndTime);
   if (toMinutes(focusStartTime) >= toMinutes(focusEndTime)) {
-    throw new BadRequestException('focusStartTime must be before focusEndTime.');
+    throw new BadRequestException(
+      'focusStartTime must be before focusEndTime.',
+    );
   }
 
   const note = readString(body.note, defaults.note);
   if (note.length > NOTE_MAX_LENGTH) {
-    throw new BadRequestException(`note must be at most ${NOTE_MAX_LENGTH} characters.`);
+    throw new BadRequestException(
+      `note must be at most ${NOTE_MAX_LENGTH} characters.`,
+    );
   }
 
-  const energyInput = body.energy && typeof body.energy === 'object' ? (body.energy as Record<string, unknown>) : {};
+  const energyInput =
+    body.energy && typeof body.energy === 'object'
+      ? (body.energy as Record<string, unknown>)
+      : {};
 
   // Sleep may legitimately cross midnight (e.g. 23:00 → 07:00), so we don't
   // require start < end. Lunch is a same-day window and must be ordered. These
   // mirror the nested shape returned by getPreferences (like `energy`).
-  const sleepInput = body.sleep && typeof body.sleep === 'object' ? (body.sleep as Record<string, unknown>) : {};
-  const lunchInput = body.lunch && typeof body.lunch === 'object' ? (body.lunch as Record<string, unknown>) : {};
+  const sleepInput =
+    body.sleep && typeof body.sleep === 'object'
+      ? (body.sleep as Record<string, unknown>)
+      : {};
+  const lunchInput =
+    body.lunch && typeof body.lunch === 'object'
+      ? (body.lunch as Record<string, unknown>)
+      : {};
   const sleep = readWindow(sleepInput.start, sleepInput.end, defaults.sleep);
   const lunch = readWindow(lunchInput.start, lunchInput.end, defaults.lunch);
   if (toMinutes(lunch.start) >= toMinutes(lunch.end)) {
@@ -176,21 +227,56 @@ export function normalizePreferences(input: unknown): PlannerPreferences {
   return {
     focusStartTime,
     focusEndTime,
-    workBlockMinutes: clampInt(body.workBlockMinutes, defaults.workBlockMinutes, WORK_BLOCK_RANGE),
-    breakMinutes: clampInt(body.breakMinutes, defaults.breakMinutes, BREAK_RANGE),
+    workBlockMinutes: clampInt(
+      body.workBlockMinutes,
+      defaults.workBlockMinutes,
+      WORK_BLOCK_RANGE,
+    ),
+    breakMinutes: clampInt(
+      body.breakMinutes,
+      defaults.breakMinutes,
+      BREAK_RANGE,
+    ),
     energy: {
       morning: normalizeEnergy(energyInput.morning, defaults.energy.morning),
-      afternoon: normalizeEnergy(energyInput.afternoon, defaults.energy.afternoon),
+      afternoon: normalizeEnergy(
+        energyInput.afternoon,
+        defaults.energy.afternoon,
+      ),
       evening: normalizeEnergy(energyInput.evening, defaults.energy.evening),
       night: normalizeEnergy(energyInput.night, defaults.energy.night),
     },
-    scheduleHardTasksInFocus: readBool(body.scheduleHardTasksInFocus, defaults.scheduleHardTasksInFocus),
-    finishStartedFirst: readBool(body.finishStartedFirst, defaults.finishStartedFirst),
-    groupSimilarTasks: readBool(body.groupSimilarTasks, defaults.groupSimilarTasks),
-    bufferBeforeMeetings: readBool(body.bufferBeforeMeetings, defaults.bufferBeforeMeetings),
-    bufferMinutes: clampInt(body.bufferMinutes, defaults.bufferMinutes, BUFFER_RANGE),
-    maxDailyWorkMinutes: clampInt(body.maxDailyWorkMinutes, defaults.maxDailyWorkMinutes, MAX_DAILY_WORK_RANGE),
-    emergencyBufferMinutes: clampInt(body.emergencyBufferMinutes, defaults.emergencyBufferMinutes, EMERGENCY_BUFFER_RANGE),
+    scheduleHardTasksInFocus: readBool(
+      body.scheduleHardTasksInFocus,
+      defaults.scheduleHardTasksInFocus,
+    ),
+    finishStartedFirst: readBool(
+      body.finishStartedFirst,
+      defaults.finishStartedFirst,
+    ),
+    groupSimilarTasks: readBool(
+      body.groupSimilarTasks,
+      defaults.groupSimilarTasks,
+    ),
+    bufferBeforeMeetings: readBool(
+      body.bufferBeforeMeetings,
+      defaults.bufferBeforeMeetings,
+    ),
+    bufferMinutes: clampInt(
+      body.bufferMinutes,
+      defaults.bufferMinutes,
+      BUFFER_RANGE,
+    ),
+    maxDailyWorkMinutes: clampInt(
+      body.maxDailyWorkMinutes,
+      defaults.maxDailyWorkMinutes,
+      MAX_DAILY_WORK_RANGE,
+    ),
+    emergencyBufferMinutes: clampInt(
+      body.emergencyBufferMinutes,
+      defaults.emergencyBufferMinutes,
+      EMERGENCY_BUFFER_RANGE,
+    ),
     sleep,
     lunch,
     unavailableHours: normalizeWindows(body.unavailableHours),
@@ -210,12 +296,26 @@ function readBool(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function clampInt(value: unknown, fallback: number, range: { min: number; max: number }): number {
-  const num = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+function clampInt(
+  value: unknown,
+  fallback: number,
+  range: { min: number; max: number },
+): number {
+  const num =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : NaN;
   if (!Number.isFinite(num)) return fallback;
   return Math.max(range.min, Math.min(range.max, Math.round(num)));
 }
 
-function normalizeEnergy(value: unknown, fallback: EnergyLevel = 'medium'): EnergyLevel {
-  return value === 'high' || value === 'medium' || value === 'low' ? value : fallback;
+function normalizeEnergy(
+  value: unknown,
+  fallback: EnergyLevel = 'medium',
+): EnergyLevel {
+  return value === 'high' || value === 'medium' || value === 'low'
+    ? value
+    : fallback;
 }

@@ -28,10 +28,39 @@ export const SUBTASK_PRIORITY_LABEL: Record<ApiSubtaskPriority, string> = {
 }
 
 export const SUBTASK_PRIORITY_CLASS: Record<ApiSubtaskPriority, string> = {
-  low: 'text-green-400 bg-green-400/10',
-  medium: 'text-orange-400 bg-orange-400/10',
-  high: 'text-red-400 bg-red-400/10',
-  urgent: 'text-red-300 bg-red-500/20',
+  low: 'text-[var(--bp-success)] bg-[var(--bp-success)]/15',
+  medium: 'text-[var(--bp-warning)] bg-[var(--bp-warning)]/15',
+  high: 'text-[var(--bp-danger)] bg-[var(--bp-danger)]/15',
+  urgent: 'text-[var(--bp-danger)] bg-[var(--bp-danger)]/25',
+}
+
+export type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+
+export type BadgeMeta = { label: string; tone: BadgeTone }
+
+/** Semantic labels and tones shared by task, subtask, and dependency badges. */
+export const STATUS_BADGE_META: Record<string, BadgeMeta> = {
+  todo: { label: 'To Do', tone: 'neutral' },
+  'To Do': { label: 'To Do', tone: 'neutral' },
+  in_progress: { label: 'In Progress', tone: 'info' },
+  'In Progress': { label: 'In Progress', tone: 'info' },
+  done: { label: 'Done', tone: 'success' },
+  Done: { label: 'Done', tone: 'success' },
+  blocked: { label: 'Blocked', tone: 'danger' },
+  Blocked: { label: 'Blocked', tone: 'danger' },
+  missed: { label: 'Missed', tone: 'danger' },
+  Missed: { label: 'Missed', tone: 'danger' },
+}
+
+export const PRIORITY_BADGE_META: Record<string, BadgeMeta> = {
+  low: { label: 'Low', tone: 'success' },
+  Low: { label: 'Low', tone: 'success' },
+  medium: { label: 'Medium', tone: 'warning' },
+  Medium: { label: 'Medium', tone: 'warning' },
+  high: { label: 'High', tone: 'danger' },
+  High: { label: 'High', tone: 'danger' },
+  urgent: { label: 'Urgent', tone: 'danger' },
+  Urgent: { label: 'Urgent', tone: 'danger' },
 }
 
 // ---- Time indicator ----

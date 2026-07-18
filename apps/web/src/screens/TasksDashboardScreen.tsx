@@ -1,8 +1,9 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import {
   AnalyticsIcon,
   AppLayout,
   CalendarIcon,
+  DirectionalChevron,
   FocusIcon,
   FloatingActionButton,
   PageHeader,
@@ -14,6 +15,7 @@ import {
   type SidebarNavHandlers,
 } from '../components/layout'
 import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
+import { AddTaskModeChooser } from '../components/AddTaskModeChooser'
 import { SharedBadge } from '../features/collaboration/components/SharedBadge'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
@@ -32,6 +34,9 @@ type TasksDashboardScreenProps = SidebarNavHandlers & {
   onRetrySummary?: () => void
   onViewReminders: () => void
   onViewTasks: () => void
+  onCreateTask?: () => void
+  onCreateTaskAi?: () => void
+  onCreateReminder?: () => void
   onViewTaskDetails?: (taskId: string) => void
   onMakeRecurringSuggestion?: (suggestion: RecurrenceSuggestion) => void
   onDismissRecurrenceSuggestion?: (suggestion: RecurrenceSuggestion) => void
@@ -50,6 +55,9 @@ export default function TasksDashboardScreen({
   onRetrySummary,
   onViewReminders,
   onViewTasks,
+  onCreateTask,
+  onCreateTaskAi,
+  onCreateReminder,
   onViewTaskDetails,
   onMakeRecurringSuggestion,
   onDismissRecurrenceSuggestion,
@@ -58,6 +66,7 @@ export default function TasksDashboardScreen({
 }: TasksDashboardScreenProps) {
   const { t, toggleLanguage, isRTL } = useLanguage()
   const { mode, toggleTheme } = useTheme()
+  const [addTaskChooserOpen, setAddTaskChooserOpen] = useState(false)
   const isLoading = summaryLoading && !summary
   const loadingLabel = '...'
   const todayTasksValue = isLoading ? loadingLabel : String(summary?.todayTasks ?? 0)
@@ -79,20 +88,32 @@ export default function TasksDashboardScreen({
       panelTitle="Keep going!"
       panelCaption="You're doing great today."
       panelPercent={overallProgress}
-      fab={<FloatingActionButton onClick={onViewTasks} />}
+      fab={<FloatingActionButton onClick={() => setAddTaskChooserOpen(true)} />}
     >
+      {addTaskChooserOpen ? (
+        <AddTaskModeChooser
+          onClose={() => setAddTaskChooserOpen(false)}
+          onManual={() => {
+            setAddTaskChooserOpen(false)
+            onCreateTask?.()
+          }}
+          onAiPlan={() => {
+            setAddTaskChooserOpen(false)
+            onCreateTaskAi?.()
+          }}
+        />
+      ) : null}
       <PageHeader
-        title="Dashboard"
-        subtitle="Smart productivity dashboard"
+        title={t('taskUi.dashboard.title')}
+        subtitle={t('taskUi.dashboard.subtitle')}
         toolbar={
           <TopActionBar
-            searchValue=""
-            onSearchChange={() => {}}
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />
@@ -144,12 +165,10 @@ export default function TasksDashboardScreen({
             <h2 className="text-sm font-bold">Overall Progress</h2>
             <p className="text-xs text-slate-400">You're doing great! Keep it up.</p>
           </div>
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-[var(--bp-accent)] text-sm font-black text-[var(--bp-accent)]">
-            {isLoading ? loadingLabel : `${overallProgress}%`}
-          </div>
+          <span className="text-lg font-black text-[var(--bp-accent)]">{isLoading ? loadingLabel : `${overallProgress}%`}</span>
         </div>
 
-        <div className="mt-4 h-2 rounded-full bg-[var(--bp-bg)]">
+        <div role="progressbar" aria-label="Overall task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={overallProgress} className="mt-4 h-2 rounded-full bg-[var(--bp-bg)]">
           <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${overallProgress}%` }} />
         </div>
 
@@ -159,12 +178,12 @@ export default function TasksDashboardScreen({
         </div>
       </SectionCard>
 
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-[1.25fr_0.75fr]">
         <SectionCard>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-bold">Today's Focus</h2>
             <button type="button" onClick={onViewTasks} className="text-xs font-bold text-[var(--bp-accent)]">
-              View All {isRTL ? '<' : '>'}
+              <span className="inline-flex items-center gap-1">View all <DirectionalChevron direction="forward" isRTL={isRTL} className="h-3.5 w-3.5" /></span>
             </button>
           </div>
 
@@ -196,10 +215,10 @@ export default function TasksDashboardScreen({
           <h2 className="mb-3 text-sm font-bold">Quick Actions</h2>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <ActionCard icon={<TasksIcon className="h-4 w-4" />} title="New Task" desc="Create a new task" onClick={onViewTasks} />
-            <ActionCard icon={<RemindersIcon className="h-4 w-4" />} title="New Reminder" desc="Add a reminder" onClick={onViewReminders} />
-            <ActionCard icon={<CalendarIcon className="h-4 w-4" />} title="View Calendar" desc="See your schedule" onClick={nav.onNavigateCalendar} />
-            <ActionCard icon={<TasksIcon className="h-4 w-4" />} title="All Tasks" desc="View all tasks" onClick={onViewTasks} />
+            <ActionCard icon={<TasksIcon className="h-4 w-4" />} title="New task" desc="Create a new task" onClick={() => setAddTaskChooserOpen(true)} />
+            <ActionCard icon={<RemindersIcon className="h-4 w-4" />} title="New reminder" desc="Add a reminder" onClick={onCreateReminder ?? onViewReminders} />
+            <ActionCard icon={<CalendarIcon className="h-4 w-4" />} title="View calendar" desc="See your schedule" onClick={nav.onNavigateCalendar} />
+            <ActionCard icon={<TasksIcon className="h-4 w-4" />} title="All tasks" desc="View all tasks" onClick={onViewTasks} />
           </div>
         </SectionCard>
       </section>
@@ -221,11 +240,8 @@ function FocusTask({
   const reasonColor =
     reason === 'Due Today' ? 'bg-[var(--bp-accent)]' : reason === 'Focus' ? 'bg-purple-400' : 'bg-orange-400'
 
-  return (
-    <div
-      className={`mb-3 flex items-center gap-3 last:mb-0 ${onClick ? 'cursor-pointer rounded-lg transition hover:bg-[var(--bp-bg)]' : ''}`}
-      onClick={onClick ? () => onClick(task.id) : undefined}
-    >
+  const content = (
+    <>
       <div className="h-4 w-4 shrink-0 rounded-full border border-slate-500" />
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-[var(--bp-text)]">
@@ -241,8 +257,14 @@ function FocusTask({
         <span className={`h-1.5 w-1.5 rounded-full ${reasonColor}`} />
         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{reason}</span>
       </div>
-    </div>
+    </>
   )
+
+  return onClick ? (
+    <button type="button" onClick={() => onClick(task.id)} aria-label={`Open focus task: ${task.title}`} className="mb-3 flex w-full items-center gap-3 rounded-lg text-left transition hover:bg-[var(--bp-bg)] last:mb-0">
+      {content}
+    </button>
+  ) : <div className="mb-3 flex items-center gap-3 last:mb-0">{content}</div>
 }
 
 function ActionCard({
@@ -260,7 +282,7 @@ function ActionCard({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] p-3 text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--bp-accent)]/40"
+      className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] p-3 text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--bp-accent)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-bg)]"
     >
       <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">{icon}</div>
       <h3 className="text-sm font-bold">{title}</h3>

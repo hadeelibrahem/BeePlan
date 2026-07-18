@@ -740,8 +740,8 @@ export class TasksService {
 
     // Resolve the target status. `isDone` remains the legacy checkbox source
     // of truth, so keep the two in sync in both directions.
-    let nextStatus: SubtaskStatus =
-      (dto.status as SubtaskStatus | undefined) ??
+    const nextStatus: SubtaskStatus =
+      dto.status ??
       (dto.isDone === true
         ? 'done'
         : dto.isDone === false

@@ -21,16 +21,17 @@ import {
 } from '../api/collaboration.api'
 import { friendlyError } from '../errorMessages'
 import { NOTIFICATION_ICON } from '../notificationMeta'
+import { notificationTarget } from '../notificationRoutes'
 import { Toast } from '../components/Toast'
 import type { AppNotification, TaskInvitation } from '../types'
 
 type Props = SidebarNavHandlers & {
   accessToken: string
-  onOpenTask: (taskId: string) => void
+  onOpenNotification: (notification: AppNotification, target: string) => void
   onSignOut: () => void
 }
 
-export function NotificationsScreen({ accessToken, onOpenTask, onSignOut, ...nav }: Props) {
+export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut, ...nav }: Props) {
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const queryClient = useQueryClient()
@@ -97,7 +98,8 @@ export function NotificationsScreen({ accessToken, onOpenTask, onSignOut, ...nav
       )
       void markNotificationRead(notification.id, accessToken).catch(() => undefined)
     }
-    if (notification.taskId) onOpenTask(notification.taskId)
+    const target = notificationTarget(notification)
+    if (target) onOpenNotification(notification, target)
   }
 
   async function loadMore() {
@@ -146,7 +148,8 @@ export function NotificationsScreen({ accessToken, onOpenTask, onSignOut, ...nav
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />

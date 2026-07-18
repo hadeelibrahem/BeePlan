@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { and, eq, ne } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import { reminders, taskDependencies, tasks } from '../db/schema';
+import { PlannerAcceptanceService } from './planner/planner-acceptance.service';
 import { PlannerDurationEstimator, type EstimatorResult } from './planner/planner-duration-estimator';
 import { PlannerPreferencesService } from './planner/planner-preferences.service';
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
@@ -63,6 +64,7 @@ export class AiPlannerService {
     private readonly schedulerEngine: PlannerSchedulerEngine,
     private readonly durationEstimator: PlannerDurationEstimator,
     private readonly preferencesService: PlannerPreferencesService,
+    private readonly acceptanceService: PlannerAcceptanceService,
   ) {}
 
   async generateDailyPlan(userId: string, request: PlannerRequest = {}): Promise<DailyPlan> {
@@ -152,6 +154,14 @@ export class AiPlannerService {
   savePreferences(userId: string, input: unknown) {
     return this.preferencesService.savePreferences(userId, input);
   }
+
+  acceptPlan(userId: string, input: unknown) {
+    return this.acceptanceService.acceptPlan(userId, input);
+  }
+
+  getAcceptance(userId: string, date: string) {
+    return this.acceptanceService.getAcceptance(userId, normalizeDate(date));
+  }
 }
 
 function normalizeDate(value?: string): string {
@@ -161,8 +171,8 @@ function normalizeDate(value?: string): string {
 
 function normalizeWorkingHours(value?: { start?: string; end?: string }): WorkingHours {
   return {
-    start: isTime(value?.start) ? value!.start! : DEFAULT_WORKING_HOURS.start,
-    end: isTime(value?.end) ? value!.end! : DEFAULT_WORKING_HOURS.end,
+    start: isTime(value?.start) ? value.start : DEFAULT_WORKING_HOURS.start,
+    end: isTime(value?.end) ? value.end : DEFAULT_WORKING_HOURS.end,
   };
 }
 

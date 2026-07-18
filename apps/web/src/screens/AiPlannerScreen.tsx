@@ -3,13 +3,16 @@ import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '..
 import { OutlineButton, PrimaryButton, SecondaryButton } from '../components/layout/Buttons'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
+  acceptDailyPlan,
   generateDailyPlan,
+  getDailyPlanAcceptance,
   getPlannerPreferences,
   updatePlannerPreferences,
   type CapacitySummary,
   type DailyPlan,
   type DailyPlanItem,
   type EnergyLevel,
+  type PlanAcceptance,
   type PlannerPreferences,
   type PostponeStatus,
   type UnscheduledItem,
@@ -34,6 +37,12 @@ const SECTION_META: Record<SectionKey, { title: string; emoji: string; tint: str
   night: { title: 'Night', emoji: '🌙', tint: 'bg-indigo-400/[0.06]', accent: 'text-indigo-300' },
 }
 
+const planCache = new Map<string, { plan: DailyPlan; accepted: boolean }>()
+
+function planCacheKey(accessToken: string, date: string) {
+  return `${accessToken}:${date}`
+}
+
 export default function AiPlannerScreen({
   accessToken,
   refreshKey = 0,
@@ -48,10 +57,13 @@ export default function AiPlannerScreen({
   const [plan, setPlan] = useState<DailyPlan | null>(null)
   const [loading, setLoading] = useState(false)
   const [accepted, setAccepted] = useState(false)
+  const [accepting, setAccepting] = useState(false)
+  const [acceptError, setAcceptError] = useState('')
   const [error, setError] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('simple')
   const [preferences, setPreferences] = useState<PlannerPreferences | null>(null)
   const [lockedItems, setLockedItems] = useState<Record<string, DailyPlanItem>>({})
+  const today = new Date().toISOString().slice(0, 10)
 
   const allItems = useMemo(() => (plan ? Object.values(plan.sections).flat() : []), [plan])
   const lockedPayload = useMemo(
@@ -75,8 +87,13 @@ export default function AiPlannerScreen({
   const validation = useMemo(() => buildValidation(plan, lockedItems), [plan, lockedItems])
 
   useEffect(() => {
-    void loadPlan()
+    void initializePlan()
   }, [accessToken, refreshKey])
+
+  useEffect(() => {
+    if (!accessToken || !plan) return
+    planCache.set(planCacheKey(accessToken, plan.date), { plan, accepted })
+  }, [accessToken, accepted, plan])
 
   useEffect(() => {
     if (!accessToken) return
@@ -103,19 +120,60 @@ export default function AiPlannerScreen({
     }
   }
 
+  /**
+   * On first load, show whatever the user already accepted for today (so
+   * "Accept Plan" survives navigation/reload) instead of silently replacing
+   * it with a freshly generated plan. Only Generate/Regenerate/Reset should
+   * produce a new plan.
+   */
+  async function initializePlan() {
+    if (!accessToken) return
+
+    const cached = planCache.get(planCacheKey(accessToken, today))
+    if (cached) {
+      setPlan(cached.plan)
+      setAccepted(cached.accepted)
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setAcceptError('')
+    try {
+      let acceptance: PlanAcceptance | null = null
+      try {
+        acceptance = await getDailyPlanAcceptance(accessToken, today)
+      } catch {
+        acceptance = null
+      }
+
+      if (acceptance) {
+        setPlan(acceptance.plan)
+        setAccepted(true)
+        planCache.set(planCacheKey(accessToken, today), { plan: acceptance.plan, accepted: true })
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load an existing plan.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function loadPlan(lockedOverride?: typeof lockedPayload) {
     if (!accessToken) return
 
     setLoading(true)
     setError('')
+    setAcceptError('')
     setAccepted(false)
     try {
       const nextPlan = await generateDailyPlan(accessToken, {
-        date: new Date().toISOString().slice(0, 10),
+        date: today,
         currentTime: currentTime(),
         lockedItems: lockedOverride ?? lockedPayload,
       })
       setPlan(nextPlan)
+      planCache.set(planCacheKey(accessToken, nextPlan.date), { plan: nextPlan, accepted: false })
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to generate today\'s plan.')
     } finally {
@@ -123,10 +181,28 @@ export default function AiPlannerScreen({
     }
   }
 
+  async function acceptPlan() {
+    if (!accessToken || !plan || accepting) return
+
+    setAccepting(true)
+    setAcceptError('')
+    try {
+      await acceptDailyPlan(accessToken, plan)
+      setAccepted(true)
+    } catch (acceptErr) {
+      setAcceptError(acceptErr instanceof Error ? acceptErr.message : 'Unable to accept plan.')
+    } finally {
+      setAccepting(false)
+    }
+  }
+
   function resetPlan() {
     setLockedItems({})
+    setPlan(null)
     setAccepted(false)
-    void loadPlan([])
+    setAcceptError('')
+    setError('')
+    if (accessToken) planCache.delete(planCacheKey(accessToken, planDate))
   }
 
   function toggleLock(item: DailyPlanItem) {
@@ -168,12 +244,12 @@ export default function AiPlannerScreen({
       onNavigateAnalytics={nav.onNavigateAnalytics}
       onNavigatePlanner={nav.onNavigatePlanner}
       panelTitle="Smart day"
-      panelCaption={plan?.source === 'ai' ? 'AI generated' : 'Rules fallback'}
+      panelCaption={plan?.source === 'ai' ? 'AI-assisted plan' : 'Standard plan'}
       panelPercent={progressPercent}
     >
       <PageHeader
-        title="AI Planner"
-        subtitle="A clean daily schedule first — open the details to see how the AI planned it."
+        title={t('taskUi.planner.title')}
+        subtitle={t('taskUi.planner.subtitle')}
         toolbar={
           <TopActionBar
             searchValue={search}
@@ -183,14 +259,15 @@ export default function AiPlannerScreen({
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />
 
       {/* HERO — today's plan summary + key stats -------------------------- */}
-      <section className="mb-4 overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-gradient-to-br from-[var(--bp-accent)]/[0.08] via-[var(--bp-surface)] to-[var(--bp-surface)] p-5 shadow-xl">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <section className="mb-4 rounded-2xl border border-[var(--bp-border)] bg-gradient-to-r from-[var(--bp-accent)]/[0.08] via-[var(--bp-surface)] to-[var(--bp-surface)] p-5">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">
@@ -202,34 +279,21 @@ export default function AiPlannerScreen({
                   plan?.source === 'ai' ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'bg-slate-500/15 text-slate-300'
                 }`}
               >
-                {plan?.source === 'ai' ? 'AI generated' : 'Rules fallback'}
+                {plan?.source === 'ai' ? 'AI-assisted' : 'Standard plan'}
               </span>
             </div>
             <h2 className="mt-2 text-2xl font-black text-[var(--bp-text)]">{formatLongDate(planDate)}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
-              {plan?.summary ?? 'Generate an optimized schedule for the rest of your day and let the assistant sequence your work.'}
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--bp-muted)]">
+              {plan?.summary ?? 'Generate a schedule when you are ready. Your current plan stays here while you move around BeePlan.'}
             </p>
           </div>
 
           {/* Progress ring */}
-          <div className="flex shrink-0 items-center gap-4 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/60 p-4">
-            <div className="relative flex items-center justify-center">
-              <ProgressRing percent={progressPercent} />
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-black text-[var(--bp-text)]">{progressPercent}%</span>
-                <span className="text-[10px] font-bold uppercase text-slate-500">done</span>
-              </div>
-            </div>
-            <div className="space-y-2 text-sm">
-              <RingStat label="Completed" value={String(completedCount)} tone="text-green-300" />
-              <RingStat label="Remaining" value={String(Math.max(0, taskCount - completedCount))} tone="text-[var(--bp-text)]" />
-              <RingStat label="Focus hours" value={insights ? formatDuration(insights.focusMinutes) : '0m'} tone="text-sky-300" />
-            </div>
-          </div>
         </div>
 
         {/* Key stats — planned work / tasks / breaks */}
-        <div className="mt-5 grid grid-cols-3 gap-3">
+        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--bp-border)] bg-[var(--bp-border)] sm:grid-cols-4">
+          <SummaryMetric label="Progress" value={`${progressPercent}%`} detail={`${completedCount} complete`} />
           <StatTile emoji="⏱️" label="Planned work" value={formatDuration(plannedMinutes)} />
           <StatTile emoji="✅" label="Tasks" value={String(taskCount)} />
           <StatTile emoji="☕" label="Breaks" value={String(insights?.breaks ?? 0)} />
@@ -239,19 +303,24 @@ export default function AiPlannerScreen({
       {/* ACTION BAR + VIEW TOGGLE ---------------------------------------- */}
       <section className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-3 shadow-xl">
         <PrimaryButton size="md" onClick={() => void loadPlan()} loading={loading}>
-          <span className="inline-flex items-center gap-1.5"><SparkleGlyph className="h-4 w-4" /> Generate Smart Plan</span>
+          <span className="inline-flex items-center gap-1.5"><SparkleGlyph className="h-4 w-4" /> {plan ? 'Regenerate plan' : 'Generate plan'}</span>
         </PrimaryButton>
-        <OutlineButton size="md" onClick={() => void loadPlan()} disabled={loading}>
-          <span className="inline-flex items-center gap-1.5"><RefreshGlyph /> Regenerate</span>
-        </OutlineButton>
-        <SecondaryButton size="md" onClick={() => setAccepted(true)} disabled={!plan || loading}>
-          <span className="inline-flex items-center gap-1.5"><CheckGlyph /> {accepted ? 'Accepted' : 'Accept Plan'}</span>
+        <SecondaryButton size="md" onClick={() => void acceptPlan()} disabled={!plan || loading || accepting || accepted}>
+          <span className="inline-flex items-center gap-1.5">
+            <CheckGlyph /> {accepted ? 'Accepted' : accepting ? 'Accepting...' : 'Accept Plan'}
+          </span>
         </SecondaryButton>
         <OutlineButton size="md" onClick={resetPlan} disabled={loading}>
           <span className="inline-flex items-center gap-1.5"><RefreshGlyph /> Reset</span>
         </OutlineButton>
         <ViewToggle mode={viewMode} onChange={setViewMode} />
       </section>
+
+      {acceptError ? (
+        <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300">
+          {acceptError}
+        </p>
+      ) : null}
 
       {/* AI PLANNING PREFERENCES — collapsed by default ------------------- */}
       {preferences ? (
@@ -268,7 +337,14 @@ export default function AiPlannerScreen({
 
       {loading && !plan ? (
         <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-8 text-center text-sm font-bold text-slate-400 shadow-xl">
-          Generating your smart daily plan...
+          Loading your saved plan...
+        </div>
+      ) : null}
+
+      {!loading && !error && !plan ? (
+        <div className="rounded-2xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-surface)] p-8 text-center shadow-xl">
+          <h2 className="text-base font-black text-[var(--bp-text)]">No plan for today yet</h2>
+          <p className="mt-2 text-sm text-[var(--bp-muted)]">Generate a plan when you want help organizing the rest of your day.</p>
         </div>
       ) : null}
 
@@ -826,41 +902,13 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-function RingStat({ label, value, tone }: { label: string; value: string; tone: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs font-bold text-slate-500">{label}</span>
-      <span className={`text-sm font-black ${tone}`}>{value}</span>
-    </div>
-  )
-}
-
-function ProgressRing({ percent, size = 92, stroke = 8 }: { percent: number; size?: number; stroke?: number }) {
-  const radius = (size - stroke) / 2
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (Math.max(0, Math.min(100, percent)) / 100) * circumference
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--bp-border)" strokeWidth={stroke} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke="var(--bp-accent)"
-        strokeWidth={stroke}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        className="transition-all duration-700"
-      />
-    </svg>
-  )
+function SummaryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <div className="bg-[var(--bp-bg)]/45 px-3 py-3"><dt className="text-[11px] font-bold text-[var(--bp-muted)]">{label}</dt><dd className="mt-1 text-lg font-black text-[var(--bp-text)]">{value}</dd><p className="mt-0.5 text-[11px] text-[var(--bp-muted)]">{detail}</p></div>
 }
 
 function StatTile({ emoji, label, value }: { emoji: string; label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/60 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--bp-accent)]/40">
+    <div className="bg-[var(--bp-bg)]/45 px-3 py-3">
       <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500">
         <span className="text-sm">{emoji}</span>
         {label}
@@ -988,7 +1036,7 @@ function PlanCard({
 
   return (
     <div
-      className={`group rounded-xl border p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
+      className={`group rounded-xl border p-3 shadow-sm transition-colors duration-200 ${
         locked
           ? 'border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/[0.06]'
           : current
@@ -1131,12 +1179,12 @@ function PlanSourceBanner({ source }: { source: DailyPlan['source'] }) {
       </span>
       <div className="min-w-0">
         <p className="text-sm font-black text-[var(--bp-text)]">
-          {ai ? 'Generated with AI reasoning, validated by scheduling rules.' : 'Generated by rules.'}
+          {ai ? 'AI-assisted plan, checked against your schedule.' : 'Standard plan, built from your schedule.'}
         </p>
         <p className="mt-0.5 text-xs text-slate-400">
           {ai
-            ? 'The AI reasoning layer ranked your tasks, then the rule engine validated the schedule.'
-            : 'Generated by rules because AI was unavailable or returned an invalid plan.'}
+            ? 'Your priorities and available time were used to suggest a practical order for today.'
+            : 'This plan uses your tasks, availability, and planning preferences.'}
         </p>
       </div>
       <span
@@ -1144,7 +1192,7 @@ function PlanSourceBanner({ source }: { source: DailyPlan['source'] }) {
           ai ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'bg-amber-500/15 text-amber-300'
         }`}
       >
-        {ai ? 'AI + Rules' : 'Rules only'}
+        {ai ? 'AI-assisted' : 'Standard plan'}
       </span>
     </section>
   )
@@ -1157,7 +1205,7 @@ function HowItWasBuilt({ source }: { source: DailyPlan['source'] }) {
         <StepCard
           step={1}
           emoji="📏"
-          title="Rule Engine"
+          title="Your schedule"
           accent="text-sky-300"
           items={[
             'Checked task dependencies',
@@ -1169,7 +1217,7 @@ function HowItWasBuilt({ source }: { source: DailyPlan['source'] }) {
         <StepCard
           step={2}
           emoji="🧠"
-          title="AI Reasoning"
+          title="Priority suggestions"
           accent="text-[var(--bp-accent)]"
           active={source === 'ai'}
           items={[
@@ -1180,7 +1228,7 @@ function HowItWasBuilt({ source }: { source: DailyPlan['source'] }) {
         <StepCard
           step={3}
           emoji="🗓️"
-          title="Scheduler Engine"
+          title="Time plan"
           accent="text-emerald-300"
           items={[
             'Assigned start & end times',

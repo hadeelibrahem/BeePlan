@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Alert, Pressable, Text, View } from 'react-native';
 import {
   changeTaskStatus,
   getAttachments,
@@ -17,6 +17,7 @@ import { type DependencyTask } from '../components/TaskDependenciesWorkflowSheet
 import { createRecurrenceSummary, getNextOccurrenceLabel, type RecurrenceSettings } from '../components/TaskRecurrenceSheet';
 import { TaskStatusWorkflowSheet, type TaskStatus } from '../components/TaskStatusWorkflowSheet';
 import SubtaskDetailSheet from '../components/SubtaskDetailSheet';
+import { TaskPriorityBadge, TaskStatusBadge } from '../components/TaskBadges';
 import {
   displaySubtaskTitle,
   formatDuration,
@@ -24,9 +25,6 @@ import {
   matchesSubtaskFilter,
   syncTaskSubtaskReminders,
   SUBTASK_INDICATOR_COLOR,
-  SUBTASK_PRIORITY_COLOR,
-  SUBTASK_PRIORITY_LABEL,
-  SUBTASK_STATUS_LABEL,
   type SubtaskFilter,
 } from '../lib/subtasks';
 import {
@@ -41,6 +39,7 @@ import {
 import { useTheme } from '../theme/useTheme';
 import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel';
 import { SharedBadge } from '../features/collaboration/components/SharedBadge';
+import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
 
 type Props = {
   task?: ApiTask | null;
@@ -53,8 +52,9 @@ type Props = {
   onRefresh?: () => void;
   onBack: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
+  onDelete?: () => Promise<void> | void;
   onMarkDone?: () => void;
+  onOpenAiCollaboration?: () => void;
 };
 
 export default function TaskDetailsScreen({
@@ -67,6 +67,7 @@ export default function TaskDetailsScreen({
   onBack,
   onEdit,
   onDelete,
+  onOpenAiCollaboration,
 }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
@@ -84,6 +85,17 @@ export default function TaskDetailsScreen({
   );
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([]);
   const [error, setError] = useState('');
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
+  const deleteConfirmationRef = useRef<ReturnType<typeof createTaskDeleteConfirmationController> | null>(null);
+  if (!deleteConfirmationRef.current) {
+    deleteConfirmationRef.current = createTaskDeleteConfirmationController(
+      async () => {
+        await onDeleteRef.current?.();
+      },
+      Alert.alert,
+    );
+  }
 
   const isOwner = task?.viewerRole === 'owner';
   const [subtaskFilter, setSubtaskFilter] = useState<SubtaskFilter>(isOwner ? 'team' : 'mine');
@@ -285,9 +297,6 @@ export default function TaskDetailsScreen({
       footer={
         isViewer ? undefined : (
           <BottomActionBar>
-            <DangerButton size="sm" onPress={onDelete} className="flex-1">
-              Delete
-            </DangerButton>
             <OutlineButton size="sm" onPress={() => setIsStatusSheetVisible(true)} className="flex-1">
               Status
             </OutlineButton>
@@ -304,8 +313,8 @@ export default function TaskDetailsScreen({
 
       <SectionCard className="mb-3">
         <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
-          <Badge label={status} color={getStatusColor(status, colors)} />
-          <Badge label={`${toUiPriority(task.priority)} Priority`} color={colors.error} />
+          <TaskStatusBadge status={status} />
+          <TaskPriorityBadge priority={toUiPriority(task.priority)} />
           <Badge label={task.category || 'General'} color={colors.accent} />
           {task.isShared || sharedMemberCount > 1 ? (
             <SharedBadge memberCount={sharedMemberCount || undefined} />
@@ -331,6 +340,18 @@ export default function TaskDetailsScreen({
           onMembersLoaded={setSharedMemberCount}
           onError={setError}
         />
+      ) : null}
+
+      {(task.isShared || sharedMemberCount > 1) && onOpenAiCollaboration ? (
+        <SectionCard className="mb-3">
+          <Text className="mb-1 text-sm font-black" style={{ color: colors.text }}>
+            AI Collaboration
+          </Text>
+          <Text className="mb-3 text-xs leading-4" style={{ color: colors.secondaryText }}>
+            See how work is split, what's due today, and AI suggestions for keeping the team balanced.
+          </Text>
+          <OutlineButton onPress={onOpenAiCollaboration}>Open AI Collaboration</OutlineButton>
+        </SectionCard>
       ) : null}
 
       <Card title="Progress">
@@ -372,6 +393,7 @@ export default function TaskDetailsScreen({
           <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
         )}
       </Card>
+      {!isViewer ? <Card title="Danger Zone"><Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>Deleting this task cannot be undone.</Text><DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>Delete Task</DangerButton></Card> : null}
 
       <Card title="Dependencies">
         {dependencyItems.length ? (
@@ -522,7 +544,7 @@ function AutomationRow({ label, value, isLast }: { label: string; value: string;
 function Badge({ label, color }: { label: string; color: string }) {
   return (
     <View className="rounded-full px-2 py-1" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-[11px] font-black" style={{ color }}>
+      <Text className="text-xs font-black" style={{ color }}>
         {label}
       </Text>
     </View>
@@ -749,19 +771,11 @@ const SubtaskRow = memo(function SubtaskRow({
         ) : null}
 
         <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
-          <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${SUBTASK_PRIORITY_COLOR[item.priority]}22` }}>
-            <Text className="text-[10px] font-bold" style={{ color: SUBTASK_PRIORITY_COLOR[item.priority] }}>
-              {SUBTASK_PRIORITY_LABEL[item.priority]}
-            </Text>
-          </View>
-          <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.secondaryText}18` }}>
-            <Text className="text-[10px] font-bold" style={{ color: colors.secondaryText }}>
-              {SUBTASK_STATUS_LABEL[item.status]}
-            </Text>
-          </View>
+          <TaskPriorityBadge priority={item.priority} />
+          <TaskStatusBadge status={item.status} />
           {item.estimatedDurationSource === 'ai' && item.estimatedDurationMinutes ? (
             <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
-              <Text className="text-[10px] font-bold" style={{ color: colors.accent }}>AI Estimate</Text>
+              <Text className="text-xs font-bold" style={{ color: colors.accent }}>AI Estimate</Text>
             </View>
           ) : null}
         </View>

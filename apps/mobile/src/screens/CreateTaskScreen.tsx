@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Pressable, Text, TextInput, View } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import {
@@ -17,15 +17,23 @@ import {
   SectionCard,
 } from '../components/layout'
 import { useTheme } from '../theme/useTheme'
+import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard'
 
 type Props = {
   accessToken?: string
   onCancel: () => void
   onSave: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void
   onCreated?: (task: ApiTask) => void
+  onLifecycleChange?: (state: CreateTaskLifecycleState) => void
 }
 
-export default function CreateTaskScreen({ accessToken, onCancel, onSave, onCreated }: Props) {
+export type CreateTaskLifecycleState = {
+  isDirty: boolean
+  isSubmitting: boolean
+  error: string
+}
+
+export default function CreateTaskScreen({ accessToken, onCancel, onSave, onCreated, onLifecycleChange }: Props) {
   const { theme } = useTheme()
   const { colors } = theme
   const [title, setTitle] = useState('')
@@ -38,6 +46,21 @@ export default function CreateTaskScreen({ accessToken, onCancel, onSave, onCrea
   const [isRecurrenceSheetVisible, setIsRecurrenceSheetVisible] = useState(false)
   const [attachments, setAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([])
   const recurrenceSummary = createRecurrenceSummary(recurrence)
+
+  // Protect unsaved edits from an Android hardware-back press.
+  const hasUnsavedChanges = Boolean(
+    title.trim() || description.trim() || notes.trim() || recurrence || attachments.length > 0,
+  )
+  const { confirmLeave } = useUnsavedBackGuard({
+    isDirty: hasUnsavedChanges && !saving,
+    onLeave: onCancel,
+    title: 'Discard new task?',
+    message: 'This task has not been saved yet. Discard it?',
+  })
+
+  useEffect(() => {
+    onLifecycleChange?.({ isDirty: hasUnsavedChanges, isSubmitting: saving || uploadingAttachments, error })
+  }, [error, hasUnsavedChanges, onLifecycleChange, saving, uploadingAttachments])
 
   async function handleSave() {
     if (!title.trim()) {
@@ -88,7 +111,7 @@ export default function CreateTaskScreen({ accessToken, onCancel, onSave, onCrea
       keyboardAvoiding
       footer={
         <BottomActionBar>
-          <SecondaryButton onPress={onCancel} className="flex-1">
+          <SecondaryButton onPress={confirmLeave} className="flex-1">
             Cancel
           </SecondaryButton>
           <PrimaryButton onPress={() => void handleSave()} className="flex-1" disabled={saving || uploadingAttachments}>
@@ -97,7 +120,7 @@ export default function CreateTaskScreen({ accessToken, onCancel, onSave, onCrea
         </BottomActionBar>
       }
     >
-      <PageHeader title="Create Task" subtitle="Organize your work" onBack={onCancel} />
+      <PageHeader title="Create Task" subtitle="Organize your work" onBack={confirmLeave} />
 
       <Card title="Task Information" icon="📋">
         <Label text="Task Title *" />

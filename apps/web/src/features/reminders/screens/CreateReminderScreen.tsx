@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DirectionalChevron } from '../../../components/layout'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import { createPersonReminder, getFriends } from '../../social/api/social.api'
 import type { FriendSummary, ParsePersonReminderResult } from '../../social/types/social.types'
@@ -6,7 +7,7 @@ import { createReminder, getReminder } from '../api/reminders.api'
 import { AiAssistantSection, clearAiReminderText } from '../components/AiAssistantSection'
 import { ReminderForm } from '../components/ReminderForm'
 import type { ReminderDraft } from '../types/aiAssistant.types'
-import type { PersonReminderConfig, Reminder } from '../types/reminders.types'
+import type { PersonReminderConfig, Reminder, ReminderType } from '../types/reminders.types'
 import { mapDraftToReminder } from '../utils/aiDraftMapping'
 
 type Props = {
@@ -15,6 +16,27 @@ type Props = {
   onCreated: (reminder: Reminder) => void
   /** Navigate to the People page (used when a detected person isn't a friend yet). */
   onNavigatePeople?: () => void
+  /** Preselect a reminder type when opening the form (e.g. 'person' from "Create Person Reminder"). */
+  initialType?: ReminderType
+}
+
+// Minimal `Reminder`-shaped seed so the form opens on a chosen type. Only the
+// `type` (and a couple of sensible person defaults) matter — the rest is left
+// empty for the user to fill in.
+function seedReminderForType(type: ReminderType): Reminder {
+  const now = new Date().toISOString()
+  return {
+    id: 'type-seed',
+    status: 'active',
+    createdAt: now,
+    updatedAt: now,
+    title: '',
+    type,
+    priority: 'medium',
+    ...(type === 'person'
+      ? { person: { radiusMeters: 100, cooldownMinutes: 30, expiration: '1w' } as PersonReminderConfig }
+      : {}),
+  }
 }
 
 // Builds a `Reminder`-shaped prefill for the Person form from an AI parse result.
@@ -45,9 +67,11 @@ function personDraftToReminder(result: ParsePersonReminderResult): Reminder {
   }
 }
 
-export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavigatePeople }: Props) {
+export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavigatePeople, initialType }: Props) {
   const { t, isRTL } = useLanguage()
-  const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(undefined)
+  const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(
+    initialType ? seedReminderForType(initialType) : undefined,
+  )
   const [formKey, setFormKey] = useState(0)
   const [friends, setFriends] = useState<FriendSummary[]>([])
 
@@ -78,7 +102,7 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
             aria-label={t('actions.back')}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)] hover:bg-[var(--bp-input)]"
           >
-            {isRTL ? '>' : '<'}
+            <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
           </button>
           <span className="text-sm font-bold text-[var(--bp-muted)]">{t('actions.back')}</span>
         </div>

@@ -2,28 +2,28 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import { DangerButton, OutlineButton, PrimaryButton } from '../components/layout/Buttons'
 import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
+import DeleteTaskModal from '../components/DeleteTaskModal'
 import SubtaskDetailModal from '../components/SubtaskDetailModal'
 import SubtaskFormModal from '../components/SubtaskFormModal'
 import RecurrenceSuggestionCard from '../components/RecurrenceSuggestionCard'
+import { TaskPriorityBadge, TaskStatusBadge } from '../components/TaskBadges'
 import {
   displaySubtaskTitle,
   formatDuration,
   getSubtaskIndicator,
   matchesSubtaskFilter,
   SUBTASK_INDICATOR_META,
-  SUBTASK_PRIORITY_CLASS,
-  SUBTASK_PRIORITY_LABEL,
-  SUBTASK_STATUS_CLASS,
-  SUBTASK_STATUS_LABEL,
   type SubtaskFilter,
 } from '../lib/subtaskDisplay'
 import { SubtaskVisibilityFilter } from '../features/collaboration/components/SubtaskVisibilityFilter'
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
+import { InlineStatusControl } from '../components/InlineStatusControl'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel'
 import { SharedBadge } from '../features/collaboration/components/SharedBadge'
+import { useTaskDeleteConfirmation } from '../features/tasks/taskDeleteConfirmation'
 import {
   changeTaskStatus,
   getAttachments,
@@ -51,7 +51,8 @@ type TaskDetailsScreenProps = SidebarNavHandlers & {
   onRefresh?: () => void
   onBack?: () => void
   onEdit?: () => void
-  onDelete?: () => void
+  onOpenAiCollaboration?: () => void
+  onDelete?: () => Promise<void> | void
   onMarkDone?: () => void
   onMakeRecurringSuggestion?: (suggestion: RecurrenceSuggestion) => void
   onDismissRecurrenceSuggestion?: (suggestion: RecurrenceSuggestion) => void
@@ -69,6 +70,7 @@ export default function TaskDetailsScreen({
   onTaskUpdated,
   onBack,
   onEdit,
+  onOpenAiCollaboration,
   onDelete,
   onMakeRecurringSuggestion,
   onDismissRecurrenceSuggestion,
@@ -81,6 +83,9 @@ export default function TaskDetailsScreen({
   const [status, setStatus] = useState<TaskStatus>(toTaskStatus(task))
   const [progress, setProgress] = useState(task?.progress ?? 0)
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
+  const [statusModalInitial, setStatusModalInitial] = useState<TaskStatus | undefined>(undefined)
+  const [statusSuccess, setStatusSuccess] = useState('')
+  const [statusChanging, setStatusChanging] = useState(false)
   const [dependencies, setDependencies] = useState<DependencyTask[]>(
     task ? toDependencyTasks(task.dependencies) : [],
   )
@@ -98,6 +103,14 @@ export default function TaskDetailsScreen({
     isOwner ? 'team' : 'mine',
   )
   const [subtaskMemberId, setSubtaskMemberId] = useState('')
+  const {
+    isOpen: isDeleteDialogOpen,
+    isDeleting: isDeletingTask,
+    error: deleteError,
+    openDeleteDialog,
+    closeDeleteDialog,
+    confirmDelete,
+  } = useTaskDeleteConfirmation(onDelete)
 
   // "By Member" options are just the assignees that actually have subtasks —
   // no extra fetch, and it always matches what's filterable.
@@ -250,6 +263,8 @@ export default function TaskDetailsScreen({
       completionDate?: string
       missedReason?: string
     }) => {
+      setStatusSuccess('')
+
       if (
         isBlocked &&
         (nextStatus.status === 'In Progress' || nextStatus.status === 'Done') &&
@@ -277,6 +292,7 @@ export default function TaskDetailsScreen({
         setStatus(nextStatus.status)
         setProgress(nextStatus.progress)
         setIsStatusModalOpen(false)
+        setStatusChanging(true)
 
         const payload = {
           status: toApiStatus(nextStatus.status),
@@ -292,15 +308,35 @@ export default function TaskDetailsScreen({
           const updatedTask = await changeTaskStatus(accessToken, task.id, payload)
           setStatus(toTaskStatus(updatedTask))
           setProgress(updatedTask.progress)
+          setStatusSuccess(`Status updated to ${nextStatus.status}.`)
           onTaskUpdated?.(updatedTask)
         } catch (saveError) {
           setStatus(previousStatus)
           setProgress(previousProgress)
           setError(saveError instanceof Error ? saveError.message : 'Unable to change task status.')
+        } finally {
+          setStatusChanging(false)
         }
       }
     },
     [isBlocked, status, subtaskItems, completedSubtasksCount, task, accessToken, progress, onTaskUpdated],
+  )
+
+  // Inline control: simple statuses apply immediately; Done/Missed open the
+  // modal so their metadata (completion date / missed reason) can be captured.
+  const openStatusMetadataModal = useCallback((next: TaskStatus) => {
+    setStatusSuccess('')
+    setStatusModalInitial(next)
+    setIsStatusModalOpen(true)
+  }, [])
+
+  const changeSimpleStatus = useCallback(
+    (next: TaskStatus) => {
+      // Keep the existing progress; a plain To Do / In Progress switch doesn't
+      // recompute it (the modal is still the place to fine-tune progress).
+      void saveStatus({ status: next, progress })
+    },
+    [saveStatus, progress],
   )
 
   return (
@@ -309,22 +345,18 @@ export default function TaskDetailsScreen({
         active="tasks"
         {...nav}
         onNavigateTasks={onBack}
-        panelTitle="Keep going!"
-        panelCaption="You're doing great today."
-        panelPercent={64}
       >
-        <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
-          <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">
-            Back
+        <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+          <button type="button" onClick={onBack} className="font-semibold hover:text-[var(--bp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]">
+            Tasks
           </button>
-          <span>Tasks</span>
           <span>/</span>
-          <span className="text-[var(--bp-text)]">Task Details</span>
-        </div>
+          <span aria-current="page" className="text-[var(--bp-text)]">Task details</span>
+        </nav>
 
         <PageHeader
-          title="Task Details"
-          subtitle="View your task at a glance"
+          title={t('taskUi.details.title')}
+          subtitle={t('taskUi.details.subtitle')}
           toolbar={
             <TopActionBar
               searchValue={search}
@@ -334,7 +366,8 @@ export default function TaskDetailsScreen({
               onToggleTheme={toggleTheme}
               languageLabel={t('common.languageToggle')}
               onToggleLanguage={toggleLanguage}
-              onProfileClick={onSignOut}
+              onOpenNotifications={nav.onNavigateNotifications}
+              onSignOut={onSignOut}
             />
           }
         />
@@ -343,8 +376,8 @@ export default function TaskDetailsScreen({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                <Badge color={statusColor(status)}>{status}</Badge>
-                <Badge color="red">{task ? toUiPriority(task.priority) : 'Medium'}</Badge>
+                <TaskStatusBadge status={status} />
+                <TaskPriorityBadge priority={task ? toUiPriority(task.priority) : 'Medium'} />
                 <Badge color="yellow">{task?.category || 'Uncategorized'}</Badge>
                 {task?.isShared || sharedMemberCount > 1 ? (
                   <SharedBadge memberCount={sharedMemberCount || undefined} />
@@ -359,11 +392,31 @@ export default function TaskDetailsScreen({
             {isViewer ? null : (
               <div className="flex shrink-0 flex-wrap gap-2">
                 <PrimaryButton size="sm" onClick={onEdit}>Edit Task</PrimaryButton>
-                <OutlineButton size="sm" onClick={() => setIsStatusModalOpen(true)}>Change Status</OutlineButton>
-                <DangerButton size="sm" onClick={onDelete}>Delete Task</DangerButton>
+                <OutlineButton
+                  size="sm"
+                  onClick={() => {
+                    setStatusModalInitial(undefined)
+                    setIsStatusModalOpen(true)
+                  }}
+                >
+                  Change status
+                </OutlineButton>
               </div>
             )}
           </div>
+
+          {isViewer ? null : (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <InlineStatusControl
+                status={status}
+                blocked={isBlocked}
+                busy={statusChanging}
+                onSimpleChange={changeSimpleStatus}
+                onNeedsMetadata={openStatusMetadataModal}
+              />
+              {statusSuccess ? <span className="text-xs font-semibold text-green-400">{statusSuccess}</span> : null}
+            </div>
+          )}
 
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <InfoBox title="Created" value={formatDate(task?.createdAt) || 'Not available'} />
@@ -376,7 +429,22 @@ export default function TaskDetailsScreen({
         </section>
 
         {task && accessToken && currentUserId ? (
-          <div className="mt-4">
+          <div className="mt-4 space-y-3">
+            {task.isShared || sharedMemberCount > 1 ? (
+              <button
+                type="button"
+                onClick={onOpenAiCollaboration}
+                className="flex w-full items-center justify-between rounded-2xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/10 px-4 py-3 text-start transition hover:bg-[var(--bp-accent)]/15"
+              >
+                <span>
+                  <span className="block text-sm font-black text-[var(--bp-text)]">AI Collaboration</span>
+                  <span className="block text-xs text-slate-400">
+                    See today's plan, progress, and fair-split suggestions for the team.
+                  </span>
+                </span>
+                <span className="text-[var(--bp-accent)]">&rarr;</span>
+              </button>
+            ) : null}
             <CollaborationPanel
               task={task}
               accessToken={accessToken}
@@ -408,7 +476,7 @@ export default function TaskDetailsScreen({
                 </p>
                 <span className="text-lg font-black text-[var(--bp-accent)]">{progress}%</span>
               </div>
-              <div className="h-2 rounded-full bg-[var(--bp-border)]">
+              <div role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2 rounded-full bg-[var(--bp-border)]">
                 <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
               </div>
             </SectionBlock>
@@ -526,7 +594,11 @@ export default function TaskDetailsScreen({
             <SectionBlock title="Details">
               <div className="divide-y divide-[var(--bp-border)]">
                 <MetaRow label="Status" value={status} color="blue" />
-                <MetaRow label="Priority" value={task ? toUiPriority(task.priority) : 'Medium'} color="red" />
+                <MetaRow
+                  label="Priority"
+                  value={task ? toUiPriority(task.priority) : 'Medium'}
+                  color={priorityMetaColor(task?.priority)}
+                />
                 <MetaRow label="Category" value={task?.category || 'Uncategorized'} color="yellow" />
                 <MetaRow
                   label="Due Date"
@@ -537,6 +609,7 @@ export default function TaskDetailsScreen({
             </SectionBlock>
           </aside>
         </div>
+        {!isViewer ? <section className="mt-6 border-t border-red-500/25 pt-4"><p className="mb-2 text-xs font-black uppercase tracking-wide text-red-400">Danger zone</p><DangerButton size="sm" onClick={openDeleteDialog}>Delete Task</DangerButton></section> : null}
 
         {error ? (
           <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
@@ -547,13 +620,17 @@ export default function TaskDetailsScreen({
       <TaskStatusWorkflowModal
         open={isStatusModalOpen}
         status={status}
+        initialStatus={statusModalInitial}
         progress={progress}
         hasSubtasks={subtaskItems.length > 0}
         subtasksComplete={subtaskItems.length === 0 || completedSubtasksCount === subtaskItems.length}
         subtaskProgress={subtaskItems.length ? Math.round((completedSubtasksCount / subtaskItems.length) * 100) : 0}
         completedSubtasksCount={completedSubtasksCount}
         totalSubtasksCount={subtaskItems.length}
-        onClose={() => setIsStatusModalOpen(false)}
+        onClose={() => {
+          setIsStatusModalOpen(false)
+          setStatusModalInitial(undefined)
+        }}
         onSave={(nextStatus) => void saveStatus(nextStatus)}
       />
       <AttachmentPreviewModal
@@ -594,6 +671,15 @@ export default function TaskDetailsScreen({
               setError(err instanceof Error ? err.message : 'Unable to update subtask.')
             }
           }}
+        />
+      ) : null}
+      {isDeleteDialogOpen ? (
+        <DeleteTaskModal
+          taskTitle={task?.title}
+          error={deleteError}
+          isDeleting={isDeletingTask}
+          onCancel={closeDeleteDialog}
+          onConfirm={() => void confirmDelete()}
         />
       ) : null}
     </>
@@ -782,14 +868,10 @@ const Subtask = memo(function Subtask({
         ) : null}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${SUBTASK_PRIORITY_CLASS[subtask.priority]}`}>
-            {SUBTASK_PRIORITY_LABEL[subtask.priority]}
-          </span>
-          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${SUBTASK_STATUS_CLASS[subtask.status]}`}>
-            {SUBTASK_STATUS_LABEL[subtask.status]}
-          </span>
+          <TaskPriorityBadge priority={subtask.priority} />
+          <TaskStatusBadge status={subtask.status} />
           {subtask.estimatedDurationSource === 'ai' && subtask.estimatedDurationMinutes ? (
-            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[var(--bp-accent)]">
+            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent)]">
               AI Estimate
             </span>
           ) : null}
@@ -799,7 +881,8 @@ const Subtask = memo(function Subtask({
       <button
         type="button"
         onClick={onOpen}
-        className="shrink-0 self-center rounded-lg border border-[var(--bp-border)] px-2.5 py-1 text-xs font-bold text-slate-400 opacity-0 transition group-hover:opacity-100 hover:text-[var(--bp-text)]"
+        aria-label={`Open subtask: ${subtask.title}`}
+        className="shrink-0 self-center rounded-lg border border-[var(--bp-border)] px-2.5 py-1 text-xs font-bold text-slate-400 transition hover:text-[var(--bp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
       >
         Open
       </button>
@@ -834,8 +917,8 @@ const Dependency = memo(function Dependency({ task }: { task: DependencyTask }) 
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
-        <Badge color={dependencyBadgeColor(task.status)}>{task.status}</Badge>
-        <span className="rounded-md bg-[var(--bp-surface)] px-2 py-1 text-xs font-bold text-slate-300">{task.priority}</span>
+        <TaskStatusBadge status={task.status} />
+        <TaskPriorityBadge priority={task.priority} />
       </div>
     </div>
   )
@@ -848,11 +931,10 @@ function dependencyDotColor(status: DependencyTask['status']) {
   return 'bg-slate-400'
 }
 
-function dependencyBadgeColor(status: DependencyTask['status']) {
-  if (status === 'Done') return 'green'
-  if (status === 'Missed' || status === 'Blocked') return 'red'
-  if (status === 'In Progress') return 'blue'
-  return 'purple'
+function priorityMetaColor(priority?: ApiTask['priority']) {
+  if (priority === 'low') return 'green'
+  if (priority === 'medium') return 'yellow'
+  return 'red'
 }
 
 const Attachment = memo(function Attachment({
@@ -917,25 +999,18 @@ function MetaRow({
   label: string
   value: string
   secondaryValue?: string
-  color?: 'red' | 'blue' | 'yellow'
+  color?: 'red' | 'blue' | 'yellow' | 'green'
 }) {
   const valueColor =
-    color === 'red' ? 'text-red-400' : color === 'blue' ? 'text-blue-400' : color === 'yellow' ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-text)]'
+    color === 'red' ? 'text-red-400' : color === 'blue' ? 'text-blue-400' : color === 'yellow' ? 'text-[var(--bp-accent)]' : color === 'green' ? 'text-[var(--bp-success)]' : 'text-[var(--bp-text)]'
 
   return (
     <div className="py-2.5 first:pt-0 last:pb-0">
-      <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</p>
       <p className={`mt-1 text-sm font-bold ${valueColor}`}>{value}</p>
       {secondaryValue ? <p className="mt-0.5 text-xs text-slate-500">{secondaryValue}</p> : null}
     </div>
   )
-}
-
-function statusColor(status: TaskStatus) {
-  if (status === 'Done') return 'green'
-  if (status === 'Missed') return 'red'
-  if (status === 'To Do') return 'purple'
-  return 'blue'
 }
 
 function toTaskStatus(task?: ApiTask | null): TaskStatus {

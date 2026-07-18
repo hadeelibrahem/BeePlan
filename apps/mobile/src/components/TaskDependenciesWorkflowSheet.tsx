@@ -11,6 +11,7 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
 import { useTheme } from '../theme/useTheme'
+import { TaskStatusBadge } from './TaskBadges'
 
 export type DependencyStatus = 'To Do' | 'In Progress' | 'Done' | 'Missed' | 'Blocked'
 export type DependencyPriority = 'Low' | 'Medium' | 'High'
@@ -188,7 +189,7 @@ export function TaskDependenciesWorkflowSheet({
                       {dependency.category}
                     </Text>
                   </View>
-                  <StatusBadge status={dependency.status} />
+                  <TaskStatusBadge status={dependency.status} />
                 </View>
                 <View className="mt-4 flex-row gap-3">
                   <InfoPill label="Due" value={dependency.dueDate} />
@@ -353,32 +354,11 @@ function DependencyOption({
       </View>
 
       <View className="mt-4 flex-row flex-wrap gap-2">
-        <StatusBadge status={task.status} />
+        <TaskStatusBadge status={task.status} />
         <MetaPill label={task.priority} />
         <MetaPill label={task.dueDate} />
       </View>
     </Pressable>
-  )
-}
-
-function StatusBadge({ status }: { status: DependencyStatus }) {
-  const { theme } = useTheme()
-  const { colors } = theme
-  const color =
-    status === 'Done'
-      ? colors.success
-      : status === 'Missed' || status === 'Blocked'
-        ? colors.error
-        : status === 'In Progress'
-          ? colors.primary
-          : colors.secondaryText
-
-  return (
-    <View className="rounded-full px-3 py-2" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-xs font-black" style={{ color }}>
-        {status}
-      </Text>
-    </View>
   )
 }
 

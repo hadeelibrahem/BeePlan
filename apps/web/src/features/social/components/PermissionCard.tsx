@@ -1,4 +1,5 @@
 import { useLanguage } from '../../../i18n/LanguageContext'
+import { formatDate } from '../../../lib/dateTime'
 import type { LocationSharingPermission } from '../types/social.types'
 import { FriendAvatar } from './FriendAvatar'
 import { PermissionStatusBadge } from './PermissionStatusBadge'
@@ -7,20 +8,13 @@ type Props = {
   permission: LocationSharingPermission
 }
 
-function formatDate(iso: string, locale: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
 /**
  * Read-only summary of a single permission for the "My Permissions" section:
  * friend, status, radius (outgoing only), and last activity.
  */
 export function PermissionCard({ permission }: Props) {
-  const { t, isRTL } = useLanguage()
+  const { t, language } = useLanguage()
   const name = permission.friend?.fullName ?? t('people.sharing.aFriend')
-  const locale = isRTL ? 'ar' : 'en'
 
   return (
     <div className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] p-3">
@@ -38,7 +32,7 @@ export function PermissionCard({ permission }: Props) {
           </span>
         )}
         <span>
-          {t('people.permissions.lastActivity')}: {formatDate(permission.lastActivityAt, locale)}
+          {t('people.permissions.lastActivity')}: {formatDate(permission.lastActivityAt, language)}
         </span>
       </div>
     </div>

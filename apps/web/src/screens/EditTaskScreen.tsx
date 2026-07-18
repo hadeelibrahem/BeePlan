@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import DeleteSubtaskModal from '../components/DeleteSubtaskModal'
+import DeleteTaskModal from '../components/DeleteTaskModal'
+import { ConfirmDestructiveModal } from '../components/ConfirmDestructiveModal'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import TaskAttachmentPicker from '../components/TaskAttachmentPicker'
 import AttachmentPreviewModal from '../components/AttachmentPreviewModal'
@@ -12,20 +14,20 @@ import {
 import { TaskDependenciesWorkflowModal, type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
-import { AiCollaborationPlannerModal } from '../features/collaboration/components/AiCollaborationPlannerModal'
 import { SharedBadge } from '../features/collaboration/components/SharedBadge'
 import { displaySubtaskTitle } from '../lib/subtaskDisplay'
+import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import { ManageMembersSection } from '../features/collaboration/components/ManageMembersSection'
 import { ReminderAudienceSection } from '../features/collaboration/components/ReminderAudienceSection'
 import { FocusAudienceSection } from '../features/collaboration/components/FocusAudienceSection'
 import { Toast } from '../features/collaboration/components/Toast'
+import { useTaskDeleteConfirmation } from '../features/tasks/taskDeleteConfirmation'
 import {
   addDependencies,
   addSubtask,
   deleteAttachment,
   deleteSubtask,
   getAttachments,
-  getTask,
   recurrenceToApi,
   recurrenceToUi,
   removeDependency,
@@ -52,7 +54,8 @@ type EditTaskScreenProps = SidebarNavHandlers & {
   onRefresh?: () => void
   onBack?: () => void
   onCancel?: () => void
-  onDelete?: () => void
+  onOpenAiCollaboration?: () => void
+  onDelete?: () => Promise<void> | void
   onSave?: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void
   onSaved?: (task: ApiTask) => void
   onTaskUpdated?: (task: ApiTask) => void
@@ -70,6 +73,7 @@ export default function EditTaskScreen({
   onRefresh,
   onBack,
   onCancel,
+  onOpenAiCollaboration,
   onDelete,
   onSave,
   onSaved,
@@ -101,6 +105,8 @@ export default function EditTaskScreen({
   const [subtasks, setSubtasks] = useState<ApiSubtask[]>(task.subtasks)
   const [dependencies, setDependencies] = useState<ApiDependency[]>(task.dependencies)
   const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([])
+  const [attachmentToDelete, setAttachmentToDelete] = useState<ApiTaskAttachment | null>(null)
+  const [isDeletingAttachment, setIsDeletingAttachment] = useState(false)
   const [previewAttachment, setPreviewAttachment] = useState<ApiTaskAttachment | null>(null)
   const [draftAttachments, setDraftAttachments] = useState<File[]>([])
   const [uploadingAttachments, setUploadingAttachments] = useState(false)
@@ -111,8 +117,55 @@ export default function EditTaskScreen({
   const [selectedDependency, setSelectedDependency] = useState<ApiDependency | null>(null)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(recurrenceToUi(task.recurrence))
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
-  const [isAiPlannerOpen, setIsAiPlannerOpen] = useState(false)
   const recurrenceSummary = createRecurrenceSummary(recurrence)
+
+  // Warn before leaving with unsaved edits (compared against the task as first
+  // loaded). Pending attachment uploads count as changes too.
+  const initialValues = useMemo(
+    () => ({
+      title: task.title,
+      description: task.description,
+      category: task.category || 'General',
+      status: toUiStatus(task.status),
+      priority: toUiPriority(task.priority),
+      dueDate: toDateInput(task.dueDate),
+      dueTime: task.dueTime,
+      notes: task.notes,
+      reminderEnabled: task.reminderEnabled,
+      reminderBeforeMinutes: task.reminderBeforeMinutes ?? 30,
+      focusEnabled: task.isFocusTask,
+      estimatedHours: String(task.estimatedHours),
+      spentHours: String(task.spentHours),
+      recurrenceSummary: createRecurrenceSummary(recurrenceToUi(task.recurrence)),
+    }),
+    [task],
+  )
+  const isDirty =
+    title !== initialValues.title ||
+    description !== initialValues.description ||
+    category !== initialValues.category ||
+    status !== initialValues.status ||
+    priority !== initialValues.priority ||
+    dueDate !== initialValues.dueDate ||
+    dueTime !== initialValues.dueTime ||
+    notes !== initialValues.notes ||
+    reminderEnabled !== initialValues.reminderEnabled ||
+    reminderBeforeMinutes !== initialValues.reminderBeforeMinutes ||
+    focusEnabled !== initialValues.focusEnabled ||
+    estimatedHours !== initialValues.estimatedHours ||
+    spentHours !== initialValues.spentHours ||
+    recurrenceSummary !== initialValues.recurrenceSummary ||
+    draftAttachments.length > 0
+  const { markSaved } = useUnsavedChangesGuard(isDirty)
+
+  const {
+    isOpen: isDeleteDialogOpen,
+    isDeleting: isDeletingTask,
+    error: deleteError,
+    openDeleteDialog,
+    closeDeleteDialog,
+    confirmDelete,
+  } = useTaskDeleteConfirmation(onDelete)
 
   useEffect(() => {
     if (!task) return
@@ -161,19 +214,6 @@ export default function EditTaskScreen({
     setProgress(updatedTask.progress)
     setError('')
     onTaskUpdated?.(updatedTask)
-  }
-
-  async function handleAiPlanApplied() {
-    if (!accessToken) return
-    try {
-      const updatedTask = await getTask(accessToken, task.id)
-      applyUpdatedTask(updatedTask)
-      setNotice('AI plan applied.')
-    } catch {
-      // The apply itself already succeeded server-side; a failed refetch just
-      // means the on-screen list is stale until the next manual refresh.
-    }
-    onRefresh?.()
   }
 
   async function handleAddSubtask(payload: SubtaskPayload) {
@@ -262,7 +302,8 @@ export default function EditTaskScreen({
   }
 
   async function handleDeleteAttachment(attachment: ApiTaskAttachment) {
-    if (!accessToken || !attachment.id) return
+    if (!accessToken || !attachment.id || isDeletingAttachment) return
+    setIsDeletingAttachment(true)
     const previous = attachments
     setAttachments((current) => current.filter((item) => item.id !== attachment.id))
 
@@ -271,6 +312,9 @@ export default function EditTaskScreen({
     } catch (deleteError) {
       setAttachments(previous)
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete attachment.')
+    } finally {
+      setIsDeletingAttachment(false)
+      setAttachmentToDelete(null)
     }
   }
 
@@ -327,6 +371,7 @@ export default function EditTaskScreen({
         setDraftAttachments([])
       }
 
+      markSaved()
       onSaved?.(updatedTask)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save task changes.')
@@ -381,8 +426,8 @@ export default function EditTaskScreen({
           </div>
 
           <PageHeader
-            title="Edit Task"
-            subtitle="Update task details, timing, progress, and supporting files."
+            title={t('taskUi.edit.title')}
+            subtitle={t('taskUi.edit.subtitle')}
             toolbar={
               <TopActionBar
                 searchValue={search}
@@ -392,7 +437,8 @@ export default function EditTaskScreen({
                 onToggleTheme={toggleTheme}
                 languageLabel={t('common.languageToggle')}
                 onToggleLanguage={toggleLanguage}
-                onProfileClick={onSignOut}
+                onOpenNotifications={nav.onNavigateNotifications}
+                onSignOut={onSignOut}
               />
             }
           />
@@ -400,11 +446,12 @@ export default function EditTaskScreen({
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
             <section className="space-y-3">
               <Card title="Task Information" code="INFO">
-                <FieldLabel label="Task Title" required />
-                <input className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} />
+                <FieldLabel label="Task Title" required htmlFor="edit-task-title" />
+                <input id="edit-task-title" required aria-required="true" aria-invalid={Boolean(error && !title.trim())} aria-describedby={error ? 'edit-task-error' : undefined} className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} />
 
-                <FieldLabel label="Description" />
+                <FieldLabel label="Description" htmlFor="edit-task-description" />
                 <textarea
+                  id="edit-task-description"
                   className={`${inputClass} min-h-28 resize-none`}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
@@ -412,8 +459,9 @@ export default function EditTaskScreen({
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <FieldLabel label="Category" />
+                    <FieldLabel label="Category" htmlFor="edit-task-category" />
                     <input
+                      id="edit-task-category"
                       className={inputClass}
                       value={category}
                       onChange={(event) => setCategory(event.target.value)}
@@ -421,8 +469,8 @@ export default function EditTaskScreen({
                     />
                   </div>
                   <div>
-                    <FieldLabel label="Status" />
-                    <select className={inputClass} value={status} onChange={(event) => setStatus(event.target.value)}>
+                    <FieldLabel label="Status" htmlFor="edit-task-status" />
+                    <select id="edit-task-status" className={inputClass} value={status} onChange={(event) => setStatus(event.target.value)}>
                       <option>To Do</option>
                       <option>In Progress</option>
                       <option>Done</option>
@@ -512,7 +560,7 @@ export default function EditTaskScreen({
                       </button>
                       <button
                         type="button"
-                        onClick={() => void handleDeleteAttachment(file)}
+                        onClick={() => setAttachmentToDelete(file)}
                         className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-300"
                       >
                         Delete
@@ -538,16 +586,17 @@ export default function EditTaskScreen({
               ) : null}
 
               {accessToken && currentUserId && task.viewerRole === 'owner' ? (
-                <Card title="AI Collaboration Planner" code="AI">
+                <Card title="AI Collaboration" code="AI">
                   <p className="mb-3 text-sm text-slate-400">
-                    Let AI propose how to split this task across your team, then review and apply what you approve.
+                    Open the AI Collaboration screen to split work fairly, track today's plan, and review
+                    suggestions with your team.
                   </p>
                   <button
                     type="button"
-                    onClick={() => setIsAiPlannerOpen(true)}
+                    onClick={onOpenAiCollaboration}
                     className="w-full rounded-lg bg-[var(--bp-accent)] px-4 py-2 text-sm font-black text-black"
                   >
-                    Open AI Planner
+                    Open AI Collaboration
                   </button>
                 </Card>
               ) : null}
@@ -564,12 +613,12 @@ export default function EditTaskScreen({
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
                   <div>
-                    <FieldLabel label="Due Date" />
-                    <input type="date" className={inputClass} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                    <FieldLabel label="Due Date" htmlFor="edit-task-due-date" />
+                    <input id="edit-task-due-date" type="date" className={inputClass} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
                   </div>
                   <div>
-                    <FieldLabel label="Due Time" />
-                    <input type="time" className={inputClass} value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
+                    <FieldLabel label="Due Time" htmlFor="edit-task-due-time" />
+                    <input id="edit-task-due-time" type="time" className={inputClass} value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
                   </div>
                 </div>
               </Card>
@@ -581,7 +630,7 @@ export default function EditTaskScreen({
                   </span>
                   <span className="text-lg font-black text-[var(--bp-accent)]">{progress}%</span>
                 </div>
-                <div className="h-2 rounded-full bg-[var(--bp-border)]">
+                <div role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2 rounded-full bg-[var(--bp-border)]">
                   <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
                 </div>
               </Card>
@@ -698,10 +747,7 @@ export default function EditTaskScreen({
             </aside>
           </div>
 
-          <footer className="mt-6 flex flex-col gap-2 border-t border-[var(--bp-border)] pt-4 md:flex-row md:items-center md:justify-between">
-            <button onClick={onDelete} className="rounded-lg border border-red-500/50 px-5 py-2.5 text-sm font-bold text-red-400">
-              Delete Task
-            </button>
+          <footer className="mt-6 flex flex-col gap-4 border-t border-[var(--bp-border)] pt-4">
             <div className="flex flex-col gap-2 sm:flex-row">
               <button onClick={onCancel} className="rounded-lg bg-[var(--bp-border)] px-6 py-2.5 text-sm font-bold text-[var(--bp-text)]">
                 Cancel Changes
@@ -714,8 +760,9 @@ export default function EditTaskScreen({
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
+            <div className="border-t border-red-500/25 pt-4"><p className="mb-2 text-xs font-black uppercase tracking-wide text-red-400">Danger zone</p><button onClick={openDeleteDialog} className="rounded-lg border border-red-500/50 px-5 py-2.5 text-sm font-bold text-red-400">Delete Task</button></div>
           </footer>
-          {error ? <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300">{error}</p> : null}
+          {error ? <p id="edit-task-error" role="alert" aria-live="assertive" className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300">{error}</p> : null}
       </AppLayout>
 
       <Toast message={notice} tone="success" onDone={() => setNotice('')} />
@@ -752,6 +799,16 @@ export default function EditTaskScreen({
           onConfirm={() => void handleConfirmDelete()}
         />
       ) : null}
+      {isDeleteDialogOpen ? (
+        <DeleteTaskModal
+          taskTitle={task.title}
+          error={deleteError}
+          isDeleting={isDeletingTask}
+          onCancel={closeDeleteDialog}
+          onConfirm={() => void confirmDelete()}
+        />
+      ) : null}
+      <ConfirmDestructiveModal open={attachmentToDelete !== null} title="Delete attachment?" message={`"${attachmentToDelete?.fileName ?? attachmentToDelete?.name ?? 'This file'}" cannot be recovered after deletion.`} confirmLabel="Delete attachment" isConfirming={isDeletingAttachment} onCancel={() => !isDeletingAttachment && setAttachmentToDelete(null)} onConfirm={() => attachmentToDelete && void handleDeleteAttachment(attachmentToDelete)} />
 
       <TaskDependenciesWorkflowModal
         open={dependencyModalMode !== null}
@@ -768,15 +825,6 @@ export default function EditTaskScreen({
         onSaveReplacement={(oldId, replacement) => void handleReplaceDependency(oldId, replacement)}
         onRemove={(dependencyId) => void handleRemoveDependency(dependencyId)}
       />
-
-      {isAiPlannerOpen && accessToken ? (
-        <AiCollaborationPlannerModal
-          task={task}
-          accessToken={accessToken}
-          onClose={() => setIsAiPlannerOpen(false)}
-          onApplied={() => void handleAiPlanApplied()}
-        />
-      ) : null}
 
       <TaskRecurrenceModal
         open={isRecurrenceModalOpen}
@@ -834,9 +882,9 @@ function Card({
   )
 }
 
-function FieldLabel({ label, required }: { label: string; required?: boolean }) {
+function FieldLabel({ label, required, htmlFor }: { label: string; required?: boolean; htmlFor?: string }) {
   return (
-    <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
+    <label htmlFor={htmlFor} className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
       {label} {required ? <span className="text-red-400">*</span> : null}
     </label>
   )

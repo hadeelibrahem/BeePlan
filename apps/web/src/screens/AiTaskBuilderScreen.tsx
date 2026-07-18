@@ -4,6 +4,7 @@ import { createReminder } from '../features/reminders/api/reminders.api'
 import type { Reminder, ReminderFormValues } from '../features/reminders/types/reminders.types'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
+import { ConfirmDestructiveModal } from '../components/ConfirmDestructiveModal'
 import {
   sendTaskPlanChat,
   type ConversationState,
@@ -62,6 +63,8 @@ export default function AiTaskBuilderScreen({
   const [error, setError] = useState('')
   const [plan, setPlan] = useState<TaskPlan | null>(null)
   const [editing, setEditing] = useState(false)
+  const [isDraftDirty, setIsDraftDirty] = useState(false)
+  const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const nextIdRef = useRef(1)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
@@ -106,6 +109,7 @@ export default function AiTaskBuilderScreen({
       if (response.type === 'plan' && response.plan) {
         setPlan(response.plan)
         setEditing(false)
+        setIsDraftDirty(false)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI planning failed. Please try again.')
@@ -115,7 +119,16 @@ export default function AiTaskBuilderScreen({
   }
 
   function regenerate() {
+    if (isDraftDirty) {
+      setIsRegenerateConfirmOpen(true)
+      return
+    }
     void send('Please regenerate the plan with a different structure or schedule, keeping the same goal and deadline.')
+  }
+
+  function applyPlanChange(nextPlan: TaskPlan) {
+    setPlan(nextPlan)
+    setIsDraftDirty(true)
   }
 
   async function savePlan() {
@@ -216,7 +229,8 @@ export default function AiTaskBuilderScreen({
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />
@@ -353,7 +367,7 @@ export default function AiTaskBuilderScreen({
               plan={plan}
               editing={editing}
               totalMinutes={totalMinutes}
-              onChange={setPlan}
+              onChange={applyPlanChange}
             />
           ) : (
             <div className="rounded-2xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-surface)]/30 p-8 text-center">
@@ -408,6 +422,7 @@ export default function AiTaskBuilderScreen({
           ) : null}
         </section>
       </div>
+      <ConfirmDestructiveModal open={isRegenerateConfirmOpen} title="Regenerate plan?" message="Your manual changes will be discarded and replaced with a new AI plan." confirmLabel="Regenerate plan" isConfirming={loading} onCancel={() => !loading && setIsRegenerateConfirmOpen(false)} onConfirm={() => { setIsRegenerateConfirmOpen(false); void send('Please regenerate the plan with a different structure or schedule, keeping the same goal and deadline.') }} />
     </AppLayout>
   )
 }

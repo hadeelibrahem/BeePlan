@@ -13,6 +13,7 @@ import {
 import SubtaskFormModal from '../components/SubtaskFormModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
+import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import {
   recurrenceToApi,
   uploadAttachment,
@@ -28,6 +29,7 @@ import {
 type CreateTaskScreenProps = SidebarNavHandlers & {
   tasks?: ApiTask[]
   accessToken?: string
+  initialDueDate?: string
   onCancel?: () => void
   onSave?: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void
   onCreated?: (task: ApiTask) => void
@@ -37,6 +39,7 @@ type CreateTaskScreenProps = SidebarNavHandlers & {
 export default function CreateTaskScreen({
   tasks = [],
   accessToken,
+  initialDueDate,
   onCancel,
   onSave,
   onCreated,
@@ -52,8 +55,9 @@ export default function CreateTaskScreen({
   const [priority, setPriority] = useState('Medium')
   const [status, setStatus] = useState('To Do')
   const [category, setCategory] = useState('')
-  const [dueDate, setDueDate] = useState('')
+  const [dueDate, setDueDate] = useState(initialDueDate ?? '')
   const [dueTime, setDueTime] = useState('')
+  const [reminderEnabled, setReminderEnabled] = useState(true)
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30)
   const [subtasks, setSubtasks] = useState<(SubtaskPayload & { title: string })[]>([])
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false)
@@ -67,6 +71,27 @@ export default function CreateTaskScreen({
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
   const recurrenceSummary = createRecurrenceSummary(recurrence)
   const availableDependencies = tasks.map(toDependencyTask)
+
+  // Warn before leaving (cancel / back / sidebar nav / tab close) once the user
+  // has entered anything. `markSaved()` suppresses the warning for the
+  // navigation that follows a successful create.
+  const isDirty = Boolean(
+    title.trim() ||
+      description.trim() ||
+      notes.trim() ||
+      category.trim() ||
+      dueDate ||
+      dueTime ||
+      subtasks.length ||
+      dependencies.length ||
+      attachments.length ||
+      recurrence ||
+      priority !== 'Medium' ||
+      status !== 'To Do' ||
+      !reminderEnabled ||
+      reminderBeforeMinutes !== 30,
+  )
+  const { markSaved } = useUnsavedChangesGuard(isDirty)
 
   async function handleSave() {
     if (!title.trim()) {
@@ -87,8 +112,8 @@ export default function CreateTaskScreen({
         category,
         dueDate: dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : undefined,
         dueTime,
-        reminderEnabled: true,
-        reminderBeforeMinutes,
+        reminderEnabled,
+        reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         recurrence: recurrenceToApi(recurrence),
         subtasks,
       })
@@ -102,6 +127,7 @@ export default function CreateTaskScreen({
         }
       }
 
+      markSaved()
       onCreated?.(createdTask)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save task.')
@@ -127,12 +153,12 @@ export default function CreateTaskScreen({
             </button>
             <span>Tasks</span>
             <span>/</span>
-            <span className="text-[var(--bp-text)]">Create New Task</span>
+            <span className="text-[var(--bp-text)]">Create new task</span>
           </div>
 
           <PageHeader
-            title="Create New Task"
-            subtitle="Organize your work and stay productive."
+            title={t('taskUi.create.title')}
+            subtitle={t('taskUi.create.subtitle')}
             toolbar={
               <TopActionBar
                 searchValue={search}
@@ -142,7 +168,8 @@ export default function CreateTaskScreen({
                 onToggleTheme={toggleTheme}
                 languageLabel={t('common.languageToggle')}
                 onToggleLanguage={toggleLanguage}
-                onProfileClick={onSignOut}
+                onOpenNotifications={nav.onNavigateNotifications}
+                onSignOut={onSignOut}
               />
             }
           />
@@ -151,16 +178,22 @@ export default function CreateTaskScreen({
             <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 shadow-2xl">
               <SectionTitle icon="INFO" title="Task Information" />
 
-              <FieldLabel label="Task Title" required />
+              <FieldLabel label="Task Title" required htmlFor="create-task-title" />
               <input
+                id="create-task-title"
+                required
+                aria-required="true"
+                aria-invalid={Boolean(error && !title.trim())}
+                aria-describedby={error && !title.trim() ? 'create-task-error' : undefined}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 className="mb-4 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                 placeholder="Enter task title..."
               />
 
-              <FieldLabel label="Description" />
+              <FieldLabel label="Description" htmlFor="create-task-description" />
               <textarea
+                id="create-task-description"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 className="mb-1.5 min-h-28 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
@@ -197,8 +230,9 @@ export default function CreateTaskScreen({
               </div>
 
               <div className="mb-4 border-t border-[var(--bp-border)] pt-4">
-                <FieldLabel label="Notes" />
+                <FieldLabel label="Notes" htmlFor="create-task-notes" />
               <textarea
+                  id="create-task-notes"
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                   className="min-h-20 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
@@ -235,8 +269,8 @@ export default function CreateTaskScreen({
                   ))}
                 </div>
 
-                <FieldLabel label="Category" />
-                <select value={category} onChange={(event) => setCategory(event.target.value)} className="mb-4 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
+                <FieldLabel label="Category" htmlFor="create-task-category" />
+                <select id="create-task-category" value={category} onChange={(event) => setCategory(event.target.value)} className="mb-4 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
                   <option>Select category...</option>
                   <option>Work</option>
                   <option>Personal</option>
@@ -246,8 +280,9 @@ export default function CreateTaskScreen({
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <FieldLabel label="Due Date" />
+                    <FieldLabel label="Due Date" htmlFor="create-task-due-date" />
                     <input
+                      id="create-task-due-date"
                       type="date"
                       value={dueDate}
                       onChange={(event) => setDueDate(event.target.value)}
@@ -255,8 +290,9 @@ export default function CreateTaskScreen({
                     />
                   </div>
                   <div>
-                    <FieldLabel label="Due Time" />
+                    <FieldLabel label="Due Time" htmlFor="create-task-due-time" />
                     <input
+                      id="create-task-due-time"
                       type="time"
                       value={dueTime}
                       onChange={(event) => setDueTime(event.target.value)}
@@ -311,16 +347,34 @@ export default function CreateTaskScreen({
               <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <FieldLabel label="Reminder" />
+                    <label htmlFor="create-task-reminder-toggle" className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
+                      Reminder
+                    </label>
                     <p className="text-sm text-slate-400">BeePlan will remind you before the due date.</p>
                   </div>
-                  <div className="flex h-6 w-11 items-center justify-end rounded-full bg-[var(--bp-accent)] p-1">
-                    <div className="h-4 w-4 rounded-full bg-white" />
-                  </div>
+                  <button
+                    id="create-task-reminder-toggle"
+                    type="button"
+                    role="switch"
+                    aria-checked={reminderEnabled}
+                    onClick={() => setReminderEnabled((current) => !current)}
+                    className={`flex h-6 w-11 shrink-0 items-center rounded-full p-1 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-surface)] ${
+                      reminderEnabled ? 'justify-end bg-[var(--bp-accent)]' : 'justify-start bg-[var(--bp-border)]'
+                    }`}
+                  >
+                    <span className="h-4 w-4 rounded-full bg-white transition-transform" />
+                  </button>
                 </div>
 
-                <FieldLabel label="Reminder Time" />
-                <select value={reminderBeforeMinutes} onChange={(event) => setReminderBeforeMinutes(Number(event.target.value))} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
+                <FieldLabel label="Reminder Time" htmlFor="create-task-reminder-time" />
+                <select
+                  id="create-task-reminder-time"
+                  aria-label="Reminder Time"
+                  value={reminderBeforeMinutes}
+                  disabled={!reminderEnabled}
+                  onChange={(event) => setReminderBeforeMinutes(Number(event.target.value))}
+                  className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   <option value={30}>30 minutes before</option>
                   <option value={10}>10 minutes before</option>
                   <option value={60}>1 hour before</option>
@@ -338,7 +392,7 @@ export default function CreateTaskScreen({
           </div>
 
           <div className="mt-6 flex justify-end gap-3 border-t border-[var(--bp-border)] pt-4">
-            {error ? <p className="me-auto self-center text-sm font-semibold text-red-300">{error}</p> : null}
+          {error ? <p id="create-task-error" role="alert" aria-live="assertive" className="me-auto self-center text-sm font-semibold text-red-300">{error}</p> : null}
             <button
               type="button"
               onClick={onCancel}
@@ -408,9 +462,9 @@ function SectionTitle({ icon, title }: { icon: string; title: string }) {
   )
 }
 
-function FieldLabel({ label, required }: { label: string; required?: boolean }) {
+function FieldLabel({ label, required, htmlFor }: { label: string; required?: boolean; htmlFor?: string }) {
   return (
-    <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
+    <label htmlFor={htmlFor} className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
       {label} {required ? <span className="text-red-400">*</span> : null}
     </label>
   )

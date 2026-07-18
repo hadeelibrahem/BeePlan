@@ -1,0 +1,16 @@
+<resources>
+  <!--
+    Full-screen theme for the block activity. Compose renders the actual UI and
+    owns colour/dark-mode, so this only needs to strip the action bar and let
+    content draw edge-to-edge behind translucent system bars.
+  -->
+  <style name="Theme.BeePlanFocusBlocker.Block" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:windowActionBar">false</item>
+    <item name="android:windowFullscreen">false</item>
+    <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+    <item name="android:windowBackground">@android:color/black</item>
+  </style>
+</resources>
