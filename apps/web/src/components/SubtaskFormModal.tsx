@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { DirectionalChevron } from './layout'
 import { useLanguage } from '../i18n/LanguageContext'
 import type { ApiSubtask, ApiSubtaskPriority, ApiSubtaskStatus, SubtaskPayload } from '../lib/tasksApi'
 import { SUBTASK_PRIORITY_LABEL, SUBTASK_STATUS_LABEL } from '../lib/subtaskDisplay'
@@ -145,7 +146,7 @@ export default function SubtaskFormModal({
               onClick={onBack ?? onCancel}
               className="mb-4 flex items-center gap-2 text-sm text-slate-400 hover:text-[var(--bp-text)]"
             >
-              <span aria-hidden>{isRTL ? '→' : '←'}</span>
+              <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
               Back
             </button>
             <h2 className="text-2xl font-black">{isEdit ? 'Edit Subtask' : 'Add Subtask'}</h2>

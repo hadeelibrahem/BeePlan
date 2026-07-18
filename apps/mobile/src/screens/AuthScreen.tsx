@@ -66,7 +66,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
             ? 'Account created successfully.'
             : 'Account created successfully. Please check your email to confirm it.',
         );
-        if (hasSession) setTimeout(() => onSuccess?.(email), 700);
+        if (hasSession) onSuccess?.(email);
       } else {
         await signIn(email, password);
         onSuccess?.(email);
@@ -217,9 +217,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                 </View>
                 {errors.password && <Text className="ml-1 mt-1 text-xs" style={{ color: colors.error }}>{errors.password}</Text>}
                 {isSignUp && password && (
-                  <Text className="ml-1 mt-1 text-xs" style={{ color: colors.secondaryText }}>
-                    Password strength: <Text className="font-bold" style={{ color: colors.text }}>{passwordStrength}</Text>
-                  </Text>
+                  <PasswordStrengthMeter strength={passwordStrength} />
                 )}
               </View>
 
@@ -299,6 +297,20 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
         </View>
       </ScrollView>
     </AppScreen>
+  );
+}
+
+function PasswordStrengthMeter({ strength }: { strength: 'Weak' | 'Medium' | 'Strong' }) {
+  const { theme } = useTheme();
+  const filled = strength === 'Strong' ? 3 : strength === 'Medium' ? 2 : 1;
+  const color = strength === 'Strong' ? theme.colors.success : strength === 'Medium' ? theme.colors.warning : theme.colors.error;
+  return (
+    <View className="ml-1 mt-2" accessibilityLiveRegion="polite">
+      <View accessibilityRole="progressbar" accessibilityLabel={`Password strength: ${strength}`} accessibilityValue={{ min: 0, max: 3, now: filled }} className="flex-row gap-1">
+        {[1, 2, 3].map((segment) => <View key={segment} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: segment <= filled ? color : theme.colors.border }} />)}
+      </View>
+      <Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>Password strength: <Text className="font-bold" style={{ color: theme.colors.text }}>{strength}</Text></Text>
+    </View>
   );
 }
 

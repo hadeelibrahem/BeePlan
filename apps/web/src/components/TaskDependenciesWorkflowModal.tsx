@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
+import { TaskStatusBadge } from './TaskBadges'
 
 export type DependencyStatus = 'To Do' | 'In Progress' | 'Done' | 'Missed' | 'Blocked'
 export type DependencyPriority = 'Low' | 'Medium' | 'High'
@@ -148,7 +149,7 @@ export function TaskDependenciesWorkflowModal({
                   <h3 className="font-black text-[var(--bp-text)]">{dependency.title}</h3>
                   <p className="mt-1 text-sm text-[var(--bp-muted)]">{dependency.category}</p>
                 </div>
-                <StatusBadge status={dependency.status} />
+                <TaskStatusBadge status={dependency.status} />
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <InfoPill label="Due Date" value={dependency.dueDate} />
@@ -287,7 +288,7 @@ function DependencyOption({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-        <StatusBadge status={task.status} />
+        <TaskStatusBadge status={task.status} />
         <span className="rounded-full bg-[var(--bp-border)] px-3 py-2 text-xs font-black text-[var(--bp-text)]">
           {task.priority}
         </span>
@@ -297,19 +298,6 @@ function DependencyOption({
       </div>
     </button>
   )
-}
-
-function StatusBadge({ status }: { status: DependencyStatus }) {
-  const color =
-    status === 'Done'
-      ? 'bg-green-500/20 text-green-300'
-      : status === 'Missed' || status === 'Blocked'
-        ? 'bg-red-500/20 text-red-300'
-        : status === 'In Progress'
-          ? 'bg-blue-500/20 text-blue-300'
-          : 'bg-slate-500/20 text-slate-300'
-
-  return <span className={`rounded-full px-3 py-2 text-xs font-black ${color}`}>{status}</span>
 }
 
 function InfoPill({ label, value }: { label: string; value: string }) {

@@ -1,0 +1,73 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <!-- Read the current foreground app (system-managed special permission). -->
+  <uses-permission
+    android:name="android.permission.PACKAGE_USAGE_STATS"
+    tools:ignore="ProtectedPermissions" />
+
+  <!-- Long-running monitoring while a session is active. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+  <!-- Ongoing notification for the running session. -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <!--
+    Reliable block-screen launch. On Android 14+ USE_FULL_SCREEN_INTENT is
+    granted by default only to calling/alarm apps, so a productivity app cannot
+    rely on it. SYSTEM_ALERT_WINDOW ("Display over other apps") is the compliant
+    mechanism that both real focus apps use and that grants background activity
+    launch. FSI is kept only as a best-effort fallback for older devices.
+  -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+  <!-- Restore an in-flight session after a reboot. -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+  <!-- Enumerate launchable apps for the block-list picker (Android 11+ visibility). -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
+  </queries>
+
+  <application>
+    <!-- Foreground monitoring service. specialUse is justified below. -->
+    <service
+      android:name="com.beeplan.focusblocker.service.FocusBlockerService"
+      android:enabled="true"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Enforces a user-initiated focus session by interrupting
+          self-selected distracting apps until the timer completes." />
+    </service>
+
+    <!-- Full-screen block screen. singleTask + no history prevents stacking. -->
+    <activity
+      android:name="com.beeplan.focusblocker.ui.BlockActivity"
+      android:enabled="true"
+      android:exported="false"
+      android:launchMode="singleTask"
+      android:excludeFromRecents="true"
+      android:noHistory="true"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:theme="@style/Theme.BeePlanFocusBlocker.Block" />
+
+    <!-- Restore an active session on device boot. -->
+    <receiver
+      android:name="com.beeplan.focusblocker.service.BootReceiver"
+      android:enabled="true"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

@@ -506,7 +506,14 @@ export class TaskMembersService {
     return user;
   }
 
-  private async loadProfiles(userIds: string[]) {
+  private async loadProfiles(
+    userIds: string[],
+  ): Promise<
+    Map<
+      string,
+      { id: string; fullName: string; email: string; avatarUrl?: string }
+    >
+  > {
     if (!userIds.length) return new Map();
     const rows = await this.db
       .select({

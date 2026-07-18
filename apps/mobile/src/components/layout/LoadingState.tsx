@@ -1,11 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { Animated, View } from 'react-native'
+import { useReducedMotion } from 'react-native-reanimated'
 import { useTheme } from '../../theme/useTheme'
 
 function SkeletonBlock({ className = '', color }: { className?: string; color: string }) {
   const opacity = useRef(new Animated.Value(0.4)).current
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
+    if (reduceMotion) {
+      opacity.setValue(1)
+      return
+    }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
@@ -14,7 +20,7 @@ function SkeletonBlock({ className = '', color }: { className?: string; color: s
     )
     loop.start()
     return () => loop.stop()
-  }, [opacity])
+  }, [opacity, reduceMotion])
 
   return <Animated.View style={{ opacity, backgroundColor: color }} className={`rounded-2xl ${className}`} />
 }

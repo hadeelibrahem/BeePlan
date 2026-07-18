@@ -189,6 +189,8 @@ export type ApiTask = {
   dependencies: ApiDependency[]
   recurrence: ApiRecurrence | null
   activities: ApiTaskActivity[]
+  // Set by the API on done/non-done transitions. Used for time-based analytics.
+  completedAt?: string
   createdAt: string
   updatedAt: string
   // Collaboration context (present on GET /tasks/:id). Optional so personal

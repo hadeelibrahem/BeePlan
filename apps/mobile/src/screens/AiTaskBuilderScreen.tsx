@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import {
   FlatList,
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -16,6 +17,7 @@ import Animated, {
   FadeIn,
   FadeInUp,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -73,6 +75,7 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
   const { theme } = useTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 0, role: 'assistant', content: GREETING, quickReplies: GREETING_QUICK_REPLIES },
   ]);
@@ -83,6 +86,7 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
   const [retryConversation, setRetryConversation] = useState<ChatMessage[] | null>(null);
   const [plan, setPlan] = useState<TaskPlan | null>(null);
   const [planVersion, setPlanVersion] = useState(0);
+  const [isDraftDirty, setIsDraftDirty] = useState(false);
   const nextIdRef = useRef(1);
   const sendingRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -132,6 +136,7 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
       if (response.type === 'plan' && response.plan) {
         setPlan(response.plan);
         setPlanVersion((value) => value + 1);
+        setIsDraftDirty(false);
       }
 
       setRetryConversation(null);
@@ -169,9 +174,21 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
   }
 
   function regenerate() {
+    if (isDraftDirty) {
+      Alert.alert('Regenerate plan?', 'Your manual changes will be discarded and replaced with a new AI plan.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Regenerate', style: 'destructive', onPress: () => void send('Please regenerate the plan with a different structure or schedule, keeping the same goal and deadline.') },
+      ]);
+      return;
+    }
     void send(
       'Please regenerate the plan with a different structure or schedule, keeping the same goal and deadline.',
     );
+  }
+
+  function applyPlanChange(nextPlan: TaskPlan) {
+    setPlan(nextPlan);
+    setIsDraftDirty(true);
   }
 
   async function handleSave() {
@@ -280,7 +297,7 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
 
                 {error ? (
                   <Animated.View
-                    entering={FadeIn.duration(180)}
+                    entering={reduceMotion ? undefined : FadeIn.duration(180)}
                     className="mb-3 rounded-2xl border px-4 py-3"
                     style={{ borderColor: colors.error, backgroundColor: `${colors.error}14` }}
                   >
@@ -312,7 +329,7 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
                     key={planVersion}
                     plan={plan}
                     totalMinutes={totalMinutes}
-                    onChange={setPlan}
+                    onChange={applyPlanChange}
                     onSave={() => void handleSave()}
                     onRegenerate={regenerate}
                     onCancel={onCancel}
@@ -366,12 +383,13 @@ function ChatBubble({
 }) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useReducedMotion();
   const isUser = message.role === 'user';
   const isAdvice = !isUser && message.kind === 'advice';
   const showQuickReplies = !isUser && isLast && !loading && (message.quickReplies?.length ?? 0) > 0;
 
   return (
-    <Animated.View entering={FadeInUp.duration(220)} className="mb-3">
+    <Animated.View entering={reduceMotion ? undefined : FadeInUp.duration(220)} className="mb-3">
       <View className={`flex-row ${isUser ? 'justify-end' : 'justify-start'}`}>
         <View
           className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${isUser ? 'rounded-br-md' : 'rounded-bl-md border'}`}
@@ -419,9 +437,10 @@ function ChatBubble({
 function TypingIndicator() {
   const { theme } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useReducedMotion();
 
   return (
-    <Animated.View entering={FadeIn.duration(150)} className="mb-3 flex-row justify-start">
+    <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(150)} className="mb-3 flex-row justify-start">
       <View
         className="flex-row items-center gap-1.5 rounded-2xl rounded-bl-md border px-4 py-3"
         style={{ borderColor: colors.border, backgroundColor: colors.card }}
@@ -436,13 +455,18 @@ function TypingIndicator() {
 
 function TypingDot({ delay, color }: { delay: number; color: string }) {
   const translateY = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      translateY.value = 0;
+      return;
+    }
     translateY.value = withDelay(
       delay,
       withRepeat(withSequence(withTiming(-4, { duration: 300 }), withTiming(0, { duration: 300 })), -1, true),
     );
-  }, [delay, translateY]);
+  }, [delay, reduceMotion, translateY]);
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
 
@@ -464,9 +488,10 @@ function ReviewSummaryCard({
 }) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useReducedMotion();
 
   return (
-    <Animated.View entering={FadeIn.duration(200)}>
+    <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(200)}>
       <SectionCard className="mb-3" style={{ borderColor: `${colors.accent}4D`, backgroundColor: `${colors.accent}0D` }}>
         <Text className="mb-2 text-xs font-black uppercase tracking-wide" style={{ color: colors.accent }}>
           What I Understood
@@ -548,10 +573,11 @@ function SummaryBullets({ label, items }: { label: string; items: string[] }) {
 function ExpandablePlanBody({ expanded, children }: { expanded: boolean; children: ReactNode }) {
   const [measuredHeight, setMeasuredHeight] = useState(0);
   const progress = useSharedValue(expanded ? 1 : 0);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    progress.value = withTiming(expanded ? 1 : 0, { duration: 240 });
-  }, [expanded, progress]);
+    progress.value = reduceMotion ? (expanded ? 1 : 0) : withTiming(expanded ? 1 : 0, { duration: 240 });
+  }, [expanded, progress, reduceMotion]);
 
   const style = useAnimatedStyle(() => ({
     height: measuredHeight ? progress.value * measuredHeight : undefined,
@@ -580,14 +606,15 @@ type PlanPreviewCardProps = {
 function PlanPreviewCard({ plan, totalMinutes, onChange, onSave, onRegenerate, onCancel, saving, loading }: PlanPreviewCardProps) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const reduceMotion = useReducedMotion();
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
   const [iosDatePickerVisible, setIosDatePickerVisible] = useState(false);
   const chevronRotation = useSharedValue(expanded ? 180 : 0);
 
   useEffect(() => {
-    chevronRotation.value = withTiming(expanded ? 180 : 0, { duration: 200 });
-  }, [expanded, chevronRotation]);
+    chevronRotation.value = reduceMotion ? (expanded ? 180 : 0) : withTiming(expanded ? 180 : 0, { duration: 200 });
+  }, [expanded, chevronRotation, reduceMotion]);
 
   const chevronStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${chevronRotation.value}deg` }] }));
 
@@ -641,7 +668,7 @@ function PlanPreviewCard({ plan, totalMinutes, onChange, onSave, onRegenerate, o
   const inputStyle = { borderColor: colors.border, backgroundColor: colors.input, color: colors.text };
 
   return (
-    <Animated.View entering={FadeIn.duration(220)}>
+    <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(220)}>
       <SectionCard className="mb-3">
         <Pressable
           onPress={() => setExpanded((value) => !value)}

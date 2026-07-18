@@ -1,113 +1,49 @@
-import { memo, useEffect } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../theme/useTheme'
-import type { AppTheme } from '../../theme/colors'
+import { pressTab, TAB_ROUTES } from '../../navigation/tabBarContract'
+import { MobileIcon, type MobileIconName } from './MobileIcon'
 
-export type BottomNavPage = 'dashboard' | 'tasks' | 'focus' | 'reminders'
+export const TAB_META: Record<typeof TAB_ROUTES[number], { label: string; icon: MobileIconName }> = {
+  Dashboard: { label: 'Dashboard', icon: 'dashboard' },
+  Tasks: { label: 'Tasks', icon: 'tasks' },
+  Focus: { label: 'Focus', icon: 'focus' },
+  Reminders: { label: 'Reminders', icon: 'reminders' },
+  People: { label: 'People', icon: 'people' },
+} as const
 
+export type BottomNavPage = 'dashboard' | 'tasks' | 'focus' | 'reminders' | 'people'
 export type BottomNavHandlers = {
   onNavigateDashboard?: () => void
   onNavigateTasks?: () => void
   onNavigateFocus?: () => void
   onNavigateReminders?: () => void
 }
+type LegacyBottomNavProps = BottomNavHandlers & { active: BottomNavPage }
 
-type BottomNavBarProps = BottomNavHandlers & {
-  active: BottomNavPage
-}
-
-const TABS: { page: BottomNavPage; icon: string; label: string }[] = [
-  { page: 'dashboard', icon: '▦', label: 'Dashboard' },
-  { page: 'tasks', icon: '☑', label: 'Tasks' },
-  { page: 'focus', icon: '🎯', label: 'Focus' },
-  { page: 'reminders', icon: '🔔', label: 'Reminders' },
-]
-
-export const BottomNavBar = memo(function BottomNavBar({
-  active,
-  onNavigateDashboard,
-  onNavigateTasks,
-  onNavigateFocus,
-  onNavigateReminders,
-}: BottomNavBarProps) {
-  const insets = useSafeAreaInsets()
+/** The single visual tab bar for navigator-backed main screens. */
+export function NavigationBottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme } = useTheme()
-  const handlers: Record<BottomNavPage, (() => void) | undefined> = {
-    dashboard: onNavigateDashboard,
-    tasks: onNavigateTasks,
-    focus: onNavigateFocus,
-    reminders: onNavigateReminders,
-  }
-
+  const insets = useSafeAreaInsets()
   return (
-    <View
-      className="absolute left-5 right-5 flex-row items-stretch rounded-3xl px-2 py-3"
-      style={{
-        bottom: 16 + insets.bottom,
-        backgroundColor: theme.colors.navigation,
-        shadowColor: theme.colors.shadow,
-        shadowOpacity: 0.25,
-        shadowRadius: 12,
-        elevation: 4,
-      }}
-    >
-      {TABS.map((tab) => (
-        <NavItem
-          key={tab.page}
-          active={active === tab.page}
-          icon={tab.icon}
-          label={tab.label}
-          onPress={handlers[tab.page]}
-          theme={theme}
-        />
-      ))}
+    <View className="absolute bottom-0 left-0 right-0 flex-row px-5 pt-2" style={{ paddingBottom: insets.bottom + 12, backgroundColor: theme.colors.background }}>
+      <View className="flex-1 flex-row rounded-3xl px-2 py-2" style={{ backgroundColor: theme.colors.navigation }}>
+        {state.routes.filter((route) => TAB_ROUTES.includes(route.name as typeof TAB_ROUTES[number])).map((route) => {
+          const index = state.routes.findIndex((item) => item.key === route.key)
+          const meta = TAB_META[route.name as keyof typeof TAB_META]
+          if (!meta) return null
+          const active = state.index === index
+          const options = descriptors[route.key].options
+          return <Pressable key={route.key} accessibilityRole="tab" accessibilityLabel={options.tabBarAccessibilityLabel ?? meta.label} accessibilityState={{ selected: active }} className="flex-1 items-center py-2" onPress={() => pressTab(active, route.name as keyof typeof TAB_META, route.key, () => navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true }), (name) => navigation.navigate(name))}>
+            <MobileIcon name={meta.icon} color={active ? theme.colors.accent : theme.colors.secondaryText} size={20} />
+            <Text className="mt-1 text-xs font-bold" style={{ color: active ? theme.colors.accent : theme.colors.secondaryText }}>{meta.label}</Text>
+          </Pressable>
+        })}
+      </View>
     </View>
   )
-})
-
-function NavItem({
-  icon,
-  label,
-  active,
-  onPress,
-  theme,
-}: {
-  icon: string
-  label: string
-  active?: boolean
-  onPress?: () => void
-  theme: AppTheme
-}) {
-  const progress = useSharedValue(active ? 1 : 0)
-
-  useEffect(() => {
-    progress.value = withTiming(active ? 1 : 0, { duration: 180 })
-  }, [active, progress])
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + progress.value * 0.08 }],
-  }))
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="tab"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: !!active }}
-      style={{ flex: 1, minHeight: 56, minWidth: 48 }}
-      className="items-center justify-center active:opacity-70"
-    >
-      <Animated.View style={[{ alignItems: 'center' }, animatedStyle]}>
-        <Text className="text-xl">{icon}</Text>
-        <Text
-          className="mt-0.5 text-xs font-bold"
-          style={{ color: active ? theme.colors.accent : theme.colors.secondaryText }}
-        >
-          {label}
-        </Text>
-      </Animated.View>
-    </Pressable>
-  )
 }
+
+/** @deprecated Legacy screens keep compiling; migrated tabs render NavigationBottomTabBar instead. */
+export function BottomNavBar(_: LegacyBottomNavProps) { return null }

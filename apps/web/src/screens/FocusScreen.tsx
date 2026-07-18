@@ -6,6 +6,7 @@ import {
   type SidebarNavHandlers,
 } from '../components/layout'
 import { PrimaryButton, SecondaryButton, OutlineButton } from '../components/layout/Buttons'
+import { CoreListSkeleton, useDelayedSkeleton } from '../components/feedback/CoreListSkeleton'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import { toUiPriority, toUiStatus, updateTask, type ApiTask } from '../lib/tasksApi'
@@ -55,6 +56,7 @@ export default function FocusScreen({
   const [todaySessions, setTodaySessions] = useState<FocusSession[]>([])
   const [startModalTask, setStartModalTask] = useState<StartTarget | null>(null)
   const [error, setError] = useState('')
+  const [loadingFocusData, setLoadingFocusData] = useState(true)
   const removingRef = useRef<Set<string>>(new Set())
 
   // The running timer lives in the dedicated workspace; this page only opens or resumes it.
@@ -68,6 +70,7 @@ export default function FocusScreen({
 
   const refreshFocusData = useCallback(async () => {
     if (!accessToken) return
+    setLoadingFocusData(true)
     try {
       const [statsData, sessions, rec] = await Promise.all([
         getFocusStats(accessToken),
@@ -79,8 +82,12 @@ export default function FocusScreen({
       setRecommendation(rec)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load focus data.')
+    } finally {
+      setLoadingFocusData(false)
     }
   }, [accessToken])
+
+  const showFocusSkeleton = useDelayedSkeleton(loadingFocusData)
 
   useEffect(() => {
     void refreshFocusData()
@@ -146,8 +153,8 @@ export default function FocusScreen({
       panelPercent={focus.active ? 100 : focusTasks.length ? 100 : 0}
     >
       <PageHeader
-        title="Focus Mode"
-        subtitle="Your deep-work control center"
+        title={t('taskUi.focus.title')}
+        subtitle={t('taskUi.focus.subtitle')}
         toolbar={
           <TopActionBar
             searchValue={search}
@@ -157,7 +164,8 @@ export default function FocusScreen({
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />
@@ -168,6 +176,7 @@ export default function FocusScreen({
         </p>
       ) : null}
 
+      {showFocusSkeleton ? <CoreListSkeleton variant="focus" rows={4} /> : <>
       <StatsRow stats={stats} />
 
       {focus.active ? (
@@ -195,6 +204,7 @@ export default function FocusScreen({
       />
 
       <TodaySessions sessions={todaySessions} />
+      </>}
 
       {startModalTask ? (
         <StartSessionModal

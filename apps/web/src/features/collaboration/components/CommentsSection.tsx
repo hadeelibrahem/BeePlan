@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FriendAvatar } from '../../social/components/FriendAvatar'
 import { GhostButton, PrimaryButton } from '../../../components/layout/Buttons'
+import { ConfirmDestructiveModal } from '../../../components/ConfirmDestructiveModal'
 import {
   createComment,
   deleteComment,
@@ -112,6 +113,22 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
     },
     [comments, accessToken, onError],
   )
+  const [commentToDelete, setCommentToDelete] = useState<TaskComment | null>(null)
+  const [isDeletingComment, setIsDeletingComment] = useState(false)
+  const deletingCommentRef = useRef(false)
+
+  async function confirmDeleteComment() {
+    if (!commentToDelete || deletingCommentRef.current) return
+    deletingCommentRef.current = true
+    setIsDeletingComment(true)
+    try {
+      await handleDelete(commentToDelete)
+    } finally {
+      deletingCommentRef.current = false
+      setIsDeletingComment(false)
+      setCommentToDelete(null)
+    }
+  }
 
   return (
     <section
@@ -151,7 +168,7 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
               onStartEdit={() => setEditingId(comment.id)}
               onCancelEdit={() => setEditingId(null)}
               onSaveEdit={(msg, mentions) => void handleEdit(comment, msg, mentions)}
-              onDelete={() => void handleDelete(comment)}
+              onDelete={() => setCommentToDelete(comment)}
             />
           ))}
           {hasMore ? (
@@ -161,6 +178,7 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
           ) : null}
         </ul>
       )}
+      <ConfirmDestructiveModal open={commentToDelete !== null} title="Delete comment?" message="This action cannot be undone." confirmLabel="Delete comment" isConfirming={isDeletingComment} onCancel={() => !isDeletingComment && setCommentToDelete(null)} onConfirm={() => void confirmDeleteComment()} />
     </section>
   )
 }

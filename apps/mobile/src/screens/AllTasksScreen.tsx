@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import {
   BottomNavBar,
   EmptyState,
@@ -10,6 +10,7 @@ import {
   ScreenLayout,
   SearchInput,
   StatsCard,
+  MobileIcon,
 } from '../components/layout';
 import { TaskFiltersSheet } from '../components/TaskFiltersSheet';
 import {
@@ -22,8 +23,8 @@ import {
   type TaskDueFilter,
   type TaskFilters,
 } from '../lib/tasksApi';
-import type { AppTheme } from '../theme/colors';
 import { useTheme } from '../theme/useTheme';
+import { TaskPriorityBadge, TaskStatusBadge } from '../components/TaskBadges';
 import { queryKeys } from '../lib/queryKeys';
 
 type TaskListItem = {
@@ -196,6 +197,7 @@ export default function AllTasksScreen({
         keyExtractor={(task) => task.id}
         renderItem={({ item }) => <TaskCard task={item} onPress={() => onViewTaskDetails(item)} />}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={tasksQuery.isRefetching} onRefresh={() => { if (!tasksQuery.isRefetching) void tasksQuery.refetch(); }} tintColor={theme.colors.accent} />}
         // Rows are simple/uniform enough that this beats measuring layout on
         // scroll, and it lets FlatList jump to an offset without rendering
         // every row in between first.
@@ -220,9 +222,10 @@ export default function AllTasksScreen({
                   backgroundColor: hasActiveFilters ? theme.colors.accentSoft : theme.colors.card,
                 }}
               >
-                <Text className="text-xs font-black" style={{ color: hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText }}>
-                  FILTER{hasActiveFilters ? ` (${activeChips.length})` : ''}
-                </Text>
+                <View className="flex-row items-center gap-1">
+                  <MobileIcon name="filter" color={hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText} size={14} />
+                  <Text className="text-xs font-black" style={{ color: hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText }}>Filters{hasActiveFilters ? ` (${activeChips.length})` : ''}</Text>
+                </View>
               </Pressable>
             </View>
 
@@ -260,13 +263,13 @@ export default function AllTasksScreen({
             {listLoading ? <Text className="mb-3 text-sm font-bold" style={{ color: theme.colors.accent }}>Loading tasks...</Text> : null}
 
             <View className="mb-3 flex-row justify-between">
-              <StatsCard icon="ALL" value={String(taskItems.length)} title="All Tasks" width="full" />
+              <StatsCard icon="tasks" value={String(taskItems.length)} title="All Tasks" width="full" />
             </View>
             <View className="mb-3 flex-row flex-wrap justify-between gap-y-2">
-              <MiniStat icon="TD" label="To Do" value={String(statusCounts.todo)} />
-              <MiniStat icon="IP" label="Progress" value={String(statusCounts.inProgress)} />
-              <MiniStat icon="DN" label="Done" value={String(statusCounts.done)} />
-              <MiniStat icon="MS" label="Missed" value={String(statusCounts.missed)} />
+              <MiniStat icon="tasks" label="To Do" value={String(statusCounts.todo)} />
+              <MiniStat icon="focus" label="Progress" value={String(statusCounts.inProgress)} />
+              <MiniStat icon="check" label="Done" value={String(statusCounts.done)} />
+              <MiniStat icon="priority" label="Missed" value={String(statusCounts.missed)} />
             </View>
 
             <Text className="mb-2 text-sm font-bold" style={{ color: theme.colors.text }}>Tasks</Text>
@@ -307,13 +310,13 @@ export default function AllTasksScreen({
   );
 }
 
-function MiniStat({ icon, label, value }: { icon: string; label: string; value: string }) {
+function MiniStat({ icon, label, value }: { icon: import('../components/layout').MobileIconName; label: string; value: string }) {
   const { theme } = useTheme();
   const { colors } = theme;
 
   return (
     <View className="w-[23%] items-center rounded-xl border py-3" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
-      <Text className="text-xs font-black" style={{ color: colors.accent }}>{icon}</Text>
+      <MobileIcon name={icon} color={colors.accent} size={16} accessibilityLabel={`${label} icon`} />
       <Text className="mt-0.5 text-sm font-black" style={{ color: colors.text }}>{value}</Text>
       <Text className="mt-0.5 text-center text-[10px] font-bold" style={{ color: colors.secondaryText }}>{label}</Text>
     </View>
@@ -360,8 +363,8 @@ const TaskCard = memo(function TaskCard({ task, onPress }: { task: TaskListItem;
           </View>
 
           <View className="mt-2 flex-row items-center gap-2">
-            <PriorityBadge label={task.priority} theme={theme} />
-            <StatusBadge label={task.status} theme={theme} />
+            <TaskPriorityBadge priority={task.priority} />
+            <TaskStatusBadge status={task.status} />
             <Text className="ml-auto text-xs" style={{ color: colors.secondaryText }}>{task.progress}%</Text>
           </View>
         </View>
@@ -383,28 +386,6 @@ function SmallBadge({ label }: { label: string }) {
   );
 }
 
-function PriorityBadge({ label, theme }: { label: string; theme: AppTheme }) {
-  const { colors } = theme;
-  const color = label === 'High' || label === 'Urgent' ? colors.error : label === 'Medium' ? colors.warning : colors.success;
-
-  return (
-    <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-xs font-bold" style={{ color }}>{label}</Text>
-    </View>
-  );
-}
-
-function StatusBadge({ label, theme }: { label: string; theme: AppTheme }) {
-  const { colors } = theme;
-  const color =
-    label === 'Done' ? colors.success : label === 'In Progress' ? colors.primary : label === 'Missed' ? colors.error : colors.secondaryText;
-
-  return (
-    <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-xs font-bold" style={{ color }}>{label}</Text>
-    </View>
-  );
-}
 
 function fromApiTask(task: ApiTask): TaskListItem {
   return {

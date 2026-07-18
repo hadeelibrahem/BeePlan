@@ -86,7 +86,6 @@ export default function TaskAttachmentPicker({
 
   return (
     <div
-      onClick={() => inputRef.current?.click()}
       onDragOver={(event) => {
         event.preventDefault()
         if (!disabled) setIsDragging(true)
@@ -96,14 +95,6 @@ export default function TaskAttachmentPicker({
       className={`cursor-pointer rounded-xl border border-dashed bg-[var(--bp-bg)] p-4 transition ${
         isDragging ? 'border-[var(--bp-accent)]/80' : 'border-[var(--bp-border)]'
       } ${disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-[var(--bp-accent)]/60'}`}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          inputRef.current?.click()
-        }
-      }}
     >
       <input
         ref={inputRef}
@@ -116,7 +107,10 @@ export default function TaskAttachmentPicker({
       />
       <div className="text-center">
         <div className="text-sm font-black text-[var(--bp-accent)]">UPLOAD</div>
-        <p className="mt-2 text-sm text-slate-300">Drag & drop files here, or click to browse</p>
+        <p className="mt-2 text-sm text-slate-300">Drag & drop files here, or browse from your device</p>
+        <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="mt-3 rounded-lg border border-[var(--bp-accent)]/60 px-3 py-1.5 text-sm font-bold text-[var(--bp-accent)] hover:bg-[var(--bp-accent)]/10 disabled:cursor-not-allowed disabled:opacity-60">
+          Browse files
+        </button>
         <p className="mt-1 text-xs text-slate-500">Supports images, PDF, Word, Excel, PowerPoint, and text files</p>
       </div>
 

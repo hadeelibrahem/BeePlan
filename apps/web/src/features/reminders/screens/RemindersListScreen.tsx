@@ -13,6 +13,7 @@ import {
 import { useLanguage } from '../../../i18n/LanguageContext'
 import { useTheme } from '../../../theme/ThemeContext'
 import { ReminderCard } from '../components/ReminderCard'
+import { CoreListSkeleton, useDelayedSkeleton } from '../../../components/feedback/CoreListSkeleton'
 import type { Reminder, ReminderType } from '../types/reminders.types'
 
 type FilterTab = 'all' | ReminderType | 'completed'
@@ -21,18 +22,23 @@ type Props = SidebarNavHandlers & {
   reminders: Reminder[]
   onSelect: (id: string) => void
   onCreate: () => void
+  /** Open the reminder create form with the Person type preselected. */
+  onCreatePerson?: () => void
   onToggle: (id: string) => void
   onBack?: () => void
   onSignOut?: () => void
+  loading?: boolean
 }
 
 export function RemindersListScreen({
   reminders,
   onSelect,
   onCreate,
+  onCreatePerson,
   onToggle,
   onBack,
   onSignOut,
+  loading = false,
   onNavigateTasks,
   onNavigateFocus,
   onNavigatePlanner,
@@ -45,6 +51,7 @@ export function RemindersListScreen({
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
+  const showSkeleton = useDelayedSkeleton(loading)
 
   const tabs: { value: FilterTab; label: string }[] = [
     { value: 'all', label: t('filters.all') },
@@ -108,7 +115,7 @@ export function RemindersListScreen({
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onSignOut={onSignOut}
           />
         }
       />
@@ -142,10 +149,10 @@ export function RemindersListScreen({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
-        {onNavigatePeople && (
+        {onCreatePerson && (
           <button
             type="button"
-            onClick={onNavigatePeople}
+            onClick={onCreatePerson}
             className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-300 transition hover:bg-sky-400/20"
           >
             {'👤 Create Person Reminder'}
@@ -153,18 +160,20 @@ export function RemindersListScreen({
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {showSkeleton ? <CoreListSkeleton variant="reminders" rows={3} /> : filtered.length === 0 ? (
         activeTab === 'person' ? (
           <EmptyState
             icon={<RemindersIcon className="h-5 w-5" />}
+            variant="first-run"
             title="No person reminders yet"
             description="Create one to be reminded when someone is nearby."
-            actionLabel={onNavigatePeople ? 'Create Person Reminder' : undefined}
-            onAction={onNavigatePeople}
+            actionLabel={onCreatePerson ? 'Create Person Reminder' : undefined}
+            onAction={onCreatePerson}
           />
         ) : (
           <EmptyState
             icon={<RemindersIcon className="h-5 w-5" />}
+            variant={search ? 'filtered' : 'first-run'}
             title={search ? t('dashboard.noResults') : t('dashboard.noReminders')}
             description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
             actionLabel={search ? undefined : t('dashboard.newReminder')}

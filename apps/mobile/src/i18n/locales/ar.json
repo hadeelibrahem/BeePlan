@@ -8,6 +8,11 @@
     "cancel": "إلغاء"
   },
   "dashboard": {
+    "greeting": {
+      "morning": "\u0635\u0628\u0627\u062d \u0627\u0644\u062e\u064a\u0631",
+      "afternoon": "\u0645\u0633\u0627\u0621 \u0627\u0644\u062e\u064a\u0631",
+      "evening": "\u0645\u0633\u0627\u0621 \u0627\u0644\u062e\u064a\u0631"
+    },
     "activeReminders": "{{count}} تذكيرات نشطة",
     "searchPlaceholder": "البحث في التذكيرات...",
     "newReminder": "+ تذكير جديد",

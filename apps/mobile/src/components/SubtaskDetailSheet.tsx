@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRef } from 'react';
 import { useTheme } from '../theme/useTheme';
+import { TaskPriorityBadge, TaskStatusBadge } from './TaskBadges';
 import {
   deleteSubtaskAttachment,
   getSubtaskAttachments,
@@ -17,8 +19,6 @@ import {
   displaySubtaskTitle,
   formatDuration,
   getSubtaskWarnings,
-  SUBTASK_PRIORITY_COLOR,
-  SUBTASK_PRIORITY_LABEL,
   SUBTASK_STATUS_LABEL,
 } from '../lib/subtasks';
 import * as DocumentPicker from 'expo-document-picker';
@@ -52,6 +52,7 @@ export default function SubtaskDetailSheet({
   const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const deletingAttachmentIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!visible || !subtask) return;
@@ -113,7 +114,8 @@ export default function SubtaskDetailSheet({
   }
 
   async function handleRemoveAttachment(attachmentId: string) {
-    if (!subtask) return;
+    if (!subtask || deletingAttachmentIdsRef.current.has(attachmentId)) return;
+    deletingAttachmentIdsRef.current.add(attachmentId);
     setBusy(true);
     try {
       await deleteSubtaskAttachment(accessToken, task.id, subtask.id, attachmentId);
@@ -122,7 +124,16 @@ export default function SubtaskDetailSheet({
       setError(err instanceof Error ? err.message : 'Unable to remove attachment.');
     } finally {
       setBusy(false);
+      deletingAttachmentIdsRef.current.delete(attachmentId);
     }
+  }
+
+  function confirmRemoveAttachment(attachment: ApiTaskAttachment) {
+    const fileName = attachment.fileName ?? attachment.name ?? 'This file';
+    Alert.alert('Delete attachment?', `"${fileName}" cannot be recovered after deletion.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => attachment.id && void handleRemoveAttachment(attachment.id) },
+    ]);
   }
 
   return (
@@ -193,12 +204,10 @@ export default function SubtaskDetailSheet({
 
             <View className="flex-row flex-wrap">
               <HalfField label="Priority" colors={colors}>
-                <Text className="text-sm font-bold" style={{ color: SUBTASK_PRIORITY_COLOR[subtask.priority] }}>
-                  {SUBTASK_PRIORITY_LABEL[subtask.priority]}
-                </Text>
+                <TaskPriorityBadge priority={subtask.priority} />
               </HalfField>
               <HalfField label="Status" colors={colors}>
-                <Text className="text-sm font-bold" style={{ color: colors.text }}>{SUBTASK_STATUS_LABEL[subtask.status]}</Text>
+                <TaskStatusBadge status={subtask.status} />
               </HalfField>
               <HalfField label="Start Date" colors={colors}>
                 <Text className="text-sm" style={{ color: colors.text }}>{formatDateTime(subtask.startDate)}</Text>
@@ -244,7 +253,7 @@ export default function SubtaskDetailSheet({
                   <Text className="text-xs font-bold" style={{ color: colors.primary }}>Open</Text>
                 </Pressable>
                 {canEdit ? (
-                  <Pressable onPress={() => a.id && void handleRemoveAttachment(a.id)}>
+                  <Pressable onPress={() => confirmRemoveAttachment(a)}>
                     <Text className="text-xs font-bold" style={{ color: colors.error }}>Remove</Text>
                   </Pressable>
                 ) : null}

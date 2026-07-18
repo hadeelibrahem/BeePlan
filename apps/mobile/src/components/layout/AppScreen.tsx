@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../theme/useTheme'
 
@@ -10,6 +10,8 @@ type AppScreenProps = {
   fab?: ReactNode
   footer?: ReactNode
   contentClassName?: string
+  refreshing?: boolean
+  onRefresh?: () => void
 }
 
 // Generous allowance for a fixed footer (BottomActionBar or BottomNavBar), which
@@ -25,6 +27,8 @@ export function AppScreen({
   fab,
   footer,
   contentClassName = '',
+  refreshing = false,
+  onRefresh,
 }: AppScreenProps) {
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
@@ -36,6 +40,7 @@ export function AppScreen({
       contentContainerStyle={{ paddingBottom: bottomPadding }}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} /> : undefined}
     >
       {children}
     </ScrollView>

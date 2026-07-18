@@ -13,6 +13,7 @@ export const SectionCard = memo(function SectionCard({ children, className = '',
 
   return (
     <View
+      // Shared layout scale: compact p-3 (this card), standard p-4, roomy p-5; cards use rounded-2xl.
       className={`rounded-2xl border p-3 ${className}`}
       style={[
         {

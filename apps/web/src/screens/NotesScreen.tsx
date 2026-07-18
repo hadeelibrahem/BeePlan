@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AppLayout,
   EmptyState,
   NotesIcon,
   PageHeader,
   PrimaryButton,
+  DangerButton,
   SecondaryButton,
   SectionCard,
   TopActionBar,
@@ -13,6 +14,7 @@ import {
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import { createNote, deleteNote, getNotes, updateNote, type ApiNote } from '../lib/notesApi'
+import { ConfirmDestructiveModal } from '../components/ConfirmDestructiveModal'
 
 type NotesScreenProps = SidebarNavHandlers & {
   accessToken?: string
@@ -32,6 +34,10 @@ export default function NotesScreen({ accessToken, onSignOut, ...nav }: NotesScr
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
+  const [noteToDelete, setNoteToDelete] = useState<ApiNote | null>(null)
+  const [isDeletingNote, setIsDeletingNote] = useState(false)
+  const [notice, setNotice] = useState('')
+  const deletingNoteRef = useRef(false)
 
   useEffect(() => {
     if (!accessToken) return
@@ -76,30 +82,37 @@ export default function NotesScreen({ accessToken, onSignOut, ...nav }: NotesScr
     }
   }
 
-  async function handleDelete(noteId: string) {
-    if (!accessToken) return
+  async function handleDelete() {
+    if (!accessToken || !noteToDelete || deletingNoteRef.current) return
+    deletingNoteRef.current = true
+    setIsDeletingNote(true)
+    setError('')
     try {
-      await deleteNote(accessToken, noteId)
-      setNotes((current) => current.filter((note) => note.id !== noteId))
+      await deleteNote(accessToken, noteToDelete.id)
+      setNotes((current) => current.filter((note) => note.id !== noteToDelete.id))
+      setNotice('Note deleted.')
+      setNoteToDelete(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to delete note.')
+    } finally {
+      setIsDeletingNote(false)
+      deletingNoteRef.current = false
     }
   }
 
   return (
-    <AppLayout active="notes" {...nav} panelTitle="Keep going!" panelCaption="You're doing great today." panelPercent={64}>
+    <AppLayout active="notes" {...nav}>
       <PageHeader
-        title="Notes"
-        subtitle="Jot down ideas and quick thoughts"
+        title={t('taskUi.notes.title')}
+        subtitle={t('taskUi.notes.subtitle')}
         toolbar={
           <TopActionBar
-            searchValue=""
-            onSearchChange={() => {}}
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />
@@ -131,11 +144,12 @@ export default function NotesScreen({ accessToken, onSignOut, ...nav }: NotesScr
       {error && (
         <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>
       )}
+      {notice && <div className="mb-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-500">{notice}</div>}
 
       {loading ? (
         <p className="text-sm text-slate-400">Loading notes...</p>
       ) : notes.length === 0 ? (
-        <EmptyState icon={<NotesIcon className="h-5 w-5" />} title="No notes yet" description="Create your first note above to start jotting down ideas." />
+        <EmptyState icon={<NotesIcon className="h-5 w-5" />} title={t('taskUi.notes.emptyTitle')} description={t('taskUi.notes.emptyDescription')} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {notes.map((note) => (
@@ -171,9 +185,9 @@ export default function NotesScreen({ accessToken, onSignOut, ...nav }: NotesScr
                   {note.content && <p className="mb-2 whitespace-pre-wrap text-sm text-slate-400">{note.content}</p>}
                   <div className="flex justify-end gap-2">
                     <SecondaryButton size="sm" onClick={() => startEdit(note)}>Edit</SecondaryButton>
-                    <SecondaryButton size="sm" onClick={() => handleDelete(note.id)} className="text-red-300">
+                    <DangerButton size="sm" onClick={() => setNoteToDelete(note)}>
                       Delete
-                    </SecondaryButton>
+                    </DangerButton>
                   </div>
                 </div>
               )}
@@ -181,6 +195,7 @@ export default function NotesScreen({ accessToken, onSignOut, ...nav }: NotesScr
           ))}
         </div>
       )}
+      <ConfirmDestructiveModal open={noteToDelete !== null} title="Delete note?" message={`"${noteToDelete?.title?.trim() || noteToDelete?.content?.trim().slice(0, 80) || 'This note'}" cannot be recovered after deletion.`} confirmLabel="Delete note" isConfirming={isDeletingNote} onCancel={() => !isDeletingNote && setNoteToDelete(null)} onConfirm={() => void handleDelete()} />
     </AppLayout>
   )
 }

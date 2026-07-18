@@ -20,6 +20,7 @@ export const NOTIFICATION_TYPES = [
   'comment_added',
   'mention',
   'ai_plan_applied',
+  'ai_recommendation_ready',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

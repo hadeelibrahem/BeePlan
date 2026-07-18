@@ -1,4 +1,5 @@
 import { useLanguage } from '../../../i18n/LanguageContext'
+import { DirectionalChevron } from '../../../components/layout'
 import type { Reminder } from '../types/reminders.types'
 import { getLocationLabel } from '../utils/locationLabel'
 
@@ -135,7 +136,11 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
             )}
           </span>
 
-          <span className="mt-1 shrink-0 text-slate-500">{isRTL ? '<' : '>'}</span>
+          <DirectionalChevron
+            direction="forward"
+            isRTL={isRTL}
+            className="mt-1 h-4 w-4 shrink-0 text-slate-500"
+          />
         </button>
       </div>
     </article>

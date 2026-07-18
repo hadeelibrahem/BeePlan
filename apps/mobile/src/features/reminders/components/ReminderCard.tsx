@@ -3,6 +3,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme } from '../../../theme/useTheme';
 import type { Reminder } from '../types/reminders.types';
 import { getLocationLabel } from '../utils/locationLabel';
+import { MobileIcon, type MobileIconName } from '../../../components/layout';
 
 const TYPE_ICON: Record<Reminder['type'], string> = {
   time: 'T',
@@ -92,9 +93,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
 
         <Pressable onPress={onPress} className="min-w-0 flex-1 flex-row items-start gap-3.5">
           <View className="mt-0.5 h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: meta.backgroundColor }}>
-            <Text className="text-xs font-black" style={{ color: meta.color }}>
-              {TYPE_ICON[reminder.type]}
-            </Text>
+            <MobileIcon name={reminderTypeIcon(reminder.type)} color={meta.color} size={18} accessibilityLabel={`${reminder.type} reminder`} />
           </View>
 
           <View className="min-w-0 flex-1">
@@ -154,6 +153,13 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
       </View>
     </View>
   );
+}
+
+function reminderTypeIcon(type: Reminder['type']): MobileIconName {
+  if (type === 'checklist') return 'check';
+  if (type === 'person' || type === 'location') return 'people';
+  if (type === 'context') return 'focus';
+  return 'reminders';
 }
 
 function getSubtitle(reminder: Reminder) {

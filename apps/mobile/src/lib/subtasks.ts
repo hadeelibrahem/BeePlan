@@ -45,6 +45,34 @@ export const SUBTASK_PRIORITY_COLOR: Record<ApiSubtaskPriority, string> = {
   urgent: '#f87171',
 };
 
+export type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+export type BadgeMeta = { label: string; tone: BadgeTone };
+
+/** Semantic labels and tones shared by task, subtask, and dependency badges. */
+export const STATUS_BADGE_META: Record<string, BadgeMeta> = {
+  todo: { label: 'To Do', tone: 'neutral' },
+  'To Do': { label: 'To Do', tone: 'neutral' },
+  in_progress: { label: 'In Progress', tone: 'info' },
+  'In Progress': { label: 'In Progress', tone: 'info' },
+  done: { label: 'Done', tone: 'success' },
+  Done: { label: 'Done', tone: 'success' },
+  blocked: { label: 'Blocked', tone: 'danger' },
+  Blocked: { label: 'Blocked', tone: 'danger' },
+  missed: { label: 'Missed', tone: 'danger' },
+  Missed: { label: 'Missed', tone: 'danger' },
+};
+
+export const PRIORITY_BADGE_META: Record<string, BadgeMeta> = {
+  low: { label: 'Low', tone: 'success' },
+  Low: { label: 'Low', tone: 'success' },
+  medium: { label: 'Medium', tone: 'warning' },
+  Medium: { label: 'Medium', tone: 'warning' },
+  high: { label: 'High', tone: 'danger' },
+  High: { label: 'High', tone: 'danger' },
+  urgent: { label: 'Urgent', tone: 'danger' },
+  Urgent: { label: 'Urgent', tone: 'danger' },
+};
+
 function isSameDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
