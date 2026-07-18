@@ -1,6 +1,7 @@
 package com.beeplan.focusblocker.core
 
 import android.content.Context
+import android.util.Log
 import com.beeplan.focusblocker.events.BlockerEvent
 import com.beeplan.focusblocker.events.BlockerEventBus
 import com.beeplan.focusblocker.notification.FocusNotificationManager
@@ -29,6 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * each stays small and independently testable.
  */
 object BlockerController {
+
+  private const val TAG = "FocusBlocker"
 
   private lateinit var appContext: Context
 
@@ -122,6 +125,46 @@ object BlockerController {
     return publishStatus()
   }
 
+  /**
+   * Temporarily suspend blocking without ending the session. The foreground
+   * service stays alive but [onTick] skips every block check while paused, and
+   * any block screen currently showing is torn down so the user can use the app.
+   * Idempotent: pausing an already-paused (or absent) session is a no-op.
+   */
+  fun pause(): FocusStatus {
+    val current = session ?: return publishStatus()
+    if (current.paused) return publishStatus()
+    val paused = current.copy(paused = true)
+    session = paused
+    sessionStore.save(paused)
+    // Let any in-flight block screen go away immediately.
+    activeBlockPackage = null
+    blockScreenActive.set(false)
+    notifications.clearBlockScreen()
+    Log.d(TAG, "[FocusBlocker] session paused")
+    return publishStatus()
+  }
+
+  /**
+   * Resume a paused session, re-arming blocking for the same selected apps
+   * without restarting the service. [newEndsAtMs], when > 0, refreshes the
+   * wall-clock end so time spent paused is not counted against the session
+   * (mirrors the JS timer, which freezes while paused).
+   */
+  fun resume(newEndsAtMs: Long = 0L): FocusStatus {
+    val current = session ?: return publishStatus()
+    if (!current.paused) return publishStatus()
+    val nextEnd = if (newEndsAtMs > 0L) newEndsAtMs else current.endsAtMs
+    val resumed = current.copy(paused = false, endsAtMs = nextEnd)
+    session = resumed
+    sessionStore.save(resumed)
+    // Ensure the service is running so detection resumes (idempotent start:
+    // startForegroundService never spawns a second loop).
+    FocusBlockerService.start(appContext)
+    Log.d(TAG, "[FocusBlocker] session resumed")
+    return publishStatus()
+  }
+
   fun emergencyExit(reason: String): FocusStatus {
     val ended = session
     if (ended != null) {
@@ -153,6 +196,19 @@ object BlockerController {
    */
   fun onTick(foregroundPackage: String?): FocusSession? {
     val current = session ?: return null
+    // Paused: freeze the timer (do not complete) and skip all blocking checks.
+    // The service is allowed to keep running; it just idles.
+    if (current.paused) {
+      if (
+        foregroundPackage != null &&
+        foregroundPackage != appContext.packageName &&
+        foregroundPackage in current.blockedPackages
+      ) {
+        Log.d(TAG, "[FocusBlocker] skipping block because session is paused")
+      }
+      publishStatus()
+      return current
+    }
     if (current.isExpired()) {
       complete()
       return null
@@ -165,6 +221,7 @@ object BlockerController {
   }
 
   private fun shouldBlock(session: FocusSession, packageName: String): Boolean {
+    if (session.paused) return false // defensive: never block while paused
     if (packageName == appContext.packageName) return false // never block BeePlan
     if (packageName !in session.blockedPackages) return false
     if (isTemporarilyAllowed(packageName)) return false
@@ -264,6 +321,7 @@ object BlockerController {
     return FocusStatus(
       isActive = true,
       strict = true,
+      isPaused = current.paused,
       sessionId = current.sessionId,
       taskTitle = current.taskTitle,
       endsAtMs = current.endsAtMs,

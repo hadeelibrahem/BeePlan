@@ -18,6 +18,12 @@ data class FocusSession(
   val motivationalMessage: String,
   val allowEmergencyExit: Boolean,
   val startedAtMs: Long,
+  /**
+   * When true the session is temporarily paused: the foreground service may stay
+   * alive but all blocking checks are skipped and the timer is frozen. Persisted
+   * so the paused state survives process/service recreation.
+   */
+  val paused: Boolean = false,
 ) {
   /** Remaining milliseconds relative to [now], clamped at zero. */
   fun remainingMs(now: Long = System.currentTimeMillis()): Long = (endsAtMs - now).coerceAtLeast(0L)
@@ -33,6 +39,7 @@ data class FocusSession(
     put("motivationalMessage", motivationalMessage)
     put("allowEmergencyExit", allowEmergencyExit)
     put("startedAtMs", startedAtMs)
+    put("paused", paused)
   }.toString()
 
   companion object {
@@ -50,6 +57,7 @@ data class FocusSession(
         motivationalMessage = obj.optString("motivationalMessage"),
         allowEmergencyExit = obj.optBoolean("allowEmergencyExit", true),
         startedAtMs = obj.optLong("startedAtMs", System.currentTimeMillis()),
+        paused = obj.optBoolean("paused", false),
       )
     }.getOrNull()
   }

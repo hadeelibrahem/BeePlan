@@ -105,6 +105,14 @@ class BeePlanFocusBlockerModule : Module() {
       BlockerController.stop().toMap()
     }
 
+    AsyncFunction("pauseStrictMode") {
+      BlockerController.pause().toMap()
+    }
+
+    AsyncFunction("resumeStrictMode") { endsAtMs: Double? ->
+      BlockerController.resume(endsAtMs?.toLong() ?: 0L).toMap()
+    }
+
     AsyncFunction("emergencyExit") { reason: String ->
       BlockerController.emergencyExit(reason).toMap()
     }

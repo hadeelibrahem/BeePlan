@@ -3,14 +3,20 @@ import test from 'node:test';
 import {
   AUTH_SCREENS,
   MAIN_TAB_SCREENS,
+  MAIN_TAB_SCREEN_ROUTES,
   STACK_SCREENS,
   areaForScreen,
   screenForDeepLink,
 } from './navigationStructure.ts';
 import { SCREEN_PARENTS, type AppScreen } from './backNavigation.ts';
+import { MAIN_TAB_ROUTES } from './types.ts';
 
 test('main destinations are the bottom tabs', () => {
-  assert.deepEqual([...MAIN_TAB_SCREENS], ['dashboard', 'tasks', 'focus', 'reminders']);
+  assert.deepEqual([...MAIN_TAB_SCREENS], ['dashboard', 'tasks', 'focus', 'reminders', 'people']);
+});
+
+test('navigation specification and navigator tab routes cannot drift', () => {
+  assert.deepEqual(MAIN_TAB_SCREENS.map((screen) => MAIN_TAB_SCREEN_ROUTES[screen]), MAIN_TAB_ROUTES);
 });
 
 test('every screen is classified into exactly one navigation area', () => {
@@ -31,6 +37,7 @@ test('every screen is classified into exactly one navigation area', () => {
 test('areaForScreen agrees with the screen lists', () => {
   assert.equal(areaForScreen('dashboard'), 'tab');
   assert.equal(areaForScreen('reminders'), 'tab');
+  assert.equal(areaForScreen('people'), 'tab');
   assert.equal(areaForScreen('taskDetails'), 'stack');
   assert.equal(areaForScreen('editTask'), 'stack');
   assert.equal(areaForScreen('social'), 'stack');
@@ -52,4 +59,11 @@ test('the reset-password deep link opens the reset screen', () => {
   assert.equal(screenForDeepLink('beeplan://reset-password?token=abc'), 'reset');
   assert.equal(screenForDeepLink('https://app.beeplan.dev/reset-password'), 'reset');
   assert.equal(screenForDeepLink('beeplan://dashboard'), null);
+});
+
+test('Calendar and AI Daily Planner are stack destinations with stable deep links', () => {
+  assert.equal(areaForScreen('calendar'), 'stack');
+  assert.equal(areaForScreen('aiDailyPlanner'), 'stack');
+  assert.equal(screenForDeepLink('beeplan://calendar'), 'calendar');
+  assert.equal(screenForDeepLink('https://beeplan.app/planner'), 'aiDailyPlanner');
 });

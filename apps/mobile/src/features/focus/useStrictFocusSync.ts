@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  pauseStrictMode,
+  resumeStrictMode,
   startStrictMode,
   stopStrictMode,
   type UseFocusBlocker,
@@ -50,6 +52,8 @@ export function useStrictFocusSync({ active, remainingMs, prefs, blocker }: Para
   const clearError = useCallback(() => setError(null), []);
 
   const activeSessionId = active?.sessionId ?? null;
+  // The JS session is the source of truth for paused; native mirrors it.
+  const jsPaused = active?.pausedSinceMs != null;
 
   useEffect(() => {
     let cancelled = false;
@@ -60,7 +64,9 @@ export function useStrictFocusSync({ active, remainingMs, prefs, blocker }: Para
       blockedCount: prefs.blockedPackages.length,
       usageAccess: blocker.usageAccess,
       activeSessionId,
+      jsPaused,
       nativeActive: blocker.status.isActive,
+      nativePaused: blocker.status.isPaused,
       nativeSessionId: blocker.status.sessionId,
       armedSessionId: armedSessionRef.current,
     });
@@ -71,6 +77,21 @@ export function useStrictFocusSync({ active, remainingMs, prefs, blocker }: Para
       armedSessionRef.current = null;
       setArming(false);
       void stopStrictMode().catch(() => undefined);
+      return;
+    }
+
+    // Pause / resume the native gate without restarting the service. We keep
+    // armedSessionRef pointing at this session — it is still armed, just idle.
+    if (action.type === 'pause') {
+      armedSessionRef.current = action.sessionId;
+      void pauseStrictMode().catch(() => undefined);
+      return;
+    }
+
+    if (action.type === 'resume') {
+      armedSessionRef.current = action.sessionId;
+      // Refresh the native end so paused time is not counted against the timer.
+      void resumeStrictMode(Date.now() + remainingRef.current).catch(() => undefined);
       return;
     }
 
@@ -109,11 +130,13 @@ export function useStrictFocusSync({ active, remainingMs, prefs, blocker }: Para
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeSessionId,
+    jsPaused,
     prefs.enabled,
     prefs.blockedPackages,
     blocker.available,
     blocker.usageAccess,
     blocker.status.isActive,
+    blocker.status.isPaused,
     blocker.status.sessionId,
   ]);
 

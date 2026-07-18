@@ -31,6 +31,11 @@ export type FocusBlockerStatus = {
   isActive: boolean;
   /** True when app blocking (not just the timer) is armed. */
   strict: boolean;
+  /**
+   * True while the session is paused: the service may stay alive but all
+   * blocking is suspended and the timer is frozen. Blocked apps open normally.
+   */
+  isPaused: boolean;
   /** Identifier of the owning focus session, or null when idle. */
   sessionId: string | null;
   /** Title of the task being focused on, shown on the block screen. */

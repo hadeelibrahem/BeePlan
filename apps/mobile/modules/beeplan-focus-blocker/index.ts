@@ -25,6 +25,8 @@ export {
   isFocusBlockerSupported,
   openOverlaySettings,
   openUsageAccessSettings,
+  pauseStrictMode,
+  resumeStrictMode,
   startStrictMode,
   stopStrictMode,
   subscribeToEvents,

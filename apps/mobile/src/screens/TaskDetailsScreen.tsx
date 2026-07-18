@@ -8,15 +8,16 @@ import {
   toApiStatus,
   toUiPriority,
   toUiStatus,
-  updateSubtask,
   type ApiSubtask,
   type ApiTask,
   type ApiTaskAttachment,
 } from '../lib/tasksApi';
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowSheet';
+import { DependencyManagementSection } from '../components/DependencyManagementSection';
 import { createRecurrenceSummary, getNextOccurrenceLabel, type RecurrenceSettings } from '../components/TaskRecurrenceSheet';
 import { TaskStatusWorkflowSheet, type TaskStatus } from '../components/TaskStatusWorkflowSheet';
-import SubtaskDetailSheet from '../components/SubtaskDetailSheet';
+import { SubtaskManagementSection } from '../components/SubtaskManagementSection';
+import { taskTimeTracking } from './taskTimeTracking';
 import { TaskPriorityBadge, TaskStatusBadge } from '../components/TaskBadges';
 import {
   displaySubtaskTitle,
@@ -59,6 +60,7 @@ type Props = {
 
 export default function TaskDetailsScreen({
   task,
+  tasks = [],
   accessToken = '',
   currentUserId = '',
   notice = '',
@@ -75,7 +77,6 @@ export default function TaskDetailsScreen({
   const [progress, setProgress] = useState(task?.progress ?? 0);
   const [isStatusSheetVisible, setIsStatusSheetVisible] = useState(false);
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? []);
-  const [detailSubtaskId, setDetailSubtaskId] = useState<string | null>(null);
   const [sharedMemberCount, setSharedMemberCount] = useState(0);
   const [dependencyItems, setDependencyItems] = useState<DependencyTask[]>(
     toDependencyTasks(task?.dependencies),
@@ -97,27 +98,6 @@ export default function TaskDetailsScreen({
     );
   }
 
-  const isOwner = task?.viewerRole === 'owner';
-  const [subtaskFilter, setSubtaskFilter] = useState<SubtaskFilter>(isOwner ? 'team' : 'mine');
-  const [subtaskMemberId, setSubtaskMemberId] = useState('');
-
-  const memberOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const item of subtaskItems) {
-      if (item.assigneeUserId && item.assignee && !seen.has(item.assigneeUserId)) {
-        seen.set(item.assigneeUserId, item.assignee);
-      }
-    }
-    return [...seen.entries()].map(([userId, name]) => ({ userId, name }));
-  }, [subtaskItems]);
-
-  const visibleSubtasks = useMemo(
-    () =>
-      subtaskItems.filter((item) =>
-        matchesSubtaskFilter(item, subtaskFilter, { currentUserId, memberId: subtaskMemberId }),
-      ),
-    [subtaskItems, subtaskFilter, currentUserId, subtaskMemberId],
-  );
 
   const completedSubtasks = useMemo(() => subtaskItems.filter((item) => item.isDone).length, [subtaskItems]);
   const dependenciesComplete = useMemo(
@@ -175,10 +155,6 @@ export default function TaskDetailsScreen({
     void syncTaskSubtaskReminders(subtaskItems);
   }, [subtaskItems]);
 
-  const detailSubtask = useMemo(
-    () => subtaskItems.find((item) => item.id === detailSubtaskId) ?? null,
-    [subtaskItems, detailSubtaskId],
-  );
 
   const handleOpenAttachment = useCallback(
     async (attachment: ApiTaskAttachment) => {
@@ -245,40 +221,6 @@ export default function TaskDetailsScreen({
       }
     },
     [task, accessToken, isBlocked, status, subtaskItems, completedSubtasks, progress, onTaskUpdated],
-  );
-
-  const handleToggleSubtask = useCallback(
-    async (subtask: ApiSubtask) => {
-      if (!task || !accessToken) return;
-
-      // Optimistic update: flip the subtask and recompute progress locally,
-      // then reconcile with the server response; roll back on error.
-      const nextIsDone = !subtask.isDone;
-      const previousSubtaskItems = subtaskItems;
-      const previousProgress = progress;
-      const optimisticSubtasks = subtaskItems.map((item) =>
-        item.id === subtask.id ? { ...item, isDone: nextIsDone } : item,
-      );
-      const optimisticProgress = optimisticSubtasks.length
-        ? Math.round((optimisticSubtasks.filter((item) => item.isDone).length / optimisticSubtasks.length) * 100)
-        : progress;
-
-      setSubtaskItems(optimisticSubtasks);
-      setProgress(optimisticProgress);
-      setError('');
-
-      try {
-        const updated = await updateSubtask(accessToken, task.id, subtask.id, { isDone: nextIsDone });
-        setSubtaskItems(updated.subtasks);
-        setProgress(updated.progress);
-        onTaskUpdated?.(updated);
-      } catch (subtaskError) {
-        setSubtaskItems(previousSubtaskItems);
-        setProgress(previousProgress);
-        setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.');
-      }
-    },
-    [task, accessToken, subtaskItems, progress, onTaskUpdated],
   );
 
   if (!task) {
@@ -365,65 +307,36 @@ export default function TaskDetailsScreen({
       </Card>
 
       <Card title="Subtasks">
-        {subtaskItems.length ? (
-          <>
-            <SubtaskFilterRow
-              filter={subtaskFilter}
-              onFilterChange={setSubtaskFilter}
-              isOwner={isOwner}
-              memberOptions={memberOptions}
-              memberId={subtaskMemberId}
-              onMemberChange={setSubtaskMemberId}
-            />
-            {visibleSubtasks.length ? (
-              visibleSubtasks.map((item) => (
-                <SubtaskRow
-                  key={item.id}
-                  item={item}
-                  canEdit={!isViewer}
-                  onToggle={handleToggleSubtask}
-                  onOpen={(subtask) => setDetailSubtaskId(subtask.id)}
-                />
-              ))
-            ) : (
-              <EmptyBlock title="No subtasks in this view" description="Try a different filter to see more." />
-            )}
-          </>
-        ) : (
-          <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
-        )}
+        <SubtaskManagementSection
+          task={{ ...task, subtasks: subtaskItems }}
+          accessToken={accessToken}
+          canEdit={!isViewer}
+          onItemsChange={setSubtaskItems}
+          onError={setError}
+          onTaskUpdated={(updated) => {
+            setSubtaskItems(updated.subtasks);
+            setProgress(updated.progress);
+            setStatus(toTaskStatus(updated));
+            onTaskUpdated?.(updated);
+          }}
+        />
       </Card>
       {!isViewer ? <Card title="Danger Zone"><Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>Deleting this task cannot be undone.</Text><DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>Delete Task</DangerButton></Card> : null}
 
       <Card title="Dependencies">
-        {dependencyItems.length ? (
-          <>
-            <View
-              className="mb-3 rounded-2xl border p-3"
-              style={{
-                backgroundColor: dependenciesComplete ? `${colors.success}16` : `${colors.accent}16`,
-                borderColor: dependenciesComplete ? `${colors.success}55` : `${colors.accent}55`,
-              }}
-            >
-              <Text className="text-xs font-bold leading-4" style={{ color: dependenciesComplete ? colors.success : colors.accent }}>
-                {dependenciesComplete
-                  ? 'All dependencies are completed. This task is ready to start.'
-                  : 'This task cannot start until all dependencies are completed.'}
-              </Text>
-            </View>
-            {dependencyItems.map((item) => (
-              <DependencyRow key={item.id} item={item} />
-            ))}
-          </>
-        ) : (
-          <EmptyBlock title="No dependencies" description="Tasks that must finish first will appear here." />
-        )}
+        <DependencyManagementSection task={task} tasks={tasks} accessToken={accessToken} canEdit={!isViewer} onDependenciesChange={setDependencyItems} onError={setError} onTaskUpdated={(updated) => { setDependencyItems(toDependencyTasks(updated.dependencies)); setStatus(toTaskStatus(updated)); setProgress(updated.progress); onTaskUpdated?.(updated) }} />
       </Card>
 
       <Card title="Automation">
         <AutomationRow label="Reminder" value={reminderText} />
         <AutomationRow label="Recurring" value={`${recurrenceSummary}${recurrence ? ` - ${nextOccurrence}` : ''}`} />
         <AutomationRow label="Focus" value={focusText} isLast />
+      </Card>
+
+      <Card title="Time Tracking">
+        <View className="gap-2">
+          {Object.entries(taskTimeTracking(task)).map(([label, value]) => <View key={label} className="flex-row justify-between py-1"><Text className="text-sm" style={{ color: colors.secondaryText }}>{label.charAt(0).toUpperCase() + label.slice(1)}</Text><Text className="text-sm font-bold" style={{ color: colors.text }}>{value}</Text></View>)}
+        </View>
       </Card>
 
       <Card title="Notes">
@@ -476,26 +389,6 @@ export default function TaskDetailsScreen({
         onClose={() => setIsStatusSheetVisible(false)}
         onSave={(next) => void saveStatus(next)}
       />
-      {task ? (
-        <SubtaskDetailSheet
-          visible={detailSubtaskId !== null}
-          task={{ ...task, subtasks: subtaskItems }}
-          subtask={detailSubtask}
-          accessToken={accessToken}
-          canEdit={!isViewer}
-          onClose={() => setDetailSubtaskId(null)}
-          onEdit={() => {
-            setDetailSubtaskId(null);
-            onEdit?.();
-          }}
-          onTaskUpdated={(updated) => {
-            setSubtaskItems(updated.subtasks);
-            setProgress(updated.progress);
-            setStatus(toTaskStatus(updated));
-            onTaskUpdated?.(updated);
-          }}
-        />
-      ) : null}
     </AppScreen>
   );
 }

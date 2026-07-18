@@ -24,30 +24,37 @@ function StageOneRoute({ label }: { label: string }) {
 type TabScreens = Partial<Record<keyof MainTabParamList, ComponentType>>
 
 export function MainTabs({ screens }: { screens?: TabScreens }) {
-  const Dashboard = screens?.Dashboard ?? (() => <StageOneRoute label="Dashboard" />)
-  const Tasks = screens?.Tasks ?? (() => <StageOneRoute label="Tasks" />)
-  const Focus = screens?.Focus ?? (() => <StageOneRoute label="Focus" />)
-  const Reminders = screens?.Reminders ?? (() => <StageOneRoute label="Reminders" />)
-  const People = screens?.People ?? (() => <StageOneRoute label="People" />)
+  const routes: Record<keyof MainTabParamList, ComponentType> = {
+    Dashboard: screens?.Dashboard ?? (() => <StageOneRoute label="Dashboard" />),
+    Tasks: screens?.Tasks ?? (() => <StageOneRoute label="Tasks" />),
+    Focus: screens?.Focus ?? (() => <StageOneRoute label="Focus" />),
+    Reminders: screens?.Reminders ?? (() => <StageOneRoute label="Reminders" />),
+    People: screens?.People ?? (() => <StageOneRoute label="People" />),
+  }
   return (
     <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <NavigationBottomTabBar {...props} />}>
-      <Tabs.Screen name="Dashboard" component={Dashboard} />
-      <Tabs.Screen name="Tasks" component={Tasks} />
-      <Tabs.Screen name="Focus" component={Focus} />
-      <Tabs.Screen name="Reminders" component={Reminders} />
-      <Tabs.Screen name="People" component={People} />
+      {MAIN_TAB_ROUTES.map((route) => <Tabs.Screen key={route} name={route} component={routes[route]} />)}
     </Tabs.Navigator>
   )
 }
 
-export function RootNavigator({ tabScreens, taskDetailsRoute: TaskDetailsRoute, createTaskRoute: CreateTaskRoute, editTaskRoute: EditTaskRoute, aiCollaborationRoute: AiCollaborationRoute, notificationsRoute: NotificationsRoute }: { tabScreens?: TabScreens; taskDetailsRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'TaskDetails'>>; createTaskRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'CreateTask'>>; editTaskRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'EditTask'>>; aiCollaborationRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'AiCollaboration'>>; notificationsRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'Notifications'>> }) {
+export function RootNavigator({ tabScreens, taskDetailsRoute: TaskDetailsRoute, createTaskRoute: CreateTaskRoute, editTaskRoute: EditTaskRoute, aiTaskBuilderRoute: AiTaskBuilderRoute, aiDailyPlannerRoute: AiDailyPlannerRoute, calendarRoute: CalendarRoute, notesRoute: NotesRoute, analyticsRoute: AnalyticsRoute, aiCollaborationRoute: AiCollaborationRoute, focusSessionRoute: FocusSessionRoute, reminderDetailsRoute: ReminderDetailsRoute, createReminderRoute: CreateReminderRoute, editReminderRoute: EditReminderRoute, notificationsRoute: NotificationsRoute }: { tabScreens?: TabScreens; taskDetailsRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'TaskDetails'>>; createTaskRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'CreateTask'>>; editTaskRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'EditTask'>>; aiTaskBuilderRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'AiTaskBuilder'>>; aiDailyPlannerRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'AiDailyPlanner'>>; calendarRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'Calendar'>>; notesRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'Notes'>>; analyticsRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'Analytics'>>; aiCollaborationRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'AiCollaboration'>>; focusSessionRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'FocusSession'>>; reminderDetailsRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'ReminderDetails'>>; createReminderRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'CreateReminder'>>; editReminderRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'EditReminder'>>; notificationsRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, 'Notifications'>> }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs">{() => <MainTabs screens={tabScreens} />}</Stack.Screen>
       {TaskDetailsRoute ? <Stack.Screen name="TaskDetails" component={TaskDetailsRoute} /> : null}
       {CreateTaskRoute ? <Stack.Screen name="CreateTask" component={CreateTaskRoute} /> : null}
       {EditTaskRoute ? <Stack.Screen name="EditTask" component={EditTaskRoute} /> : null}
+      {AiTaskBuilderRoute ? <Stack.Screen name="AiTaskBuilder" component={AiTaskBuilderRoute} /> : null}
+      {AiDailyPlannerRoute ? <Stack.Screen name="AiDailyPlanner" component={AiDailyPlannerRoute} /> : null}
+      {CalendarRoute ? <Stack.Screen name="Calendar" component={CalendarRoute} /> : null}
+      {NotesRoute ? <Stack.Screen name="Notes" component={NotesRoute} /> : null}
+      {AnalyticsRoute ? <Stack.Screen name="Analytics" component={AnalyticsRoute} /> : null}
       {AiCollaborationRoute ? <Stack.Screen name="AiCollaboration" component={AiCollaborationRoute} /> : null}
+      {FocusSessionRoute ? <Stack.Screen name="FocusSession" component={FocusSessionRoute} /> : null}
+      {ReminderDetailsRoute ? <Stack.Screen name="ReminderDetails" component={ReminderDetailsRoute} /> : null}
+      {CreateReminderRoute ? <Stack.Screen name="CreateReminder" component={CreateReminderRoute} /> : null}
+      {EditReminderRoute ? <Stack.Screen name="EditReminder" component={EditReminderRoute} /> : null}
       {NotificationsRoute ? <Stack.Screen name="Notifications" component={NotificationsRoute} /> : null}
     </Stack.Navigator>
   )

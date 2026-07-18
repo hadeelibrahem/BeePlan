@@ -7,9 +7,9 @@ import { ReminderCard } from '../components/ReminderCard';
 import type { Reminder, ReminderType } from '../types/reminders.types';
 
 type FilterTab = 'all' | ReminderType | 'completed';
-type Props = { reminders: Reminder[]; onSelect: (id: string) => void; onCreate: () => void; onToggle: (id: string) => void; onSignOut?: () => void; onBack?: () => void; onViewPeople?: () => void; onRefresh?: () => Promise<void> | void };
+type Props = { reminders: Reminder[]; onSelect: (id: string) => void; onCreate: () => void; onCreatePersonReminder?: () => void; onToggle: (id: string) => void; onSignOut?: () => void; onBack?: () => void; onViewPeople?: () => void; onRefresh?: () => Promise<void> | void };
 
-export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, onSignOut, onBack, onViewPeople, onRefresh }: Props) {
+export function RemindersListScreen({ reminders, onSelect, onCreate, onCreatePersonReminder, onToggle, onSignOut, onBack, onViewPeople, onRefresh }: Props) {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [refreshing, setRefreshing] = useState(false);
@@ -23,7 +23,7 @@ export function RemindersListScreen({ reminders, onSelect, onCreate, onToggle, o
     {onBack ? <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel={t('actions.back')} className="mb-3 h-8 w-8 items-center justify-center rounded-full border active:opacity-70" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }}><MobileIcon name="focus" color={theme.colors.text} size={16} accessibilityLabel={t('actions.back')} /></Pressable> : null}
     {onViewPeople ? <Pressable onPress={onViewPeople} accessibilityRole="button" accessibilityLabel="People and proximity reminders" className="mb-3 flex-row items-center justify-between rounded-2xl border px-4 py-3 active:opacity-80" style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.surface }}><View className="flex-row items-center gap-2"><MobileIcon name="people" color={theme.colors.text} size={18} /><Text className="text-sm font-bold" style={{ color: theme.colors.text }}>People & proximity reminders</Text></View><MobileIcon name="focus" color={theme.colors.accent} size={16} /></Pressable> : null}
     <SearchInput value={search} onChangeText={setSearch} placeholder={t('dashboard.searchPlaceholder')} /><FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
-    {activeTab === 'person' && onViewPeople ? <Pressable onPress={onViewPeople} accessibilityRole="button" accessibilityLabel="Create Person Reminder" className="mb-3 flex-row items-center justify-center gap-2 rounded-2xl border px-4 py-3 active:opacity-80" style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}><MobileIcon name="people" color={theme.colors.accent} size={18} /><Text className="text-sm font-bold" style={{ color: theme.colors.accent }}>Create Person Reminder</Text></Pressable> : null}
+    {activeTab === 'person' && onCreatePersonReminder ? <Pressable onPress={onCreatePersonReminder} accessibilityRole="button" accessibilityLabel="Create Person Reminder" className="mb-3 flex-row items-center justify-center gap-2 rounded-2xl border px-4 py-3 active:opacity-80" style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}><MobileIcon name="people" color={theme.colors.accent} size={18} /><Text className="text-sm font-bold" style={{ color: theme.colors.accent }}>Create Person Reminder</Text></Pressable> : null}
     {filtered.length === 0 ? activeTab === 'person' ? <EmptyState icon="people" title="No person reminders yet" description="Create one to be reminded when someone is nearby." /> : <EmptyState icon="reminders" title={search ? t('dashboard.noResults') : t('dashboard.noReminders')} description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')} /> : <View className="gap-2">{filtered.map((reminder) => <ReminderCard key={reminder.id} reminder={reminder} onPress={() => onSelect(reminder.id)} onToggle={() => onToggle(reminder.id)} />)}</View>}
   </ScreenLayout>;
 }

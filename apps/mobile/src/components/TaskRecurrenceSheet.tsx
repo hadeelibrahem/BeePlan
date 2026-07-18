@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
 import { useTheme } from '../theme/useTheme'
+import { parseRecurrenceWithAi, type AiRecurrenceParseResponse } from '../lib/tasksApi'
+import { applyAiRecurrence, isUsableAiRecurrence, parseAiRecurrence } from './recurrenceAi'
 
 export type RecurrenceFrequency = 'Never' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly' | 'Custom'
 export type RecurrenceEndType = 'never' | 'onDate' | 'after'
@@ -24,6 +26,7 @@ type TaskRecurrenceSheetProps = {
   visible: boolean
   mode: 'create' | 'edit'
   recurrence: RecurrenceSettings | null
+  accessToken?: string
   onClose: () => void
   onSave: (recurrence: RecurrenceSettings | null) => void
   onRemove?: () => void
@@ -88,6 +91,7 @@ export function TaskRecurrenceSheet({
   visible,
   mode,
   recurrence,
+  accessToken,
   onClose,
   onSave,
   onRemove,
@@ -97,12 +101,22 @@ export function TaskRecurrenceSheet({
   const insets = useSafeAreaInsets()
   const [draft, setDraft] = useState<RecurrenceSettings>(recurrence ?? defaultRecurrenceSettings)
   const [error, setError] = useState('')
+  const [aiInput, setAiInput] = useState('')
+  const [aiContext, setAiContext] = useState('')
+  const [aiMessage, setAiMessage] = useState('')
+  const [aiResult, setAiResult] = useState<AiRecurrenceParseResponse | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
 
   useEffect(() => {
     if (!visible) return
 
     setDraft(recurrence ?? defaultRecurrenceSettings)
     setError('')
+    setAiInput('')
+    setAiContext('')
+    setAiMessage('')
+    setAiResult(null)
+    setAiLoading(false)
   }, [recurrence, visible])
 
   const preview = useMemo(() => createRecurrenceSummary(draft), [draft])
@@ -140,6 +154,60 @@ export function TaskRecurrenceSheet({
     onClose()
   }
 
+  const handleAskAi = async () => {
+    if (!accessToken) {
+      setAiMessage("I couldn't reach the assistant. You can still set it manually.")
+      setAiResult(null)
+      return
+    }
+
+    setAiLoading(true)
+    setAiMessage('')
+    setAiResult(null)
+    try {
+      const result = await parseAiRecurrence(aiInput, (message) => {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        return parseRecurrenceWithAi(accessToken, {
+          message: aiContext ? `${aiContext}\nUser follow-up: ${message}` : message,
+          currentDate: new Date().toISOString(),
+          timezone,
+        })
+      })
+      if (!isUsableAiRecurrence(result)) {
+        setAiMessage("I couldn't understand that. You can still set it manually.")
+        setAiContext('')
+      } else if (result.clarifyingQuestion) {
+        setAiMessage(result.clarifyingQuestion)
+        setAiContext(`User request: ${aiInput.trim()}\nAssistant asked: ${result.clarifyingQuestion}`)
+        setAiInput('')
+      } else {
+        setAiResult(result)
+        setAiMessage(`I understood: ${result.preview}`)
+        setAiContext('')
+        setAiInput('')
+      }
+    } catch (cause) {
+      setAiMessage(cause instanceof Error && cause.message ? cause.message : "I couldn't understand that. Try again or set it manually.")
+      setAiResult(null)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleApplyAiResult = () => {
+    if (!aiResult) return
+    const next = applyAiRecurrence(aiResult, draft)
+    if (!next) {
+      setAiMessage("I couldn't apply that to the recurrence options. You can still set it manually.")
+      setAiResult(null)
+      return
+    }
+    setDraft(next)
+    setError('')
+    setAiMessage(`Applied: ${createRecurrenceSummary(next)}. Review or adjust it, then save.`)
+    setAiResult(null)
+  }
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}>
@@ -170,6 +238,35 @@ export function TaskRecurrenceSheet({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
+            <View className="rounded-3xl border p-4" style={{ backgroundColor: colors.background, borderColor: colors.border }}>
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="font-black" style={{ color: colors.text }}>AI Recurrence Assistant</Text>
+                  <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>Describe how this task should repeat.</Text>
+                </View>
+                {aiLoading ? <ActivityIndicator color={colors.accent} accessibilityLabel="Parsing recurrence" /> : null}
+              </View>
+              <TextInput
+                value={aiInput}
+                onChangeText={setAiInput}
+                editable={!aiLoading}
+                placeholder="Every weekday at 9am"
+                placeholderTextColor={colors.placeholder}
+                accessibilityLabel="Describe recurrence in natural language"
+                className="mt-3 rounded-2xl border px-4 py-3 text-sm font-semibold"
+                style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
+              />
+              <PrimaryButton onPress={() => void handleAskAi()} disabled={aiLoading || !aiInput.trim()} className="mt-3" fullWidth>
+                {aiLoading ? 'Parsing…' : 'Parse recurrence'}
+              </PrimaryButton>
+              {aiMessage ? (
+                <View className="mt-3 rounded-2xl border p-3" style={{ backgroundColor: colors.card, borderColor: colors.border }}>
+                  <Text className="text-sm font-semibold" style={{ color: colors.text }}>{aiMessage}</Text>
+                  {aiResult ? <SecondaryButton onPress={handleApplyAiResult} className="mt-3" fullWidth>Apply parsed recurrence</SecondaryButton> : null}
+                </View>
+              ) : null}
+            </View>
+
             <Text className="mb-3 text-xs font-black uppercase tracking-wide" style={{ color: colors.secondaryText }}>
               Repeat
             </Text>

@@ -1,11 +1,6 @@
-// NOTE: `TaskDependenciesWorkflowSheet` below is currently never rendered
-// anywhere in the app — only the `DependencyTask` type from this file is
-// imported (by src/screens/TaskDetailsScreen.tsx). The backend already
-// supports dependency add/replace/remove (see apps/api/src/tasks), so this
-// component is a ready-made UI for that flow; it just hasn't been wired up
-// yet. Left in place rather than deleted since the type export is in active
-// use and the component may still be the intended implementation for
-// dependency management on mobile.
+// Shared dependency selection and management sheet. It is used by Create Task
+// for draft dependency selection and by dependency-management flows for adding,
+// replacing, and removing persisted task dependencies.
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -220,6 +215,15 @@ export function TaskDependenciesWorkflowSheet({
               </ScrollView>
 
               <View className="mt-3 flex-row gap-3">
+                <DangerButton
+                  onPress={() => {
+                    onRemove(dependency.id)
+                    onClose()
+                  }}
+                  className="flex-1"
+                >
+                  Remove
+                </DangerButton>
                 <SecondaryButton onPress={onClose} className="flex-1">
                   Cancel
                 </SecondaryButton>

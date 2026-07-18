@@ -13,13 +13,18 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined
   TaskDetails: { taskId: string }
-  CreateTask: { source?: 'dashboard' | 'tasks' }
+  CreateTask: { source?: 'dashboard' | 'tasks' | 'calendar'; initialDueDate?: string }
   EditTask: { taskId: string }
   AiTaskBuilder: { source?: 'dashboard' | 'tasks' }
+  AiDailyPlanner: undefined
+  Calendar: undefined
+  Notes: undefined
+  Analytics: undefined
+  FocusSession: undefined
   AiCollaboration: { taskId: string }
   Notifications: undefined
   ReminderDetails: { reminderId: string }
-  CreateReminder: { initialType?: 'task' | 'person' | 'checklist' }
+  CreateReminder: { initialType?: 'task' | 'person' | 'checklist'; initialFriendId?: string }
   EditReminder: { reminderId: string }
   Auth: undefined
   ForgotPassword: undefined

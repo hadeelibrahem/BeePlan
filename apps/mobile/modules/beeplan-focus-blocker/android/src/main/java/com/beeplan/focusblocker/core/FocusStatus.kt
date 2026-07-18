@@ -7,6 +7,7 @@ package com.beeplan.focusblocker.core
 data class FocusStatus(
   val isActive: Boolean,
   val strict: Boolean,
+  val isPaused: Boolean,
   val sessionId: String?,
   val taskTitle: String?,
   val endsAtMs: Long?,
@@ -18,6 +19,7 @@ data class FocusStatus(
   fun toMap(): Map<String, Any?> = mapOf(
     "isActive" to isActive,
     "strict" to strict,
+    "isPaused" to isPaused,
     "sessionId" to sessionId,
     "taskTitle" to taskTitle,
     // endsAtMs / remainingMs cross the bridge as Doubles to avoid Long truncation.
@@ -32,6 +34,7 @@ data class FocusStatus(
     fun idle(hasUsageAccess: Boolean, canDrawOverlays: Boolean) = FocusStatus(
       isActive = false,
       strict = false,
+      isPaused = false,
       sessionId = null,
       taskTitle = null,
       endsAtMs = null,

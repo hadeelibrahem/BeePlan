@@ -18,6 +18,10 @@ type Props = {
   onViewTasks: () => void
   onViewFocus?: () => void
   onViewReminders: () => void
+  onViewNotes?: () => void
+  onViewAnalytics?: () => void
+  onViewCalendar?: () => void
+  onViewAiDailyPlanner?: () => void
   onViewNotifications?: () => void
   unreadCount?: number
   onCreateTask: () => void
@@ -38,6 +42,10 @@ export default function TasksDashboardScreen({
   onViewTasks,
   onViewFocus,
   onViewReminders,
+  onViewNotes,
+  onViewAnalytics,
+  onViewCalendar,
+  onViewAiDailyPlanner,
   onViewNotifications,
   unreadCount,
   onCreateTask,
@@ -122,6 +130,8 @@ export default function TasksDashboardScreen({
       <SectionCard className="mb-3">
         <View className="mb-3 flex-row justify-between">
           <Text className="text-sm font-bold" style={{ color: colors.text }}>Today's Focus</Text>
+          {onViewNotes ? <Pressable onPress={onViewNotes} accessibilityRole="button" accessibilityLabel="Open notes"><Text className="text-sm font-bold" style={{ color: colors.accent }}>Notes</Text></Pressable> : null}
+          {onViewAnalytics ? <Pressable onPress={onViewAnalytics} accessibilityRole="button" accessibilityLabel="Open analytics"><Text className="text-sm font-bold" style={{ color: colors.accent }}>Analytics</Text></Pressable> : null}
           <Pressable onPress={onViewTasks} accessibilityRole="button" accessibilityLabel="View all tasks">
             <Text className="text-sm font-bold" style={{ color: colors.accent }}>View All ›</Text>
           </Pressable>
@@ -157,6 +167,8 @@ export default function TasksDashboardScreen({
         <Text className="mb-3 text-sm font-bold" style={{ color: colors.text }}>Quick Actions</Text>
 
         <View className="gap-2">
+          <ActionCard icon="Calendar" title="Calendar" desc="See tasks and reminders by date" onPress={onViewCalendar} />
+          <ActionCard icon="AI" title="AI Daily Planner" desc="Plan and review your day" onPress={onViewAiDailyPlanner} />
           <ActionCard icon="➕" title="New Task" desc="Create a new task" onPress={onCreateTask} />
           <ActionCard icon="🔔" title="New Reminder" desc="Add a reminder" onPress={onViewReminders} />
           <ActionCard icon="👥" title="Notifications" desc="Invitations & updates" onPress={onViewNotifications} />
