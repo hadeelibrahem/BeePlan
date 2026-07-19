@@ -33,6 +33,7 @@ export const isFocusBlockerAvailable = native != null;
 export const IDLE_STATUS: FocusBlockerStatus = {
   isActive: false,
   strict: false,
+  isPaused: false,
   sessionId: null,
   taskTitle: null,
   endsAtMs: null,
@@ -70,6 +71,16 @@ export async function startStrictMode(
 
 export async function stopStrictMode(): Promise<FocusBlockerStatus> {
   return (await native?.stopStrictMode()) ?? IDLE_STATUS;
+}
+
+export async function pauseStrictMode(): Promise<FocusBlockerStatus> {
+  return (await native?.pauseStrictMode()) ?? IDLE_STATUS;
+}
+
+export async function resumeStrictMode(
+  endsAtMs?: number | null,
+): Promise<FocusBlockerStatus> {
+  return (await native?.resumeStrictMode(endsAtMs ?? null)) ?? IDLE_STATUS;
 }
 
 export function getStatus(): FocusBlockerStatus {

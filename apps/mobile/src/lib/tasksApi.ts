@@ -11,6 +11,25 @@ export type ApiTaskLabel = {
   name: string;
 };
 
+export type RecurrenceSuggestion = {
+  id: string; sourceTaskId: string; taskTitle: string; reason: string; preview: string;
+};
+
+// Kept in lockstep with the web client and the API's AiRecurrenceParseResponse.
+export type AiRecurrenceParseResponse = {
+  repeat: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'never';
+  interval: number;
+  daysOfWeek: string[];
+  dayOfMonth: number | null;
+  endCondition: 'never' | 'onDate' | 'afterOccurrences';
+  endDate: string | null;
+  occurrences: number | null;
+  time: string | null;
+  preview: string;
+  confidence: number;
+  clarifyingQuestion: string | null;
+};
+
 export type ApiTaskAttachment = {
   id?: string;
   taskId?: string;
@@ -150,6 +169,7 @@ export type ApiTask = {
   activities: ApiTaskActivity[];
   createdAt: string;
   updatedAt: string;
+  completedAt?: string;
   attachments: ApiTaskAttachment[];
   // Collaboration context (present on GET /tasks/:id). Optional so list
   // payloads and personal tasks stay valid.
@@ -279,6 +299,24 @@ export function updateTask(accessToken: string, taskId: string, payload: TaskPay
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+export function getRecurrenceSuggestions(accessToken: string) {
+  return request<{ suggestions: RecurrenceSuggestion[] }>(accessToken, '/ai/recurrence/suggestions');
+}
+
+export function parseRecurrenceWithAi(
+  accessToken: string,
+  payload: { message: string; currentDate: string; timezone: string },
+) {
+  return request<AiRecurrenceParseResponse>(accessToken, '/ai/recurrence/parse', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function dismissRecurrenceSuggestion(accessToken: string, suggestionId: string) {
+  return request<void>(accessToken, `/ai/recurrence/suggestions/${encodeURIComponent(suggestionId)}/dismiss`, { method: 'POST' });
 }
 
 export function deleteTask(accessToken: string, taskId: string) {

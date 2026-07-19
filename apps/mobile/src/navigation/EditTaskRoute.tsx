@@ -9,7 +9,7 @@ import type { RootStackParamList } from './types'
 type Props = NativeStackScreenProps<RootStackParamList, 'EditTask'> & {
   accessToken: string; tasks: ApiTask[]; currentUserId: string
   onBack: () => void; onCancel: () => void; onRefresh: () => void; onDelete: () => Promise<void>; onSave: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void
-  onSaved: (task: ApiTask) => void; onPermissionDenied: () => void
+  onSaved: (task: ApiTask) => void; onSubtasksUpdated: (task: ApiTask) => void; onDependenciesUpdated: (task: ApiTask) => void; onPermissionDenied: () => void
 }
 
 /** Cache-first route resolver; save/delete/navigation lifecycle remains in App for this stage. */
@@ -34,7 +34,7 @@ export function EditTaskRoute({ route, navigation, accessToken, tasks, currentUs
     if (navigation.canGoBack()) navigation.goBack()
     else navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Tasks' } }] })
   }
-  return <EditTaskScreen task={task} accessToken={accessToken} currentUserId={currentUserId} {...handlers}
+  return <EditTaskScreen task={task} tasks={tasks} accessToken={accessToken} currentUserId={currentUserId} {...handlers}
     onBack={leave} onCancel={leave}
     onDelete={async () => {
       await onDelete()
@@ -46,5 +46,7 @@ export function EditTaskRoute({ route, navigation, accessToken, tasks, currentUs
       onSaved(updatedTask)
       navigation.replace('TaskDetails', { taskId: updatedTask.id })
     }}
+    onSubtasksUpdated={handlers.onSubtasksUpdated}
+    onDependenciesUpdated={handlers.onDependenciesUpdated}
     onLifecycleChange={setLifecycle} />
 }

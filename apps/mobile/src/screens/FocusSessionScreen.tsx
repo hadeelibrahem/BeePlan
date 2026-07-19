@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View, type GestureResponderEvent } from 'react-native';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
+import { createGuardedSoundPlayer, type GuardedSoundPlayer } from '../lib/focusSoundPlayer';
 import { DangerButton, OutlineButton, PrimaryButton, SecondaryButton } from '../components/layout';
 import { BREAK_PRESETS, formatFocusClock, labelForFocusType, type FocusTaskOutcome } from '../lib/focusApi';
 import { FOCUS_SOUND_CATEGORIES, FOCUS_SOUNDS, type FocusSound } from '../lib/focusSounds';
@@ -266,6 +267,17 @@ function useFocusSoundPlayer() {
   const [volume, setVolume] = useState(0.65);
   const [muted, setMuted] = useState(false);
 
+  // A guarded controller that no-ops after the player is released and never
+  // forwards a null source to replace(). Recreated only if the player identity
+  // changes (it's stable across renders and Fast Refresh).
+  const playerRef = useRef(player);
+  const controllerRef = useRef<GuardedSoundPlayer | null>(null);
+  if (!controllerRef.current || playerRef.current !== player) {
+    playerRef.current = player;
+    controllerRef.current = createGuardedSoundPlayer(player, (id) => FOCUS_SOUND_ASSETS[id]);
+  }
+  const controller = controllerRef.current;
+
   const activeSound = useMemo(
     () => FOCUS_SOUNDS.find((sound) => sound.id === activeSoundId) ?? null,
     [activeSoundId],
@@ -276,51 +288,68 @@ function useFocusSoundPlayer() {
   }, []);
 
   const pause = useCallback(() => {
-    player.pause();
+    controller.pause();
     setIsPlaying(false);
-  }, [player]);
+  }, [controller]);
 
   const stop = useCallback(() => {
-    player.pause();
-    void player.seekTo(0).catch(() => undefined);
-    player.replace(null);
+    controller.stop();
     setActiveSoundId(null);
     setIsPlaying(false);
-  }, [player]);
+  }, [controller]);
 
   const play = useCallback(
     async (sound: FocusSound) => {
+      console.log(`[FocusSound] play requested (${sound.id})`); // TEMP debug
+      if (controller.isReleased()) {
+        console.log('[FocusSound] playback skipped (controller released)'); // TEMP debug
+        return;
+      }
+
       if (activeSoundId === sound.id) {
-        player.volume = muted ? 0 : volume;
-        player.muted = muted;
-        player.play();
+        controller.resume({ volume, muted });
         setIsPlaying(true);
         return;
       }
 
+      // Fade the previous sound out (or just pause if nothing was playing),
+      // then load the new one — but bail if a newer op or unmount intervened.
+      const token = controller.beginFade();
       if (activeSoundId) {
-        await fadeOutPlayer(player);
+        await fadeOutPlayer(controller, token);
       } else {
-        player.pause();
+        controller.pause();
+      }
+      if (!controller.isFadeCurrent(token)) {
+        console.log('[FocusSound] playback skipped (superseded during fade)'); // TEMP debug
+        return;
       }
 
-      player.replace(FOCUS_SOUND_ASSETS[sound.id]);
-      player.loop = true;
-      player.volume = muted ? 0 : volume;
-      player.muted = muted;
-      player.play();
+      if (!controller.loadAndPlay(sound.id, { volume, muted })) return;
       setActiveSoundId(sound.id);
       setIsPlaying(true);
     },
-    [activeSoundId, muted, player, volume],
+    [activeSoundId, controller, muted, volume],
   );
 
   useEffect(() => {
-    player.volume = muted ? 0 : volume;
-    player.muted = muted;
-  }, [muted, player, volume]);
+    controller.applyVolume({ volume, muted });
+  }, [controller, muted, volume]);
 
-  useEffect(() => stop, [stop]);
+  // useAudioPlayer releases the native player on unmount, which stops playback.
+  // We only flip our guard so any in-flight async work (fades, awaited ops)
+  // stops touching the released object — we never call player methods here.
+  //
+  // Effect cleanups also run on every Fast Refresh, where expo-audio keeps the
+  // native player alive — so setup must re-arm the guard via markMounted(), or
+  // one refresh would leave the ref-cached controller silently dead forever
+  // (the regression that stopped all focus sounds).
+  useEffect(() => {
+    controller.markMounted();
+    return () => {
+      controller.markReleased();
+    };
+  }, [controller]);
 
   return {
     activeSound,
@@ -335,19 +364,28 @@ function useFocusSoundPlayer() {
   };
 }
 
-function fadeOutPlayer(player: ReturnType<typeof useAudioPlayer>, durationMs = 380): Promise<void> {
-  const startVolume = player.volume;
+// Ramps the player volume down to 0 over `durationMs`, then pauses and rewinds.
+// Aborts immediately if the fade token is superseded or the player is released.
+function fadeOutPlayer(controller: GuardedSoundPlayer, token: number, durationMs = 380): Promise<void> {
+  const startVolume = controller.readVolume();
   const startedAt = Date.now();
 
   return new Promise((resolve) => {
     const interval = setInterval(() => {
+      if (!controller.isFadeCurrent(token)) {
+        clearInterval(interval);
+        resolve();
+        return;
+      }
       const progress = Math.min(1, (Date.now() - startedAt) / durationMs);
-      player.volume = startVolume * (1 - progress);
-
+      if (!controller.fadeStep(token, startVolume * (1 - progress))) {
+        clearInterval(interval);
+        resolve();
+        return;
+      }
       if (progress >= 1) {
         clearInterval(interval);
-        player.pause();
-        void player.seekTo(0).catch(() => undefined);
+        controller.pauseAndRewind();
         resolve();
       }
     }, 16);

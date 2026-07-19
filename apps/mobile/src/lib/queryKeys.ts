@@ -7,6 +7,8 @@ export const queryKeys = {
     sharedIds: ['tasks', 'shared-ids'] as const,
   },
   dashboard: { summary: ['dashboard', 'summary'] as const },
+  reminders: { list: ['reminders'] as const },
+  focus: { stats: ['focus', 'stats'] as const },
   aiCollaboration: {
     capacity: (taskId: string) => ['aiCollaboration', 'capacity', taskId] as const,
     today: (taskId: string) => ['aiCollaboration', 'today', taskId] as const,

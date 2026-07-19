@@ -37,9 +37,13 @@ import {
 } from '../lib/tasksApi';
 import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
 import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard';
+import { SubtaskManagementSection } from '../components/SubtaskManagementSection';
+import { DependencyManagementSection } from '../components/DependencyManagementSection';
+import { TASK_REMINDER_OPTIONS, canScheduleTaskReminder, validateTaskReminder } from './editTaskReminder';
 
 type Props = {
   task: ApiTask | null;
+  tasks?: ApiTask[];
   accessToken?: string;
   currentUserId?: string;
   onRefresh?: () => void;
@@ -48,6 +52,8 @@ type Props = {
   onDelete: () => Promise<void> | void;
   onSave: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void;
   onSaved?: (task: ApiTask) => void;
+  onSubtasksUpdated?: (task: ApiTask) => void;
+  onDependenciesUpdated?: (task: ApiTask) => void;
   onPermissionDenied?: () => void;
   onOpenAiCollaboration?: () => void;
   onLifecycleChange?: (state: EditTaskLifecycleState) => void;
@@ -115,6 +121,7 @@ function attachmentColor(type?: string, fileName?: string) {
 
 export default function EditTaskScreen({
   task,
+  tasks = [],
   accessToken,
   currentUserId = '',
   onRefresh,
@@ -123,6 +130,8 @@ export default function EditTaskScreen({
   onDelete,
   onSave,
   onSaved,
+  onSubtasksUpdated,
+  onDependenciesUpdated,
   onPermissionDenied,
   onOpenAiCollaboration,
   onLifecycleChange,
@@ -148,6 +157,8 @@ export default function EditTaskScreen({
   const [priority, setPriority] = useState(task ? toUiPriority(task.priority) : 'Medium');
   const [dueDate, setDueDate] = useState<Date | undefined>(toDateInput(task?.dueDate));
   const [dueTime, setDueTime] = useState(task?.dueTime ?? '');
+  const [reminderEnabled, setReminderEnabled] = useState(task?.reminderEnabled ?? false);
+  const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task?.reminderBeforeMinutes ?? 30);
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [estimatedHours, setEstimatedHours] = useState(String(task?.estimatedHours ?? 0));
   const [spentHours, setSpentHours] = useState(String(task?.spentHours ?? 0));
@@ -178,6 +189,8 @@ export default function EditTaskScreen({
       priority: task ? toUiPriority(task.priority) : 'Medium',
       dueDateTime: toDateInput(task?.dueDate)?.getTime(),
       dueTime: task?.dueTime ?? '',
+      reminderEnabled: task?.reminderEnabled ?? false,
+      reminderBeforeMinutes: task?.reminderBeforeMinutes ?? 30,
       notes: task?.notes ?? '',
       estimatedHours: String(task?.estimatedHours ?? 0),
       spentHours: String(task?.spentHours ?? 0),
@@ -195,6 +208,8 @@ export default function EditTaskScreen({
     priority !== initialValues.priority ||
     dueDate?.getTime() !== initialValues.dueDateTime ||
     dueTime !== initialValues.dueTime ||
+    reminderEnabled !== initialValues.reminderEnabled ||
+    reminderBeforeMinutes !== initialValues.reminderBeforeMinutes ||
     notes !== initialValues.notes ||
     estimatedHours !== initialValues.estimatedHours ||
     spentHours !== initialValues.spentHours ||
@@ -313,6 +328,8 @@ export default function EditTaskScreen({
       setError('Task title is required.');
       return;
     }
+    const reminderError = validateTaskReminder(reminderEnabled, dueDate, dueTime);
+    if (reminderError) { setError(reminderError); return; }
 
     setSaving(true);
     setError('');
@@ -329,6 +346,8 @@ export default function EditTaskScreen({
         priority: toApiPriority(priority),
         dueDate: dueDate ? dueDate.toISOString() : undefined,
         dueTime,
+        reminderEnabled,
+        reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         notes: notes.trim(),
         estimatedTimeMinutes,
         spentTimeMinutes,
@@ -439,6 +458,23 @@ export default function EditTaskScreen({
           ))}
         </View>
         {error ? <Text className="mt-2 text-sm font-bold text-red-300">{error}</Text> : null}
+      </Card>
+
+      <Card title="Subtasks">
+        <SubtaskManagementSection
+          task={task}
+          accessToken={accessToken ?? ''}
+          canEdit={canEditShared}
+          onError={setError}
+          onTaskUpdated={(updated) => {
+            onSubtasksUpdated?.(updated);
+            onRefresh?.();
+          }}
+        />
+      </Card>
+
+      <Card title="Dependencies">
+        <DependencyManagementSection task={task} tasks={tasks} accessToken={accessToken ?? ''} canEdit={canEditShared} onError={setError} onTaskUpdated={(updated) => { onDependenciesUpdated?.(updated); onRefresh?.(); }} />
       </Card>
 
       <Card title="Task Settings">
@@ -563,6 +599,12 @@ export default function EditTaskScreen({
       </Card>
 
       <Card title="Reminder">
+        <View className="mb-3 flex-row items-center justify-between">
+          <View><Text className="text-sm font-bold" style={{ color: colors.text }}>Enable task reminder</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>{canScheduleTaskReminder(dueDate, dueTime) ? 'Remind before this task is due.' : 'Set a due date and time to enable reminders.'}</Text></View>
+          <Pressable disabled={!canScheduleTaskReminder(dueDate, dueTime)} accessibilityRole="switch" accessibilityState={{ checked: reminderEnabled, disabled: !canScheduleTaskReminder(dueDate, dueTime) }} accessibilityLabel="Enable task reminder" onPress={() => setReminderEnabled((enabled) => !enabled)} className="h-6 w-11 justify-center rounded-full px-1" style={{ backgroundColor: reminderEnabled ? colors.accent : colors.border, opacity: canScheduleTaskReminder(dueDate, dueTime) ? 1 : 0.5 }}><View className={`h-4 w-4 rounded-full bg-white ${reminderEnabled ? 'self-end' : 'self-start'}`} /></Pressable>
+        </View>
+        <Label text="Reminder lead time" />
+        <Select label={`${TASK_REMINDER_OPTIONS.includes(reminderBeforeMinutes as never) ? reminderBeforeMinutes : 30} minutes before`} onPress={() => reminderEnabled && Alert.alert('Reminder lead time', 'Choose when to be reminded', TASK_REMINDER_OPTIONS.map((value) => ({ text: value === 60 ? '1 hour before' : value === 1440 ? '1 day before' : `${value} minutes before`, onPress: () => setReminderBeforeMinutes(value) })))} />
         <ReminderAudienceSection
           taskId={task.id}
           canEditShared={canEditShared}
@@ -617,6 +659,7 @@ export default function EditTaskScreen({
         visible={isRecurrenceSheetVisible}
         mode={recurrence ? 'edit' : 'create'}
         recurrence={recurrence}
+        accessToken={accessToken}
         onClose={() => setIsRecurrenceSheetVisible(false)}
         onSave={setRecurrence}
         onRemove={() => setRecurrence(null)}

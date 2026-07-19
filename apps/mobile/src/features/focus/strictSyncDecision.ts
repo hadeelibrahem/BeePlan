@@ -19,8 +19,12 @@ export type StrictSyncInputs = {
   usageAccess: boolean;
   /** Current JS focus session id, or null when idle. */
   activeSessionId: string | null;
+  /** Whether the JS focus session is currently paused (pausedSinceMs !== null). */
+  jsPaused: boolean;
   /** Whether the native blocker currently reports an active session. */
   nativeActive: boolean;
+  /** Whether the native blocker currently reports the session as paused. */
+  nativePaused: boolean;
   /** Session id the native blocker is running, or null. */
   nativeSessionId: string | null;
   /** Session id we last armed, or null. */
@@ -30,6 +34,8 @@ export type StrictSyncInputs = {
 export type StrictSyncAction =
   | { type: 'noop' }
   | { type: 'arm'; sessionId: string }
+  | { type: 'pause'; sessionId: string }
+  | { type: 'resume'; sessionId: string }
   | { type: 'disarm'; reason: 'ended' | 'disabled' | 'stale' };
 
 export function decideStrictSync(i: StrictSyncInputs): StrictSyncAction {
@@ -53,16 +59,29 @@ export function decideStrictSync(i: StrictSyncInputs): StrictSyncAction {
   }
 
   const sessionId = i.activeSessionId as string;
+  const armedForThis = i.armedSessionId === sessionId;
+  const nativeForThis = i.nativeActive && i.nativeSessionId === sessionId;
 
-  // Already armed for this exact session.
-  if (i.armedSessionId === sessionId) {
-    // Native drifted to a different session id → re-arm to replace it.
-    if (i.nativeActive && i.nativeSessionId !== null && i.nativeSessionId !== sessionId) {
-      return { type: 'arm', sessionId };
-    }
-    return { type: 'noop' };
+  // No native session for this id yet (and we did not arm it) → start fresh.
+  // Keying off nativeForThis as well means a session the native side is already
+  // running (e.g. after a JS reload) is adopted rather than started twice.
+  if (!armedForThis && !nativeForThis) {
+    return { type: 'arm', sessionId };
   }
 
-  // New (or changed) session that should be armed.
-  return { type: 'arm', sessionId };
+  // We armed this id but native drifted to a different one → replace it.
+  if (armedForThis && i.nativeActive && i.nativeSessionId !== null && i.nativeSessionId !== sessionId) {
+    return { type: 'arm', sessionId };
+  }
+
+  // Native is running our session: reconcile only the paused gate, never restart
+  // the service. This is what makes Pause actually release the blocked apps.
+  if (nativeForThis && i.jsPaused && !i.nativePaused) {
+    return { type: 'pause', sessionId };
+  }
+  if (nativeForThis && !i.jsPaused && i.nativePaused) {
+    return { type: 'resume', sessionId };
+  }
+
+  return { type: 'noop' };
 }

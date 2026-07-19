@@ -13,11 +13,22 @@
  * Tab/Stack navigators a single source of truth for their screen lists.
  */
 
+import type { MainTabParamList } from './types';
 import type { AppScreen } from './backNavigation';
 
 /** Bottom-tab destinations — the app's top-level "places". */
-export const MAIN_TAB_SCREENS = ['dashboard', 'tasks', 'focus', 'reminders'] as const;
+export const MAIN_TAB_SCREENS = ['dashboard', 'tasks', 'focus', 'reminders', 'people'] as const;
 export type MainTabScreen = (typeof MAIN_TAB_SCREENS)[number];
+
+/** Maps the framework-agnostic specification to the navigator's typed names. */
+export const MAIN_TAB_SCREEN_ROUTES: Record<MainTabScreen, keyof MainTabParamList> = {
+  dashboard: 'Dashboard',
+  tasks: 'Tasks',
+  focus: 'Focus',
+  reminders: 'Reminders',
+  people: 'People',
+};
+
 
 /**
  * Screens pushed onto the stack above the tabs: detail / create / edit / modal
@@ -34,6 +45,8 @@ export const STACK_SCREENS = [
   'edit',
   'social',
   'notifications',
+  'calendar',
+  'aiDailyPlanner',
 ] as const;
 export type StackScreen = (typeof STACK_SCREENS)[number];
 
@@ -51,6 +64,8 @@ export type NavigationArea = 'tab' | 'stack' | 'auth';
  */
 export const DEEP_LINKS: Record<string, AppScreen> = {
   'reset-password': 'reset',
+  calendar: 'calendar',
+  planner: 'aiDailyPlanner',
 };
 
 /** Which area of the navigation tree a screen belongs to. */

@@ -13,6 +13,7 @@ export type AppScreen =
   | 'forgot'
   | 'reset'
   | 'dashboard'
+  | 'people'
   | 'tasks'
   | 'focus'
   | 'focusSession'
@@ -25,7 +26,9 @@ export type AppScreen =
   | 'details'
   | 'edit'
   | 'social'
-  | 'notifications';
+  | 'notifications'
+  | 'calendar'
+  | 'aiDailyPlanner';
 
 /**
  * The logical parent of each screen — where "back" returns to. `null` marks a
@@ -42,6 +45,7 @@ export const SCREEN_PARENTS: Record<AppScreen, AppScreen | null> = {
   dashboard: null,
   // Primary destinations hang off the dashboard.
   tasks: 'dashboard',
+  people: 'dashboard',
   focus: 'dashboard',
   reminders: 'dashboard',
   notifications: 'dashboard',
@@ -56,6 +60,8 @@ export const SCREEN_PARENTS: Record<AppScreen, AppScreen | null> = {
   details: 'reminders',
   edit: 'details',
   social: 'reminders',
+  calendar: 'dashboard',
+  aiDailyPlanner: 'dashboard',
 };
 
 export type BackDecision =

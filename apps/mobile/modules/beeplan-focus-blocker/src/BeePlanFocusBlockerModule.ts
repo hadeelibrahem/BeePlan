@@ -37,6 +37,14 @@ declare class BeePlanFocusBlockerModuleType extends NativeModule<{
   startStrictMode(config: StartStrictModeConfig): Promise<FocusBlockerStatus>;
   /** Tears down the service and blocking. Safe to call when idle. */
   stopStrictMode(): Promise<FocusBlockerStatus>;
+  /** Suspends blocking without ending the session. Safe to call when idle/paused. */
+  pauseStrictMode(): Promise<FocusBlockerStatus>;
+  /**
+   * Re-arms blocking for a paused session without restarting the service.
+   * `endsAtMs` (ms since epoch), when provided, refreshes the wall-clock end so
+   * time spent paused is not counted against the session.
+   */
+  resumeStrictMode(endsAtMs?: number | null): Promise<FocusBlockerStatus>;
   /** Synchronous snapshot of the current status. */
   getStatus(): FocusBlockerStatus;
   /** Returns raw block events, optionally filtered to a session id. */

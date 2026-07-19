@@ -11,11 +11,18 @@ function inputs(overrides: Partial<StrictSyncInputs> = {}): StrictSyncInputs {
     blockedCount: 2,
     usageAccess: true,
     activeSessionId: 's1',
+    jsPaused: false,
     nativeActive: false,
+    nativePaused: false,
     nativeSessionId: null,
     armedSessionId: null,
     ...overrides,
   }
+}
+
+// An armed, natively-running, unpaused session "s1" — i.e. actively blocking.
+function armedAndRunning(overrides: Partial<StrictSyncInputs> = {}): StrictSyncInputs {
+  return inputs({ armedSessionId: 's1', nativeActive: true, nativeSessionId: 's1', ...overrides })
 }
 
 test('strict mode disabled → does not arm', () => {
@@ -98,4 +105,66 @@ test('retry after a failed start — arm reset to null re-issues arm', () => {
   // The hook clears armedSessionId on failure; the next evaluation re-arms.
   const action = decideStrictSync(inputs({ armedSessionId: null }))
   assert.deepEqual(action, { type: 'arm', sessionId: 's1' })
+})
+
+// --- Pause / resume ---------------------------------------------------------
+
+test('ACTIVE: running unpaused session keeps blocking — noop (block stays on)', () => {
+  // The selected app is blocked because the session is active and not paused.
+  assert.deepEqual(decideStrictSync(armedAndRunning()), { type: 'noop' })
+})
+
+test('PAUSED: JS pauses a running session → pause the native gate (apps open)', () => {
+  const action = decideStrictSync(armedAndRunning({ jsPaused: true, nativePaused: false }))
+  assert.deepEqual(action, { type: 'pause', sessionId: 's1' })
+})
+
+test('PAUSED: already reflected natively → noop (no redundant pause)', () => {
+  const action = decideStrictSync(armedAndRunning({ jsPaused: true, nativePaused: true }))
+  assert.deepEqual(action, { type: 'noop' })
+})
+
+test('RESUMED: JS unpauses while native still paused → resume (blocks again)', () => {
+  const action = decideStrictSync(armedAndRunning({ jsPaused: false, nativePaused: true }))
+  assert.deepEqual(action, { type: 'resume', sessionId: 's1' })
+})
+
+test('pause/resume never restart the service — no arm while native runs our session', () => {
+  // Whether paused or resuming, the action is pause/resume, never arm.
+  assert.notEqual(decideStrictSync(armedAndRunning({ jsPaused: true })).type, 'arm')
+  assert.notEqual(
+    decideStrictSync(armedAndRunning({ jsPaused: false, nativePaused: true })).type,
+    'arm',
+  )
+})
+
+test('STOPPED: session ends while paused → disarm (fully clear)', () => {
+  const action = decideStrictSync(
+    inputs({ activeSessionId: null, jsPaused: false, armedSessionId: 's1', nativeActive: true, nativePaused: true }),
+  )
+  assert.deepEqual(action, { type: 'disarm', reason: 'ended' })
+})
+
+test('adopt after JS reload: native already running our session → no duplicate arm', () => {
+  // JS process restarted (armedSessionId lost) but native still runs s1 unpaused.
+  const action = decideStrictSync(
+    inputs({ armedSessionId: null, nativeActive: true, nativeSessionId: 's1', jsPaused: false }),
+  )
+  assert.deepEqual(action, { type: 'noop' })
+})
+
+test('adopt after JS reload while paused: native runs s1, JS says paused → pause', () => {
+  const action = decideStrictSync(
+    inputs({ armedSessionId: null, nativeActive: true, nativeSessionId: 's1', jsPaused: true, nativePaused: false }),
+  )
+  assert.deepEqual(action, { type: 'pause', sessionId: 's1' })
+})
+
+test('service recreation preserves paused: JS paused, native reports paused → noop', () => {
+  // After the foreground service is recreated it rehydrates the persisted
+  // paused session; JS and native agree, so nothing needs to change.
+  const action = decideStrictSync(
+    armedAndRunning({ jsPaused: true, nativePaused: true }),
+  )
+  assert.deepEqual(action, { type: 'noop' })
 })

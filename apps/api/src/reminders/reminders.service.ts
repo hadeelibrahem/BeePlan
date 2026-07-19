@@ -22,6 +22,11 @@ type PersonConfig = {
   cooldownMinutes?: number;
   permissionId?: string | null;
   lastNotifiedAt?: string | null;
+  proximityState?: 'inside' | 'outside' | null;
+  lastEnteredAt?: string | null;
+  lastExitedAt?: string | null;
+  lastTransitionAt?: string | null;
+  completedAt?: string | null;
 };
 
 @Injectable()
@@ -154,9 +159,8 @@ export class RemindersService {
     const existing = await this.findOne(userId, id);
 
     // Person config is a partial patch: merge onto the stored config so
-    // permission/targeting fields (permissionId, targetUserId, lastNotifiedAt)
-    // survive an edit that only changes radius/notes/cooldown. Ignored for
-    // non-person reminders.
+    // permission/targeting/proximity fields survive an edit that only changes
+    // radius/notes/cooldown. Ignored for non-person reminders.
     const { person: personPatch, ...rest } = dto;
     let mergedPerson: PersonConfig | undefined;
     if (personPatch && existing.type === 'person') {

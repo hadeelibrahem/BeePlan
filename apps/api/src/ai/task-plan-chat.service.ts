@@ -15,7 +15,12 @@ import { buildTaskPlanChatPrompt } from './prompts/task-plan-chat.prompt';
 import { PlannerPreferencesService } from './planner/planner-preferences.service';
 import { normalizeTaskPlanChatResponse, TaskPlanChatResponse } from './task-plan';
 import type { ExistingTaskSummary } from './task-plan-chat.types';
+import { repairPlanResponse } from './task-plan-schedule';
 import { parseJsonResponse } from './utils/json-response';
+
+// An existing task counts a whole UTC day as "busy" once it needs at least this
+// much work — enough that stacking new focus sessions on top is a bad idea.
+const BUSY_DAY_MINUTES = 240;
 
 // The conversation grows every turn (full history + the open-tasks list is
 // re-sent each time), so later turns take noticeably longer for the provider
@@ -109,10 +114,46 @@ export class TaskPlanChatService {
     this.logger.log(`[${requestId}] provider call finished in ${providerDurationMs}ms`);
 
     const response = this.toResponse(raw, requestId);
+
+    // Deterministically validate + repair the focus schedule before returning,
+    // so a "plan" never ships past-dated, over-long, under-covered, overlapping,
+    // or deadline-violating sessions even when the model's own scheduling drifts.
+    const repaired = repairPlanResponse(response, {
+      now: new Date(),
+      preferences,
+      busyDays: this.deriveBusyDays(existingTasks, dto.availability),
+    });
+
     this.logger.log(
-      `[${requestId}] request completed in ${Date.now() - receivedAt}ms (type=${response.type})`,
+      `[${requestId}] request completed in ${Date.now() - receivedAt}ms (type=${repaired.type})`,
     );
-    return response;
+    return repaired;
+  }
+
+  /**
+   * Derive UTC days that are already too busy to schedule new focus work on:
+   * substantial existing tasks due that day, plus any explicit busy days the
+   * client passed in `availability.busyDays`.
+   */
+  private deriveBusyDays(
+    existingTasks: ExistingTaskSummary[],
+    availability?: Record<string, unknown>,
+  ): string[] {
+    const days = new Set<string>();
+    for (const task of existingTasks) {
+      if (task.dueDate && task.estimatedTimeMinutes >= BUSY_DAY_MINUTES) {
+        days.add(task.dueDate.slice(0, 10));
+      }
+    }
+    const busy = availability?.busyDays;
+    if (Array.isArray(busy)) {
+      for (const value of busy) {
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+          days.add(value.slice(0, 10));
+        }
+      }
+    }
+    return [...days];
   }
 
   private async loadOpenTasks(userId: string): Promise<ExistingTaskSummary[]> {

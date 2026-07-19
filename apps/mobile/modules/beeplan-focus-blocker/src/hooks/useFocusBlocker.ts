@@ -13,6 +13,8 @@ import {
   isFocusBlockerSupported,
   openOverlaySettings,
   openUsageAccessSettings,
+  pauseStrictMode,
+  resumeStrictMode,
   startStrictMode,
   stopStrictMode,
   subscribeToEvents,
@@ -153,6 +155,18 @@ export function useFocusBlocker(options: UseFocusBlockerOptions = {}) {
     return next;
   }, []);
 
+  const pause = useCallback(async () => {
+    const next = await pauseStrictMode();
+    setStatus(next);
+    return next;
+  }, []);
+
+  const resume = useCallback(async (endsAtMs?: number | null) => {
+    const next = await resumeStrictMode(endsAtMs);
+    setStatus(next);
+    return next;
+  }, []);
+
   const exitEmergency = useCallback(async (reason: string) => {
     const next = await emergencyExit(reason);
     setStatus(next);
@@ -178,6 +192,8 @@ export function useFocusBlocker(options: UseFocusBlockerOptions = {}) {
     loadInstalledApps,
     start,
     stop,
+    pause,
+    resume,
     emergencyExit: exitEmergency,
     allowAppTemporarily,
   };
