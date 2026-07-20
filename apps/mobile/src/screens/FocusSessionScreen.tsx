@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View, type GestureResponderEvent } from 'react-native';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
+import { createGuardedSoundPlayer, type GuardedSoundPlayer } from '../lib/focusSoundPlayer';
 import { DangerButton, OutlineButton, PrimaryButton, SecondaryButton } from '../components/layout';
 import { BREAK_PRESETS, formatFocusClock, labelForFocusType, type FocusTaskOutcome } from '../lib/focusApi';
 import { FOCUS_SOUND_CATEGORIES, FOCUS_SOUNDS, type FocusSound } from '../lib/focusSounds';
@@ -8,6 +9,9 @@ import type { UseFocusSession } from '../lib/useFocusSession';
 import type { ApiTask } from '../lib/tasksApi';
 import type { AppTheme } from '../theme/colors';
 import { useTheme } from '../theme/useTheme';
+import { MobileIcon } from '../components/layout';
+import { useStrictFocus } from '../features/focus/StrictFocusContext';
+import { StrictStatsSheet } from '../features/focus/StrictStatsSheet';
 
 const FOCUS_SOUND_ASSETS: Record<string, number> = {
   ambient: require('../../assets/focus-sounds/ambient.mp3') as number,
@@ -56,6 +60,31 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
   const [soundsOpen, setSoundsOpen] = useState(false);
   const soundPlayer = useFocusSoundPlayer();
   const stopSound = soundPlayer.stop;
+
+  // --- Strict Mode -----------------------------------------------------------
+  const strict = useStrictFocus();
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [showStrictExit, setShowStrictExit] = useState(false);
+  const strictActive =
+    strict.blocker.status.isActive && strict.blocker.status.sessionId === (active?.sessionId ?? null);
+
+  // End a strict session early with a logged reason, then cancel the focus
+  // session itself. emergencyExit stops native blocking + records the reason.
+  const confirmStrictExit = useCallback(
+    async (reason: string) => {
+      setShowStrictExit(false);
+      await strict.blocker.emergencyExit(reason);
+      await focus.cancel();
+    },
+    [strict.blocker, focus],
+  );
+
+  // Cancel: for a strict session require the deliberate emergency-exit flow;
+  // otherwise keep the existing one-tap cancel behaviour.
+  const handleCancelPress = useCallback(() => {
+    if (strictActive) setShowStrictExit(true);
+    else void focus.cancel();
+  }, [strictActive, focus]);
 
   const activeTask = useMemo(() => tasks.find((task) => task.id === active?.taskId) ?? null, [tasks, active?.taskId]);
 
@@ -145,12 +174,25 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
                   </PrimaryButton>
                 </View>
                 <View className="flex-1">
-                  <DangerButton fullWidth onPress={() => void focus.cancel()}>
+                  <DangerButton fullWidth onPress={handleCancelPress}>
                     Cancel
                   </DangerButton>
                 </View>
               </View>
             </View>
+          ) : null}
+
+          {strictActive || strict.sync.arming || strict.sync.error ? (
+            <StrictStatusCard
+              theme={theme}
+              active={strictActive}
+              arming={strict.sync.arming}
+              error={strict.sync.error}
+              blockedCount={strict.blocker.status.blockedPackages.length}
+              usageAccess={strict.blocker.usageAccess}
+              attempts={strict.blockAttempts}
+              onViewAttempts={() => setStatsOpen(true)}
+            />
           ) : null}
         </View>
 
@@ -182,6 +224,22 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
         <ExitConfirm theme={theme} onStay={() => setShowExitConfirm(false)} onLeave={() => { setShowExitConfirm(false); onExit(); }} />
       </Modal>
 
+      <Modal visible={showStrictExit} transparent animationType="fade">
+        <StrictExitConfirm
+          theme={theme}
+          onStay={() => setShowStrictExit(false)}
+          onExit={(reason) => void confirmStrictExit(reason)}
+        />
+      </Modal>
+
+      <StrictStatsSheet
+        visible={statsOpen}
+        sessionId={active?.sessionId ?? strict.blocker.status.sessionId}
+        focusMinutes={completedMinutes}
+        endReason={strict.lastEndReason}
+        onClose={() => setStatsOpen(false)}
+      />
+
       <FocusSoundsSheet
         visible={soundsOpen}
         theme={theme}
@@ -209,6 +267,17 @@ function useFocusSoundPlayer() {
   const [volume, setVolume] = useState(0.65);
   const [muted, setMuted] = useState(false);
 
+  // A guarded controller that no-ops after the player is released and never
+  // forwards a null source to replace(). Recreated only if the player identity
+  // changes (it's stable across renders and Fast Refresh).
+  const playerRef = useRef(player);
+  const controllerRef = useRef<GuardedSoundPlayer | null>(null);
+  if (!controllerRef.current || playerRef.current !== player) {
+    playerRef.current = player;
+    controllerRef.current = createGuardedSoundPlayer(player, (id) => FOCUS_SOUND_ASSETS[id]);
+  }
+  const controller = controllerRef.current;
+
   const activeSound = useMemo(
     () => FOCUS_SOUNDS.find((sound) => sound.id === activeSoundId) ?? null,
     [activeSoundId],
@@ -219,51 +288,68 @@ function useFocusSoundPlayer() {
   }, []);
 
   const pause = useCallback(() => {
-    player.pause();
+    controller.pause();
     setIsPlaying(false);
-  }, [player]);
+  }, [controller]);
 
   const stop = useCallback(() => {
-    player.pause();
-    void player.seekTo(0).catch(() => undefined);
-    player.replace(null);
+    controller.stop();
     setActiveSoundId(null);
     setIsPlaying(false);
-  }, [player]);
+  }, [controller]);
 
   const play = useCallback(
     async (sound: FocusSound) => {
+      console.log(`[FocusSound] play requested (${sound.id})`); // TEMP debug
+      if (controller.isReleased()) {
+        console.log('[FocusSound] playback skipped (controller released)'); // TEMP debug
+        return;
+      }
+
       if (activeSoundId === sound.id) {
-        player.volume = muted ? 0 : volume;
-        player.muted = muted;
-        player.play();
+        controller.resume({ volume, muted });
         setIsPlaying(true);
         return;
       }
 
+      // Fade the previous sound out (or just pause if nothing was playing),
+      // then load the new one — but bail if a newer op or unmount intervened.
+      const token = controller.beginFade();
       if (activeSoundId) {
-        await fadeOutPlayer(player);
+        await fadeOutPlayer(controller, token);
       } else {
-        player.pause();
+        controller.pause();
+      }
+      if (!controller.isFadeCurrent(token)) {
+        console.log('[FocusSound] playback skipped (superseded during fade)'); // TEMP debug
+        return;
       }
 
-      player.replace(FOCUS_SOUND_ASSETS[sound.id]);
-      player.loop = true;
-      player.volume = muted ? 0 : volume;
-      player.muted = muted;
-      player.play();
+      if (!controller.loadAndPlay(sound.id, { volume, muted })) return;
       setActiveSoundId(sound.id);
       setIsPlaying(true);
     },
-    [activeSoundId, muted, player, volume],
+    [activeSoundId, controller, muted, volume],
   );
 
   useEffect(() => {
-    player.volume = muted ? 0 : volume;
-    player.muted = muted;
-  }, [muted, player, volume]);
+    controller.applyVolume({ volume, muted });
+  }, [controller, muted, volume]);
 
-  useEffect(() => stop, [stop]);
+  // useAudioPlayer releases the native player on unmount, which stops playback.
+  // We only flip our guard so any in-flight async work (fades, awaited ops)
+  // stops touching the released object — we never call player methods here.
+  //
+  // Effect cleanups also run on every Fast Refresh, where expo-audio keeps the
+  // native player alive — so setup must re-arm the guard via markMounted(), or
+  // one refresh would leave the ref-cached controller silently dead forever
+  // (the regression that stopped all focus sounds).
+  useEffect(() => {
+    controller.markMounted();
+    return () => {
+      controller.markReleased();
+    };
+  }, [controller]);
 
   return {
     activeSound,
@@ -278,19 +364,28 @@ function useFocusSoundPlayer() {
   };
 }
 
-function fadeOutPlayer(player: ReturnType<typeof useAudioPlayer>, durationMs = 380): Promise<void> {
-  const startVolume = player.volume;
+// Ramps the player volume down to 0 over `durationMs`, then pauses and rewinds.
+// Aborts immediately if the fade token is superseded or the player is released.
+function fadeOutPlayer(controller: GuardedSoundPlayer, token: number, durationMs = 380): Promise<void> {
+  const startVolume = controller.readVolume();
   const startedAt = Date.now();
 
   return new Promise((resolve) => {
     const interval = setInterval(() => {
+      if (!controller.isFadeCurrent(token)) {
+        clearInterval(interval);
+        resolve();
+        return;
+      }
       const progress = Math.min(1, (Date.now() - startedAt) / durationMs);
-      player.volume = startVolume * (1 - progress);
-
+      if (!controller.fadeStep(token, startVolume * (1 - progress))) {
+        clearInterval(interval);
+        resolve();
+        return;
+      }
       if (progress >= 1) {
         clearInterval(interval);
-        player.pause();
-        void player.seekTo(0).catch(() => undefined);
+        controller.pauseAndRewind();
         resolve();
       }
     }, 16);
@@ -367,7 +462,7 @@ function FocusSoundsSheet({
                         <View className="flex-row items-center justify-between gap-3">
                           <View className="flex-1">
                             <View className="flex-row items-center gap-2">
-                              <Text className="text-xl">{sound.icon}</Text>
+                              <MobileIcon name={sound.icon} color={colors.accent} size={20} accessibilityLabel={`${sound.name} sound`} />
                               <Text numberOfLines={1} className="text-sm font-black" style={{ color: colors.text }}>
                                 {sound.name}
                               </Text>
@@ -718,6 +813,140 @@ function Badge({ theme, label, type }: { theme: AppTheme; label: string; type: s
       <Text className="text-[11px] font-bold capitalize" style={{ color }}>
         {label}
       </Text>
+    </View>
+  );
+}
+
+// --- Strict Mode pieces ----------------------------------------------------
+
+function StrictStatusCard({
+  theme,
+  active,
+  arming,
+  error,
+  blockedCount,
+  usageAccess,
+  attempts,
+  onViewAttempts,
+}: {
+  theme: AppTheme;
+  active: boolean;
+  arming: boolean;
+  error: string | null;
+  blockedCount: number;
+  usageAccess: boolean;
+  attempts: number;
+  onViewAttempts: () => void;
+}) {
+  const { colors } = theme;
+
+  if (error) {
+    return (
+      <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.error, backgroundColor: `${colors.error}18` }}>
+        <Text className="text-xs font-black uppercase" style={{ color: colors.error, letterSpacing: 1 }}>
+          App blocking did not activate
+        </Text>
+        <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
+          {error} Your focus timer is still running normally.
+        </Text>
+      </View>
+    );
+  }
+
+  if (arming && !active) {
+    return (
+      <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
+        <Text className="text-xs font-semibold" style={{ color: colors.secondaryText }}>
+          Activating app blocking…
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}>
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2">
+          <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.accent }}>
+            <Text className="text-[10px] font-black uppercase" style={{ color: colors.accentText, letterSpacing: 1 }}>
+              Strict Mode active
+            </Text>
+          </View>
+        </View>
+        <Text className="text-xs font-semibold" style={{ color: usageAccess ? colors.success : colors.warning }}>
+          {usageAccess ? 'Usage Access ✓' : 'Permission lost'}
+        </Text>
+      </View>
+
+      <View className="mt-3 flex-row items-center justify-between">
+        <View>
+          <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
+            Blocking
+          </Text>
+          <Text className="text-sm font-black" style={{ color: colors.text }}>
+            {blockedCount} app{blockedCount === 1 ? '' : 's'}
+          </Text>
+        </View>
+        <View>
+          <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
+            Blocked attempts
+          </Text>
+          <Text className="text-sm font-black" style={{ color: colors.text }}>
+            {attempts}
+          </Text>
+        </View>
+        <Pressable onPress={onViewAttempts} accessibilityRole="button" className="rounded-xl px-3 py-2 active:opacity-70" style={{ backgroundColor: colors.surface }}>
+          <Text className="text-xs font-black" style={{ color: colors.primary }}>
+            View details
+          </Text>
+        </Pressable>
+      </View>
+
+      {!usageAccess ? (
+        <Text className="mt-2 text-[11px]" style={{ color: colors.warning }}>
+          Usage Access was revoked — blocking can't enforce until it's re-granted.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function StrictExitConfirm({
+  theme,
+  onStay,
+  onExit,
+}: {
+  theme: AppTheme;
+  onStay: () => void;
+  onExit: (reason: string) => void;
+}) {
+  const { colors } = theme;
+  const reasons = [
+    { key: 'emergency', label: 'Real emergency' },
+    { key: 'need-app', label: 'I need a blocked app' },
+    { key: 'done-early', label: 'Finished early' },
+    { key: 'other', label: 'Other reason' },
+  ];
+  return (
+    <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: '#00000099' }}>
+      <View className="w-full rounded-3xl border p-6" style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}>
+        <Text className="text-center text-lg font-black" style={{ color: colors.text }}>
+          End strict session early?
+        </Text>
+        <Text className="mt-1 text-center text-sm" style={{ color: colors.secondaryText }}>
+          This stops app blocking and ends your focus session. Pick a reason — it's saved to your stats.
+        </Text>
+        <View className="mt-4 gap-2">
+          {reasons.map((reason) => (
+            <DangerButton key={reason.key} fullWidth onPress={() => onExit(reason.key)}>
+              {reason.label}
+            </DangerButton>
+          ))}
+          <SecondaryButton fullWidth onPress={onStay}>
+            Keep focusing
+          </SecondaryButton>
+        </View>
+      </View>
     </View>
   );
 }

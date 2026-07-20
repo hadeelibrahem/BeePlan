@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import {
   BottomNavBar,
@@ -49,6 +49,7 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [permissions, setPermissions] = useState<LocationSharingPermission[]>([]);
+  const revokingPermissionIdsRef = useRef(new Set<string>());
   const [search, setSearch] = useState('');
   const [email, setEmail] = useState('');
   const [addingFriend, setAddingFriend] = useState(false);
@@ -141,6 +142,24 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
     }
   };
 
+  const confirmRevokeSharing = (permission: LocationSharingPermission) => {
+    const name = permission.friend?.fullName ?? t('people.sharing.aFriend');
+    Alert.alert('Revoke location sharing?', `${name} will no longer be able to see your shared location.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Revoke',
+        style: 'destructive',
+        onPress: () => {
+          if (revokingPermissionIdsRef.current.has(permission.id)) return;
+          revokingPermissionIdsRef.current.add(permission.id);
+          void run(() => revokeLocationSharing(permission.id), t('people.sharing.revoked')).finally(() => {
+            revokingPermissionIdsRef.current.delete(permission.id);
+          });
+        },
+      },
+    ]);
+  };
+
   async function handleSendTestNotification() {
     const notifGranted = await requestNotificationPermission();
     const id = await showPersonNearbyNotification({
@@ -189,7 +208,7 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
   return (
     <ScreenLayout
       headerSubtitle={t('people.subtitle')}
-      onProfilePress={onSignOut}
+      onSignOut={onSignOut}
       footer={<BottomNavBar active="reminders" onNavigateDashboard={onBack} />}
     >
       <Pressable
@@ -302,7 +321,7 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
                   <OutlineButton size="sm" onPress={() => void run(() => rejectLocationSharing(perm.id))}>{t('people.sharing.reject')}</OutlineButton>
                 </View>
               ) : perm.status === 'active' ? (
-                <DangerButton size="sm" onPress={() => void run(() => revokeLocationSharing(perm.id), t('people.sharing.revoked'))}>{t('people.sharing.revoke')}</DangerButton>
+                <DangerButton size="sm" onPress={() => confirmRevokeSharing(perm)}>{t('people.sharing.revoke')}</DangerButton>
               ) : null}
             </View>
           ))

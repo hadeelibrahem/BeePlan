@@ -1,13 +1,15 @@
 import './global.css';
 
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { createNavigationContainerRef, NavigationContainer, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import {
   addNotificationResponseReceivedListener,
   getLastNotificationResponseAsync,
 } from 'expo-notifications/build/NotificationsEmitter';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Linking, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   CreateReminderScreen,
@@ -15,6 +17,7 @@ import {
   ReminderDetailsScreen,
   RemindersListScreen,
   fetchReminders,
+  getReminderById,
   toggleReminderStatus,
   type Reminder,
 } from './src/features/reminders';
@@ -24,7 +27,9 @@ import {
 } from './src/features/reminders/utils/smartLocationReminderMonitor';
 import { AddTaskSheet } from './src/components/AddTaskSheet';
 import { PeopleScreen } from './src/features/social';
+import { createPersonReminderParams } from './src/features/reminders/personReminderNavigation';
 import { NotificationsScreen } from './src/features/collaboration';
+import { getUnreadCount } from './src/features/collaboration/api/collaboration.api';
 import { getLocationSharing } from './src/features/social/api/social.api';
 import { startProximityMonitor, stopProximityMonitor } from './src/services/proximityMonitor';
 import { useAuth } from './src/hooks/useAuth';
@@ -32,15 +37,17 @@ import { LanguageProvider } from './src/i18n/LanguageContext';
 import { AuthProvider } from './src/providers/AuthProvider';
 import AuthScreen from './src/screens/AuthScreen';
 import AiTaskBuilderScreen from './src/screens/AiTaskBuilderScreen';
+import AiDailyPlannerScreen from './src/screens/AiDailyPlannerScreen';
+import CalendarScreen from './src/screens/CalendarScreen';
+import NotesScreen from './src/screens/NotesScreen';
+import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import AllTasksScreen from './src/screens/AllTasksScreen';
-import CreateTaskScreen from './src/screens/CreateTaskScreen';
-import EditTaskScreen from './src/screens/EditTaskScreen';
 import FocusScreen from './src/screens/FocusScreen';
 import FocusSessionScreen from './src/screens/FocusSessionScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import { useFocusSession } from './src/lib/useFocusSession';
-import TaskDetailsScreen from './src/screens/TaskDetailsScreen';
+import { StrictFocusProvider } from './src/features/focus/StrictFocusContext';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { useTheme } from './src/theme/useTheme';
@@ -57,6 +64,18 @@ import {
   type TaskPayload,
 } from './src/lib/tasksApi';
 import { queryKeys } from './src/lib/queryKeys';
+import { ScreenHistory } from './src/lib/screenHistory';
+import { linking } from './src/navigation/linking';
+import { RootNavigator } from './src/navigation/RootNavigator';
+import type { MainTabParamList, RootStackParamList } from './src/navigation/types';
+import { TaskDetailsRoute } from './src/navigation/TaskDetailsRoute';
+import { CreateTaskRoute } from './src/navigation/CreateTaskRoute';
+import { EditTaskRoute } from './src/navigation/EditTaskRoute';
+import { AiCollaborationRoute } from './src/navigation/AiCollaborationRoute';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { AppScreen } from './src/navigation/backNavigation';
+
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,25 +84,6 @@ const queryClient = new QueryClient({
   },
 });
 
-type AppScreen =
-  | 'auth'
-  | 'forgot'
-  | 'reset'
-  | 'dashboard'
-  | 'tasks'
-  | 'focus'
-  | 'focusSession'
-  | 'createTask'
-  | 'aiPlanTask'
-  | 'taskDetails'
-  | 'editTask'
-  | 'reminders'
-  | 'create'
-  | 'details'
-  | 'edit'
-  | 'social'
-  | 'notifications';
-
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -91,7 +91,9 @@ export default function App() {
         <AuthProvider>
           <LanguageProvider>
             <ThemeProvider>
-              <ThemedApp />
+              <NavigationContainer ref={navigationRef} linking={linking}>
+                <ThemedApp />
+              </NavigationContainer>
             </ThemeProvider>
           </LanguageProvider>
         </AuthProvider>
@@ -101,7 +103,8 @@ export default function App() {
 }
 
 function ThemedApp() {
-  const [screen, setScreen] = useState<AppScreen>('auth');
+  const [screen, setScreenState] = useState<AppScreen>('auth');
+  const screenHistory = useRef(new ScreenHistory<AppScreen>());
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -112,31 +115,76 @@ function ThemedApp() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
   const [addTaskSheetVisible, setAddTaskSheetVisible] = useState(false);
   const { accessToken, loading, user, signOut } = useAuth();
   const { theme } = useTheme();
+
+  const refreshUnreadNotificationCount = useCallback(async () => {
+    if (!user) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+    try {
+      const { count } = await getUnreadCount();
+      setUnreadNotificationCount(count);
+    } catch {
+      // The badge is supplemental; navigation continues when this request fails.
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void refreshUnreadNotificationCount();
+  }, [refreshUnreadNotificationCount]);
   const queryClient = useQueryClient();
   const invalidateTaskFilters = useCallback(
     () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
     [queryClient],
   );
 
+  // Keep the existing screen switch while giving Android a predictable logical back stack.
+  const setScreen = useCallback((nextScreen: AppScreen) => {
+    if (nextScreen === screen) return;
+    screenHistory.current.push(screen, nextScreen);
+    setScreenState(nextScreen);
+  }, [screen]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      // A visible sheet always wins over navigation.
+      if (addTaskSheetVisible) {
+        setAddTaskSheetVisible(false);
+        return true;
+      }
+
+      const goBack = () => {
+        const previous = screenHistory.current.pop();
+        setScreenState(previous ?? 'dashboard');
+      };
+
+      // Forms do not expose their internal dirty state yet, so hardware back
+      // deliberately asks before leaving either creation or editing surface.
+      if (screen === 'aiPlanTask' || screen === 'create' || screen === 'edit') {
+        Alert.alert('Discard changes?', 'Your unsaved changes will be lost.', [
+          { text: 'Keep editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: goBack },
+        ]);
+        return true;
+      }
+
+      if (screen === 'dashboard') return false;
+      goBack();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [addTaskSheetVisible, screen]);
+
   useEffect(() => {
     const handleUrl = (url: string | null) => {
-      if (!url) return;
-
-      const reminderMatch = url.match(/reminders\/([^/?#]+)/);
-      if (reminderMatch?.[1]) {
-        setSelectedId(decodeURIComponent(reminderMatch[1]));
-        setScreen('details');
-        return;
-      }
-
-      if (url.includes('reset-password')) {
-        setScreen('reset');
-      }
+      if (!url || !url.includes('reset-password')) return;
+      setScreen('reset');
     };
 
     Linking.getInitialURL().then(handleUrl);
@@ -148,6 +196,9 @@ function ThemedApp() {
     return () => subscription.remove();
   }, []);
 
+  // Open the relevant reminder when the user taps a reminder notification
+  // (cold start via getLastNotificationResponseAsync, or while running via the
+  // listener). Routes through React Navigation's ReminderDetails screen.
   useEffect(() => {
     const openReminderFromResponse = (response: unknown) => {
       const data = (
@@ -158,20 +209,15 @@ function ThemedApp() {
 
       const reminderId = typeof data?.reminderId === 'string' ? data.reminderId : undefined;
       const url = typeof data?.url === 'string' ? data.url : undefined;
+      const urlMatch = url?.match(/reminders\/([^/?#]+)/)?.[1];
+      const targetId = reminderId ?? (urlMatch ? decodeURIComponent(urlMatch) : undefined);
+      if (!targetId) return;
 
-      if (reminderId) {
-        setSelectedId(reminderId);
-        setScreen('details');
-        return;
-      }
-
-      if (url) {
-        const match = url.match(/reminders\/([^/?#]+)/);
-        if (match?.[1]) {
-          setSelectedId(decodeURIComponent(match[1]));
-          setScreen('details');
-        }
-      }
+      const navigateToReminder = () => navigationRef.navigate('ReminderDetails', { reminderId: targetId });
+      // On cold start the navigation container may not be ready the instant the
+      // last response resolves; defer briefly if so.
+      if (navigationRef.isReady()) navigateToReminder();
+      else setTimeout(navigateToReminder, 500);
     };
 
     getLastNotificationResponseAsync().then((response) => {
@@ -289,6 +335,12 @@ function ThemedApp() {
       .finally(() => setSummaryLoading(false));
   }, [accessToken]);
 
+  const refreshReminders = useCallback(async () => {
+    if (!accessToken) return;
+    const fetched = await fetchReminders(accessToken);
+    setReminders(fetched);
+  }, [accessToken]);
+
   useEffect(() => {
     if (!user || !accessToken || !reminders.length) return;
 
@@ -340,11 +392,12 @@ function ThemedApp() {
 
   // Restore the full-screen workspace once if a session was live at launch.
   const focusRestoredRef = useRef(false);
+  const deletingTaskRef = useRef<Promise<void> | null>(null);
   useEffect(() => {
     if (focusRestoredRef.current) return;
     if (user && focus.hydrated && focus.hasSession) {
       focusRestoredRef.current = true;
-      setScreen('focusSession');
+      navigationRef.navigate('FocusSession');
     }
   }, [user, focus.hydrated, focus.hasSession]);
 
@@ -352,8 +405,6 @@ function ThemedApp() {
     if (!user || !accessToken) return;
     loadDashboardSummary();
   }, [accessToken, user, loadDashboardSummary]);
-
-  const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null;
 
   async function handleToggle(id: string) {
     if (!accessToken) return;
@@ -381,12 +432,12 @@ function ThemedApp() {
   async function handleSignOut() {
     await signOut();
     setScreen('auth');
-    setSelectedId(null);
     setSelectedTask(null);
     setReminders([]);
     setTasks([]);
     setSummary(null);
     setSummaryError('');
+    screenHistory.current.clear();
   }
 
   async function handleCreateTask(payload: TaskPayload) {
@@ -408,7 +459,7 @@ function ThemedApp() {
 
   function handleTaskCreated(task: ApiTask) {
     setSelectedTask(task);
-    setScreen('taskDetails');
+    navigationRef.navigate('TaskDetails', { taskId: task.id });
   }
 
   // Re-fetch the open task (with collaboration context — viewerRole/canEdit
@@ -449,9 +500,9 @@ function ThemedApp() {
           : [target, ...current],
       );
       setSelectedTask(target);
-      setScreen('taskDetails');
+      navigationRef.navigate('TaskDetails', { taskId });
     } catch {
-      setScreen('tasks');
+      navigationRef.navigate('MainTabs', { screen: 'Tasks' });
     }
   }
 
@@ -467,34 +518,44 @@ function ThemedApp() {
 
   function handleTaskSaved(task: ApiTask) {
     setSelectedTask(task);
-    setScreen('taskDetails');
+    navigationRef.navigate('TaskDetails', { taskId: task.id });
   }
 
-  async function handleDeleteTask() {
+  function handleDeleteTask(): Promise<void> {
+    if (deletingTaskRef.current) return deletingTaskRef.current;
+
     if (!accessToken || !selectedTask?.id) {
-      setScreen('tasks');
-      return;
+      navigationRef.navigate('MainTabs', { screen: 'Tasks' });
+      return Promise.resolve();
     }
 
-    try {
+    const deletion = (async () => {
       await deleteTask(accessToken, selectedTask.id);
       setTasks((current) => current.filter((task) => task.id !== selectedTask.id));
       queryClient.setQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all }, (current) =>
         Array.isArray(current) ? current.filter((task) => task.id !== selectedTask.id) : current,
       );
       setSelectedTask(null);
-      setScreen('tasks');
+      navigationRef.navigate('MainTabs', { screen: 'Tasks' });
       invalidateTaskFilters();
       loadDashboardSummary();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not delete task.';
-      Alert.alert('Failed to delete task', message);
-    }
+    })();
+
+    deletingTaskRef.current = deletion;
+    void deletion.then(
+      () => {
+        if (deletingTaskRef.current === deletion) deletingTaskRef.current = null;
+      },
+      () => {
+        if (deletingTaskRef.current === deletion) deletingTaskRef.current = null;
+      },
+    );
+    return deletion;
   }
 
   async function handleMarkTaskDone() {
     if (!accessToken || !selectedTask?.id) {
-      setScreen('tasks');
+      navigationRef.navigate('MainTabs', { screen: 'Tasks' });
       return;
     }
 
@@ -503,7 +564,7 @@ function ThemedApp() {
       setTasks((current) => current.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
       setSelectedTask(updatedTask);
       syncTaskQueryCaches(updatedTask);
-      setScreen('tasks');
+      navigationRef.navigate('MainTabs', { screen: 'Tasks' });
       invalidateTaskFilters();
       loadDashboardSummary();
     } catch (error) {
@@ -538,7 +599,247 @@ function ThemedApp() {
     );
   }
 
+  // Stage 2A adapter: Dashboard is navigator-backed; destinations remain on
+  // the legacy flow until their own tab/stack migrations land.
+  const DashboardTab = () => {
+    const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+    const rootNavigation = navigation.getParent<import('@react-navigation/native-stack').NativeStackNavigationProp<RootStackParamList>>();
+    return (<>
+    <TasksDashboardScreen
+      userName={user?.fullName}
+      tasks={tasks}
+      summary={summary}
+      summaryLoading={summaryLoading}
+      summaryError={summaryError}
+      onRetrySummary={loadDashboardSummary}
+      onRefresh={loadDashboardSummary}
+      onSignOut={() => void handleSignOut()}
+      onViewTasks={() => navigation.navigate('Tasks')}
+      onViewFocus={() => navigation.navigate('Focus')}
+      onViewReminders={() => navigation.navigate('Reminders')}
+      onViewNotes={() => rootNavigation?.navigate('Notes')}
+      onViewAnalytics={() => rootNavigation?.navigate('Analytics')}
+      onViewCalendar={() => rootNavigation?.navigate('Calendar')}
+      onViewAiDailyPlanner={() => rootNavigation?.navigate('AiDailyPlanner')}
+      onViewNotifications={() => rootNavigation?.navigate('Notifications')}
+      unreadCount={unreadNotificationCount}
+      sharedTaskIds={sharedTaskIds}
+      onCreateTask={() => setAddTaskSheetVisible(true)}
+      onViewTaskDetails={(task) => rootNavigation?.navigate('TaskDetails', { taskId: task.id })}
+    />
+    <AddTaskSheet
+      visible={addTaskSheetVisible}
+      onClose={() => setAddTaskSheetVisible(false)}
+      onSelectManual={() => { setAddTaskSheetVisible(false); rootNavigation?.navigate({ name: 'CreateTask', params: { source: 'dashboard' } }); }}
+      onSelectAi={() => { setAddTaskSheetVisible(false); rootNavigation?.navigate('AiTaskBuilder', { source: 'dashboard' }); }}
+    />
+  </>);
+  };
+
+  // Stage 2B adapters: detail and creation flows stay legacy-controlled.
+  const TasksTab = () => {
+    const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+    const rootNavigation = navigation.getParent<import('@react-navigation/native-stack').NativeStackNavigationProp<RootStackParamList>>();
+    return (<>
+      <AllTasksScreen
+        onBackDashboard={() => navigation.navigate('Dashboard')}
+        onViewFocus={() => navigation.navigate('Focus')}
+        onViewReminders={() => navigation.navigate('Reminders')}
+        onCreateTask={() => setAddTaskSheetVisible(true)}
+        onViewTaskDetails={(task) => rootNavigation?.navigate('TaskDetails', { taskId: task.id })}
+        accessToken={accessToken}
+        tasks={tasks}
+        loading={tasksLoading}
+        error={tasksError}
+        sharedTaskIds={sharedTaskIds}
+        onTaskUpdated={handleTaskUpdated}
+      />
+      <AddTaskSheet
+        visible={addTaskSheetVisible}
+        onClose={() => setAddTaskSheetVisible(false)}
+        onSelectManual={() => { setAddTaskSheetVisible(false); rootNavigation?.navigate({ name: 'CreateTask', params: { source: 'tasks' } }); }}
+        onSelectAi={() => { setAddTaskSheetVisible(false); rootNavigation?.navigate('AiTaskBuilder', { source: 'tasks' }); }}
+      />
+    </>);
+  };
+
+  // Stage 2C adapters: task details, reminders, and the dedicated workspace
+  // remain legacy routes while the Focus tab owns the main focus surface.
+  const FocusTab = () => {
+    const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+    const rootNavigation = navigation.getParent<import('@react-navigation/native-stack').NativeStackNavigationProp<RootStackParamList>>();
+    return (
+      <FocusScreen
+        onBackDashboard={() => navigation.navigate('Dashboard')}
+        onViewReminders={() => navigation.navigate('Reminders')}
+        onViewTaskDetails={(task) => rootNavigation?.navigate('TaskDetails', { taskId: task.id })}
+        tasks={tasks}
+        accessToken={accessToken ?? ''}
+        onTaskUpdated={handleTaskUpdated}
+        focus={focus}
+        onOpenWorkspace={() => rootNavigation?.navigate('FocusSession')}
+      />
+    );
+  };
+
+  // Stage 2D adapters: reminder detail/create/edit, person reminders,
+  // notifications, and People permissions remain legacy-controlled.
+  const RemindersTab = () => {
+    const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+    const rootNavigation = navigation.getParent<import('@react-navigation/native-stack').NativeStackNavigationProp<RootStackParamList>>();
+    return (
+      <RemindersListScreen
+        reminders={reminders}
+        onCreate={() => rootNavigation?.navigate('CreateReminder', {})}
+        onCreatePersonReminder={() => rootNavigation?.navigate('CreateReminder', createPersonReminderParams())}
+        onSelect={(id) => rootNavigation?.navigate('ReminderDetails', { reminderId: id })}
+        onToggle={handleToggle}
+        onSignOut={() => void handleSignOut()}
+        onBack={() => navigation.navigate('Dashboard')}
+        onViewPeople={() => navigation.navigate('People')}
+        onRefresh={refreshReminders}
+      />
+    );
+  };
+
+  // Stage 2E adapter: auth reset remains outside tabs; People owns all of its
+  // friends, request, and location-permission subflows internally.
+  const PeopleTab = () => {
+    const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+    return <PeopleScreen onBack={() => navigation.navigate('Dashboard')} onSignOut={() => void handleSignOut()} />;
+  };
+
+  const TaskDetailsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'TaskDetails'>) => (
+    <TaskDetailsRoute {...props} accessToken={accessToken ?? ''} tasks={tasks} currentUserId={user?.id ?? ''} notice={taskDetailsNotice}
+      onNoticeShown={() => setTaskDetailsNotice('')} onBack={() => {
+        if (props.navigation.canGoBack()) props.navigation.goBack()
+        else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Tasks' } }] })
+      }} onEdit={() => props.navigation.navigate('EditTask', { taskId: props.route.params.taskId })}
+      onDelete={async () => {
+        const taskId = props.route.params.taskId
+        if (deletingTaskRef.current) return deletingTaskRef.current
+        const deletion = (async () => {
+          if (!accessToken) throw new Error('Please sign in again.')
+          await deleteTask(accessToken, taskId)
+          setTasks((current) => current.filter((task) => task.id !== taskId))
+          queryClient.setQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all }, (current) =>
+            Array.isArray(current) ? current.filter((task) => task.id !== taskId) : current,
+          )
+          invalidateTaskFilters()
+          loadDashboardSummary()
+          props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Tasks' } }] })
+        })()
+        deletingTaskRef.current = deletion
+        try { await deletion } finally { if (deletingTaskRef.current === deletion) deletingTaskRef.current = null }
+      }} onMarkDone={() => void handleMarkTaskDone()} onTaskUpdated={handleTaskUpdated}
+      onRefresh={() => void refreshSelectedTask()} />
+  );
+  const CreateTaskStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'CreateTask'>) => (
+    <CreateTaskRoute {...props} accessToken={accessToken ?? ''} tasks={tasks} onSave={handleCreateTask} />
+  );
+  const EditTaskStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'EditTask'>) => (
+    <EditTaskRoute {...props} accessToken={accessToken ?? ''} tasks={tasks} currentUserId={user?.id ?? ''}
+      onBack={() => props.navigation.goBack()} onCancel={() => props.navigation.goBack()} onRefresh={() => void refreshSelectedTask()}
+      onDelete={handleDeleteTask} onSave={(payload) => handleUpdateTask(props.route.params.taskId, payload)} onSaved={handleTaskUpdated}
+      onSubtasksUpdated={handleTaskUpdated}
+      onDependenciesUpdated={handleTaskUpdated}
+      onPermissionDenied={() => setTaskDetailsNotice("You don't have permission to edit this task.")} />
+  );
+  const AiCollaborationStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'AiCollaboration'>) => (
+    <AiCollaborationRoute {...props} accessToken={accessToken ?? ''} tasks={tasks} onBack={() => props.navigation.goBack()} />
+  );
+  const NotificationsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Notifications'>) => (
+    <NotificationsScreen
+      onBack={() => props.navigation.goBack()}
+      onSignOut={() => void handleSignOut()}
+      onOpenNotification={(notification) => {
+        const data = notification.data ?? {};
+        const reminderId = typeof data.reminderId === 'string' ? data.reminderId : undefined;
+        if ((notification.type === 'reminder' || notification.type === 'reminder_updated') && reminderId) { props.navigation.navigate('ReminderDetails', { reminderId }); return; }
+        if (notification.taskId && (data.destination === 'ai_collaboration' || data.notificationTarget === 'ai_collaboration' || data.tab === 'ai_collaboration')) { props.navigation.navigate('AiCollaboration', { taskId: notification.taskId }); return; }
+        if (notification.taskId) void openTaskFromNotification(notification.taskId);
+      }}
+      onUnreadCountChange={setUnreadNotificationCount}
+    />
+  );
+  const FocusSessionStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'FocusSession'>) => (
+    <FocusSessionScreen focus={focus} tasks={tasks} onExit={() => {
+      if (props.navigation.canGoBack()) props.navigation.goBack()
+      else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Focus' } }] })
+    }} />
+  );
+  const AiTaskBuilderStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'AiTaskBuilder'>) => (
+    <AiTaskBuilderScreen accessToken={accessToken ?? ''} onCancel={() => {
+      if (props.navigation.canGoBack()) props.navigation.goBack()
+      else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Tasks' } }] })
+    }} onSaveTask={handleCreateTask} onReminderCreated={(reminder) => setReminders((current) => [reminder, ...current])}
+    onSaved={(task) => props.navigation.replace('TaskDetails', { taskId: task.id })} />
+  );
+  const AiDailyPlannerStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'AiDailyPlanner'>) => (
+    <AiDailyPlannerScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
+  );
+  const CalendarStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Calendar'>) => (
+    <CalendarScreen tasks={tasks} reminders={reminders} onBack={() => props.navigation.goBack()} onTask={(taskId) => props.navigation.navigate('TaskDetails', { taskId })} onReminder={(reminderId) => props.navigation.navigate('ReminderDetails', { reminderId })} onCreateTask={(params) => props.navigation.navigate('CreateTask', params)} />
+  );
+  const NotesStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Notes'>) => (
+    <NotesScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
+  );
+  const AnalyticsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Analytics'>) => (
+    <AnalyticsScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
+  );
+  const ReminderDetailsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'ReminderDetails'>) => {
+    const [resolvedReminder, setResolvedReminder] = useState<Reminder | null>(null);
+    const [loadingReminder, setLoadingReminder] = useState(true);
+    const reminder = reminders.find((item) => item.id === props.route.params.reminderId) ?? resolvedReminder;
+    useEffect(() => {
+      if (reminder) { setLoadingReminder(false); return; }
+      if (!accessToken) { setLoadingReminder(false); return; }
+      void getReminderById(props.route.params.reminderId, accessToken).then(setResolvedReminder).finally(() => setLoadingReminder(false));
+    }, [accessToken, props.route.params.reminderId, reminder]);
+    if (!reminder) return <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}>{loadingReminder ? <ActivityIndicator color={theme.colors.accent} /> : <Text style={{ color: theme.colors.error }}>Reminder not found.</Text>}</View>;
+    return <ReminderDetailsScreen reminder={reminder} onBack={() => {
+      if (props.navigation.canGoBack()) props.navigation.goBack()
+      else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Reminders' } }] })
+    }} onEdit={() => props.navigation.navigate('EditReminder', { reminderId: reminder.id })} />;
+  };
+  const CreateReminderStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'CreateReminder'>) => (
+    <CreateReminderScreen accessToken={accessToken ?? ''} initialType={props.route.params?.initialType} initialFriendId={props.route.params?.initialFriendId} onCancel={() => {
+      if (props.navigation.canGoBack()) props.navigation.goBack()
+      else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Reminders' } }] })
+    }} onNavigatePeople={() => props.navigation.navigate('MainTabs', { screen: 'People' })} onCreated={(reminder) => {
+      setReminders((current) => [reminder, ...current]);
+      props.navigation.replace('ReminderDetails', { reminderId: reminder.id });
+    }} />
+  );
+  const EditReminderStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'EditReminder'>) => {
+    const [resolvedReminder, setResolvedReminder] = useState<Reminder | null>(null);
+    const [loadingReminder, setLoadingReminder] = useState(true);
+    const reminder = reminders.find((item) => item.id === props.route.params.reminderId) ?? resolvedReminder;
+    useEffect(() => {
+      if (reminder) { setLoadingReminder(false); return; }
+      if (!accessToken) { setLoadingReminder(false); return; }
+      void getReminderById(props.route.params.reminderId, accessToken).then(setResolvedReminder).finally(() => setLoadingReminder(false));
+    }, [accessToken, props.route.params.reminderId, reminder]);
+    if (!reminder) return <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}>{loadingReminder ? <ActivityIndicator color={theme.colors.accent} /> : <Text style={{ color: theme.colors.error }}>Reminder not found.</Text>}</View>;
+    return <EditReminderScreen reminder={reminder} accessToken={accessToken ?? ''} onCancel={() => props.navigation.goBack()} onSaved={(updated) => {
+      setReminders((current) => current.map((item) => item.id === updated.id ? updated : item));
+      props.navigation.replace('ReminderDetails', { reminderId: updated.id });
+    }} />;
+  };
+
+  // StrictFocusProvider is the ROOT element of BOTH return paths. React keeps a
+  // single instance across the tab-navigator ↔ focusSession transition, so
+  // native app-blocking is never restarted merely because we switch screens.
+  if (user) {
+    return (
+      <StrictFocusProvider active={focus.active} remainingMs={focus.remainingMs}>
+        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} />
+      </StrictFocusProvider>
+    );
+  }
+
   return (
+    <StrictFocusProvider active={focus.active} remainingMs={focus.remainingMs}>
     <View style={{ backgroundColor: theme.colors.background, flex: 1 }}>
       <StatusBar backgroundColor={theme.colors.background} style={theme.statusBarStyle} translucent />
 
@@ -548,7 +849,7 @@ function ThemedApp() {
           initialCode={resetCode}
           onBack={() => setScreen('auth')}
         />
-      ) : !user ? (
+      ) : (
         <>
           {screen === 'auth' && (
             <AuthScreen
@@ -567,175 +868,9 @@ function ThemedApp() {
             />
           )}
         </>
-      ) : screen === 'dashboard' ? (
-        <TasksDashboardScreen
-          userName={user?.fullName}
-          tasks={tasks}
-          summary={summary}
-          summaryLoading={summaryLoading}
-          summaryError={summaryError}
-          onRetrySummary={loadDashboardSummary}
-          onSignOut={() => void handleSignOut()}
-          onViewTasks={() => setScreen('tasks')}
-          onViewFocus={() => setScreen('focus')}
-          onViewReminders={() => setScreen('reminders')}
-          onViewNotifications={() => setScreen('notifications')}
-          sharedTaskIds={sharedTaskIds}
-          onCreateTask={() => setAddTaskSheetVisible(true)}
-          onViewTaskDetails={(task) => {
-            setSelectedTask(task);
-            setScreen('taskDetails');
-          }}
-        />
-      ) : screen === 'tasks' ? (
-        <AllTasksScreen
-          onBackDashboard={() => setScreen('dashboard')}
-          onViewFocus={() => setScreen('focus')}
-          onViewReminders={() => setScreen('reminders')}
-          onCreateTask={() => setAddTaskSheetVisible(true)}
-          onViewTaskDetails={(task) => {
-            setSelectedTask(tasks.find((item) => item.id === task.id) ?? null);
-            setScreen('taskDetails');
-          }}
-          accessToken={accessToken}
-          tasks={tasks}
-          loading={tasksLoading}
-          error={tasksError}
-        />
-      ) : screen === 'focusSession' ? (
-        <FocusSessionScreen focus={focus} tasks={tasks} onExit={() => setScreen('focus')} />
-      ) : screen === 'focus' ? (
-        <FocusScreen
-          onBackDashboard={() => setScreen('dashboard')}
-          onViewReminders={() => setScreen('reminders')}
-          onViewTaskDetails={(task) => {
-            setSelectedTask(tasks.find((item) => item.id === task.id) ?? null);
-            setScreen('taskDetails');
-          }}
-          tasks={tasks}
-          accessToken={accessToken ?? ''}
-          onTaskUpdated={handleTaskUpdated}
-          focus={focus}
-          onOpenWorkspace={() => setScreen('focusSession')}
-        />
-      ) : screen === 'createTask' ? (
-        <CreateTaskScreen
-          accessToken={accessToken ?? ''}
-          onCancel={() => setScreen('tasks')}
-          onSave={handleCreateTask}
-          onCreated={handleTaskCreated}
-        />
-      ) : screen === 'aiPlanTask' ? (
-        <AiTaskBuilderScreen
-          accessToken={accessToken ?? ''}
-          onCancel={() => setScreen('tasks')}
-          onSaveTask={handleCreateTask}
-          onReminderCreated={(reminder) => setReminders((current) => [reminder, ...current])}
-          onSaved={handleTaskCreated}
-        />
-      ) : screen === 'taskDetails' ? (
-        <TaskDetailsScreen
-          task={selectedTask}
-          tasks={tasks}
-          accessToken={accessToken ?? ''}
-          currentUserId={user?.id ?? ''}
-          notice={taskDetailsNotice}
-          onNoticeShown={() => setTaskDetailsNotice('')}
-          onBack={() => setScreen('tasks')}
-          onEdit={() => {
-            if (selectedTask && !canEditTask(selectedTask)) {
-              setTaskDetailsNotice("You don't have permission to edit this task.");
-              return;
-            }
-            setScreen('editTask');
-          }}
-          onDelete={() => void handleDeleteTask()}
-          onMarkDone={() => void handleMarkTaskDone()}
-          onTaskUpdated={handleTaskUpdated}
-          onRefresh={() => void refreshSelectedTask()}
-        />
-      ) : screen === 'editTask' ? (
-        <EditTaskScreen
-          task={selectedTask}
-          accessToken={accessToken ?? ''}
-          currentUserId={user?.id ?? ''}
-          onRefresh={() => void refreshSelectedTask()}
-          onBack={() => setScreen('taskDetails')}
-          onCancel={() => setScreen('taskDetails')}
-          onDelete={() => void handleDeleteTask()}
-          onSave={(payload) => (selectedTask ? handleUpdateTask(selectedTask.id, payload) : undefined)}
-          onSaved={handleTaskSaved}
-          onPermissionDenied={() => {
-            setTaskDetailsNotice("You don't have permission to edit this task.");
-            setScreen('taskDetails');
-          }}
-        />
-      ) : screen === 'create' ? (
-        <CreateReminderScreen
-          accessToken={accessToken ?? ''}
-          onCancel={() => setScreen('reminders')}
-          onNavigatePeople={() => setScreen('social')}
-          onCreated={(reminder) => {
-            setReminders((current) => [reminder, ...current]);
-            setSelectedId(reminder.id);
-            setScreen('details');
-          }}
-        />
-      ) : screen === 'details' && selectedReminder ? (
-        <ReminderDetailsScreen
-          reminder={selectedReminder}
-          onBack={() => setScreen('reminders')}
-          onEdit={() => setScreen('edit')}
-        />
-      ) : screen === 'edit' && selectedReminder ? (
-        <EditReminderScreen
-          reminder={selectedReminder}
-          accessToken={accessToken ?? ''}
-          onCancel={() => setScreen('details')}
-          onSaved={(reminder) => {
-            setReminders((current) => current.map((item) => (item.id === reminder.id ? reminder : item)));
-            setSelectedId(reminder.id);
-            setScreen('details');
-          }}
-        />
-      ) : screen === 'social' ? (
-        <PeopleScreen
-          onBack={() => setScreen('reminders')}
-          onSignOut={() => void handleSignOut()}
-        />
-      ) : screen === 'notifications' ? (
-        <NotificationsScreen
-          onBack={() => setScreen('dashboard')}
-          onSignOut={() => void handleSignOut()}
-          onOpenTask={(taskId) => void openTaskFromNotification(taskId)}
-        />
-      ) : (
-        <RemindersListScreen
-          reminders={reminders}
-          onCreate={() => setScreen('create')}
-          onSelect={(id) => {
-            setSelectedId(id);
-            setScreen('details');
-          }}
-          onToggle={handleToggle}
-          onSignOut={() => void handleSignOut()}
-          onBack={() => setScreen('dashboard')}
-          onViewPeople={() => setScreen('social')}
-        />
       )}
 
-      <AddTaskSheet
-        visible={addTaskSheetVisible}
-        onClose={() => setAddTaskSheetVisible(false)}
-        onSelectManual={() => {
-          setAddTaskSheetVisible(false);
-          setScreen('createTask');
-        }}
-        onSelectAi={() => {
-          setAddTaskSheetVisible(false);
-          setScreen('aiPlanTask');
-        }}
-      />
     </View>
+    </StrictFocusProvider>
   );
 }

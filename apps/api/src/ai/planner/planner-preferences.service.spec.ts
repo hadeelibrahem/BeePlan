@@ -1,6 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../../db/database.service';
-import { DEFAULT_PLANNER_PREFERENCES, PlannerPreferencesService } from './planner-preferences.service';
+import {
+  DEFAULT_PLANNER_PREFERENCES,
+  PlannerPreferencesService,
+} from './planner-preferences.service';
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -24,7 +27,9 @@ function buildService(existingRows: unknown[] = []) {
     select: jest.fn(() => selectQuery(existingRows)),
     insert,
   };
-  const service = new PlannerPreferencesService({ db } as unknown as DatabaseService);
+  const service = new PlannerPreferencesService({
+    db,
+  } as unknown as DatabaseService);
   return { service, insert, values, onConflictDoUpdate };
 }
 
@@ -73,37 +78,53 @@ describe('PlannerPreferencesService', () => {
         focusEndTime: '12:00',
         workBlockMinutes: 60,
         breakMinutes: 10,
-        energy: { morning: 'high', afternoon: 'medium', evening: 'low', night: 'low' },
+        energy: {
+          morning: 'high',
+          afternoon: 'medium',
+          evening: 'low',
+          night: 'low',
+        },
         note: 'Deep work in the morning.',
       });
 
       expect(insert).toHaveBeenCalledTimes(1);
       expect(onConflictDoUpdate).toHaveBeenCalledTimes(1);
-      const persisted = values.mock.calls[0][0];
-      expect(persisted.userId).toBe(USER_ID);
-      expect(persisted.focusStartTime).toBe('09:00');
-      expect(persisted.workBlockMinutes).toBe(60);
+      type PersistedRow = Record<string, unknown>;
+      const persisted = values.mock.calls[0]?.[0] as PersistedRow | undefined;
+      expect(persisted?.userId).toBe(USER_ID);
+      expect(persisted?.focusStartTime).toBe('09:00');
+      expect(persisted && (persisted['workBlockMinutes'] as number)).toBe(60);
       expect(result.note).toBe('Deep work in the morning.');
     });
 
     it('clamps out-of-range work block and break durations', async () => {
       const { service, values } = buildService();
-      await service.savePreferences(USER_ID, { workBlockMinutes: 500, breakMinutes: 1 });
-      const persisted = values.mock.calls[0][0];
-      expect(persisted.workBlockMinutes).toBe(120); // clamped to max
-      expect(persisted.breakMinutes).toBe(5); // clamped to min
+      await service.savePreferences(USER_ID, {
+        workBlockMinutes: 500,
+        breakMinutes: 1,
+      });
+      type PersistedRow = Record<string, unknown>;
+      const persisted = values.mock.calls[0]?.[0] as PersistedRow | undefined;
+      expect(persisted).toBeDefined();
+      expect(persisted!['workBlockMinutes'] as number).toBe(120); // clamped to max
+      expect(persisted!['breakMinutes'] as number).toBe(5); // clamped to min
     });
 
     it('rejects focus hours that are not in order', async () => {
       const { service } = buildService();
-      await expect(service.savePreferences(USER_ID, { focusStartTime: '11:00', focusEndTime: '09:00' })).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.savePreferences(USER_ID, {
+          focusStartTime: '11:00',
+          focusEndTime: '09:00',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects a note longer than 1000 characters', async () => {
       const { service } = buildService();
-      await expect(service.savePreferences(USER_ID, { note: 'x'.repeat(1001) })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.savePreferences(USER_ID, { note: 'x'.repeat(1001) }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

@@ -1,4 +1,5 @@
 import { useLanguage } from '../../../i18n/LanguageContext'
+import { DirectionalChevron } from '../../../components/layout'
 import type { Reminder } from '../types/reminders.types'
 import { getLocationLabel } from '../utils/locationLabel'
 
@@ -22,7 +23,7 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
               aria-label={t('actions.back')}
               className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]"
             >
-              {isRTL ? '>' : '<'}
+              <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
             </button>
             <span className="text-sm font-bold text-[var(--bp-muted)]">{t('actions.back')}</span>
           </div>

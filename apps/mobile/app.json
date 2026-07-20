@@ -71,7 +71,8 @@
         {
           "microphonePermission": "BeePlan uses your microphone to record voice reminders for the AI assistant."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "extra": {
       "eas": {

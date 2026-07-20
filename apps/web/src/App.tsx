@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useState, type ReactNode, type SetStateAction } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import {
   CreateReminderScreen,
@@ -9,9 +10,11 @@ import {
   fetchReminders,
   toggleReminderStatus,
   type Reminder,
+  type ReminderType,
 } from './features/reminders'
 import { SocialScreen } from './features/social'
 import { NotificationsScreen } from './features/collaboration'
+import { notificationTarget } from './features/collaboration/notificationRoutes'
 import { useSharedTaskIds } from './features/collaboration/useSharedTaskIds'
 import { useAuth } from './hooks/useAuth'
 import { LanguageProvider } from './i18n/LanguageContext'
@@ -46,6 +49,7 @@ import FocusSessionScreen from './screens/FocusSessionScreen'
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
 import NotesScreen from './screens/NotesScreen'
 import ResetPasswordScreen from './screens/ResetPasswordScreen'
+import TaskCollaborationScreen from './screens/TaskCollaborationScreen'
 import TaskDetailsScreen from './screens/TaskDetailsScreen'
 import TasksDashboardScreen from './screens/TasksDashboardScreen'
 import { ThemeProvider } from './theme/ThemeContext'
@@ -53,30 +57,13 @@ import {
   TaskRecurrenceModal,
   type RecurrenceSettings,
 } from './components/TaskRecurrenceModal'
+import { RouteFallback } from './components/RouteFallback'
+import { useToast } from './components/feedback/ToastProvider'
 import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
 import { queryKeys } from './lib/queryKeys'
+import { pathForScreen, resolveAppRoute, type AppScreen } from './lib/appRoutes'
 
 type AuthScreenState = 'auth' | 'forgot' | 'reset'
-type AppScreen =
-  | 'dashboard'
-  | 'tasks'
-  | 'focus'
-  | 'focusSession'
-  | 'planner'
-  | 'createTask'
-  | 'aiPlanTask'
-  | 'taskDetails'
-  | 'editTask'
-  | 'list'
-  | 'create'
-  | 'details'
-  | 'edit'
-  | 'calendar'
-  | 'notes'
-  | 'analytics'
-  | 'social'
-  | 'notifications'
-
 function getAuthScreenFromPath(): AuthScreenState {
   if (window.location.pathname === '/reset-password') return 'reset'
   if (window.location.pathname === '/forgot-password') return 'forgot'
@@ -94,15 +81,19 @@ export default function App() {
 }
 
 function ThemedApp() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const route = resolveAppRoute(location.pathname)
   const [authScreen, setAuthScreen] = useState<AuthScreenState>(() => getAuthScreenFromPath())
-  // Restore the full-screen focus workspace if a session was live on refresh.
-  const [screen, setScreen] = useState<AppScreen>(() =>
-    hasPersistedFocusSession() ? 'focusSession' : 'dashboard',
-  )
+  const screen = route.screen
   const [reminders, setReminders] = useState<Reminder[]>([])
-  const [tasks, setTasks] = useState<ApiTask[]>([])
-  const [tasksLoading, setTasksLoading] = useState(false)
-  const [tasksError, setTasksError] = useState('')
+  const [remindersLoading, setRemindersLoading] = useState(false)
+  // Preselected reminder type when opening the create form (e.g. Person from
+  // the "Create Person Reminder" CTA). Cleared for a plain "New Reminder".
+  const [createReminderType, setCreateReminderType] = useState<ReminderType | undefined>(undefined)
+  // Calendar passes a selected local date into the existing manual-create flow.
+  const [createTaskInitialDueDate, setCreateTaskInitialDueDate] = useState<string | undefined>(undefined)
+  const [taskActionError, setTaskActionError] = useState('')
   const [taskDetailsNotice, setTaskDetailsNotice] = useState('')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -110,42 +101,50 @@ function ThemedApp() {
   const [recurrenceSuggestions, setRecurrenceSuggestions] = useState<RecurrenceSuggestion[]>([])
   const [activeRecurrenceSuggestion, setActiveRecurrenceSuggestion] = useState<RecurrenceSuggestion | null>(null)
   const [plannerRefreshKey, setPlannerRefreshKey] = useState(0)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [selectedIdState, setSelectedId] = useState<string | null>(null)
+  const [selectedTaskIdState, setSelectedTaskId] = useState<string | null>(null)
+  const selectedId = route.reminderId ?? selectedIdState
+  const selectedTaskId = route.taskId ?? selectedTaskIdState
   const { accessToken, loading, user, signOut } = useAuth()
+  const { showToast } = useToast()
   const queryClient = useQueryClient()
+  // The base task list is the single task source for the app shell. Filtered
+  // screens use their own query keys, and mutations update/invalidate all task
+  // keys so list rows, details, and summary-driven screens converge on one cache.
+  const tasksQuery = useQuery({
+    queryKey: queryKeys.tasks.list({}),
+    queryFn: () => getTasks(accessToken ?? ''),
+    enabled: Boolean(user && accessToken),
+  })
+  const tasks = tasksQuery.data ?? []
+  const tasksLoading = tasksQuery.isLoading
+  const tasksError = taskActionError || (tasksQuery.error instanceof Error ? tasksQuery.error.message : '')
+  const setTasks = useCallback(
+    (updater: SetStateAction<ApiTask[]>) => {
+      queryClient.setQueryData<ApiTask[]>(queryKeys.tasks.list({}), (current = []) =>
+        typeof updater === 'function' ? updater(current) : updater,
+      )
+    },
+    [queryClient],
+  )
   const invalidateTaskFilters = useCallback(
     () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
     [queryClient],
   )
   const refreshPlanner = useCallback(() => setPlannerRefreshKey((value) => value + 1), [])
 
+  useEffect(() => setAuthScreen(getAuthScreenFromPath()), [location.pathname])
+
   useEffect(() => {
-    const syncPath = () => setAuthScreen(getAuthScreenFromPath())
-    window.addEventListener('popstate', syncPath)
-    return () => window.removeEventListener('popstate', syncPath)
-  }, [])
+    // Restore the dedicated focus workspace only from the initial dashboard route.
+    if (location.pathname === '/' && hasPersistedFocusSession()) navigate('/focus/session', { replace: true })
+  }, [location.pathname, navigate])
 
   useEffect(() => {
     if (!user || !accessToken) return
-    fetchReminders(accessToken).then(setReminders)
+    setRemindersLoading(true)
+    fetchReminders(accessToken).then(setReminders).finally(() => setRemindersLoading(false))
   }, [user, accessToken])
-
-  useEffect(() => {
-    if (!user || !accessToken) return
-
-    setTasksLoading(true)
-    setTasksError('')
-    getTasks(accessToken)
-      .then((loadedTasks) => {
-        setTasks(loadedTasks)
-        queryClient.setQueryData(queryKeys.tasks.list({}), loadedTasks)
-      })
-      .catch((error) => {
-        setTasksError(error instanceof Error ? error.message : 'Unable to load tasks.')
-      })
-      .finally(() => setTasksLoading(false))
-  }, [accessToken, user, queryClient])
 
   const refreshSummary = useCallback(() => {
     if (!accessToken) return
@@ -186,9 +185,16 @@ function ThemedApp() {
           ? '/forgot-password'
           : '/sign-in'
 
-    window.history.pushState(null, '', path)
+    navigate(path)
     setAuthScreen(nextScreen)
   }
+
+  const setScreen = useCallback(
+    (nextScreen: Exclude<AppScreen, 'notFound'>) => {
+      navigate(pathForScreen(nextScreen, { taskId: selectedTaskId, reminderId: selectedId }))
+    },
+    [navigate, selectedId, selectedTaskId],
+  )
 
   const selectedReminder = reminders.find((reminder) => reminder.id === selectedId) ?? null
 
@@ -218,7 +224,7 @@ function ThemedApp() {
   async function handleSignOut() {
     await signOut()
     setScreen('dashboard')
-    setTasks([])
+    queryClient.removeQueries({ queryKey: queryKeys.tasks.all })
     setSelectedTaskId(null)
     navigateAuth('auth')
   }
@@ -233,11 +239,12 @@ function ThemedApp() {
     refreshSummary()
     invalidateTaskFilters()
     refreshPlanner()
+    showToast({ tone: 'success', message: 'Task created.' })
     return createdTask
   }
 
   function showInvalidTaskIdError(action: string) {
-    setTasksError(`Cannot ${action} because this task is missing a valid database id. Please refresh tasks and try again.`)
+    setTaskActionError(`Cannot ${action} because this task is missing a valid database id. Please refresh tasks and try again.`)
   }
 
   function openTaskDetails(taskId: string) {
@@ -247,15 +254,15 @@ function ThemedApp() {
       return
     }
 
-    setTasksError('')
+    setTaskActionError('')
     setSelectedTaskId(taskId)
-    setScreen('taskDetails')
+    navigate(pathForScreen('taskDetails', { taskId }))
   }
 
   // Opens a task that may not yet be in the loaded list (e.g. a shared task the
   // user just accepted from Notifications). Fetches it and inserts it so the
   // details screen can render immediately.
-  async function openTaskFromNotification(taskId: string) {
+  async function openTaskFromNotification(taskId: string, targetPath = pathForScreen('taskDetails', { taskId })) {
     if (!accessToken || !isValidTaskId(taskId)) {
       openTaskDetails(taskId)
       return
@@ -268,9 +275,9 @@ function ThemedApp() {
           : [task, ...current],
       )
       setSelectedTaskId(taskId)
-      setScreen('taskDetails')
+      navigate(targetPath)
     } catch {
-      setTasksError('This task is no longer available.')
+      setTaskActionError('This task is no longer available.')
       setScreen('tasks')
     }
   }
@@ -282,7 +289,7 @@ function ThemedApp() {
       return
     }
 
-    setTasksError('')
+    setTaskActionError('')
     try {
       const refreshedTask = await refreshSelectedTask(taskId)
       setSelectedTaskId(taskId)
@@ -291,9 +298,9 @@ function ThemedApp() {
         setScreen('taskDetails')
         return
       }
-      setScreen('editTask')
+      navigate(pathForScreen('editTask', { taskId }))
     } catch (error) {
-      setTasksError(error instanceof Error ? error.message : 'Unable to load this task for editing.')
+      setTaskActionError(error instanceof Error ? error.message : 'Unable to load this task for editing.')
       setScreen('tasks')
     }
   }
@@ -311,17 +318,24 @@ function ThemedApp() {
     refreshSummary()
     invalidateTaskFilters()
     refreshPlanner()
+    showToast({ tone: 'success', message: 'Task updated.' })
     return updatedTask
   }
 
   function handleTaskCreated(task: ApiTask) {
+    setCreateTaskInitialDueDate(undefined)
     setSelectedTaskId(task.id)
-    setScreen('taskDetails')
+    navigate(pathForScreen('taskDetails', { taskId: task.id }))
+  }
+
+  function openCreateTask(initialDueDate?: string) {
+    setCreateTaskInitialDueDate(initialDueDate)
+    setScreen('createTask')
   }
 
   function handleTaskSaved(task: ApiTask) {
     setSelectedTaskId(task.id)
-    setScreen('taskDetails')
+    navigate(pathForScreen('taskDetails', { taskId: task.id }))
   }
 
   async function handleDeleteTask(taskId: string) {
@@ -342,6 +356,7 @@ function ThemedApp() {
     refreshSummary()
     invalidateTaskFilters()
     refreshPlanner()
+    showToast({ tone: 'success', message: 'Task deleted.' })
   }
 
   function handleTaskUpdated(updatedTask: ApiTask) {
@@ -407,7 +422,11 @@ function ThemedApp() {
     }
 
     const refreshedTask = await getTask(accessToken, taskId)
-    setTasks((current) => current.map((task) => (task.id === taskId ? refreshedTask : task)))
+    setTasks((current) =>
+      current.some((task) => task.id === taskId)
+        ? current.map((task) => (task.id === taskId ? refreshedTask : task))
+        : [refreshedTask, ...current],
+    )
     return refreshedTask
   }
 
@@ -431,9 +450,10 @@ function ThemedApp() {
     if (screen !== 'taskDetails' || !selectedTaskId || !accessToken) return
 
     refreshSelectedTask(selectedTaskId).catch((error) => {
-      setTasksError(error instanceof Error ? error.message : 'Unable to refresh task details.')
+      setTaskActionError(error instanceof Error ? error.message : 'Unable to refresh task details.')
+      setScreen('tasks')
     })
-  }, [accessToken, screen, selectedTaskId])
+  }, [accessToken, screen, selectedTaskId, setScreen])
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null
   const selectedTaskRecurrenceSuggestions = selectedTask
@@ -494,6 +514,10 @@ function ThemedApp() {
     return <AuthScreen onForgot={() => navigateAuth('forgot')} />
   }
 
+  if (screen === 'notFound') {
+    return <RouteFallback title="Page not found" message="The link you opened does not match a BeePlan page." onBack={() => setScreen('dashboard')} />
+  }
+
   if (screen === 'dashboard') {
     return renderWithRecurrenceSuggestionModal(
       <TasksDashboardScreen
@@ -508,6 +532,12 @@ function ThemedApp() {
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
+        onCreateTask={() => openCreateTask()}
+        onCreateTaskAi={() => setScreen('aiPlanTask')}
+        onCreateReminder={() => {
+          setCreateReminderType(undefined)
+          setScreen('create')
+        }}
         onViewTaskDetails={openTaskDetails}
         onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}
         onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
@@ -527,14 +557,13 @@ function ThemedApp() {
     return renderWithRecurrenceSuggestionModal(
       <AllTasksScreen
         onBackDashboard={() => setScreen('dashboard')}
-        onCreateTask={() => setScreen('createTask')}
+        onCreateTask={() => openCreateTask()}
         onCreateTaskAi={() => setScreen('aiPlanTask')}
         onViewTaskDetails={openTaskDetails}
         accessToken={accessToken}
-        tasks={tasks}
         recurrenceSuggestions={recurrenceSuggestions}
-        loading={tasksLoading}
         error={tasksError}
+        onTaskUpdated={handleTaskUpdated}
         onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}
         onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
         onNavigateFocus={sidebarNav.onNavigateFocus}
@@ -607,7 +636,20 @@ function ThemedApp() {
   }
 
   if (screen === 'calendar') {
-    return <CalendarScreen {...sidebarNav} tasks={tasks} reminders={reminders} onSignOut={() => void handleSignOut()} />
+    return (
+      <CalendarScreen
+        {...sidebarNav}
+        tasks={tasks}
+        reminders={reminders}
+        onViewTask={openTaskDetails}
+        onViewReminder={(reminderId) => {
+          setSelectedId(reminderId)
+          navigate(pathForScreen('details', { reminderId }))
+        }}
+        onCreateTaskForDate={openCreateTask}
+        onSignOut={() => void handleSignOut()}
+      />
+    )
   }
 
   if (screen === 'notes') {
@@ -623,14 +665,18 @@ function ThemedApp() {
       <NotificationsScreen
         {...sidebarNav}
         accessToken={accessToken ?? ''}
-        onOpenTask={(taskId) => void openTaskFromNotification(taskId)}
+        onOpenNotification={(notification, target) => {
+          if (notification.taskId && notificationTarget(notification)) {
+            void openTaskFromNotification(notification.taskId, target)
+          }
+        }}
         onSignOut={() => void handleSignOut()}
       />
     )
   }
 
   if (screen === 'analytics') {
-    return <AnalyticsScreen {...sidebarNav} tasks={tasks} reminders={reminders} onSignOut={() => void handleSignOut()} />
+    return <AnalyticsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
   }
 
   if (screen === 'aiPlanTask') {
@@ -652,7 +698,11 @@ function ThemedApp() {
       <CreateTaskScreen
         tasks={tasks}
         accessToken={accessToken ?? ''}
-        onCancel={() => setScreen('tasks')}
+        initialDueDate={createTaskInitialDueDate}
+        onCancel={() => {
+          setCreateTaskInitialDueDate(undefined)
+          setScreen('tasks')
+        }}
         onSave={handleCreateTask}
         onCreated={handleTaskCreated}
         onSignOut={() => void handleSignOut()}
@@ -683,6 +733,7 @@ function ThemedApp() {
         onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('tasks')}
         onEdit={() => void openEditTask(selectedTask.id)}
+        onOpenAiCollaboration={() => setScreen('aiCollaboration')}
         onDelete={() => void handleDeleteTask(selectedTask.id)}
         onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}
         onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
@@ -715,6 +766,31 @@ function ThemedApp() {
     )
   }
 
+  if (screen === 'aiCollaboration' && selectedTask) {
+    return (
+      <TaskCollaborationScreen
+        task={selectedTask}
+        accessToken={accessToken ?? ''}
+        currentUserId={user.id}
+        onBack={() => setScreen('taskDetails')}
+        onSignOut={() => void handleSignOut()}
+        onNavigateDashboard={sidebarNav.onNavigateDashboard}
+        onNavigateFocus={sidebarNav.onNavigateFocus}
+        onNavigatePlanner={sidebarNav.onNavigatePlanner}
+        onNavigateReminders={sidebarNav.onNavigateReminders}
+        onNavigatePeople={sidebarNav.onNavigatePeople}
+        onNavigateNotifications={sidebarNav.onNavigateNotifications}
+        onNavigateCalendar={sidebarNav.onNavigateCalendar}
+        onNavigateNotes={sidebarNav.onNavigateNotes}
+        onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+      />
+    )
+  }
+
+  if ((screen === 'taskDetails' || screen === 'editTask' || screen === 'aiCollaboration') && selectedTaskId && !selectedTask) {
+    return <RouteFallback title="Opening task" message="Loading the task from this link..." actionLabel="Back to tasks" onBack={() => setScreen('tasks')} />
+  }
+
   if (screen === 'editTask' && selectedTask) {
     return (
       <EditTaskScreen
@@ -725,6 +801,7 @@ function ThemedApp() {
         onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('taskDetails')}
         onCancel={() => setScreen('taskDetails')}
+        onOpenAiCollaboration={() => setScreen('aiCollaboration')}
         onDelete={() => void handleDeleteTask(selectedTask.id)}
         onSave={(payload) => void handleUpdateTask(selectedTask.id, payload)}
         onTaskUpdated={handleTaskUpdated}
@@ -751,12 +828,13 @@ function ThemedApp() {
     return renderShell(
       <CreateReminderScreen
         accessToken={accessToken ?? ''}
+        initialType={createReminderType}
         onCancel={() => setScreen('list')}
         onNavigatePeople={sidebarNav.onNavigatePeople}
         onCreated={(reminder) => {
           setReminders((current) => [reminder, ...current])
           setSelectedId(reminder.id)
-          setScreen('details')
+          navigate(pathForScreen('details', { reminderId: reminder.id }))
           refreshSummary()
           refreshPlanner()
         }}
@@ -794,10 +872,18 @@ function ThemedApp() {
   return (
     <RemindersListScreen
       reminders={reminders}
-      onCreate={() => setScreen('create')}
+      loading={remindersLoading}
+      onCreate={() => {
+        setCreateReminderType(undefined)
+        setScreen('create')
+      }}
+      onCreatePerson={() => {
+        setCreateReminderType('person')
+        setScreen('create')
+      }}
       onSelect={(id) => {
         setSelectedId(id)
-        setScreen('details')
+        navigate(pathForScreen('details', { reminderId: id }))
       }}
       onToggle={handleToggle}
       onBack={() => setScreen('dashboard')}

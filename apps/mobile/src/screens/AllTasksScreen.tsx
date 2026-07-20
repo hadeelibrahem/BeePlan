@@ -1,6 +1,7 @@
-import { memo, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert, FlatList, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import {
   BottomNavBar,
   EmptyState,
@@ -10,11 +11,15 @@ import {
   ScreenLayout,
   SearchInput,
   StatsCard,
+  MobileIcon,
 } from '../components/layout';
 import { TaskFiltersSheet } from '../components/TaskFiltersSheet';
 import {
   getTaskFilterSummary,
   getTasks,
+  changeTaskStatus,
+  dismissRecurrenceSuggestion,
+  getRecurrenceSuggestions,
   toUiPriority,
   toUiStatus,
   type ApiTask,
@@ -22,8 +27,8 @@ import {
   type TaskDueFilter,
   type TaskFilters,
 } from '../lib/tasksApi';
-import type { AppTheme } from '../theme/colors';
 import { useTheme } from '../theme/useTheme';
+import { TaskPriorityBadge, TaskStatusBadge } from '../components/TaskBadges';
 import { queryKeys } from '../lib/queryKeys';
 
 type TaskListItem = {
@@ -34,6 +39,9 @@ type TaskListItem = {
   priority: string;
   status: string;
   progress: number;
+  dueDate?: string;
+  createdAt?: string;
+  isShared?: boolean;
 };
 
 type Props = {
@@ -46,6 +54,8 @@ type Props = {
   tasks?: ApiTask[];
   loading?: boolean;
   error?: string;
+  sharedTaskIds?: Set<string>;
+  onTaskUpdated?: (task: ApiTask) => void;
 };
 
 type TaskFilter = 'all' | 'todo' | 'inProgress' | 'done' | 'missed';
@@ -63,6 +73,9 @@ const DUE_FILTER_LABELS: Record<TaskDueFilter, string> = {
   upcoming: 'Upcoming',
   overdue: 'Overdue',
 };
+type SortField = 'due' | 'priority' | 'created' | 'title';
+const SORT_STORAGE_KEY = 'beeplan-task-sort';
+const PRIORITY_RANK: Record<string, number> = { Low: 1, Medium: 2, High: 3, Urgent: 4 };
 
 function mapTabToApiStatus(tab: TaskFilter): ApiTaskStatus | undefined {
   if (tab === 'todo') return 'todo';
@@ -82,8 +95,11 @@ export default function AllTasksScreen({
   tasks,
   loading,
   error,
+  sharedTaskIds,
+  onTaskUpdated,
 }: Props) {
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskFilter>('all');
   const [filtersVisible, setFiltersVisible] = useState(false);
@@ -92,6 +108,11 @@ export default function AllTasksScreen({
   const [completedActive, setCompletedActive] = useState(false);
   const [highPriorityActive, setHighPriorityActive] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ field: SortField; direction: 'asc' | 'desc' }>({ field: 'due', direction: 'asc' });
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [suggestions, setSuggestions] = useState<import('../lib/tasksApi').RecurrenceSuggestion[]>([]);
+  useEffect(() => { void AsyncStorage.getItem(SORT_STORAGE_KEY).then((saved) => { if (saved) setSort(JSON.parse(saved)); }).catch(() => undefined); }, []);
+  useEffect(() => { if (accessToken) void getRecurrenceSuggestions(accessToken).then((result) => setSuggestions(result.suggestions)).catch(() => setSuggestions([])); }, [accessToken]);
 
   const filters: TaskFilters = useMemo(() => {
     const next: TaskFilters = {};
@@ -140,9 +161,25 @@ export default function AllTasksScreen({
     () =>
       (tasksQuery.data ?? [])
         .map(fromApiTask)
-        .filter((task) => task.title.toLowerCase().includes(search.trim().toLowerCase())),
-    [tasksQuery.data, search],
+        .filter((task) => task.title.toLowerCase().includes(search.trim().toLowerCase()))
+        .sort((left, right) => {
+          const value = sort.field === 'title' ? left.title.localeCompare(right.title) : sort.field === 'priority' ? PRIORITY_RANK[left.priority] - PRIORITY_RANK[right.priority] : Date.parse(sort.field === 'created' ? left.createdAt ?? '' : left.dueDate ?? '') - Date.parse(sort.field === 'created' ? right.createdAt ?? '' : right.dueDate ?? '');
+          return (Number.isNaN(value) ? 0 : value) * (sort.direction === 'asc' ? 1 : -1);
+        }),
+    [tasksQuery.data, search, sort],
   );
+
+  async function updateStatus(task: TaskListItem, status: ApiTaskStatus) {
+    if (!accessToken || pendingIds.has(task.id)) return;
+    const previous = queryClient.getQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all });
+    const progress = status === 'done' ? 100 : status === 'todo' ? 0 : task.progress;
+    setPendingIds((current) => new Set(current).add(task.id));
+    queryClient.setQueriesData<ApiTask[]>({ queryKey: queryKeys.tasks.all }, (current) => current?.map((item) => item.id === task.id ? { ...item, status, progress } : item));
+    try { onTaskUpdated?.(await changeTaskStatus(accessToken, task.id, { status, progress })); }
+    catch (mutationError) { previous.forEach(([key, value]) => queryClient.setQueryData(key, value)); Alert.alert('Unable to update task', mutationError instanceof Error ? mutationError.message : 'Please try again.'); }
+    finally { setPendingIds((current) => { const next = new Set(current); next.delete(task.id); return next; }); }
+  }
+  function updateSort(field: SortField) { setSort((current) => { const next = field === current.field ? { field, direction: current.direction === 'asc' ? 'desc' as const : 'asc' as const } : { field, direction: field === 'priority' ? 'desc' as const : 'asc' as const }; void AsyncStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(next)); return next; }); }
 
   function clearFilters() {
     setStatusFilter('all');
@@ -194,8 +231,9 @@ export default function AllTasksScreen({
         className="flex-1"
         data={filteredTasks}
         keyExtractor={(task) => task.id}
-        renderItem={({ item }) => <TaskCard task={item} onPress={() => onViewTaskDetails(item)} />}
+        renderItem={({ item }) => <TaskCard task={item} isShared={sharedTaskIds?.has(item.id) || item.isShared} pending={pendingIds.has(item.id)} onToggle={() => void updateStatus(item, item.status === 'Done' ? 'todo' : 'done')} onChangeStatus={() => Alert.alert('Change status', item.title, [{ text: 'To Do', onPress: () => void updateStatus(item, 'todo') }, { text: 'In Progress', onPress: () => void updateStatus(item, 'in_progress') }, { text: 'Done', onPress: () => void updateStatus(item, 'done') }, { text: 'Missed', onPress: () => void updateStatus(item, 'missed') }, { text: 'Cancel', style: 'cancel' }])} onPress={() => onViewTaskDetails(item)} />}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={tasksQuery.isRefetching} onRefresh={() => { if (!tasksQuery.isRefetching) void tasksQuery.refetch(); }} tintColor={theme.colors.accent} />}
         // Rows are simple/uniform enough that this beats measuring layout on
         // scroll, and it lets FlatList jump to an offset without rendering
         // every row in between first.
@@ -220,13 +258,16 @@ export default function AllTasksScreen({
                   backgroundColor: hasActiveFilters ? theme.colors.accentSoft : theme.colors.card,
                 }}
               >
-                <Text className="text-xs font-black" style={{ color: hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText }}>
-                  FILTER{hasActiveFilters ? ` (${activeChips.length})` : ''}
-                </Text>
+                <View className="flex-row items-center gap-1">
+                  <MobileIcon name="filter" color={hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText} size={14} />
+                  <Text className="text-xs font-black" style={{ color: hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText }}>Filters{hasActiveFilters ? ` (${activeChips.length})` : ''}</Text>
+                </View>
               </Pressable>
             </View>
 
             <FilterTabs tabs={FILTERS} active={statusFilter} onChange={setStatusFilter} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2 mt-2"><View className="flex-row gap-2">{(['due', 'priority', 'created', 'title'] as SortField[]).map((field) => <Pressable key={field} onPress={() => updateSort(field)} accessibilityRole="button" accessibilityLabel={`Sort by ${field}`} className="rounded-full border px-3 py-1.5" style={{ borderColor: sort.field === field ? theme.colors.accent : theme.colors.border }}><Text className="text-xs font-bold" style={{ color: sort.field === field ? theme.colors.accent : theme.colors.secondaryText }}>{field === 'due' ? 'Due date' : field === 'created' ? 'Created' : field[0].toUpperCase() + field.slice(1)}{sort.field === field ? ` ${sort.direction === 'asc' ? '↑' : '↓'}` : ''}</Text></Pressable>)}</View></ScrollView>
+            {suggestions.map((suggestion) => <View key={suggestion.id} className="mb-2 rounded-xl border p-3" style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}><Text className="text-xs font-black" style={{ color: theme.colors.text }}>BeePlan noticed a pattern</Text><Text className="mt-1 text-sm" style={{ color: theme.colors.secondaryText }}>{suggestion.reason}</Text><Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>{suggestion.preview}</Text><View className="mt-2 flex-row gap-3"><Pressable onPress={() => onViewTaskDetails({ id: suggestion.sourceTaskId, title: suggestion.taskTitle, category: '', due: '', priority: 'Medium', status: 'To Do', progress: 0 })} accessibilityRole="button" accessibilityLabel={`Review recurrence suggestion for ${suggestion.taskTitle}`}><Text className="text-xs font-bold" style={{ color: theme.colors.accent }}>Review</Text></Pressable><Pressable onPress={() => { setSuggestions((current) => current.filter((item) => item.id !== suggestion.id)); if (accessToken) void dismissRecurrenceSuggestion(accessToken, suggestion.id).catch(() => void getRecurrenceSuggestions(accessToken).then((result) => setSuggestions(result.suggestions))); }} accessibilityRole="button" accessibilityLabel="Dismiss recurrence suggestion"><Text className="text-xs font-bold" style={{ color: theme.colors.secondaryText }}>Dismiss</Text></Pressable></View></View>)}
 
             {activeChips.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3 mt-3">
@@ -260,13 +301,13 @@ export default function AllTasksScreen({
             {listLoading ? <Text className="mb-3 text-sm font-bold" style={{ color: theme.colors.accent }}>Loading tasks...</Text> : null}
 
             <View className="mb-3 flex-row justify-between">
-              <StatsCard icon="ALL" value={String(taskItems.length)} title="All Tasks" width="full" />
+              <StatsCard icon="tasks" value={String(taskItems.length)} title="All Tasks" width="full" />
             </View>
             <View className="mb-3 flex-row flex-wrap justify-between gap-y-2">
-              <MiniStat icon="TD" label="To Do" value={String(statusCounts.todo)} />
-              <MiniStat icon="IP" label="Progress" value={String(statusCounts.inProgress)} />
-              <MiniStat icon="DN" label="Done" value={String(statusCounts.done)} />
-              <MiniStat icon="MS" label="Missed" value={String(statusCounts.missed)} />
+              <MiniStat icon="tasks" label="To Do" value={String(statusCounts.todo)} />
+              <MiniStat icon="focus" label="Progress" value={String(statusCounts.inProgress)} />
+              <MiniStat icon="check" label="Done" value={String(statusCounts.done)} />
+              <MiniStat icon="priority" label="Missed" value={String(statusCounts.missed)} />
             </View>
 
             <Text className="mb-2 text-sm font-bold" style={{ color: theme.colors.text }}>Tasks</Text>
@@ -307,20 +348,20 @@ export default function AllTasksScreen({
   );
 }
 
-function MiniStat({ icon, label, value }: { icon: string; label: string; value: string }) {
+function MiniStat({ icon, label, value }: { icon: import('../components/layout').MobileIconName; label: string; value: string }) {
   const { theme } = useTheme();
   const { colors } = theme;
 
   return (
     <View className="w-[23%] items-center rounded-xl border py-3" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
-      <Text className="text-xs font-black" style={{ color: colors.accent }}>{icon}</Text>
+      <MobileIcon name={icon} color={colors.accent} size={16} accessibilityLabel={`${label} icon`} />
       <Text className="mt-0.5 text-sm font-black" style={{ color: colors.text }}>{value}</Text>
       <Text className="mt-0.5 text-center text-[10px] font-bold" style={{ color: colors.secondaryText }}>{label}</Text>
     </View>
   );
 }
 
-const TaskCard = memo(function TaskCard({ task, onPress }: { task: TaskListItem; onPress: () => void }) {
+const TaskCard = memo(function TaskCard({ task, isShared, pending, onPress, onToggle, onChangeStatus }: { task: TaskListItem; isShared?: boolean; pending: boolean; onPress: () => void; onToggle: () => void; onChangeStatus: () => void }) {
   const { theme } = useTheme();
   const { colors } = theme;
   const isDone = task.status === 'Done';
@@ -334,7 +375,7 @@ const TaskCard = memo(function TaskCard({ task, onPress }: { task: TaskListItem;
       style={{ borderColor: colors.border, backgroundColor: colors.card }}
     >
       <View className="flex-row items-start gap-3">
-        <View
+        <Pressable onPress={onToggle} disabled={pending} accessibilityRole="checkbox" accessibilityState={{ checked: isDone, disabled: pending }} accessibilityLabel={isDone ? 'Reopen task' : 'Complete task'}
           className="mt-1 h-5 w-5 rounded-md border"
           style={{ borderColor: isDone ? colors.success : colors.border, backgroundColor: isDone ? colors.success : 'transparent' }}
         />
@@ -346,6 +387,7 @@ const TaskCard = memo(function TaskCard({ task, onPress }: { task: TaskListItem;
 
           <View className="mt-1.5 flex-row gap-2">
             <SmallBadge label={task.category} />
+            {isShared ? <SmallBadge label="Shared" /> : null}
             <Text className="text-xs" style={{ color: colors.secondaryText }}>{task.due}</Text>
           </View>
 
@@ -360,8 +402,8 @@ const TaskCard = memo(function TaskCard({ task, onPress }: { task: TaskListItem;
           </View>
 
           <View className="mt-2 flex-row items-center gap-2">
-            <PriorityBadge label={task.priority} theme={theme} />
-            <StatusBadge label={task.status} theme={theme} />
+            <TaskPriorityBadge priority={task.priority} />
+            <Pressable onPress={onChangeStatus} accessibilityRole="button" accessibilityLabel={`Change status, currently ${task.status}`}><TaskStatusBadge status={task.status} /></Pressable>
             <Text className="ml-auto text-xs" style={{ color: colors.secondaryText }}>{task.progress}%</Text>
           </View>
         </View>
@@ -383,28 +425,6 @@ function SmallBadge({ label }: { label: string }) {
   );
 }
 
-function PriorityBadge({ label, theme }: { label: string; theme: AppTheme }) {
-  const { colors } = theme;
-  const color = label === 'High' || label === 'Urgent' ? colors.error : label === 'Medium' ? colors.warning : colors.success;
-
-  return (
-    <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-xs font-bold" style={{ color }}>{label}</Text>
-    </View>
-  );
-}
-
-function StatusBadge({ label, theme }: { label: string; theme: AppTheme }) {
-  const { colors } = theme;
-  const color =
-    label === 'Done' ? colors.success : label === 'In Progress' ? colors.primary : label === 'Missed' ? colors.error : colors.secondaryText;
-
-  return (
-    <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-xs font-bold" style={{ color }}>{label}</Text>
-    </View>
-  );
-}
 
 function fromApiTask(task: ApiTask): TaskListItem {
   return {
@@ -415,6 +435,9 @@ function fromApiTask(task: ApiTask): TaskListItem {
     priority: toUiPriority(task.priority),
     status: toUiStatus(task.status),
     progress: task.progress,
+    dueDate: task.dueDate,
+    createdAt: task.createdAt,
+    isShared: task.isShared,
   };
 }
 

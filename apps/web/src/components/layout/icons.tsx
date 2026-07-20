@@ -1,6 +1,17 @@
 type IconProps = { className?: string }
+type DirectionalIconProps = IconProps & { direction: 'forward' | 'back'; isRTL?: boolean }
 
 const base = 'h-5 w-5'
+
+/** A logical chevron that mirrors when the interface direction changes. */
+export function DirectionalChevron({ className = base, direction, isRTL = false }: DirectionalIconProps) {
+  const pointsRight = direction === 'forward' ? !isRTL : isRTL
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={pointsRight ? 'M9 5l7 7-7 7' : 'M15 5l-7 7 7 7'} />
+    </svg>
+  )
+}
 
 export function DashboardIcon({ className = base }: IconProps) {
   return (

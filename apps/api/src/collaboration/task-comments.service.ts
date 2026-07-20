@@ -272,7 +272,11 @@ export class TaskCommentsService {
     return user ?? { id: userId, fullName: 'Unknown', avatarUrl: null };
   }
 
-  private async loadProfiles(userIds: string[]) {
+  private async loadProfiles(
+    userIds: string[],
+  ): Promise<
+    Map<string, { id: string; fullName: string; avatarUrl: string | null }>
+  > {
     if (!userIds.length) return new Map();
     const rows = await this.db
       .select({

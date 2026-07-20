@@ -138,6 +138,24 @@ export const plannerPreferences = pgTable('planner_preferences', {
   updatedAt: updatedAt(),
 });
 
+export const plannerAcceptedPlans = pgTable(
+  'planner_accepted_plans',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    date: varchar('date', { length: 10 }).notNull(),
+    plan: jsonb('plan').notNull(),
+    acceptedAt: timestamp('accepted_at').defaultNow().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => ({
+    userDateUnique: uniqueIndex('planner_accepted_plans_user_date_idx').on(table.userId, table.date),
+  }),
+);
+
 export const categories = pgTable('categories', {
   id: id(),
   userId: uuid('user_id')
@@ -699,6 +717,38 @@ export const notifications = pgTable(
     index('idx_notifications_user_unread').on(table.userId, table.isRead),
     index('idx_notifications_sent_at').on(table.sentAt),
   ],
+);
+
+// The standing AI project manager's recommendation cards. See
+// AiRecommendationsService for detection heuristics and DatabaseService's
+// ensureAiRecommendationsTable for the runtime DDL (incl. the partial unique
+// index on (taskId, dedupeKey) that dedupes pending cards).
+export const aiRecommendations = pgTable(
+  'ai_recommendations',
+  {
+    id: id(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    // ahead_of_pace | inactive_member | deadline_risk | workload_imbalance
+    kind: varchar('kind', { length: 40 }).notNull(),
+    // pending | approved | dismissed | auto_resolved
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    targetUserId: uuid('target_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    title: varchar('title', { length: 255 }).notNull(),
+    message: text('message').notNull(),
+    reason: text('reason').notNull(),
+    payload: jsonb('payload').notNull().default({}),
+    dedupeKey: varchar('dedupe_key', { length: 160 }).notNull(),
+    createdAt: createdAt(),
+    resolvedAt: timestamp('resolved_at'),
+    resolvedByUserId: uuid('resolved_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+  },
+  (table) => [index('idx_ai_reco_task').on(table.taskId, table.createdAt)],
 );
 
 export const deviceTokens = pgTable('device_tokens', {

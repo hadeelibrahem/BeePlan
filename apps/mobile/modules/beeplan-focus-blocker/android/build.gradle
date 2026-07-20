@@ -1,0 +1,74 @@
+buildscript {
+  repositories {
+    mavenCentral()
+  }
+  dependencies {
+    classpath("org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:${kotlinVersion}")
+  }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+group = 'com.beeplan.focusblocker'
+version = '1.0.0'
+
+def expoModulesCorePlugin = new File(
+  project(':expo-modules-core').projectDir.absolutePath,
+  'ExpoModulesCorePlugin.gradle'
+)
+
+apply from: expoModulesCorePlugin
+
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useExpoPublishing()
+
+// Falls back to a default when the host app does not define the ext property.
+def safeExtGet(prop, fallback) {
+  return rootProject.ext.has(prop)
+    ? rootProject.ext.get(prop)
+    : fallback
+}
+
+android {
+  namespace 'com.beeplan.focusblocker'
+
+  compileSdk safeExtGet('compileSdkVersion', 35)
+
+  defaultConfig {
+    minSdk safeExtGet('minSdkVersion', 24)
+    targetSdk safeExtGet('targetSdkVersion', 35)
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  buildFeatures {
+    compose true
+  }
+}
+
+dependencies {
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+  implementation 'androidx.core:core-ktx:1.13.1'
+  implementation 'androidx.activity:activity-ktx:1.9.2'
+  implementation 'androidx.activity:activity-compose:1.9.2'
+  implementation 'androidx.compose.animation:animation-core:1.7.6'
+  implementation 'androidx.compose.foundation:foundation-android:1.7.6'
+  implementation 'androidx.compose.ui:ui-android:1.7.6'
+  implementation 'androidx.compose.ui:ui-graphics:1.7.6'
+  implementation 'androidx.compose.material3:material3:1.3.1'
+
+  // Unit tests. `org.json:json` shadows the stubbed org.json in android.jar so
+  // FocusSession's JSON (de)serialization can be exercised on the plain JVM.
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20180813'
+}

@@ -10,7 +10,6 @@ import type {
   PlannerContext,
   PlannerTask,
   PostponeReasonCode,
-  PostponeStatus,
   ReasoningResult,
   SectionKey,
   TaskType,

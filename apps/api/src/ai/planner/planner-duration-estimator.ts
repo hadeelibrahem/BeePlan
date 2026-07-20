@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import type { DurationConfidence, DurationEstimate, TaskType } from './planner.types';
+import type {
+  DurationConfidence,
+  DurationEstimate,
+  TaskType,
+} from './planner.types';
 
 /** Minimal task shape the estimator needs (kept independent of DB rows). */
 export interface EstimatorInput {
@@ -46,7 +50,9 @@ export class PlannerDurationEstimator {
    * degrades to the deterministic model. Tasks whose duration is already known
    * are returned as `estimated: false` with high confidence.
    */
-  async estimate(tasks: EstimatorInput[]): Promise<Map<string, EstimatorResult>> {
+  async estimate(
+    tasks: EstimatorInput[],
+  ): Promise<Map<string, EstimatorResult>> {
     const result = new Map<string, EstimatorResult>();
     if (!tasks.length) return result;
 
@@ -57,7 +63,9 @@ export class PlannerDurationEstimator {
     }
 
     // Only ask the AI about tasks whose duration we genuinely don't know.
-    const needEstimate = tasks.filter((task) => !hasKnownDuration(task.knownMinutes));
+    const needEstimate = tasks.filter(
+      (task) => !hasKnownDuration(task.knownMinutes),
+    );
     if (!needEstimate.length || !this.client || !this.model) return result;
 
     try {
@@ -65,16 +73,23 @@ export class PlannerDurationEstimator {
       for (const [id, estimate] of aiEstimates) {
         const baseline = result.get(id);
         // Keep the deterministic task type if the AI didn't provide one.
-        result.set(id, { ...estimate, taskType: estimate.taskType ?? baseline?.taskType ?? 'light' });
+        result.set(id, {
+          ...estimate,
+          taskType: estimate.taskType ?? baseline?.taskType ?? 'light',
+        });
       }
     } catch (error) {
-      this.logger.warn(`AI duration estimation unavailable, using deterministic estimates: ${message(error)}`);
+      this.logger.warn(
+        `AI duration estimation unavailable, using deterministic estimates: ${message(error)}`,
+      );
     }
 
     return result;
   }
 
-  private async estimateWithAI(tasks: EstimatorInput[]): Promise<Map<string, EstimatorResult>> {
+  private async estimateWithAI(
+    tasks: EstimatorInput[],
+  ): Promise<Map<string, EstimatorResult>> {
     const response = await this.client!.chat.completions.create({
       model: this.model!,
       messages: [
@@ -98,7 +113,10 @@ export class PlannerDurationEstimator {
     return this.parse(response.choices[0]?.message?.content ?? '', tasks);
   }
 
-  private parse(raw: string, tasks: EstimatorInput[]): Map<string, EstimatorResult> {
+  private parse(
+    raw: string,
+    tasks: EstimatorInput[],
+  ): Map<string, EstimatorResult> {
     const out = new Map<string, EstimatorResult>();
     const cleaned = raw
       .trim()
@@ -114,12 +132,18 @@ export class PlannerDurationEstimator {
       return out;
     }
 
-    const root = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    const root =
+      parsed && typeof parsed === 'object'
+        ? (parsed as Record<string, unknown>)
+        : {};
     const rows = Array.isArray(root.estimates) ? root.estimates : [];
     const known = new Set(tasks.map((task) => task.id));
 
     for (const entry of rows) {
-      const row = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+      const row =
+        entry && typeof entry === 'object'
+          ? (entry as Record<string, unknown>)
+          : {};
       const id = typeof row.id === 'string' ? row.id : undefined;
       if (!id || !known.has(id)) continue;
       const minutes = clampMinutes(Number(row.minutes));
@@ -127,7 +151,10 @@ export class PlannerDurationEstimator {
       out.set(id, {
         minutes,
         confidence: normalizeConfidence(row.confidence),
-        reason: typeof row.reason === 'string' && row.reason.trim() ? row.reason.trim() : 'Estimated by the assistant.',
+        reason:
+          typeof row.reason === 'string' && row.reason.trim()
+            ? row.reason.trim()
+            : 'Estimated by the assistant.',
         estimated: true,
         taskType: normalizeTaskType(row.taskType),
       });
@@ -140,7 +167,11 @@ export class PlannerDurationEstimator {
    * is the fallback, so it must always produce a sensible, explainable number.
    */
   private deterministic(task: EstimatorInput): EstimatorResult {
-    const taskType = classifyTaskType(task.title, task.category, task.isFocusTask);
+    const taskType = classifyTaskType(
+      task.title,
+      task.category,
+      task.isFocusTask,
+    );
 
     if (hasKnownDuration(task.knownMinutes)) {
       return {
@@ -179,10 +210,21 @@ function clampMinutes(value: number): number {
 }
 
 function normalizeConfidence(value: unknown): DurationConfidence {
-  return value === 'high' || value === 'medium' || value === 'low' ? value : 'medium';
+  return value === 'high' || value === 'medium' || value === 'low'
+    ? value
+    : 'medium';
 }
 
-const TASK_TYPES: TaskType[] = ['deep', 'light', 'meeting', 'errand', 'admin', 'creative', 'learning', 'exercise'];
+const TASK_TYPES: TaskType[] = [
+  'deep',
+  'light',
+  'meeting',
+  'errand',
+  'admin',
+  'creative',
+  'learning',
+  'exercise',
+];
 
 function normalizeTaskType(value: unknown): TaskType {
   return TASK_TYPES.includes(value as TaskType) ? (value as TaskType) : 'light';
@@ -190,16 +232,48 @@ function normalizeTaskType(value: unknown): TaskType {
 
 /** Keyword buckets used by both classification and the fallback estimate. */
 const TYPE_KEYWORDS: { type: TaskType; words: RegExp }[] = [
-  { type: 'meeting', words: /\b(meeting|call|standup|sync|interview|1:1|zoom|catch\s?up|discussion)\b/i },
-  { type: 'exercise', words: /\b(gym|run|running|workout|exercise|walk|yoga|training|swim|jog)\b/i },
-  { type: 'learning', words: /\b(study|studying|learn|read|reading|course|lecture|revise|revision|research|exam|homework|assignment)\b/i },
-  { type: 'creative', words: /\b(design|write|writing|draft|brainstorm|prototype|sketch|compose|content|blog|video|edit)\b/i },
-  { type: 'errand', words: /\b(buy|groceries|shop|shopping|pick\s?up|drop\s?off|errand|pay|bank|post|deliver|pharmacy)\b/i },
-  { type: 'admin', words: /\b(email|emails|reply|invoice|report|expense|schedule|organize|plan|paperwork|form|submit|book)\b/i },
-  { type: 'deep', words: /\b(build|develop|code|coding|implement|debug|project|architecture|analyze|thesis|presentation|prepare)\b/i },
+  {
+    type: 'meeting',
+    words:
+      /\b(meeting|call|standup|sync|interview|1:1|zoom|catch\s?up|discussion)\b/i,
+  },
+  {
+    type: 'exercise',
+    words:
+      /\b(gym|run|running|workout|exercise|walk|yoga|training|swim|jog)\b/i,
+  },
+  {
+    type: 'learning',
+    words:
+      /\b(study|studying|learn|read|reading|course|lecture|revise|revision|research|exam|homework|assignment)\b/i,
+  },
+  {
+    type: 'creative',
+    words:
+      /\b(design|write|writing|draft|brainstorm|prototype|sketch|compose|content|blog|video|edit)\b/i,
+  },
+  {
+    type: 'errand',
+    words:
+      /\b(buy|groceries|shop|shopping|pick\s?up|drop\s?off|errand|pay|bank|post|deliver|pharmacy)\b/i,
+  },
+  {
+    type: 'admin',
+    words:
+      /\b(email|emails|reply|invoice|report|expense|schedule|organize|plan|paperwork|form|submit|book)\b/i,
+  },
+  {
+    type: 'deep',
+    words:
+      /\b(build|develop|code|coding|implement|debug|project|architecture|analyze|thesis|presentation|prepare)\b/i,
+  },
 ];
 
-export function classifyTaskType(title: string, category?: string | null, isFocusTask?: boolean): TaskType {
+export function classifyTaskType(
+  title: string,
+  category?: string | null,
+  isFocusTask?: boolean,
+): TaskType {
   const haystack = `${title} ${category ?? ''}`;
   for (const { type, words } of TYPE_KEYWORDS) {
     if (words.test(haystack)) return type;
@@ -209,7 +283,10 @@ export function classifyTaskType(title: string, category?: string | null, isFocu
 }
 
 /** Rough per-type duration used only when nothing better is known. */
-function estimateFromKeywords(title: string, taskType: TaskType): { minutes: number; reason: string } {
+function estimateFromKeywords(
+  title: string,
+  taskType: TaskType,
+): { minutes: number; reason: string } {
   const base: Record<TaskType, number> = {
     deep: 90,
     learning: 90,
@@ -231,7 +308,10 @@ function estimateFromKeywords(title: string, taskType: TaskType): { minutes: num
     errand: 'an errand',
     exercise: 'exercise',
   };
-  return { minutes, reason: `Estimated ${minutes} min — looks like ${label[taskType]} (no duration set).` };
+  return {
+    minutes,
+    reason: `Estimated ${minutes} min — looks like ${label[taskType]} (no duration set).`,
+  };
 }
 
 function message(error: unknown): string {

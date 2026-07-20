@@ -115,11 +115,11 @@ export async function apiFetch(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  console.log('[BeePlan API] ->', method, url);
+  if (__DEV__) console.log('[BeePlan API] ->', method, url);
 
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
-    console.log('[BeePlan API] <-', method, url, response.status);
+    if (__DEV__) console.log('[BeePlan API] <-', method, url, response.status);
     return response;
   } catch (error) {
     const isAbort = error instanceof Error && error.name === 'AbortError';

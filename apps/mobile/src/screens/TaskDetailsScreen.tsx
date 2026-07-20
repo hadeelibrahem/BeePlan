@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Alert, Pressable, Text, View } from 'react-native';
 import {
   changeTaskStatus,
   getAttachments,
@@ -8,15 +8,17 @@ import {
   toApiStatus,
   toUiPriority,
   toUiStatus,
-  updateSubtask,
   type ApiSubtask,
   type ApiTask,
   type ApiTaskAttachment,
 } from '../lib/tasksApi';
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowSheet';
+import { DependencyManagementSection } from '../components/DependencyManagementSection';
 import { createRecurrenceSummary, getNextOccurrenceLabel, type RecurrenceSettings } from '../components/TaskRecurrenceSheet';
 import { TaskStatusWorkflowSheet, type TaskStatus } from '../components/TaskStatusWorkflowSheet';
-import SubtaskDetailSheet from '../components/SubtaskDetailSheet';
+import { SubtaskManagementSection } from '../components/SubtaskManagementSection';
+import { taskTimeTracking } from './taskTimeTracking';
+import { TaskPriorityBadge, TaskStatusBadge } from '../components/TaskBadges';
 import {
   displaySubtaskTitle,
   formatDuration,
@@ -24,9 +26,6 @@ import {
   matchesSubtaskFilter,
   syncTaskSubtaskReminders,
   SUBTASK_INDICATOR_COLOR,
-  SUBTASK_PRIORITY_COLOR,
-  SUBTASK_PRIORITY_LABEL,
-  SUBTASK_STATUS_LABEL,
   type SubtaskFilter,
 } from '../lib/subtasks';
 import {
@@ -41,6 +40,7 @@ import {
 import { useTheme } from '../theme/useTheme';
 import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel';
 import { SharedBadge } from '../features/collaboration/components/SharedBadge';
+import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
 
 type Props = {
   task?: ApiTask | null;
@@ -53,12 +53,14 @@ type Props = {
   onRefresh?: () => void;
   onBack: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
+  onDelete?: () => Promise<void> | void;
   onMarkDone?: () => void;
+  onOpenAiCollaboration?: () => void;
 };
 
 export default function TaskDetailsScreen({
   task,
+  tasks = [],
   accessToken = '',
   currentUserId = '',
   notice = '',
@@ -67,6 +69,7 @@ export default function TaskDetailsScreen({
   onBack,
   onEdit,
   onDelete,
+  onOpenAiCollaboration,
 }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
@@ -74,7 +77,6 @@ export default function TaskDetailsScreen({
   const [progress, setProgress] = useState(task?.progress ?? 0);
   const [isStatusSheetVisible, setIsStatusSheetVisible] = useState(false);
   const [subtaskItems, setSubtaskItems] = useState<ApiSubtask[]>(task?.subtasks ?? []);
-  const [detailSubtaskId, setDetailSubtaskId] = useState<string | null>(null);
   const [sharedMemberCount, setSharedMemberCount] = useState(0);
   const [dependencyItems, setDependencyItems] = useState<DependencyTask[]>(
     toDependencyTasks(task?.dependencies),
@@ -84,28 +86,18 @@ export default function TaskDetailsScreen({
   );
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([]);
   const [error, setError] = useState('');
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
+  const deleteConfirmationRef = useRef<ReturnType<typeof createTaskDeleteConfirmationController> | null>(null);
+  if (!deleteConfirmationRef.current) {
+    deleteConfirmationRef.current = createTaskDeleteConfirmationController(
+      async () => {
+        await onDeleteRef.current?.();
+      },
+      Alert.alert,
+    );
+  }
 
-  const isOwner = task?.viewerRole === 'owner';
-  const [subtaskFilter, setSubtaskFilter] = useState<SubtaskFilter>(isOwner ? 'team' : 'mine');
-  const [subtaskMemberId, setSubtaskMemberId] = useState('');
-
-  const memberOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const item of subtaskItems) {
-      if (item.assigneeUserId && item.assignee && !seen.has(item.assigneeUserId)) {
-        seen.set(item.assigneeUserId, item.assignee);
-      }
-    }
-    return [...seen.entries()].map(([userId, name]) => ({ userId, name }));
-  }, [subtaskItems]);
-
-  const visibleSubtasks = useMemo(
-    () =>
-      subtaskItems.filter((item) =>
-        matchesSubtaskFilter(item, subtaskFilter, { currentUserId, memberId: subtaskMemberId }),
-      ),
-    [subtaskItems, subtaskFilter, currentUserId, subtaskMemberId],
-  );
 
   const completedSubtasks = useMemo(() => subtaskItems.filter((item) => item.isDone).length, [subtaskItems]);
   const dependenciesComplete = useMemo(
@@ -163,10 +155,6 @@ export default function TaskDetailsScreen({
     void syncTaskSubtaskReminders(subtaskItems);
   }, [subtaskItems]);
 
-  const detailSubtask = useMemo(
-    () => subtaskItems.find((item) => item.id === detailSubtaskId) ?? null,
-    [subtaskItems, detailSubtaskId],
-  );
 
   const handleOpenAttachment = useCallback(
     async (attachment: ApiTaskAttachment) => {
@@ -235,40 +223,6 @@ export default function TaskDetailsScreen({
     [task, accessToken, isBlocked, status, subtaskItems, completedSubtasks, progress, onTaskUpdated],
   );
 
-  const handleToggleSubtask = useCallback(
-    async (subtask: ApiSubtask) => {
-      if (!task || !accessToken) return;
-
-      // Optimistic update: flip the subtask and recompute progress locally,
-      // then reconcile with the server response; roll back on error.
-      const nextIsDone = !subtask.isDone;
-      const previousSubtaskItems = subtaskItems;
-      const previousProgress = progress;
-      const optimisticSubtasks = subtaskItems.map((item) =>
-        item.id === subtask.id ? { ...item, isDone: nextIsDone } : item,
-      );
-      const optimisticProgress = optimisticSubtasks.length
-        ? Math.round((optimisticSubtasks.filter((item) => item.isDone).length / optimisticSubtasks.length) * 100)
-        : progress;
-
-      setSubtaskItems(optimisticSubtasks);
-      setProgress(optimisticProgress);
-      setError('');
-
-      try {
-        const updated = await updateSubtask(accessToken, task.id, subtask.id, { isDone: nextIsDone });
-        setSubtaskItems(updated.subtasks);
-        setProgress(updated.progress);
-        onTaskUpdated?.(updated);
-      } catch (subtaskError) {
-        setSubtaskItems(previousSubtaskItems);
-        setProgress(previousProgress);
-        setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.');
-      }
-    },
-    [task, accessToken, subtaskItems, progress, onTaskUpdated],
-  );
-
   if (!task) {
     return (
       <AppScreen>
@@ -285,9 +239,6 @@ export default function TaskDetailsScreen({
       footer={
         isViewer ? undefined : (
           <BottomActionBar>
-            <DangerButton size="sm" onPress={onDelete} className="flex-1">
-              Delete
-            </DangerButton>
             <OutlineButton size="sm" onPress={() => setIsStatusSheetVisible(true)} className="flex-1">
               Status
             </OutlineButton>
@@ -304,8 +255,8 @@ export default function TaskDetailsScreen({
 
       <SectionCard className="mb-3">
         <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
-          <Badge label={status} color={getStatusColor(status, colors)} />
-          <Badge label={`${toUiPriority(task.priority)} Priority`} color={colors.error} />
+          <TaskStatusBadge status={status} />
+          <TaskPriorityBadge priority={toUiPriority(task.priority)} />
           <Badge label={task.category || 'General'} color={colors.accent} />
           {task.isShared || sharedMemberCount > 1 ? (
             <SharedBadge memberCount={sharedMemberCount || undefined} />
@@ -333,6 +284,18 @@ export default function TaskDetailsScreen({
         />
       ) : null}
 
+      {(task.isShared || sharedMemberCount > 1) && onOpenAiCollaboration ? (
+        <SectionCard className="mb-3">
+          <Text className="mb-1 text-sm font-black" style={{ color: colors.text }}>
+            AI Collaboration
+          </Text>
+          <Text className="mb-3 text-xs leading-4" style={{ color: colors.secondaryText }}>
+            See how work is split, what's due today, and AI suggestions for keeping the team balanced.
+          </Text>
+          <OutlineButton onPress={onOpenAiCollaboration}>Open AI Collaboration</OutlineButton>
+        </SectionCard>
+      ) : null}
+
       <Card title="Progress">
         <View className="mb-2 flex-row items-center justify-between">
           <Text className="text-sm" style={{ color: colors.secondaryText }}>
@@ -344,64 +307,36 @@ export default function TaskDetailsScreen({
       </Card>
 
       <Card title="Subtasks">
-        {subtaskItems.length ? (
-          <>
-            <SubtaskFilterRow
-              filter={subtaskFilter}
-              onFilterChange={setSubtaskFilter}
-              isOwner={isOwner}
-              memberOptions={memberOptions}
-              memberId={subtaskMemberId}
-              onMemberChange={setSubtaskMemberId}
-            />
-            {visibleSubtasks.length ? (
-              visibleSubtasks.map((item) => (
-                <SubtaskRow
-                  key={item.id}
-                  item={item}
-                  canEdit={!isViewer}
-                  onToggle={handleToggleSubtask}
-                  onOpen={(subtask) => setDetailSubtaskId(subtask.id)}
-                />
-              ))
-            ) : (
-              <EmptyBlock title="No subtasks in this view" description="Try a different filter to see more." />
-            )}
-          </>
-        ) : (
-          <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
-        )}
+        <SubtaskManagementSection
+          task={{ ...task, subtasks: subtaskItems }}
+          accessToken={accessToken}
+          canEdit={!isViewer}
+          onItemsChange={setSubtaskItems}
+          onError={setError}
+          onTaskUpdated={(updated) => {
+            setSubtaskItems(updated.subtasks);
+            setProgress(updated.progress);
+            setStatus(toTaskStatus(updated));
+            onTaskUpdated?.(updated);
+          }}
+        />
       </Card>
+      {!isViewer ? <Card title="Danger Zone"><Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>Deleting this task cannot be undone.</Text><DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>Delete Task</DangerButton></Card> : null}
 
       <Card title="Dependencies">
-        {dependencyItems.length ? (
-          <>
-            <View
-              className="mb-3 rounded-2xl border p-3"
-              style={{
-                backgroundColor: dependenciesComplete ? `${colors.success}16` : `${colors.accent}16`,
-                borderColor: dependenciesComplete ? `${colors.success}55` : `${colors.accent}55`,
-              }}
-            >
-              <Text className="text-xs font-bold leading-4" style={{ color: dependenciesComplete ? colors.success : colors.accent }}>
-                {dependenciesComplete
-                  ? 'All dependencies are completed. This task is ready to start.'
-                  : 'This task cannot start until all dependencies are completed.'}
-              </Text>
-            </View>
-            {dependencyItems.map((item) => (
-              <DependencyRow key={item.id} item={item} />
-            ))}
-          </>
-        ) : (
-          <EmptyBlock title="No dependencies" description="Tasks that must finish first will appear here." />
-        )}
+        <DependencyManagementSection task={task} tasks={tasks} accessToken={accessToken} canEdit={!isViewer} onDependenciesChange={setDependencyItems} onError={setError} onTaskUpdated={(updated) => { setDependencyItems(toDependencyTasks(updated.dependencies)); setStatus(toTaskStatus(updated)); setProgress(updated.progress); onTaskUpdated?.(updated) }} />
       </Card>
 
       <Card title="Automation">
         <AutomationRow label="Reminder" value={reminderText} />
         <AutomationRow label="Recurring" value={`${recurrenceSummary}${recurrence ? ` - ${nextOccurrence}` : ''}`} />
         <AutomationRow label="Focus" value={focusText} isLast />
+      </Card>
+
+      <Card title="Time Tracking">
+        <View className="gap-2">
+          {Object.entries(taskTimeTracking(task)).map(([label, value]) => <View key={label} className="flex-row justify-between py-1"><Text className="text-sm" style={{ color: colors.secondaryText }}>{label.charAt(0).toUpperCase() + label.slice(1)}</Text><Text className="text-sm font-bold" style={{ color: colors.text }}>{value}</Text></View>)}
+        </View>
       </Card>
 
       <Card title="Notes">
@@ -454,26 +389,6 @@ export default function TaskDetailsScreen({
         onClose={() => setIsStatusSheetVisible(false)}
         onSave={(next) => void saveStatus(next)}
       />
-      {task ? (
-        <SubtaskDetailSheet
-          visible={detailSubtaskId !== null}
-          task={{ ...task, subtasks: subtaskItems }}
-          subtask={detailSubtask}
-          accessToken={accessToken}
-          canEdit={!isViewer}
-          onClose={() => setDetailSubtaskId(null)}
-          onEdit={() => {
-            setDetailSubtaskId(null);
-            onEdit?.();
-          }}
-          onTaskUpdated={(updated) => {
-            setSubtaskItems(updated.subtasks);
-            setProgress(updated.progress);
-            setStatus(toTaskStatus(updated));
-            onTaskUpdated?.(updated);
-          }}
-        />
-      ) : null}
     </AppScreen>
   );
 }
@@ -522,7 +437,7 @@ function AutomationRow({ label, value, isLast }: { label: string; value: string;
 function Badge({ label, color }: { label: string; color: string }) {
   return (
     <View className="rounded-full px-2 py-1" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-[11px] font-black" style={{ color }}>
+      <Text className="text-xs font-black" style={{ color }}>
         {label}
       </Text>
     </View>
@@ -749,19 +664,11 @@ const SubtaskRow = memo(function SubtaskRow({
         ) : null}
 
         <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
-          <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${SUBTASK_PRIORITY_COLOR[item.priority]}22` }}>
-            <Text className="text-[10px] font-bold" style={{ color: SUBTASK_PRIORITY_COLOR[item.priority] }}>
-              {SUBTASK_PRIORITY_LABEL[item.priority]}
-            </Text>
-          </View>
-          <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.secondaryText}18` }}>
-            <Text className="text-[10px] font-bold" style={{ color: colors.secondaryText }}>
-              {SUBTASK_STATUS_LABEL[item.status]}
-            </Text>
-          </View>
+          <TaskPriorityBadge priority={item.priority} />
+          <TaskStatusBadge status={item.status} />
           {item.estimatedDurationSource === 'ai' && item.estimatedDurationMinutes ? (
             <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
-              <Text className="text-[10px] font-bold" style={{ color: colors.accent }}>AI Estimate</Text>
+              <Text className="text-xs font-bold" style={{ color: colors.accent }}>AI Estimate</Text>
             </View>
           ) : null}
         </View>

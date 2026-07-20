@@ -1,16 +1,12 @@
-// NOTE: `TaskDependenciesWorkflowSheet` below is currently never rendered
-// anywhere in the app — only the `DependencyTask` type from this file is
-// imported (by src/screens/TaskDetailsScreen.tsx). The backend already
-// supports dependency add/replace/remove (see apps/api/src/tasks), so this
-// component is a ready-made UI for that flow; it just hasn't been wired up
-// yet. Left in place rather than deleted since the type export is in active
-// use and the component may still be the intended implementation for
-// dependency management on mobile.
+// Shared dependency selection and management sheet. It is used by Create Task
+// for draft dependency selection and by dependency-management flows for adding,
+// replacing, and removing persisted task dependencies.
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
 import { useTheme } from '../theme/useTheme'
+import { TaskStatusBadge } from './TaskBadges'
 
 export type DependencyStatus = 'To Do' | 'In Progress' | 'Done' | 'Missed' | 'Blocked'
 export type DependencyPriority = 'Low' | 'Medium' | 'High'
@@ -188,7 +184,7 @@ export function TaskDependenciesWorkflowSheet({
                       {dependency.category}
                     </Text>
                   </View>
-                  <StatusBadge status={dependency.status} />
+                  <TaskStatusBadge status={dependency.status} />
                 </View>
                 <View className="mt-4 flex-row gap-3">
                   <InfoPill label="Due" value={dependency.dueDate} />
@@ -219,6 +215,15 @@ export function TaskDependenciesWorkflowSheet({
               </ScrollView>
 
               <View className="mt-3 flex-row gap-3">
+                <DangerButton
+                  onPress={() => {
+                    onRemove(dependency.id)
+                    onClose()
+                  }}
+                  className="flex-1"
+                >
+                  Remove
+                </DangerButton>
                 <SecondaryButton onPress={onClose} className="flex-1">
                   Cancel
                 </SecondaryButton>
@@ -353,32 +358,11 @@ function DependencyOption({
       </View>
 
       <View className="mt-4 flex-row flex-wrap gap-2">
-        <StatusBadge status={task.status} />
+        <TaskStatusBadge status={task.status} />
         <MetaPill label={task.priority} />
         <MetaPill label={task.dueDate} />
       </View>
     </Pressable>
-  )
-}
-
-function StatusBadge({ status }: { status: DependencyStatus }) {
-  const { theme } = useTheme()
-  const { colors } = theme
-  const color =
-    status === 'Done'
-      ? colors.success
-      : status === 'Missed' || status === 'Blocked'
-        ? colors.error
-        : status === 'In Progress'
-          ? colors.primary
-          : colors.secondaryText
-
-  return (
-    <View className="rounded-full px-3 py-2" style={{ backgroundColor: `${color}33` }}>
-      <Text className="text-xs font-black" style={{ color }}>
-        {status}
-      </Text>
-    </View>
   )
 }
 

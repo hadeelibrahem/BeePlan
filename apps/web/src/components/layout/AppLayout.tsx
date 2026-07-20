@@ -4,9 +4,9 @@ import { Sidebar, type SidebarNavHandlers, type SidebarPage } from './Sidebar'
 
 type AppLayoutProps = SidebarNavHandlers & {
   active: SidebarPage
-  panelTitle: string
-  panelCaption: string
-  panelPercent: number
+  panelTitle?: string
+  panelCaption?: string
+  panelPercent?: number
   fab?: ReactNode
   children: ReactNode
 }

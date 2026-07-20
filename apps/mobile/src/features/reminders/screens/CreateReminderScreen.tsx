@@ -14,6 +14,7 @@ import type { ReminderDraft } from '../types/aiAssistant.types';
 import type { PersonReminderConfig, Reminder } from '../types/reminders.types';
 import { scheduleTimeReminderNotification } from '../utils/reminderNotificationSync';
 import { mapDraftToReminder } from '../utils/aiDraftMapping';
+import { createReminderInitialState } from '../createReminderInitialState';
 
 type Props = {
   accessToken: string;
@@ -21,6 +22,8 @@ type Props = {
   onCreated: (reminder: Reminder) => void;
   /** Navigate to the People page (used when a detected person isn't a friend yet). */
   onNavigatePeople?: () => void;
+  initialType?: 'task' | 'person' | 'checklist';
+  initialFriendId?: string;
 };
 
 // Builds a `Reminder`-shaped prefill for the Person form from an AI parse result.
@@ -51,9 +54,9 @@ function personDraftToReminder(result: ParsePersonReminderResult): Reminder {
   };
 }
 
-export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavigatePeople }: Props) {
+export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavigatePeople, initialType, initialFriendId }: Props) {
   const { t } = useLanguage();
-  const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(undefined);
+  const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(() => createReminderInitialState(initialType, initialFriendId));
   const [formKey, setFormKey] = useState(0);
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);

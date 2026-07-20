@@ -66,7 +66,7 @@ async function tick(): Promise<void> {
     // A failed poll (network blip, permission change) must never crash the app —
     // just log and let the next interval retry.
     debug('tick failed', error);
-    console.error('[proximityMonitor] tick failed:', error);
+    if (__DEV__) console.error('[proximityMonitor] tick failed:', error);
   }
 }
 

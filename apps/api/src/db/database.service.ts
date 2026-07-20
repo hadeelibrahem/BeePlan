@@ -27,10 +27,12 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureGoogleLoginApprovalsTable();
     await this.ensureStandaloneNotesTable();
     await this.ensurePlannerPreferencesTable();
+    await this.ensurePlannerAcceptedPlansTable();
     await this.ensureFocusSessionsTable();
     await this.ensureSocialTables();
     await this.ensureNotificationsTable();
     await this.ensureCollaborationTables();
+    await this.ensureAiRecommendationsTable();
   }
 
   async healthCheck() {
@@ -450,6 +452,25 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     `);
   }
 
+  private async ensurePlannerAcceptedPlansTable() {
+    await this.getPool().query(`
+      create table if not exists planner_accepted_plans (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        date varchar(10) not null,
+        plan jsonb not null,
+        accepted_at timestamp default now() not null,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      create unique index if not exists planner_accepted_plans_user_date_idx
+        on planner_accepted_plans (user_id, date)
+    `);
+  }
+
   private async ensureFocusSessionsTable() {
     await this.getPool().query(`
       create table if not exists focus_sessions (
@@ -683,6 +704,39 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists idx_personal_task_prefs_user
         on personal_task_preferences (user_id)
+    `);
+  }
+
+  // The standing AI project manager's recommendation cards (ahead-of-pace,
+  // inactive member, deadline risk, workload imbalance). One row per
+  // detected situation; the partial unique index on (task_id, dedupe_key)
+  // stops re-detection from spamming duplicates of an already-pending card.
+  private async ensureAiRecommendationsTable() {
+    await this.getPool().query(`
+      create table if not exists ai_recommendations (
+        id uuid primary key default gen_random_uuid() not null,
+        task_id uuid not null references tasks(id) on delete cascade,
+        kind varchar(40) not null,
+        status varchar(20) not null default 'pending',
+        target_user_id uuid references users(id) on delete set null,
+        title varchar(255) not null,
+        message text not null,
+        reason text not null,
+        payload jsonb not null default '{}',
+        dedupe_key varchar(160) not null,
+        created_at timestamp default now() not null,
+        resolved_at timestamp,
+        resolved_by_user_id uuid references users(id) on delete set null
+      )
+    `);
+    await this.getPool().query(`
+      create unique index if not exists idx_ai_reco_dedupe
+        on ai_recommendations (task_id, dedupe_key)
+        where status = 'pending'
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_ai_reco_task
+        on ai_recommendations (task_id, created_at)
     `);
   }
 

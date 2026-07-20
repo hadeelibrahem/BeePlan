@@ -3,7 +3,6 @@ import { daysBetween, isTime, minutesBetween, toMinutes, todayString, windowToDa
 import type {
   BlockedTask,
   DailyPlan,
-  DailyPlanItem,
   FixedBlock,
   PlannerConstraints,
   PlannerContext,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DirectionalChevron } from '../../../components/layout'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import { getFriends } from '../../social/api/social.api'
 import type { FriendSummary } from '../../social/types/social.types'
@@ -34,7 +35,7 @@ export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }:
             aria-label={t('actions.back')}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)] hover:bg-[var(--bp-input)]"
           >
-            {isRTL ? '>' : '<'}
+            <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
           </button>
           <span className="text-sm font-bold text-[var(--bp-muted)]">{t('actions.back')}</span>
         </div>

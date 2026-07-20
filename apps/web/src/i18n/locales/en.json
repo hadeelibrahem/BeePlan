@@ -2,7 +2,37 @@
   "common": {
     "brand_name": "BeePlan",
     "languageToggle": "العربية",
+    "cancel": "Cancel",
     "somethingWentWrong": "Something went wrong. Please try again."
+  },
+  "topBar": {
+    "searchPlaceholder": "Search...",
+    "closeSearch": "Close search",
+    "notifications": "Notifications",
+    "openAccountMenu": "Open account menu",
+    "switchToDark": "Switch to dark mode",
+    "switchToLight": "Switch to light mode"
+  },
+  "account": {
+    "title": "Account",
+    "theme": "Theme",
+    "language": "Language",
+    "signOutTitle": "Sign out?",
+    "signOutBody": "You will need to sign in again to access your {{brand}} account.",
+    "signOutError": "Could not sign out. Please try again.",
+    "signingOut": "Signing out..."
+  },
+  "taskUi": {
+    "dashboard": { "title": "Dashboard", "subtitle": "Smart productivity dashboard" },
+    "allTasks": { "title": "All Tasks", "subtitle": "Manage, filter, and track all your tasks", "emptyTitle": "No tasks match the selected filters." },
+    "details": { "title": "Task Details", "subtitle": "View your task at a glance" },
+    "create": { "title": "Create New Task", "subtitle": "Organize your work and stay productive." },
+    "edit": { "title": "Edit Task", "subtitle": "Update task details, timing, progress, and supporting files." },
+    "focus": { "title": "Focus Mode", "subtitle": "Your deep-work control center" },
+    "calendar": { "title": "Calendar", "subtitle": "See your schedule at a glance", "emptyTitle": "Nothing scheduled", "emptyDescription": "No tasks or reminders are due on this day." },
+    "notes": { "title": "Notes", "subtitle": "Jot down ideas and quick thoughts", "emptyTitle": "No notes yet", "emptyDescription": "Create your first note above to start jotting down ideas." },
+    "analytics": { "title": "Analytics", "subtitle": "Track your productivity over time" },
+    "planner": { "title": "AI Planner", "subtitle": "A clean daily schedule first — open the details to see how the AI planned it." }
   },
   "dashboard": {
     "activeReminders": "{{count}} active reminder{{plural}}",

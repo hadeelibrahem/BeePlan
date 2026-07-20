@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import TaskAttachmentPicker from '../components/TaskAttachmentPicker';
 import {
   AppScreen,
@@ -18,7 +18,6 @@ import {
   type RecurrenceSettings,
 } from '../components/TaskRecurrenceSheet';
 import { useTheme } from '../theme/useTheme';
-import { AiCollaborationPlannerModal } from '../features/collaboration/components/AiCollaborationPlannerModal';
 import { ManageMembersSection } from '../features/collaboration/components/ManageMembersSection';
 import { ReminderAudienceSection } from '../features/collaboration/components/ReminderAudienceSection';
 import { FocusAudienceSection } from '../features/collaboration/components/FocusAudienceSection';
@@ -36,18 +35,35 @@ import {
   type ApiTaskAttachment,
   type TaskPayload,
 } from '../lib/tasksApi';
+import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
+import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard';
+import { SubtaskManagementSection } from '../components/SubtaskManagementSection';
+import { DependencyManagementSection } from '../components/DependencyManagementSection';
+import { TASK_REMINDER_OPTIONS, canScheduleTaskReminder, validateTaskReminder } from './editTaskReminder';
 
 type Props = {
   task: ApiTask | null;
+  tasks?: ApiTask[];
   accessToken?: string;
   currentUserId?: string;
   onRefresh?: () => void;
   onBack: () => void;
   onCancel: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void> | void;
   onSave: (payload: TaskPayload) => Promise<ApiTask | undefined> | ApiTask | void;
   onSaved?: (task: ApiTask) => void;
+  onSubtasksUpdated?: (task: ApiTask) => void;
+  onDependenciesUpdated?: (task: ApiTask) => void;
   onPermissionDenied?: () => void;
+  onOpenAiCollaboration?: () => void;
+  onLifecycleChange?: (state: EditTaskLifecycleState) => void;
+};
+
+export type EditTaskLifecycleState = {
+  isDirty: boolean;
+  isSubmitting: boolean;
+  error: string;
+  lastSuccess?: 'saved';
 };
 
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const;
@@ -105,6 +121,7 @@ function attachmentColor(type?: string, fileName?: string) {
 
 export default function EditTaskScreen({
   task,
+  tasks = [],
   accessToken,
   currentUserId = '',
   onRefresh,
@@ -113,10 +130,25 @@ export default function EditTaskScreen({
   onDelete,
   onSave,
   onSaved,
+  onSubtasksUpdated,
+  onDependenciesUpdated,
   onPermissionDenied,
+  onOpenAiCollaboration,
+  onLifecycleChange,
 }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
+  const deleteConfirmationRef = useRef<ReturnType<typeof createTaskDeleteConfirmationController> | null>(null);
+  if (!deleteConfirmationRef.current) {
+    deleteConfirmationRef.current = createTaskDeleteConfirmationController(
+      async () => {
+        await onDeleteRef.current();
+      },
+      Alert.alert,
+    );
+  }
 
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
@@ -125,6 +157,8 @@ export default function EditTaskScreen({
   const [priority, setPriority] = useState(task ? toUiPriority(task.priority) : 'Medium');
   const [dueDate, setDueDate] = useState<Date | undefined>(toDateInput(task?.dueDate));
   const [dueTime, setDueTime] = useState(task?.dueTime ?? '');
+  const [reminderEnabled, setReminderEnabled] = useState(task?.reminderEnabled ?? false);
+  const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task?.reminderBeforeMinutes ?? 30);
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [estimatedHours, setEstimatedHours] = useState(String(task?.estimatedHours ?? 0));
   const [spentHours, setSpentHours] = useState(String(task?.spentHours ?? 0));
@@ -132,16 +166,91 @@ export default function EditTaskScreen({
     task ? recurrenceToUi(task.recurrence) : null,
   );
   const [isRecurrenceSheetVisible, setIsRecurrenceSheetVisible] = useState(false);
-  const [isAiPlannerVisible, setIsAiPlannerVisible] = useState(false);
   const [iosPicker, setIosPicker] = useState<'date' | 'time' | null>(null);
   const [focusEnabled, setFocusEnabled] = useState(task?.isFocusTask ?? false);
   const [error, setError] = useState('');
+  const [lastSuccess, setLastSuccess] = useState<'saved' | undefined>(undefined);
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([]);
+  const deletingAttachmentIdsRef = useRef(new Set<string>());
   const [draftAttachments, setDraftAttachments] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const recurrenceSummary = createRecurrenceSummary(recurrence);
+
+  // Snapshot of the task's editable fields as first loaded, used to detect
+  // unsaved edits when the user presses Android hardware back.
+  const initialValues = useMemo(
+    () => ({
+      title: task?.title ?? '',
+      description: task?.description ?? '',
+      category: task?.category || 'General',
+      status: task ? toUiStatus(task.status) : 'To Do',
+      priority: task ? toUiPriority(task.priority) : 'Medium',
+      dueDateTime: toDateInput(task?.dueDate)?.getTime(),
+      dueTime: task?.dueTime ?? '',
+      reminderEnabled: task?.reminderEnabled ?? false,
+      reminderBeforeMinutes: task?.reminderBeforeMinutes ?? 30,
+      notes: task?.notes ?? '',
+      estimatedHours: String(task?.estimatedHours ?? 0),
+      spentHours: String(task?.spentHours ?? 0),
+      focusEnabled: task?.isFocusTask ?? false,
+      recurrenceSummary: createRecurrenceSummary(task ? recurrenceToUi(task.recurrence) : null),
+    }),
+    [task],
+  );
+
+  const hasUnsavedChanges =
+    title !== initialValues.title ||
+    description !== initialValues.description ||
+    category !== initialValues.category ||
+    status !== initialValues.status ||
+    priority !== initialValues.priority ||
+    dueDate?.getTime() !== initialValues.dueDateTime ||
+    dueTime !== initialValues.dueTime ||
+    reminderEnabled !== initialValues.reminderEnabled ||
+    reminderBeforeMinutes !== initialValues.reminderBeforeMinutes ||
+    notes !== initialValues.notes ||
+    estimatedHours !== initialValues.estimatedHours ||
+    spentHours !== initialValues.spentHours ||
+    focusEnabled !== initialValues.focusEnabled ||
+    recurrenceSummary !== initialValues.recurrenceSummary ||
+    draftAttachments.length > 0;
+
+  useEffect(() => {
+    onLifecycleChange?.({ isDirty: hasUnsavedChanges, isSubmitting: saving || uploadingAttachments, error, lastSuccess });
+  }, [error, hasUnsavedChanges, lastSuccess, onLifecycleChange, saving, uploadingAttachments]);
+
+  const { confirmLeave } = useUnsavedBackGuard({
+    isDirty: hasUnsavedChanges && !saving,
+    onLeave: onCancel,
+    title: 'Discard changes?',
+    message: 'Your edits have not been saved. Discard them?',
+  });
+
+  function confirmDeleteAttachment(file: ApiTaskAttachment) {
+    if (!task) return;
+    const fileName = file.fileName ?? file.name ?? 'This file';
+    Alert.alert('Delete attachment?', `"${fileName}" cannot be recovered after deletion.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          if (!accessToken || !file.id || deletingAttachmentIdsRef.current.has(file.id)) return;
+          deletingAttachmentIdsRef.current.add(file.id);
+          const previous = attachments;
+          setAttachments((current) => current.filter((item) => item.id !== file.id));
+          void deleteAttachment(accessToken, task.id, file.id)
+            .catch((deleteError: unknown) => {
+              setAttachments(previous);
+              setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete attachment.');
+            })
+            .finally(() => deletingAttachmentIdsRef.current.delete(file.id!));
+        },
+      },
+    ]);
+  }
 
   useEffect(() => {
     if (!task || !accessToken) return;
@@ -219,6 +328,8 @@ export default function EditTaskScreen({
       setError('Task title is required.');
       return;
     }
+    const reminderError = validateTaskReminder(reminderEnabled, dueDate, dueTime);
+    if (reminderError) { setError(reminderError); return; }
 
     setSaving(true);
     setError('');
@@ -235,6 +346,8 @@ export default function EditTaskScreen({
         priority: toApiPriority(priority),
         dueDate: dueDate ? dueDate.toISOString() : undefined,
         dueTime,
+        reminderEnabled,
+        reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         notes: notes.trim(),
         estimatedTimeMinutes,
         spentTimeMinutes,
@@ -259,6 +372,7 @@ export default function EditTaskScreen({
         setDraftAttachments([]);
       }
 
+      setLastSuccess('saved');
       onSaved?.(updatedTask);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save task changes.');
@@ -295,10 +409,7 @@ export default function EditTaskScreen({
         <BottomActionBar>
           <View className="flex-1 gap-3">
             <View className="flex-row gap-3">
-              <DangerButton onPress={onDelete} className="flex-1">
-                Delete Task
-              </DangerButton>
-              <SecondaryButton onPress={onCancel} className="flex-1">
+              <SecondaryButton onPress={confirmLeave} className="flex-1">
                 Cancel Changes
               </SecondaryButton>
             </View>
@@ -309,7 +420,7 @@ export default function EditTaskScreen({
         </BottomActionBar>
       }
     >
-      <PageHeader title="Edit Task" subtitle="Update existing task" onBack={onBack} />
+      <PageHeader title="Edit Task" subtitle="Update existing task" onBack={confirmLeave} />
 
       {notice ? (
         <View className="mb-3 rounded-xl px-3 py-2" style={{ backgroundColor: `${colors.success}26` }}>
@@ -347,6 +458,23 @@ export default function EditTaskScreen({
           ))}
         </View>
         {error ? <Text className="mt-2 text-sm font-bold text-red-300">{error}</Text> : null}
+      </Card>
+
+      <Card title="Subtasks">
+        <SubtaskManagementSection
+          task={task}
+          accessToken={accessToken ?? ''}
+          canEdit={canEditShared}
+          onError={setError}
+          onTaskUpdated={(updated) => {
+            onSubtasksUpdated?.(updated);
+            onRefresh?.();
+          }}
+        />
+      </Card>
+
+      <Card title="Dependencies">
+        <DependencyManagementSection task={task} tasks={tasks} accessToken={accessToken ?? ''} canEdit={canEditShared} onError={setError} onTaskUpdated={(updated) => { onDependenciesUpdated?.(updated); onRefresh?.(); }} />
       </Card>
 
       <Card title="Task Settings">
@@ -447,15 +575,7 @@ export default function EditTaskScreen({
                 </Text>
               </View>
               <Pressable
-                onPress={() => {
-                  if (!accessToken || !file.id) return;
-                  const previous = attachments;
-                  setAttachments((current) => current.filter((item) => item.id !== file.id));
-                  void deleteAttachment(accessToken, task.id, file.id).catch((deleteError: unknown) => {
-                    setAttachments(previous);
-                    setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete attachment.');
-                  });
-                }}
+                onPress={() => confirmDeleteAttachment(file)}
                 className="rounded-lg px-3 py-1.5 active:opacity-80"
                 style={{ backgroundColor: `${colors.error}22` }}
               >
@@ -479,6 +599,12 @@ export default function EditTaskScreen({
       </Card>
 
       <Card title="Reminder">
+        <View className="mb-3 flex-row items-center justify-between">
+          <View><Text className="text-sm font-bold" style={{ color: colors.text }}>Enable task reminder</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>{canScheduleTaskReminder(dueDate, dueTime) ? 'Remind before this task is due.' : 'Set a due date and time to enable reminders.'}</Text></View>
+          <Pressable disabled={!canScheduleTaskReminder(dueDate, dueTime)} accessibilityRole="switch" accessibilityState={{ checked: reminderEnabled, disabled: !canScheduleTaskReminder(dueDate, dueTime) }} accessibilityLabel="Enable task reminder" onPress={() => setReminderEnabled((enabled) => !enabled)} className="h-6 w-11 justify-center rounded-full px-1" style={{ backgroundColor: reminderEnabled ? colors.accent : colors.border, opacity: canScheduleTaskReminder(dueDate, dueTime) ? 1 : 0.5 }}><View className={`h-4 w-4 rounded-full bg-white ${reminderEnabled ? 'self-end' : 'self-start'}`} /></Pressable>
+        </View>
+        <Label text="Reminder lead time" />
+        <Select label={`${TASK_REMINDER_OPTIONS.includes(reminderBeforeMinutes as never) ? reminderBeforeMinutes : 30} minutes before`} onPress={() => reminderEnabled && Alert.alert('Reminder lead time', 'Choose when to be reminded', TASK_REMINDER_OPTIONS.map((value) => ({ text: value === 60 ? '1 hour before' : value === 1440 ? '1 day before' : `${value} minutes before`, onPress: () => setReminderBeforeMinutes(value) })))} />
         <ReminderAudienceSection
           taskId={task.id}
           canEditShared={canEditShared}
@@ -506,39 +632,34 @@ export default function EditTaskScreen({
         <ManageMembersSection task={task} currentUserId={currentUserId} onRefresh={onRefresh} />
       ) : null}
 
-      {currentUserId && task && task.viewerRole === 'owner' ? (
-        <Card title="AI Collaboration Planner">
+      {currentUserId && task && task.viewerRole === 'owner' && onOpenAiCollaboration ? (
+        <Card title="AI Collaboration">
           <Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>
-            Let AI propose how to split this task across your team, then review and apply what you approve.
+            See capacity, today's plan, progress, and AI suggestions for splitting this task fairly — you always
+            approve before anything changes.
           </Text>
           <Pressable
-            onPress={() => setIsAiPlannerVisible(true)}
+            onPress={onOpenAiCollaboration}
             className="items-center rounded-lg px-4 py-2.5"
             style={{ backgroundColor: colors.accent }}
           >
             <Text className="font-black" style={{ color: colors.accentText }}>
-              Open AI Planner
+              Open AI Collaboration
             </Text>
           </Pressable>
         </Card>
       ) : null}
 
-      {task ? (
-        <AiCollaborationPlannerModal
-          visible={isAiPlannerVisible}
-          task={task}
-          onClose={() => setIsAiPlannerVisible(false)}
-          onApplied={() => {
-            showNotice('AI plan applied.');
-            onRefresh?.();
-          }}
-        />
-      ) : null}
+      <Card title="Danger Zone">
+        <Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>Deleting this task cannot be undone.</Text>
+        <DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>Delete Task</DangerButton>
+      </Card>
 
       <TaskRecurrenceSheet
         visible={isRecurrenceSheetVisible}
         mode={recurrence ? 'edit' : 'create'}
         recurrence={recurrence}
+        accessToken={accessToken}
         onClose={() => setIsRecurrenceSheetVisible(false)}
         onSave={setRecurrence}
         onRemove={() => setRecurrence(null)}

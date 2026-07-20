@@ -49,7 +49,10 @@ export class PlannerReasoningEngine {
    * Returns `null` (never throws) when the model is unavailable or its output
    * cannot be trusted, so the caller can fall back deterministically.
    */
-  async rankWithAI(context: PlannerContext, constraints: PlannerConstraints): Promise<ReasoningResult | null> {
+  async rankWithAI(
+    context: PlannerContext,
+    constraints: PlannerConstraints,
+  ): Promise<ReasoningResult | null> {
     if (!this.client || !this.model) return null;
     if (!constraints.schedulableTasks.length) {
       return { source: 'ai', order: [], summary: 'Nothing to schedule today.' };
@@ -60,16 +63,24 @@ export class PlannerReasoningEngine {
         model: this.model,
         messages: [
           { role: 'system', content: this.systemPrompt() },
-          { role: 'user', content: JSON.stringify(this.promptContext(context, constraints)) },
+          {
+            role: 'user',
+            content: JSON.stringify(this.promptContext(context, constraints)),
+          },
         ],
         response_format: { type: 'json_object' },
         temperature: 0.1,
       });
-      const parsed = this.parseAiOrder(response.choices[0]?.message?.content ?? '', constraints);
+      const parsed = this.parseAiOrder(
+        response.choices[0]?.message?.content ?? '',
+        constraints,
+      );
       if (!parsed) return null;
       return { source: 'ai', order: parsed.order, summary: parsed.summary };
     } catch (error) {
-      this.logger.warn(`AI reasoning unavailable, using deterministic ranking: ${errorMessage(error)}`);
+      this.logger.warn(
+        `AI reasoning unavailable, using deterministic ranking: ${errorMessage(error)}`,
+      );
       return null;
     }
   }
@@ -79,12 +90,19 @@ export class PlannerReasoningEngine {
    * deadline pressure, overdue/started status and focus, then groups tasks of
    * the same category next to each other to reduce context switching.
    */
-  rankDeterministic(context: PlannerContext, constraints: PlannerConstraints): ReasoningResult {
+  rankDeterministic(
+    context: PlannerContext,
+    constraints: PlannerConstraints,
+  ): ReasoningResult {
     const { schedulableTasks } = constraints;
     const scored = [...schedulableTasks].sort(
-      (a, b) => this.score(b, context, constraints) - this.score(a, context, constraints),
+      (a, b) =>
+        this.score(b, context, constraints) -
+        this.score(a, context, constraints),
     );
-    const grouped = constraints.preferences.groupSimilarTasks ? groupByCategoryPreservingRank(scored) : scored;
+    const grouped = constraints.preferences.groupSimilarTasks
+      ? groupByCategoryPreservingRank(scored)
+      : scored;
 
     const order: TaskDecision[] = grouped.map((task, index) => ({
       taskId: task.id,
@@ -111,7 +129,9 @@ export class PlannerReasoningEngine {
     const dueToday = constraints.dueTodayTaskIds.has(task.id);
     const overdue = constraints.overdueTaskIds.has(task.id);
     const groupedWithPrevious =
-      neighbours.previous?.category && task.category && neighbours.previous.category === task.category;
+      neighbours.previous?.category &&
+      task.category &&
+      neighbours.previous.category === task.category;
 
     if (overdue) {
       return task.isFocusTask
@@ -139,7 +159,11 @@ export class PlannerReasoningEngine {
     return 'Scheduled by priority, deadline, and the time available today.';
   }
 
-  private score(task: PlannerTask, context: PlannerContext, constraints: PlannerConstraints): number {
+  private score(
+    task: PlannerTask,
+    context: PlannerContext,
+    constraints: PlannerConstraints,
+  ): number {
     const priority = PRIORITY_SCORE[task.priority];
     // Hard-deadline signals stay dominant so preferences can never bump an
     // overdue / due-today task below ordinary work.
@@ -152,20 +176,39 @@ export class PlannerReasoningEngine {
     // "Finish started tasks first" — only boosts when the user enabled it, and
     // stays below the overdue / due-today tiers above.
     const isStarted = task.spentMinutes > 0 || task.progress > 0;
-    const started = isStarted && constraints.preferences.finishStartedFirst ? 200 : 0;
+    const started =
+      isStarted && constraints.preferences.finishStartedFirst ? 200 : 0;
     const missed = task.status === 'missed' ? 25 : 0;
-    const staleness = Math.min(12, Math.max(0, daysBetween(task.updatedAt.slice(0, 10), new Date())));
-    return priority + overdue + dueToday + deadlinePressure + focus + started + missed + staleness;
+    const staleness = Math.min(
+      12,
+      Math.max(0, daysBetween(task.updatedAt.slice(0, 10), new Date())),
+    );
+    return (
+      priority +
+      overdue +
+      dueToday +
+      deadlinePressure +
+      focus +
+      started +
+      missed +
+      staleness
+    );
   }
 
-  private promptContext(context: PlannerContext, constraints: PlannerConstraints) {
+  private promptContext(
+    context: PlannerContext,
+    constraints: PlannerConstraints,
+  ) {
     const preferences = constraints.preferences;
     return {
       date: context.date,
       currentTime: context.currentTime,
       workingHours: context.workingHours,
       preferences: {
-        focusHours: { start: preferences.focusStartTime, end: preferences.focusEndTime },
+        focusHours: {
+          start: preferences.focusStartTime,
+          end: preferences.focusEndTime,
+        },
         energyByPartOfDay: preferences.energy,
         scheduleHardTasksInFocus: preferences.scheduleHardTasksInFocus,
         finishStartedFirst: preferences.finishStartedFirst,
@@ -210,16 +253,24 @@ export class PlannerReasoningEngine {
       return null;
     }
 
-    const root = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    const root =
+      parsed && typeof parsed === 'object'
+        ? (parsed as Record<string, unknown>)
+        : {};
     const rawOrder = Array.isArray(root.order) ? root.order : null;
     if (!rawOrder) return null;
 
-    const schedulable = new Map(constraints.schedulableTasks.map((task) => [task.id, task]));
+    const schedulable = new Map(
+      constraints.schedulableTasks.map((task) => [task.id, task]),
+    );
     const seen = new Set<string>();
     const order: TaskDecision[] = [];
 
     for (const entry of rawOrder) {
-      const row = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+      const row =
+        entry && typeof entry === 'object'
+          ? (entry as Record<string, unknown>)
+          : {};
       const taskId = typeof row.taskId === 'string' ? row.taskId : undefined;
       if (!taskId || !schedulable.has(taskId) || seen.has(taskId)) continue;
       seen.add(taskId);
@@ -237,7 +288,10 @@ export class PlannerReasoningEngine {
     if (!order.length) return null;
     for (const task of constraints.schedulableTasks) {
       if (!seen.has(task.id)) {
-        order.push({ taskId: task.id, rationale: 'Added to fill remaining available time today.' });
+        order.push({
+          taskId: task.id,
+          rationale: 'Added to fill remaining available time today.',
+        });
       }
     }
 
@@ -284,11 +338,19 @@ function groupByCategoryPreservingRank(tasks: PlannerTask[]): PlannerTask[] {
   return result;
 }
 
-function buildSummary(taskCount: number, constraints: PlannerConstraints): string {
+function buildSummary(
+  taskCount: number,
+  constraints: PlannerConstraints,
+): string {
   const dueToday = constraints.dueTodayTaskIds.size;
-  const focus = constraints.schedulableTasks.filter((task) => task.isFocusTask).length;
-  const parts = [`Planned ${taskCount} task${taskCount === 1 ? '' : 's'} around your reminders and breaks`];
-  if (focus) parts.push(`${focus} deep-focus block${focus === 1 ? '' : 's'} up front`);
+  const focus = constraints.schedulableTasks.filter(
+    (task) => task.isFocusTask,
+  ).length;
+  const parts = [
+    `Planned ${taskCount} task${taskCount === 1 ? '' : 's'} around your reminders and breaks`,
+  ];
+  if (focus)
+    parts.push(`${focus} deep-focus block${focus === 1 ? '' : 's'} up front`);
   if (dueToday) parts.push(`${dueToday} due today`);
   return `${parts.join(', ')}.`;
 }

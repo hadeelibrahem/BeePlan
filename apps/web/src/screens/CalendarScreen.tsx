@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 import {
   AppLayout,
   CalendarIcon,
+  DirectionalChevron,
   EmptyState,
   PageHeader,
   RemindersIcon,
@@ -14,10 +15,14 @@ import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import type { ApiTask } from '../lib/tasksApi'
 import type { Reminder } from '../features/reminders'
+import { formatDate, parseLocalDate } from '../lib/dateTime'
 
 type CalendarScreenProps = SidebarNavHandlers & {
   tasks?: ApiTask[]
   reminders?: Reminder[]
+  onViewTask?: (taskId: string) => void
+  onViewReminder?: (reminderId: string) => void
+  onCreateTaskForDate?: (date: string) => void
   onSignOut?: () => void
 }
 
@@ -27,14 +32,21 @@ function toDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function isoToDateKey(iso?: string) {
-  if (!iso) return null
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return null
+export function isoToDateKey(iso?: string) {
+  const date = parseLocalDate(iso)
+  if (!date) return null
   return toDateKey(date)
 }
 
-export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, ...nav }: CalendarScreenProps) {
+export default function CalendarScreen({
+  tasks = [],
+  reminders = [],
+  onViewTask,
+  onViewReminder,
+  onCreateTaskForDate,
+  onSignOut,
+  ...nav
+}: CalendarScreenProps) {
   const { t, toggleLanguage, isRTL } = useLanguage()
   const { mode, toggleTheme } = useTheme()
 
@@ -89,41 +101,76 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1))
   }
 
+  function goToToday() {
+    setViewDate(new Date(today.getFullYear(), today.getMonth(), 1))
+    setSelectedDateKey(toDateKey(today))
+  }
+
+  function selectDate(date: Date) {
+    setSelectedDateKey(toDateKey(date))
+    setViewDate(new Date(date.getFullYear(), date.getMonth(), 1))
+  }
+
+  function handleDayKeyDown(event: KeyboardEvent<HTMLButtonElement>, date: Date) {
+    const offsets: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }
+    let next: Date | null = null
+    if (event.key in offsets) next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + offsets[event.key])
+    if (event.key === 'Home') next = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay())
+    if (event.key === 'End') next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + (6 - date.getDay()))
+    if (!next) return
+    event.preventDefault()
+    selectDate(next)
+  }
+
   return (
-    <AppLayout active="calendar" {...nav} panelTitle="Keep going!" panelCaption="You're doing great today." panelPercent={64}>
+    <AppLayout active="calendar" {...nav}>
       <PageHeader
-        title="Calendar"
-        subtitle="See your schedule at a glance"
+        title={t('taskUi.calendar.title')}
+        subtitle={t('taskUi.calendar.subtitle')}
         toolbar={
           <TopActionBar
-            searchValue=""
-            onSearchChange={() => {}}
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
             onToggleLanguage={toggleLanguage}
-            onProfileClick={onSignOut}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
           />
         }
       />
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <SectionCard>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"
               onClick={() => goToMonth(-1)}
               className="rounded-lg px-2 py-1 text-xs font-semibold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
             >
-              {isRTL ? '→' : '←'} Prev
+              <span className="inline-flex items-center gap-1">
+                <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
+                <span>Prev</span>
+              </span>
             </button>
-            <h2 className="text-sm font-bold">{monthLabel}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold">{monthLabel}</h2>
+              <button
+                type="button"
+                onClick={goToToday}
+                className="rounded-lg border border-[var(--bp-border)] px-2 py-1 text-xs font-semibold text-[var(--bp-text)] hover:bg-[var(--bp-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
+              >
+                Today
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => goToMonth(1)}
               className="rounded-lg px-2 py-1 text-xs font-semibold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
             >
-              Next {isRTL ? '←' : '→'}
+              <span className="inline-flex items-center gap-1">
+                <span>Next</span>
+                <DirectionalChevron direction="forward" isRTL={isRTL} className="h-4 w-4" />
+              </span>
             </button>
           </div>
 
@@ -133,19 +180,27 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-1">
+          <div role="grid" aria-label={`${monthLabel} calendar`} className="grid grid-cols-7 gap-1">
             {gridDays.map(({ date, key, inCurrentMonth, isToday }) => {
               const dayTasks = tasksByDate.get(key) ?? []
               const dayReminders = remindersByDate.get(key) ?? []
-              const hasItems = dayTasks.length > 0 || dayReminders.length > 0
+              const dayItems = [
+                ...dayTasks.map((task) => ({ id: task.id, title: task.title, kind: 'task' as const })),
+                ...dayReminders.map((reminder) => ({ id: reminder.id, title: reminder.title, kind: 'reminder' as const })),
+              ]
               const isSelected = key === selectedDateKey
 
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setSelectedDateKey(key)}
-                  className={`flex aspect-square flex-col items-center justify-start gap-1 rounded-lg border p-1 text-xs transition ${
+                  role="gridcell"
+                  onClick={() => selectDate(date)}
+                  onKeyDown={(event) => handleDayKeyDown(event, date)}
+                  aria-selected={isSelected}
+                  aria-current={isToday ? 'date' : undefined}
+                  aria-label={`${date.toLocaleDateString(isRTL ? 'ar' : 'en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${isToday ? ', today' : ''}${dayItems.length ? `, ${dayItems.length} scheduled item${dayItems.length === 1 ? '' : 's'}` : ', no scheduled items'}`}
+                  className={`flex aspect-square min-h-14 flex-col items-center justify-start gap-0.5 overflow-hidden rounded-lg border p-1 text-xs transition ${
                     isSelected
                       ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/15'
                       : 'border-transparent hover:border-[var(--bp-border)]'
@@ -154,7 +209,18 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
                   <span className={`flex h-5 w-5 items-center justify-center rounded-full ${isToday ? 'bg-[var(--bp-accent)] font-bold text-[var(--bp-accent-text)]' : ''}`}>
                     {date.getDate()}
                   </span>
-                  {hasItems && <span className="h-1.5 w-1.5 rounded-full bg-[var(--bp-accent)]" />}
+                  <div className="hidden w-full space-y-0.5 md:block">
+                    {dayItems.slice(0, 2).map((item) => (
+                      <span
+                        key={`${item.kind}-${item.id}`}
+                        className="block w-full truncate rounded bg-[var(--bp-border)]/80 px-1 text-[9px] leading-3 text-[var(--bp-text)]"
+                      >
+                        {item.title}
+                      </span>
+                    ))}
+                    {dayItems.length > 2 && <span className="block text-[10px] font-semibold text-[var(--bp-accent)]">+{dayItems.length - 2}</span>}
+                  </div>
+                  {dayItems.length > 0 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bp-accent)] md:hidden" />}
                 </button>
               )
             })}
@@ -162,12 +228,23 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-3 text-sm font-bold">
-            {new Date(selectedDateKey).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-          </h2>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-bold">
+              {formatDate(selectedDateKey, isRTL ? 'ar' : 'en', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </h2>
+            {onCreateTaskForDate && (
+              <button
+                type="button"
+                onClick={() => onCreateTaskForDate(selectedDateKey)}
+                className="shrink-0 rounded-lg bg-[var(--bp-accent)] px-2.5 py-1.5 text-xs font-bold text-[var(--bp-accent-text)] hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
+              >
+                Add task
+              </button>
+            )}
+          </div>
 
           {selectedTasks.length === 0 && selectedReminders.length === 0 ? (
-            <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="Nothing scheduled" description="No tasks or reminders are due on this day." />
+            <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title={t('taskUi.calendar.emptyTitle')} description={t('taskUi.calendar.emptyDescription')} />
           ) : (
             <div className="space-y-3">
               {selectedTasks.length > 0 && (
@@ -177,9 +254,16 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
                   </h3>
                   <ul className="space-y-2">
                     {selectedTasks.map((task) => (
-                      <li key={task.id} className="rounded-lg border border-[var(--bp-border)] px-3 py-2 text-sm">
-                        <p className="font-semibold text-[var(--bp-text)]">{task.title}</p>
-                        <p className="text-xs text-slate-400 capitalize">{task.status.replace('_', ' ')} - {task.priority}</p>
+                      <li key={task.id}>
+                        <button
+                          type="button"
+                          onClick={() => onViewTask?.(task.id)}
+                          aria-label={`Open task: ${task.title}`}
+                          className="w-full rounded-lg border border-[var(--bp-border)] px-3 py-2 text-left text-sm transition hover:bg-[var(--bp-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
+                        >
+                          <p className="font-semibold text-[var(--bp-text)]">{task.title}</p>
+                          <p className="text-xs text-slate-400 capitalize">{task.status.replace('_', ' ')} - {task.priority}</p>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -193,9 +277,16 @@ export default function CalendarScreen({ tasks = [], reminders = [], onSignOut, 
                   </h3>
                   <ul className="space-y-2">
                     {selectedReminders.map((reminder) => (
-                      <li key={reminder.id} className="rounded-lg border border-[var(--bp-border)] px-3 py-2 text-sm">
-                        <p className="font-semibold text-[var(--bp-text)]">{reminder.title}</p>
-                        <p className="text-xs text-slate-400 capitalize">{reminder.status}</p>
+                      <li key={reminder.id}>
+                        <button
+                          type="button"
+                          onClick={() => onViewReminder?.(reminder.id)}
+                          aria-label={`Open reminder: ${reminder.title}`}
+                          className="w-full rounded-lg border border-[var(--bp-border)] px-3 py-2 text-left text-sm transition hover:bg-[var(--bp-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
+                        >
+                          <p className="font-semibold text-[var(--bp-text)]">{reminder.title}</p>
+                          <p className="text-xs text-slate-400 capitalize">{reminder.status}</p>
+                        </button>
                       </li>
                     ))}
                   </ul>

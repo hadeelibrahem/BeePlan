@@ -48,9 +48,9 @@ function BellIcon() {
 
 type SidebarProps = SidebarNavHandlers & {
   active: SidebarPage
-  panelTitle: string
-  panelCaption: string
-  panelPercent: number
+  panelTitle?: string
+  panelCaption?: string
+  panelPercent?: number
   mobileOpen?: boolean
   onCloseMobile?: () => void
 }
@@ -113,9 +113,9 @@ function SidebarContent({
   onNavigate,
 }: {
   active: SidebarPage
-  panelTitle: string
-  panelCaption: string
-  panelPercent: number
+  panelTitle?: string
+  panelCaption?: string
+  panelPercent?: number
   nav: SidebarNavHandlers
   onNavigate?: () => void
 }) {
@@ -154,22 +154,13 @@ function SidebarContent({
         change to keep the fix scoped; do that as a follow-up instead of
         inventing new backend category endpoints/tables.
       */}
-      <div className="mt-6">
-        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Categories</p>
-        <CategoryDot label="Work" color="bg-blue-400" />
-        <CategoryDot label="Personal" color="bg-purple-400" />
-        <CategoryDot label="Study" color="bg-green-400" />
-        <CategoryDot label="Health" color="bg-red-400" />
-        <CategoryDot label="Finance" color="bg-[var(--bp-accent)]" />
-      </div>
-
-      <div className="mt-6 rounded-xl bg-[var(--bp-bg)] p-3">
+      {panelPercent !== undefined ? <div className="mt-6 rounded-xl bg-[var(--bp-bg)] p-3">
         <p className="text-xs font-bold">{panelTitle}</p>
         <p className="mt-0.5 text-[11px] text-slate-400">{panelCaption}</p>
         <div className="mx-auto mt-3 flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[var(--bp-accent)] text-xs font-black text-[var(--bp-accent)]">
           {panelPercent}%
         </div>
-      </div>
+      </div> : null}
     </>
   )
 }
@@ -207,11 +198,3 @@ export function SidebarNavItem({
   )
 }
 
-function CategoryDot({ label, color }: { label: string; color: string }) {
-  return (
-    <div className="mb-2 flex items-center gap-2.5 px-3 text-[13px] text-slate-300">
-      <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
-      {label}
-    </div>
-  )
-}

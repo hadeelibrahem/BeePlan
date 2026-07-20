@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { BottomNavBar, PrimaryButton, ScreenLayout } from '../../../components/layout';
+import { BottomNavBar, MobileIcon, PrimaryButton, ScreenLayout } from '../../../components/layout';
 import { useTheme } from '../../../theme/useTheme';
 import { Avatar } from '../components/Avatar';
 import {
@@ -13,16 +13,19 @@ import {
   markNotificationRead,
 } from '../api/collaboration.api';
 import { friendlyError } from '../errorMessages';
-import { NOTIFICATION_ICON, type AppNotification, type TaskInvitation } from '../types';
+import { type AppNotification, type TaskInvitation } from '../types';
 import { queryKeys } from '../../../lib/queryKeys';
+import { notificationDestination } from '../notificationRouting';
+import { filterNotifications, type NotificationReadFilter } from '../notificationSearch';
 
 type Props = {
   onBack: () => void;
   onSignOut?: () => void;
-  onOpenTask: (taskId: string) => void;
+  onOpenNotification: (notification: AppNotification) => void;
+  onUnreadCountChange?: (count: number) => void;
 };
 
-export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
+export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onUnreadCountChange }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
   const queryClient = useQueryClient();
@@ -34,6 +37,9 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+  const [readFilter, setReadFilter] = useState<NotificationReadFilter>('all');
 
   const load = useCallback(async () => {
     setLoadError(false);
@@ -51,6 +57,12 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const refresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }, [load, refreshing]);
 
   function flash(tone: 'success' | 'error', text: string) {
     setBanner({ tone, text });
@@ -83,7 +95,7 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
       setNotifications((prev) => (prev ?? []).map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
       void markNotificationRead(n.id).catch(() => undefined);
     }
-    if (n.taskId) onOpenTask(n.taskId);
+    if (notificationDestination(n)) onOpenNotification(n);
   }
 
   async function markAll() {
@@ -107,11 +119,18 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
   }
 
   const unread = (notifications ?? []).filter((n) => !n.isRead).length;
+  const visibleNotifications = filterNotifications(notifications ?? [], search, readFilter);
+
+  useEffect(() => {
+    onUnreadCountChange?.(unread);
+  }, [onUnreadCountChange, unread]);
 
   return (
     <ScreenLayout
       headerSubtitle="Invitations, mentions & updates"
-      onProfilePress={onSignOut}
+      onSignOut={onSignOut}
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}
       footer={<BottomNavBar active="reminders" onNavigateDashboard={onBack} />}
     >
       <View className="mb-3 flex-row items-center gap-2">
@@ -217,6 +236,32 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
             ) : null}
           </View>
 
+          <View className="mb-3 rounded-2xl border p-2" style={{ borderColor: colors.border, backgroundColor: colors.surfaceElevated }}>
+            <View className="flex-row items-center gap-2">
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search notifications"
+                placeholderTextColor={colors.placeholder}
+                accessibilityLabel="Search notifications"
+                className="min-w-0 flex-1 px-2 py-2 text-sm"
+                style={{ color: colors.text }}
+              />
+              {search ? (
+                <Pressable onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear notification search" className="px-2 py-2">
+                  <Text className="text-xs font-bold" style={{ color: colors.accent }}>Clear</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View className="mt-2 flex-row gap-2">
+              {(['all', 'unread', 'read'] as NotificationReadFilter[]).map((filter) => (
+                <Pressable key={filter} onPress={() => setReadFilter(filter)} accessibilityRole="button" accessibilityState={{ selected: readFilter === filter }} accessibilityLabel={`Show ${filter} notifications`} className="rounded-full px-3 py-1.5" style={{ backgroundColor: readFilter === filter ? colors.accentSoft : colors.card }}>
+                  <Text className="text-xs font-bold" style={{ color: readFilter === filter ? colors.accent : colors.secondaryText }}>{filter === 'all' ? 'All' : filter === 'unread' ? 'Unread' : 'Read'}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
           {notifications === null ? (
             <ActivityIndicator color={colors.accent} className="py-4" />
           ) : notifications.length === 0 ? (
@@ -225,9 +270,16 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
                 Nothing here yet.
               </Text>
             </View>
+          ) : visibleNotifications.length === 0 ? (
+            <View className="rounded-2xl border border-dashed p-6" style={{ borderColor: colors.border }}>
+              <Text style={{ color: colors.secondaryText }} className="text-center text-sm">
+                No notifications match your search.
+              </Text>
+              {search ? <Pressable onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear notification search" className="mt-2 self-center"><Text className="text-xs font-bold" style={{ color: colors.accent }}>Clear search</Text></Pressable> : null}
+            </View>
           ) : (
             <View className="gap-1.5">
-              {notifications.map((n) => (
+              {visibleNotifications.map((n) => (
                 <Pressable
                   key={n.id}
                   onPress={() => void openNotification(n)}
@@ -237,7 +289,7 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenTask }: Props) {
                     backgroundColor: n.isRead ? colors.card : `${colors.accent}0d`,
                   }}
                 >
-                  <Text className="text-lg">{NOTIFICATION_ICON[n.type] ?? '🔔'}</Text>
+                  <MobileIcon name="notifications" color={colors.accent} size={20} accessibilityLabel={`${n.type} notification`} />
                   <View className="flex-1">
                     <Text style={{ color: colors.text }} className="text-sm font-bold">
                       {n.title}

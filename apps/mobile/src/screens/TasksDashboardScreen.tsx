@@ -9,6 +9,8 @@ import {
 import type { ApiTask, DashboardSummary } from '../lib/tasksApi'
 import { SharedBadge } from '../features/collaboration/components/SharedBadge'
 import { useTheme } from '../theme/useTheme'
+import { useLanguage } from '../i18n/LanguageContext'
+import { greetingTranslationKey } from '../lib/greeting'
 
 type Props = {
   userName?: string
@@ -16,7 +18,12 @@ type Props = {
   onViewTasks: () => void
   onViewFocus?: () => void
   onViewReminders: () => void
+  onViewNotes?: () => void
+  onViewAnalytics?: () => void
+  onViewCalendar?: () => void
+  onViewAiDailyPlanner?: () => void
   onViewNotifications?: () => void
+  unreadCount?: number
   onCreateTask: () => void
   onViewTaskDetails?: (task: ApiTask) => void
   sharedTaskIds?: Set<string>
@@ -26,6 +33,7 @@ type Props = {
   summaryError?: string
   tasksLoading?: boolean
   onRetrySummary?: () => void
+  onRefresh?: () => void
 }
 
 export default function TasksDashboardScreen({
@@ -34,7 +42,12 @@ export default function TasksDashboardScreen({
   onViewTasks,
   onViewFocus,
   onViewReminders,
+  onViewNotes,
+  onViewAnalytics,
+  onViewCalendar,
+  onViewAiDailyPlanner,
   onViewNotifications,
+  unreadCount,
   onCreateTask,
   onViewTaskDetails,
   sharedTaskIds,
@@ -44,8 +57,10 @@ export default function TasksDashboardScreen({
   summaryError = '',
   tasksLoading = false,
   onRetrySummary,
+  onRefresh,
 }: Props) {
   const { theme } = useTheme()
+  const { t } = useLanguage()
   const { colors } = theme
   const isLoading = summaryLoading && !summary
   const loadingLabel = '...'
@@ -61,8 +76,12 @@ export default function TasksDashboardScreen({
 
   return (
     <ScreenLayout
-      headerSubtitle={userName ? `Good morning, ${userName}` : 'Good morning'}
-      onProfilePress={onSignOut}
+      headerSubtitle={`${t(greetingTranslationKey())}${userName ? `, ${userName}` : ''}`}
+      onSignOut={onSignOut}
+      onOpenNotifications={onViewNotifications}
+      unreadCount={unreadCount}
+      refreshing={summaryLoading && Boolean(summary)}
+      onRefresh={onRefresh}
       fab={<FloatingActionButton onPress={onCreateTask} aboveNavBar />}
       footer={<BottomNavBar active="dashboard" onNavigateTasks={onViewTasks} onNavigateFocus={onViewFocus} onNavigateReminders={onViewReminders} />}
     >
@@ -95,9 +114,7 @@ export default function TasksDashboardScreen({
             <Text className="text-xs" style={{ color: colors.secondaryText }}>You're doing great! Keep it up.</Text>
           </View>
 
-          <View className="h-12 w-12 items-center justify-center rounded-full border-[3px]" style={{ borderColor: colors.accent }}>
-            <Text className="text-xs font-black" style={{ color: colors.accent }}>{isLoading ? loadingLabel : `${overallProgress}%`}</Text>
-          </View>
+          <Text className="text-lg font-black" style={{ color: colors.accent }}>{isLoading ? loadingLabel : `${overallProgress}%`}</Text>
         </View>
 
         <View className="h-2 rounded-full" style={{ backgroundColor: colors.progressTrack }}>
@@ -113,6 +130,8 @@ export default function TasksDashboardScreen({
       <SectionCard className="mb-3">
         <View className="mb-3 flex-row justify-between">
           <Text className="text-sm font-bold" style={{ color: colors.text }}>Today's Focus</Text>
+          {onViewNotes ? <Pressable onPress={onViewNotes} accessibilityRole="button" accessibilityLabel="Open notes"><Text className="text-sm font-bold" style={{ color: colors.accent }}>Notes</Text></Pressable> : null}
+          {onViewAnalytics ? <Pressable onPress={onViewAnalytics} accessibilityRole="button" accessibilityLabel="Open analytics"><Text className="text-sm font-bold" style={{ color: colors.accent }}>Analytics</Text></Pressable> : null}
           <Pressable onPress={onViewTasks} accessibilityRole="button" accessibilityLabel="View all tasks">
             <Text className="text-sm font-bold" style={{ color: colors.accent }}>View All ›</Text>
           </Pressable>
@@ -148,6 +167,8 @@ export default function TasksDashboardScreen({
         <Text className="mb-3 text-sm font-bold" style={{ color: colors.text }}>Quick Actions</Text>
 
         <View className="gap-2">
+          <ActionCard icon="Calendar" title="Calendar" desc="See tasks and reminders by date" onPress={onViewCalendar} />
+          <ActionCard icon="AI" title="AI Daily Planner" desc="Plan and review your day" onPress={onViewAiDailyPlanner} />
           <ActionCard icon="➕" title="New Task" desc="Create a new task" onPress={onCreateTask} />
           <ActionCard icon="🔔" title="New Reminder" desc="Add a reminder" onPress={onViewReminders} />
           <ActionCard icon="👥" title="Notifications" desc="Invitations & updates" onPress={onViewNotifications} />

@@ -96,6 +96,45 @@ export async function generateDailyPlan(accessToken: string, payload: GenerateDa
   return data as DailyPlan
 }
 
+export type PlanAcceptance = {
+  date: string
+  plan: DailyPlan
+  acceptedAt: string
+}
+
+export async function acceptDailyPlan(accessToken: string, plan: DailyPlan) {
+  const response = await fetch(`${apiUrl}/ai/planner/daily/accept`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ plan }),
+  })
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
+    throw new Error(message ?? 'Unable to accept today\'s plan.')
+  }
+
+  return data as PlanAcceptance
+}
+
+export async function getDailyPlanAcceptance(accessToken: string, date: string) {
+  const response = await fetch(`${apiUrl}/ai/planner/daily/accept?date=${encodeURIComponent(date)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
+    throw new Error(message ?? 'Unable to load plan acceptance.')
+  }
+
+  return (data ?? null) as PlanAcceptance | null
+}
+
 export type EnergyLevel = 'high' | 'medium' | 'low'
 
 export type TimeWindow = { start: string; end: string }

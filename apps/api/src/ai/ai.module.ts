@@ -7,6 +7,7 @@ import { AiPlannerController } from './ai-planner.controller';
 import { AiPlannerService } from './ai-planner.service';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { PlannerAcceptanceService } from './planner/planner-acceptance.service';
 import { PlannerDurationEstimator } from './planner/planner-duration-estimator';
 import { PlannerPreferencesService } from './planner/planner-preferences.service';
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
@@ -32,6 +33,7 @@ import { TaskPlanChatService } from './task-plan-chat.service';
     PlannerSchedulerEngine,
     PlannerDurationEstimator,
     PlannerPreferencesService,
+    PlannerAcceptanceService,
     JwtAuthGuard,
   ],
 })

@@ -8,6 +8,11 @@
     "cancel": "Cancel"
   },
   "dashboard": {
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
     "activeReminders": "{{count}} active reminder{{plural}}",
     "searchPlaceholder": "Search reminders...",
     "newReminder": "+ New Reminder",

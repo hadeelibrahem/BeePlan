@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { DirectionalChevron } from './layout'
 import { useLanguage } from '../i18n/LanguageContext'
+import { ConfirmDestructiveModal } from './ConfirmDestructiveModal'
+import { TaskPriorityBadge, TaskStatusBadge } from './TaskBadges'
 import {
   deleteSubtaskAttachment,
   downloadSubtaskAttachment,
@@ -16,8 +19,6 @@ import {
   getSubtaskIndicator,
   getSubtaskWarnings,
   SUBTASK_INDICATOR_META,
-  SUBTASK_PRIORITY_CLASS,
-  SUBTASK_PRIORITY_LABEL,
   SUBTASK_STATUS_CLASS,
   SUBTASK_STATUS_LABEL,
 } from '../lib/subtaskDisplay'
@@ -47,6 +48,8 @@ export default function SubtaskDetailModal({
   const [attachments, setAttachments] = useState<ApiTaskAttachment[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [attachmentToDelete, setAttachmentToDelete] = useState<ApiTaskAttachment | null>(null)
+  const [isDeletingAttachment, setIsDeletingAttachment] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -100,6 +103,8 @@ export default function SubtaskDetailModal({
   }
 
   async function handleDeleteAttachment(attachmentId: string) {
+    if (isDeletingAttachment) return
+    setIsDeletingAttachment(true)
     setBusy(true)
     try {
       await deleteSubtaskAttachment(accessToken, task.id, subtask.id, attachmentId)
@@ -108,6 +113,8 @@ export default function SubtaskDetailModal({
       setError(err instanceof Error ? err.message : 'Unable to delete attachment.')
     } finally {
       setBusy(false)
+      setIsDeletingAttachment(false)
+      setAttachmentToDelete(null)
     }
   }
 
@@ -121,7 +128,7 @@ export default function SubtaskDetailModal({
               onClick={onClose}
               className="mb-3 flex items-center gap-2 text-sm text-slate-400 hover:text-[var(--bp-text)]"
             >
-              <span aria-hidden>{isRTL ? '→' : '←'}</span>
+              <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
               Back
             </button>
             <div className="flex items-center gap-2">
@@ -184,14 +191,10 @@ export default function SubtaskDetailModal({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Priority">
-            <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold ${SUBTASK_PRIORITY_CLASS[subtask.priority]}`}>
-              {SUBTASK_PRIORITY_LABEL[subtask.priority]}
-            </span>
+            <TaskPriorityBadge priority={subtask.priority} />
           </Field>
           <Field label="Status">
-            <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-bold ${SUBTASK_STATUS_CLASS[subtask.status]}`}>
-              {SUBTASK_STATUS_LABEL[subtask.status]}
-            </span>
+            <TaskStatusBadge status={subtask.status} />
           </Field>
           <Field label="Start Date">
             <Value>{formatDateTime(subtask.startDate)}</Value>
@@ -203,7 +206,7 @@ export default function SubtaskDetailModal({
             <Value>
               {formatDuration(subtask.estimatedDurationMinutes) || '—'}
               {subtask.estimatedDurationSource === 'ai' && subtask.estimatedDurationMinutes ? (
-                <span className="ms-2 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[var(--bp-accent)]">
+                <span className="ms-2 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent)]">
                   AI Estimate
                 </span>
               ) : null}
@@ -272,7 +275,7 @@ export default function SubtaskDetailModal({
                 {canEdit ? (
                   <button
                     type="button"
-                    onClick={() => a.id && void handleDeleteAttachment(a.id)}
+                    onClick={() => setAttachmentToDelete(a)}
                     className="text-xs font-bold text-red-400 hover:underline"
                   >
                     Remove
@@ -312,6 +315,7 @@ export default function SubtaskDetailModal({
           </ul>
         </Field>
       </div>
+      <ConfirmDestructiveModal open={attachmentToDelete !== null} title="Delete attachment?" message={`"${attachmentToDelete?.fileName ?? attachmentToDelete?.name ?? 'This file'}" cannot be recovered after deletion.`} confirmLabel="Delete attachment" isConfirming={isDeletingAttachment} onCancel={() => !isDeletingAttachment && setAttachmentToDelete(null)} onConfirm={() => attachmentToDelete?.id && void handleDeleteAttachment(attachmentToDelete.id)} />
     </div>
   )
 }

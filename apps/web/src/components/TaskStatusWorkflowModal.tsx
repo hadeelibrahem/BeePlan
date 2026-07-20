@@ -6,6 +6,8 @@ export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Missed'
 type TaskStatusWorkflowModalProps = {
   open: boolean
   status: TaskStatus
+  /** Status to preselect when opening (e.g. 'Done' from the inline control). Defaults to `status`. */
+  initialStatus?: TaskStatus
   progress: number
   hasSubtasks?: boolean
   subtasksComplete?: boolean
@@ -63,6 +65,7 @@ const statusOptions: {
 export function TaskStatusWorkflowModal({
   open,
   status,
+  initialStatus,
   progress,
   hasSubtasks = false,
   subtasksComplete = true,
@@ -72,7 +75,7 @@ export function TaskStatusWorkflowModal({
   onClose,
   onSave,
 }: TaskStatusWorkflowModalProps) {
-  const [selectedStatus, setSelectedStatus] = useState<TaskStatus>(status)
+  const [selectedStatus, setSelectedStatus] = useState<TaskStatus>(initialStatus ?? status)
   const [progressValue, setProgressValue] = useState(progress)
   const [completionDate, setCompletionDate] = useState('')
   const [missedReason, setMissedReason] = useState('')
@@ -80,11 +83,11 @@ export function TaskStatusWorkflowModal({
   useEffect(() => {
     if (!open) return
 
-    setSelectedStatus(status)
+    setSelectedStatus(initialStatus ?? status)
     setProgressValue(progress)
     setCompletionDate('')
     setMissedReason('')
-  }, [open, progress, status])
+  }, [open, progress, status, initialStatus])
 
   const doneDisabled = hasSubtasks && !subtasksComplete
   const saveDisabled = selectedStatus === 'Done' && doneDisabled

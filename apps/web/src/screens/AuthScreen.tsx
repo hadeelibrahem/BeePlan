@@ -29,7 +29,6 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
   const [errors, setErrors] = useState<AuthErrors>({})
   const [isLoading, setIsLoading] = useState(false)
   const [shakeActive, setShakeActive] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
 
@@ -70,7 +69,6 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
       } else {
         await signIn(email, password)
       }
-      setIsSuccess(true)
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -110,30 +108,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
       sub="Experience intelligent scheduling and seamless task mapping in a clean, minimal workspace crafted for premium productivity."
     >
       <AuthCard shake={shakeActive}>
-        {isSuccess ? (
-          <div className="text-center py-6 animate-scale-up">
-            <div className="w-20 h-20 flex items-center justify-center mx-auto mb-6">
-              <svg className="success-circle-svg" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="40" fill="none" />
-                <polyline points="30,52 45,65 70,38" fill="none" />
-              </svg>
-            </div>
-            <h3 className="text-2xl font-bold text-[var(--bp-text)] tracking-tight">Authentication Approved</h3>
-            <p className="text-sm text-[var(--bp-muted)] mt-3">
-              Welcome to your dashboard. Preparing your smart productivity plans...
-            </p>
-            <button
-              onClick={() => {
-                setIsSuccess(false)
-                reset()
-              }}
-              className="mt-8 px-6 py-2.5 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] hover:bg-[var(--bp-border)] text-xs font-semibold text-[var(--bp-text)] transition-colors"
-            >
-              Back to Auth Portal
-            </button>
-          </div>
-        ) : (
-          <div className="animate-scale-up">
+        <div className="animate-scale-up">
             <BrandHeader />
             <div className="text-center mb-6">
               <h3 className="text-xl font-bold text-[var(--bp-text)]">
@@ -222,9 +197,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                 }
               />
               {isSignUp && password && (
-                <p className="text-xs text-[var(--bp-muted)] ps-1 -mt-2">
-                  Password strength: <span className="font-bold text-[var(--bp-text)]">{passwordStrength}</span>
-                </p>
+                <PasswordStrengthMeter strength={passwordStrength} />
               )}
               {isSignUp && (
                 <AuthInput
@@ -273,10 +246,22 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
               label={isSignUp ? 'Sign In' : 'Sign Up'}
               onClick={toggleMode}
             />
-          </div>
-        )}
+        </div>
       </AuthCard>
     </AuthShell>
+  )
+}
+
+function PasswordStrengthMeter({ strength }: { strength: 'Weak' | 'Medium' | 'Strong' }) {
+  const filled = strength === 'Strong' ? 3 : strength === 'Medium' ? 2 : 1
+  const tone = strength === 'Strong' ? 'bg-emerald-500' : strength === 'Medium' ? 'bg-amber-400' : 'bg-red-500'
+  return (
+    <div className="space-y-1 ps-1" aria-live="polite">
+      <div className="flex gap-1" role="progressbar" aria-label={`Password strength: ${strength}`} aria-valuemin={0} aria-valuemax={3} aria-valuenow={filled}>
+        {[1, 2, 3].map((segment) => <span key={segment} className={`h-1.5 flex-1 rounded-full ${segment <= filled ? tone : 'bg-[var(--bp-border)]'}`} />)}
+      </div>
+      <p className="text-xs text-[var(--bp-muted)]">Password strength: <span className="font-bold text-[var(--bp-text)]">{strength}</span></p>
+    </div>
   )
 }
 

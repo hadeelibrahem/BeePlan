@@ -117,6 +117,17 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const applyPulse = useRef(new Animated.Value(1)).current;
 
+  // The recorder is a native shared object that `useAudioRecorder` releases on
+  // unmount. Track mount status so async callbacks (network round-trips) never
+  // update state or touch the recorder after the component is gone.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const busy = state === 'uploading' || state === 'processing' || recorderState.isRecording;
 
   const reset = () => {
@@ -153,6 +164,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
   };
 
   const showError = (error: unknown) => {
+    if (!mountedRef.current) return;
     const key = friendlyErrorKey(error);
     setErrorMessage(key ? t(key) : error instanceof Error ? error.message : t('reminders.aiAssistant.errorUnderstand'));
     setState('error');
@@ -168,6 +180,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
     try {
       const sourceText = text.trim();
       const person = await parsePersonReminder(sourceText);
+      if (!mountedRef.current) return;
       if (person.isPersonReminder && person.confidence >= PERSON_CONFIDENCE_THRESHOLD) {
         setTranscript('');
         setDraft(null);
@@ -176,6 +189,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
         return;
       }
       const result = await parseReminderText(sourceText, accessToken);
+      if (!mountedRef.current) return;
       setTranscript('');
       setPersonResult(null);
       setDraft(result);
@@ -192,6 +206,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
     setErrorMessage('');
     try {
       const { granted } = await requestRecordingPermissionsAsync();
+      if (!mountedRef.current) return;
       if (!granted) {
         setErrorMessage(t('reminders.aiAssistant.errorMicPermission'));
         setState('error');
@@ -199,6 +214,8 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
+      // Unmounted during permission/prepare → recorder is released; don't record.
+      if (!mountedRef.current) return;
       recorder.record();
       setState('recording');
     } catch (error) {
@@ -210,14 +227,19 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
     setState('uploading');
     try {
       await recorder.stop();
+      // Bail if we unmounted while stopping — the recorder is now released and
+      // its `uri` would throw "shared object already released".
+      if (!mountedRef.current) return;
       const uri = recorder.uri;
       if (!uri) throw new Error('Recording failed.');
       const result = await createVoiceReminderDraft({ uri, name: 'recording.m4a', type: 'audio/m4a' }, accessToken);
+      if (!mountedRef.current) return;
       setTranscript(result.transcript);
       // Re-check the transcript for person intent so voice and text produce the
       // same analysis. Falls back to the generic draft on any failure.
       try {
         const person = await parsePersonReminder(result.transcript);
+        if (!mountedRef.current) return;
         if (person.isPersonReminder && person.confidence >= PERSON_CONFIDENCE_THRESHOLD) {
           setDraft(null);
           setPersonResult(person);
@@ -227,6 +249,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
       } catch {
         // best-effort — keep the generic draft
       }
+      if (!mountedRef.current) return;
       setPersonResult(null);
       setDraft(result.draft);
       setCategoryOverride(undefined);
