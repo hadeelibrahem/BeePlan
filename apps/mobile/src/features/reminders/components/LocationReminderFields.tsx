@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { requestForegroundLocationPermission } from '../../../lib/location';
 import { useTheme } from '../../../theme/useTheme';
 import { reverseGeocode, type GeoapifyPlaceSuggestion } from '../services/geoapifyPlacesService';
 import type { GeneralLocationCategory, LocationReminderConfig, LocationReminderMode, TriggerType } from '../types/reminders.types';
@@ -60,9 +61,9 @@ export function LocationReminderFields({ value, onChange }: Props) {
     setLocationError('');
     setIsLocating(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const granted = await requestForegroundLocationPermission();
 
-      if (status !== 'granted') {
+      if (!granted) {
         setLocationError('Location permission was denied.');
         return;
       }

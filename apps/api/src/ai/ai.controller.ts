@@ -21,9 +21,11 @@ import { SpeechService } from '../speech/speech.service';
 import { AiService } from './ai.service';
 import { ParseReminderDto } from './dto/parse-reminder.dto';
 import { ParseRecurrenceDto } from './dto/parse-recurrence.dto';
+import { SmartLocationInferenceDto } from './dto/smart-location-inference.dto';
 import { TaskPlanChatDto } from './dto/task-plan-chat.dto';
 import { RecurrenceParseService } from './recurrence-parse.service';
 import { RecurrenceSuggestionsService } from './recurrence-suggestions.service';
+import { SmartLocationInferenceService } from './smart-location-inference.service';
 import { TaskPlanChatService } from './task-plan-chat.service';
 
 @UseGuards(JwtAuthGuard)
@@ -37,6 +39,7 @@ export class AiController {
     private readonly taskPlanChatService: TaskPlanChatService,
     private readonly recurrenceParseService: RecurrenceParseService,
     private readonly recurrenceSuggestionsService: RecurrenceSuggestionsService,
+    private readonly smartLocationInferenceService: SmartLocationInferenceService,
   ) {}
 
   @Post('task-plan/chat')
@@ -50,6 +53,12 @@ export class AiController {
   @HttpCode(HttpStatus.OK)
   parseReminder(@Body() dto: ParseReminderDto) {
     return this.aiService.parseReminder(dto.text);
+  }
+
+  @Post('smart-location')
+  @HttpCode(HttpStatus.OK)
+  smartLocation(@Body() dto: SmartLocationInferenceDto) {
+    return this.smartLocationInferenceService.infer(dto.text);
   }
 
   @Post('recurrence/parse')

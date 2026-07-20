@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import { createPersonReminder, getFriends } from '../../social/api/social.api'
 import type { FriendSummary, ParsePersonReminderResult } from '../../social/types/social.types'
 import { createReminder, getReminder } from '../api/reminders.api'
-import { AiAssistantSection, clearAiReminderText } from '../components/AiAssistantSection'
+import { AiAssistantSection, clearAiReminderText, type ApplyDraftOptions } from '../components/AiAssistantSection'
 import { ReminderForm } from '../components/ReminderForm'
 import type { ReminderDraft } from '../types/aiAssistant.types'
 import type { PersonReminderConfig, Reminder } from '../types/reminders.types'
@@ -50,6 +50,7 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
   const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(undefined)
   const [formKey, setFormKey] = useState(0)
   const [friends, setFriends] = useState<FriendSummary[]>([])
+  const formSectionRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!accessToken) return
@@ -58,9 +59,12 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
       .catch(() => setFriends([]))
   }, [accessToken])
 
-  const applyDraft = (draft: ReminderDraft) => {
-    setDraftReminder(mapDraftToReminder(draft))
+  const applyDraft = (draft: ReminderDraft, options?: ApplyDraftOptions) => {
+    setDraftReminder(mapDraftToReminder(draft, options))
     setFormKey((key) => key + 1)
+    requestAnimationFrame(() => {
+      formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   const applyPersonDraft = (result: ParsePersonReminderResult) => {
@@ -91,37 +95,40 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
           onApplyPersonDraft={applyPersonDraft}
           accessToken={accessToken}
         />
-        <ReminderForm
-          key={formKey}
-          initialReminder={draftReminder}
-          friends={friends}
-          onAddFriend={onNavigatePeople}
-          submitLabel={t('reminders.saveReminder')}
-          onSubmit={async (values) => {
-            if (values.type === 'person') {
-              const person = values.person
-              if (!person?.targetUserId) return
-              const created = (await createPersonReminder(
-                {
-                  title: values.title,
-                  targetUserId: person.targetUserId,
-                  message: values.description || person.message || '',
-                  expiration: person.expiration ?? '1w',
-                  radiusMeters: person.radiusMeters ?? 100,
-                  cooldownMinutes: person.cooldownMinutes ?? 30,
-                },
-                accessToken,
-              )) as { id: string }
+        <div ref={formSectionRef}>
+          <ReminderForm
+            key={formKey}
+            initialReminder={draftReminder}
+            accessToken={accessToken}
+            friends={friends}
+            onAddFriend={onNavigatePeople}
+            submitLabel={t('reminders.saveReminder')}
+            onSubmit={async (values) => {
+              if (values.type === 'person') {
+                const person = values.person
+                if (!person?.targetUserId) return
+                const created = (await createPersonReminder(
+                  {
+                    title: values.title,
+                    targetUserId: person.targetUserId,
+                    message: values.description || person.message || '',
+                    expiration: person.expiration ?? '1w',
+                    radiusMeters: person.radiusMeters ?? 100,
+                    cooldownMinutes: person.cooldownMinutes ?? 30,
+                  },
+                  accessToken,
+                )) as { id: string }
+                clearAiReminderText()
+                const full = await getReminder(created.id, accessToken)
+                onCreated(full)
+                return
+              }
+              const reminder = await createReminder(values, accessToken)
               clearAiReminderText()
-              const full = await getReminder(created.id, accessToken)
-              onCreated(full)
-              return
-            }
-            const reminder = await createReminder(values, accessToken)
-            clearAiReminderText()
-            onCreated(reminder)
-          }}
-        />
+              onCreated(reminder)
+            }}
+          />
+        </div>
       </div>
     </main>
   )

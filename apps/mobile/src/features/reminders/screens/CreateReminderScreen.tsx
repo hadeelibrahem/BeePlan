@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { AppScreen, PageHeader } from '../../../components/layout';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { requestForegroundLocationPermission } from '../../../lib/location';
@@ -7,7 +8,7 @@ import { startProximityMonitor } from '../../../services/proximityMonitor';
 import { createPersonReminder, getFriends } from '../../social/api/social.api';
 import type { FriendSummary, ParsePersonReminderResult } from '../../social/types/social.types';
 import { createReminder, getReminderById } from '../api/reminders.api';
-import { AiAssistantSection, clearAiReminderText } from '../components/AiAssistantSection';
+import { AiAssistantSection, clearAiReminderText, type ApplyDraftOptions } from '../components/AiAssistantSection';
 import { ReminderForm } from '../components/ReminderForm';
 import type { ReminderDraft } from '../types/aiAssistant.types';
 import type { PersonReminderConfig, Reminder } from '../types/reminders.types';
@@ -55,6 +56,8 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
   const [draftReminder, setDraftReminder] = useState<Reminder | undefined>(undefined);
   const [formKey, setFormKey] = useState(0);
   const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const formSectionY = useRef(0);
 
   useEffect(() => {
     void getFriends()
@@ -62,9 +65,12 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
       .catch(() => setFriends([]));
   }, []);
 
-  const applyDraft = (draft: ReminderDraft) => {
-    setDraftReminder(mapDraftToReminder(draft));
+  const applyDraft = (draft: ReminderDraft, options?: ApplyDraftOptions) => {
+    setDraftReminder(mapDraftToReminder(draft, options));
     setFormKey((key) => key + 1);
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({ y: Math.max(formSectionY.current - 16, 0), animated: true });
+    });
   };
 
   const applyPersonDraft = (result: ParsePersonReminderResult) => {
@@ -73,7 +79,7 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
   };
 
   return (
-    <AppScreen keyboardAvoiding>
+    <AppScreen keyboardAvoiding scrollRef={scrollViewRef}>
       <PageHeader
         title={t('reminders.createTitle')}
         subtitle={t('reminders.createSubtitle', { brand_name: t('common.brand_name') })}
@@ -84,40 +90,43 @@ export function CreateReminderScreen({ accessToken, onCancel, onCreated, onNavig
         onApplyPersonDraft={applyPersonDraft}
         accessToken={accessToken}
       />
-      <ReminderForm
-        key={formKey}
-        initialReminder={draftReminder}
-        friends={friends}
-        onAddFriend={onNavigatePeople}
-        submitLabel={t('reminders.saveReminder')}
-        onSubmit={async (values) => {
-          if (values.type === 'person') {
-            const person = values.person;
-            if (!person?.targetUserId) return;
-            const created = (await createPersonReminder({
-              title: values.title,
-              targetUserId: person.targetUserId,
-              message: values.description || person.message || '',
-              expiration: person.expiration ?? '1w',
-              radiusMeters: person.radiusMeters ?? 100,
-              cooldownMinutes: person.cooldownMinutes ?? 30,
-            })) as { id: string };
+      <View onLayout={(event) => (formSectionY.current = event.nativeEvent.layout.y)}>
+        <ReminderForm
+          key={formKey}
+          initialReminder={draftReminder}
+          accessToken={accessToken}
+          friends={friends}
+          onAddFriend={onNavigatePeople}
+          submitLabel={t('reminders.saveReminder')}
+          onSubmit={async (values) => {
+            if (values.type === 'person') {
+              const person = values.person;
+              if (!person?.targetUserId) return;
+              const created = (await createPersonReminder({
+                title: values.title,
+                targetUserId: person.targetUserId,
+                message: values.description || person.message || '',
+                expiration: person.expiration ?? '1w',
+                radiusMeters: person.radiusMeters ?? 100,
+                cooldownMinutes: person.cooldownMinutes ?? 30,
+              })) as { id: string };
+              clearAiReminderText();
+              // The reminder can't fire until this device is posting snapshots, so
+              // request the permissions the feature needs and start the monitor.
+              await requestNotificationPermission();
+              const granted = await requestForegroundLocationPermission();
+              if (granted) void startProximityMonitor();
+              const full = await getReminderById(created.id, accessToken);
+              if (full) onCreated(full);
+              return;
+            }
+            const reminder = await createReminder(values, accessToken);
+            await scheduleTimeReminderNotification(reminder);
             clearAiReminderText();
-            // The reminder can't fire until this device is posting snapshots, so
-            // request the permissions the feature needs and start the monitor.
-            await requestNotificationPermission();
-            const granted = await requestForegroundLocationPermission();
-            if (granted) void startProximityMonitor();
-            const full = await getReminderById(created.id, accessToken);
-            if (full) onCreated(full);
-            return;
-          }
-          const reminder = await createReminder(values, accessToken);
-          await scheduleTimeReminderNotification(reminder);
-          clearAiReminderText();
-          onCreated(reminder);
-        }}
-      />
+            onCreated(reminder);
+          }}
+        />
+      </View>
     </AppScreen>
   );
 }

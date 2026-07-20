@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsIn,
   IsISO8601,
   IsInt,
@@ -11,6 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  REMINDER_PLACE_CATEGORIES,
   REMINDER_PRIORITIES,
   REMINDER_REPEATS,
   REMINDER_STATUSES,
@@ -22,6 +24,7 @@ import {
 } from './reminder-shared.dto';
 import type {
   ReminderPriority,
+  ReminderPlaceCategory,
   ReminderRepeat,
   ReminderStatus,
   ReminderType,
@@ -93,4 +96,29 @@ export class CreateReminderDto {
   @ValidateNested()
   @Type(() => ReminderPersonDto)
   person?: ReminderPersonDto;
+  @IsOptional()
+  @IsBoolean()
+  smartLocationEnabled?: boolean;
+
+  @IsOptional()
+  @IsIn(REMINDER_PLACE_CATEGORIES)
+  smartPlaceCategory?: ReminderPlaceCategory;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  triggerRadius?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  triggerOnEnter?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  triggerCooldown?: number;
+
+  @IsOptional()
+  @IsISO8601()
+  lastTriggeredAt?: string;
 }

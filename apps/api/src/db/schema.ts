@@ -504,6 +504,14 @@ export const reminders = pgTable(
     //   by the nearby check to enforce the notification cooldown. Null for all
     //   non-person reminder types. See src/social/person-reminders.service.ts.
     person: jsonb('person'),
+    smartLocationEnabled: boolean('smart_location_enabled')
+      .notNull()
+      .default(false),
+    smartPlaceCategory: varchar('smart_place_category', { length: 80 }),
+    triggerRadius: integer('trigger_radius').notNull().default(200),
+    triggerOnEnter: boolean('trigger_on_enter').notNull().default(true),
+    triggerCooldown: integer('trigger_cooldown').notNull().default(1440),
+    lastTriggeredAt: timestamp('last_triggered_at'),
     // True when `userId` is null - i.e. this row predates auth being
     // required on reminder creation and has no determinable owner. Kept
     // instead of deleted so the data isn't lost; see DatabaseService.

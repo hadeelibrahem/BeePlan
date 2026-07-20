@@ -44,6 +44,7 @@ export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }:
         </p>
         <ReminderForm
           initialReminder={reminder}
+          accessToken={accessToken}
           friends={friends}
           submitLabel={t('reminders.saveChanges')}
           onSubmit={async (values) => {

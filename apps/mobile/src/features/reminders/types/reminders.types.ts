@@ -77,13 +77,26 @@ export type GeneralLocationCategory =
   | 'school'
   | 'gym'
   | 'pharmacy'
+  | 'supermarket'
+  | 'cafe'
   | 'grocery_store'
   | 'coffee_shop'
   | 'restaurant'
+  | 'bakery'
   | 'hospital'
+  | 'clinic'
   | 'airport'
+  | 'train_station'
+  | 'bus_station'
   | 'bank'
   | 'atm'
+  | 'bookstore'
+  | 'electronics_store'
+  | 'shopping_mall'
+  | 'hardware_store'
+  | 'pet_store'
+  | 'laundry'
+  | 'post_office'
   | 'parking'
   | 'gas_station'
   | 'mosque'
@@ -161,6 +174,14 @@ export type Reminder = {
   checklistItems?: ChecklistItem[];
   checklistReminderTrigger?: ChecklistReminderTrigger;
   person?: PersonReminderConfig;
+  smartLocationEnabled?: boolean;
+  smartPlaceCategory?: GeneralLocationCategory;
+  triggerRadius?: number;
+  triggerOnEnter?: boolean;
+  triggerCooldown?: number;
+  lastTriggeredAt?: string;
+  smartLocationReason?: string;
+  smartLocationConfidence?: number;
   createdAt: string;
   updatedAt: string;
 };

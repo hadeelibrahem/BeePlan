@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ActivityIndicator, Pressable, Text } from 'react-native'
+import { ActivityIndicator, Pressable, Text, type StyleProp, type ViewStyle } from 'react-native'
 import { useTheme } from '../../theme/useTheme'
 
 type ButtonProps = {
@@ -10,6 +10,7 @@ type ButtonProps = {
   className?: string
   fullWidth?: boolean
   size?: 'sm' | 'md'
+  style?: StyleProp<ViewStyle>
 }
 
 const SIZE_CLASSES = {
@@ -71,7 +72,7 @@ export function SecondaryButton({ children, onPress, disabled, loading, classNam
   )
 }
 
-export function OutlineButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
+export function OutlineButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md', style }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -83,7 +84,7 @@ export function OutlineButton({ children, onPress, disabled, loading, className 
       className={`items-center justify-center rounded-xl border bg-transparent active:scale-[0.98] ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
-      style={{ borderColor: theme.colors.border }}
+      style={[{ borderColor: theme.colors.border }, style]}
     >
       {loading ? (
         <ActivityIndicator color={theme.colors.text} />

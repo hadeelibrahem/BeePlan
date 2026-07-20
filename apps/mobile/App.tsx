@@ -1,6 +1,10 @@
 import './global.css';
 
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import {
+  addNotificationResponseReceivedListener,
+  getLastNotificationResponseAsync,
+} from 'expo-notifications/build/NotificationsEmitter';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, View } from 'react-native';
@@ -14,6 +18,10 @@ import {
   toggleReminderStatus,
   type Reminder,
 } from './src/features/reminders';
+import {
+  startSmartLocationReminderMonitor,
+  stopSmartLocationReminderMonitor,
+} from './src/features/reminders/utils/smartLocationReminderMonitor';
 import { AddTaskSheet } from './src/components/AddTaskSheet';
 import { PeopleScreen } from './src/features/social';
 import { NotificationsScreen } from './src/features/collaboration';
@@ -117,8 +125,18 @@ function ThemedApp() {
 
   useEffect(() => {
     const handleUrl = (url: string | null) => {
-      if (!url || !url.includes('reset-password')) return;
-      setScreen('reset');
+      if (!url) return;
+
+      const reminderMatch = url.match(/reminders\/([^/?#]+)/);
+      if (reminderMatch?.[1]) {
+        setSelectedId(decodeURIComponent(reminderMatch[1]));
+        setScreen('details');
+        return;
+      }
+
+      if (url.includes('reset-password')) {
+        setScreen('reset');
+      }
     };
 
     Linking.getInitialURL().then(handleUrl);
@@ -127,6 +145,40 @@ function ThemedApp() {
       handleUrl(url);
     });
 
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    const openReminderFromResponse = (response: unknown) => {
+      const data = (
+        response as {
+          notification?: { request?: { content?: { data?: Record<string, unknown> } } };
+        }
+      )?.notification?.request?.content?.data;
+
+      const reminderId = typeof data?.reminderId === 'string' ? data.reminderId : undefined;
+      const url = typeof data?.url === 'string' ? data.url : undefined;
+
+      if (reminderId) {
+        setSelectedId(reminderId);
+        setScreen('details');
+        return;
+      }
+
+      if (url) {
+        const match = url.match(/reminders\/([^/?#]+)/);
+        if (match?.[1]) {
+          setSelectedId(decodeURIComponent(match[1]));
+          setScreen('details');
+        }
+      }
+    };
+
+    getLastNotificationResponseAsync().then((response) => {
+      if (response) openReminderFromResponse(response);
+    });
+
+    const subscription = addNotificationResponseReceivedListener(openReminderFromResponse);
     return () => subscription.remove();
   }, []);
 
@@ -236,6 +288,39 @@ function ThemedApp() {
       })
       .finally(() => setSummaryLoading(false));
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!user || !accessToken || !reminders.length) return;
+
+    let active = true;
+    let subscription: { remove: () => void } | null = null;
+
+    startSmartLocationReminderMonitor({
+      reminders,
+      accessToken,
+      onReminderTriggered: (updatedReminder) => {
+        setReminders((current) =>
+          current.map((reminder) => (reminder.id === updatedReminder.id ? updatedReminder : reminder)),
+        );
+        loadDashboardSummary();
+      },
+    })
+      .then((createdSubscription) => {
+        if (!active) {
+          stopSmartLocationReminderMonitor(createdSubscription);
+          return;
+        }
+        subscription = createdSubscription;
+      })
+      .catch((error: unknown) => {
+        console.error('[App] failed to start smart location reminder monitor:', error);
+      });
+
+    return () => {
+      active = false;
+      stopSmartLocationReminderMonitor(subscription);
+    };
+  }, [accessToken, loadDashboardSummary, reminders, user]);
 
   // Single shared focus-session instance so the Focus page and the full-screen
   // workspace stay in sync (AsyncStorage writes are async, so a per-screen

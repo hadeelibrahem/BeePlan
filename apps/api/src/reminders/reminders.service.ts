@@ -8,6 +8,7 @@ import type {
   ReminderChecklistItemDto,
   ReminderContextDto,
   ReminderLocationDto,
+  ReminderPlaceCategory,
 } from './dto/reminder-shared.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { Reminder } from './entities/reminder.entity';
@@ -78,6 +79,13 @@ export class RemindersService {
       checklistItems:
         (row.checklistItems as ReminderChecklistItemDto[] | null) ?? undefined,
       person,
+      smartLocationEnabled: row.smartLocationEnabled ?? false,
+      smartPlaceCategory:
+        (row.smartPlaceCategory as ReminderPlaceCategory | null) ?? undefined,
+      triggerRadius: row.triggerRadius ?? 200,
+      triggerOnEnter: row.triggerOnEnter ?? true,
+      triggerCooldown: row.triggerCooldown ?? 1440,
+      lastTriggeredAt: row.lastTriggeredAt?.toISOString(),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -106,6 +114,14 @@ export class RemindersService {
         location: dto.location,
         context: dto.context,
         checklistItems: dto.checklistItems,
+        smartLocationEnabled: dto.smartLocationEnabled ?? false,
+        smartPlaceCategory: dto.smartPlaceCategory,
+        triggerRadius: dto.triggerRadius ?? 200,
+        triggerOnEnter: dto.triggerOnEnter ?? true,
+        triggerCooldown: dto.triggerCooldown ?? 1440,
+        lastTriggeredAt: dto.lastTriggeredAt
+          ? new Date(dto.lastTriggeredAt)
+          : undefined,
       })
       .returning();
 
@@ -182,6 +198,9 @@ export class RemindersService {
           : undefined,
         repeatEndDate: dto.repeatEndDate
           ? new Date(dto.repeatEndDate)
+          : undefined,
+        lastTriggeredAt: dto.lastTriggeredAt
+          ? new Date(dto.lastTriggeredAt)
           : undefined,
         updatedAt: new Date(),
       })

@@ -9,6 +9,7 @@ import OpenAI from 'openai';
 import { FriendsService, FriendSummary } from '../social/friends.service';
 import { buildReminderParsePrompt } from './prompts/reminder-parse.prompt';
 import { normalizeReminderDraft, ReminderDraft } from './reminder-draft';
+import { inferSmartLocationWithRules } from './smart-location-inference.service';
 import { parseJsonResponse } from './utils/json-response';
 
 export type PersonReminderMatch = {
@@ -76,7 +77,7 @@ export class AiService {
       throw new InternalServerErrorException('Failed to parse reminder with AI.');
     }
 
-    return this.toDraft(raw);
+    return this.applySmartLocationOverride(trimmed, this.toDraft(raw));
   }
 
   /**
@@ -176,6 +177,31 @@ export class AiService {
     }
 
     return normalizeReminderDraft(parsed);
+  }
+
+  private applySmartLocationOverride(
+    text: string,
+    draft: ReminderDraft,
+  ): ReminderDraft {
+    const smartLocation = inferSmartLocationWithRules(text);
+    if (!smartLocation.category || smartLocation.confidence < 0.55) {
+      return draft;
+    }
+
+    return {
+      ...draft,
+      title: draft.title.trim() || smartLocation.title,
+      reminderType: 'location',
+      location: {
+        mode: 'general',
+        name: '',
+        address: '',
+        category: smartLocation.category,
+        trigger: 'arrive',
+        radius: 200,
+      },
+      context: { condition: '' },
+    };
   }
 }
 

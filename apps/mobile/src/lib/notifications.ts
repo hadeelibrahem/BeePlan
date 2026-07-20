@@ -69,6 +69,13 @@ export type ScheduleReminderNotificationInput = {
   priority: ReminderPriority;
 };
 
+export type ShowImmediateReminderNotificationInput = {
+  title: string;
+  body?: string;
+  priority: ReminderPriority;
+  data?: Record<string, unknown>;
+};
+
 /**
  * Schedules a LOCAL notification for a Time Reminder. No push tokens, no remote
  * notifications — only `scheduleNotificationAsync` with a DATE trigger. Throws
@@ -124,6 +131,41 @@ export async function scheduleReminderNotification({
       date: triggerDate,
       channelId: Platform.OS === 'android' ? 'reminders' : undefined,
     },
+  });
+}
+
+export async function showImmediateReminderNotification({
+  title,
+  body,
+  priority,
+  data,
+}: ShowImmediateReminderNotificationInput): Promise<string> {
+  const granted = await requestNotificationPermission();
+
+  if (!granted) {
+    throw new NotificationPermissionDeniedError();
+  }
+
+  const notificationColor = PRIORITY_NOTIFICATION_COLORS[priority];
+
+  if (Platform.OS === 'android') {
+    await setNotificationChannelAsync('reminders', {
+      name: 'Reminders',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+      lightColor: notificationColor,
+    });
+  }
+
+  return scheduleNotificationAsync({
+    content: {
+      title,
+      body: body || DEFAULT_NOTIFICATION_BODY,
+      sound: 'default',
+      color: notificationColor,
+      data,
+    },
+    trigger: null,
   });
 }
 

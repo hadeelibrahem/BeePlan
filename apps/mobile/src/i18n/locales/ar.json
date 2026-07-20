@@ -270,7 +270,27 @@
       "summaryWhen": "الوقت",
       "summaryWhere": "المكان",
       "summaryCondition": "الشرط",
-      "summaryItems": "العناصر"
+      "summaryItems": "العناصر",
+      "smartLocationTitle": "🤖 الموقع الذكي بالذكاء الاصطناعي",
+      "understood": "فهم BeePlan تذكيرك.",
+      "triggerSentenceArrive": "سيتم تنبيهك عند اقترابك من {{category}}.",
+      "triggerSentenceLeave": "سيتم تنبيهك عند مغادرتك {{category}}.",
+      "categoryLabel": "الفئة",
+      "triggerLabel": "المُشغّل",
+      "radiusLabel": "النطاق",
+      "reasonLabel": "السبب",
+      "confidenceLabel": "مستوى الثقة",
+      "triggerWhenArriving": "عند الاقتراب",
+      "triggerWhenLeaving": "عند المغادرة",
+      "radiusValue": "{{radius}} م",
+      "lowConfidenceHint": "لست متأكدًا تمامًا. يمكنك تغيير الفئة المقترحة أدناه.",
+      "apply": "✅ تطبيق",
+      "changeCategory": "✏️ تغيير الفئة",
+      "disableSmartLocation": "❌ تعطيل الموقع الذكي",
+      "startOver": "البدء من جديد",
+      "userSelectedReason": "لقد اخترت {{category}} كفئة.",
+      "analyzingCategory": "🤖 جارٍ تحسين الفئة ومستوى الثقة...",
+      "searchingNearbyPlaces": "جارٍ البحث عن أماكن قريبة..."
     }
   },
   "people": {

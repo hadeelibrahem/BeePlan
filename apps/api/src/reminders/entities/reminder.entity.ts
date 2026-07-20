@@ -5,6 +5,7 @@ import {
 } from '../dto/reminder-shared.dto';
 import type {
   ReminderPriority,
+  ReminderPlaceCategory,
   ReminderRepeat,
   ReminderStatus,
   ReminderType,
@@ -29,6 +30,12 @@ export class Reminder {
   // Present only for `type = 'person'` proximity reminders. Opaque config
   // stored/managed by the social module — see src/social/person-reminders.service.ts.
   person?: Record<string, unknown>;
+  smartLocationEnabled!: boolean;
+  smartPlaceCategory?: ReminderPlaceCategory;
+  triggerRadius!: number;
+  triggerOnEnter!: boolean;
+  triggerCooldown!: number;
+  lastTriggeredAt?: string;
   createdAt!: string;
   updatedAt!: string;
 }
