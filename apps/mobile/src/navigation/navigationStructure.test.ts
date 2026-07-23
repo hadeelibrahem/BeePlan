@@ -67,3 +67,8 @@ test('Calendar and AI Daily Planner are stack destinations with stable deep link
   assert.equal(screenForDeepLink('beeplan://calendar'), 'calendar');
   assert.equal(screenForDeepLink('https://beeplan.app/planner'), 'aiDailyPlanner');
 });
+
+test('Settings is a stack destination whose Android back parent is Dashboard', () => {
+  assert.equal(areaForScreen('settings'), 'stack');
+  assert.equal(SCREEN_PARENTS.settings, 'dashboard');
+});

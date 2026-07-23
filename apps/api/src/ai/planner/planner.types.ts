@@ -58,6 +58,7 @@ export type PostponeReasonCode =
   | 'unavailable_time_window'
   | 'energy_mismatch'
   | 'meeting_reminder_conflict'
+  | 'commitment_conflict'
   | 'max_daily_work_limit'
   | 'sleep_lunch_unavailable_hours'
   | 'task_too_large'
@@ -228,6 +229,20 @@ export interface PlannerReminder {
   type: string;
 }
 
+/**
+ * A recurring commitment reduced to a hard busy interval for the plan date.
+ * Produced by the Personal Context module (RecurringCommitmentsService) and
+ * enforced by the Rule Engine as an immovable FixedBlock — no task, focus, or
+ * study block may overlap it.
+ */
+export interface PlannerCommitment {
+  id: string;
+  title: string;
+  start: string; // HH:mm
+  end: string; // HH:mm
+  placeName?: string | null;
+}
+
 export interface PlannerContext {
   userId: string;
   date: string;
@@ -237,6 +252,8 @@ export interface PlannerContext {
   lockedItems: LockedInput[];
   tasks: PlannerTask[];
   reminders: PlannerReminder[];
+  /** Active recurring commitments that fall on `date` (hard busy blocks). */
+  commitments: PlannerCommitment[];
   preferences: PlannerPreferences;
   /**
    * Every incomplete parent task id (whether it is scheduled directly or via its

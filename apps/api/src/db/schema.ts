@@ -166,17 +166,101 @@ export const categories = pgTable('categories', {
   createdAt: createdAt(),
 });
 
-export const savedLocations = pgTable('saved_locations', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 255 }).notNull(),
-  latitude: decimal('latitude', { precision: 10, scale: 7 }).notNull(),
-  longitude: decimal('longitude', { precision: 10, scale: 7 }).notNull(),
-  radiusMeters: integer('radius_meters').notNull().default(100),
-  createdAt: createdAt(),
-});
+// A user's permanent "saved place" (Home, University, Work, Gym...). Doubles as
+// the canonical target every place alias resolves to, and as an optional
+// location for a recurring commitment. Previously an unused base table; extended
+// with icon/address/category/updatedAt for the Personal Context feature so the
+// app never needs a second place model (reminders keep their inline jsonb
+// location — see reminders.location).
+export const savedLocations = pgTable(
+  'saved_locations',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // The short canonical label shown in the row, e.g. "Home", "University".
+    name: varchar('name', { length: 255 }).notNull(),
+    // Optional emoji/icon for the row (e.g. "🏠").
+    icon: varchar('icon', { length: 16 }),
+    // Human-readable address / location value, e.g. "Tubas, Palestine".
+    address: text('address'),
+    // Optional link to a smart place category (home/work/university/gym/...) so
+    // the AI can resolve a canonical place to a category and back. Mirrors the
+    // client GeneralLocationCategory / REMINDER_PLACE_CATEGORIES list.
+    category: varchar('category', { length: 80 }),
+    latitude: decimal('latitude', { precision: 10, scale: 7 }).notNull(),
+    longitude: decimal('longitude', { precision: 10, scale: 7 }).notNull(),
+    radiusMeters: integer('radius_meters').notNull().default(100),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index('idx_saved_locations_user').on(table.userId)],
+);
+
+// Natural-language names ("home", "البيت", "campus", "الجامعة") that resolve to
+// a canonical savedLocation. Scoped to the user; a given normalized alias maps
+// to at most one place per user (enforced by the unique index) so AI resolution
+// is deterministic.
+export const savedLocationAliases = pgTable(
+  'saved_location_aliases',
+  {
+    id: id(),
+    savedLocationId: uuid('saved_location_id')
+      .notNull()
+      .references(() => savedLocations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // The alias exactly as the user typed it (for display).
+    alias: varchar('alias', { length: 120 }).notNull(),
+    // Lowercased/diacritic-stripped form used for matching (incl. Arabic).
+    normalizedAlias: varchar('normalized_alias', { length: 120 }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_saved_location_alias_user').on(
+      table.userId,
+      table.normalizedAlias,
+    ),
+    index('idx_saved_location_aliases_location').on(table.savedLocationId),
+  ],
+);
+
+// A recurring, fixed weekly commitment (e.g. "University Classes", Mon/Tue/Wed
+// 08:00–11:00). The AI planner treats an active commitment whose weekday matches
+// the plan date as a HARD busy interval — no task/focus/study block may overlap
+// it. Times are the user's local wall-clock (same convention as
+// plannerPreferences sleep/lunch/unavailableHours).
+export const recurringCommitments = pgTable(
+  'recurring_commitments',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    // JSON array of weekday numbers, 0 = Sunday .. 6 = Saturday (JS getDay()).
+    daysOfWeek: jsonb('days_of_week').notNull().default([]),
+    startTime: varchar('start_time', { length: 5 }).notNull(), // HH:mm
+    endTime: varchar('end_time', { length: 5 }).notNull(), // HH:mm
+    // Optional place this commitment happens at.
+    savedLocationId: uuid('saved_location_id').references(
+      () => savedLocations.id,
+      { onDelete: 'set null' },
+    ),
+    repeatWeekly: boolean('repeat_weekly').notNull().default(true),
+    // Optional bounds — the commitment only applies within [startDate, endDate].
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    // When false the commitment is temporarily disabled (ignored by the planner).
+    isActive: boolean('is_active').notNull().default(true),
+    notes: text('notes'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index('idx_recurring_commitments_user').on(table.userId)],
+);
 
 export const tasks = pgTable(
   'tasks',

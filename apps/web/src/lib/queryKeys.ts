@@ -10,6 +10,10 @@ export const queryKeys = {
   dashboard: { summary: ['dashboard', 'summary'] as const },
   focus: { stats: ['focus', 'stats'] as const },
   reminders: { all: ['reminders'] as const, list: ['reminders', 'list'] as const },
+  context: {
+    places: ['context', 'places'] as const,
+    commitments: ['context', 'commitments'] as const,
+  },
   aiCollaboration: {
     capacity: (taskId: string) => ['aiCollaboration', 'capacity', taskId] as const,
     today: (taskId: string) => ['aiCollaboration', 'today', taskId] as const,

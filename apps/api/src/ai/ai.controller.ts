@@ -51,8 +51,11 @@ export class AiController {
 
   @Post('parse-reminder')
   @HttpCode(HttpStatus.OK)
-  parseReminder(@Body() dto: ParseReminderDto) {
-    return this.aiService.parseReminder(dto.text);
+  parseReminder(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: ParseReminderDto,
+  ) {
+    return this.aiService.parseReminder(dto.text, request.user.id);
   }
 
   @Post('smart-location')
@@ -93,13 +96,16 @@ export class AiController {
   @Post('voice-reminder-draft')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('audio', audioMulterOptions))
-  async voiceReminderDraft(@UploadedFile() file?: Express.Multer.File) {
+  async voiceReminderDraft(
+    @Req() request: AuthenticatedRequest,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('An audio file is required.');
     }
 
     const transcript = await this.speechService.transcribe(file);
-    const draft = await this.aiService.parseReminder(transcript);
+    const draft = await this.aiService.parseReminder(transcript, request.user.id);
     return { transcript, draft };
   }
 }

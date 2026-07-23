@@ -50,6 +50,7 @@ import { useFocusSession } from './src/lib/useFocusSession';
 import { syncWidget, pushSignedOutWidget } from './src/lib/widgetSync';
 import { StrictFocusProvider } from './src/features/focus/StrictFocusContext';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { useTheme } from './src/theme/useTheme';
 import {
@@ -681,6 +682,7 @@ function ThemedApp() {
       onViewReminders={() => navigation.navigate('Reminders')}
       onViewNotes={() => rootNavigation?.navigate('Notes')}
       onViewAnalytics={() => rootNavigation?.navigate('Analytics')}
+      onViewSettings={() => rootNavigation?.navigate('Settings')}
       onViewCalendar={() => rootNavigation?.navigate('Calendar')}
       onViewAiDailyPlanner={() => rootNavigation?.navigate('AiDailyPlanner')}
       onViewNotifications={() => rootNavigation?.navigate('Notifications')}
@@ -845,6 +847,14 @@ function ThemedApp() {
   const NotesStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Notes'>) => (
     <NotesScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
   );
+  const SettingsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Settings'>) => (
+    <SettingsScreen
+      accessToken={accessToken ?? ''}
+      onBack={() => props.navigation.goBack()}
+      onSignOut={() => void handleSignOut()}
+      onOpenPlanner={() => props.navigation.navigate('AiDailyPlanner')}
+    />
+  );
   const AnalyticsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Analytics'>) => (
     <AnalyticsScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
   );
@@ -894,7 +904,7 @@ function ThemedApp() {
   if (user) {
     return (
       <StrictFocusProvider active={focus.active} remainingMs={focus.remainingMs}>
-        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} />
+        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} settingsRoute={SettingsStackRoute} />
       </StrictFocusProvider>
     );
   }

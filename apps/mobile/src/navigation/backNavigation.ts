@@ -28,7 +28,8 @@ export type AppScreen =
   | 'social'
   | 'notifications'
   | 'calendar'
-  | 'aiDailyPlanner';
+  | 'aiDailyPlanner'
+  | 'settings';
 
 /**
  * The logical parent of each screen — where "back" returns to. `null` marks a
@@ -62,6 +63,7 @@ export const SCREEN_PARENTS: Record<AppScreen, AppScreen | null> = {
   social: 'reminders',
   calendar: 'dashboard',
   aiDailyPlanner: 'dashboard',
+  settings: 'dashboard',
 };
 
 export type BackDecision =

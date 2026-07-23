@@ -16,7 +16,7 @@ export function AppLayout({ active, panelTitle, panelCaption, panelPercent, fab,
 
   return (
     <div className="min-h-screen bg-[var(--bp-bg)] text-[var(--bp-text)]">
-      <div className="mx-auto flex max-w-7xl gap-4 px-5 py-5">
+      <div className="mx-auto flex max-w-7xl items-start gap-4 overflow-x-hidden px-5 py-5">
         <Sidebar
           active={active}
           panelTitle={panelTitle}
@@ -27,7 +27,7 @@ export function AppLayout({ active, panelTitle, panelCaption, panelPercent, fab,
           {...nav}
         />
 
-        <main className="flex-1 animate-[beeplanFadeIn_300ms_ease-out] rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/40 p-5">
+        <main className="min-w-0 flex-1 animate-[beeplanFadeIn_300ms_ease-out] rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/40 p-5">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}

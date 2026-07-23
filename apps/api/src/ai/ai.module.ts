@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ContextModule } from '../context/context.module';
 import { DatabaseModule } from '../db/database.module';
 import { SocialModule } from '../social/social.module';
 import { SpeechModule } from '../speech/speech.module';
@@ -19,7 +20,7 @@ import { SmartLocationInferenceService } from './smart-location-inference.servic
 import { TaskPlanChatService } from './task-plan-chat.service';
 
 @Module({
-  imports: [DatabaseModule, SpeechModule, SocialModule],
+  imports: [DatabaseModule, SpeechModule, SocialModule, ContextModule],
   controllers: [AiController, AiPlannerController],
   providers: [
     AiService,

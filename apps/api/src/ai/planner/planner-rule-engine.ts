@@ -104,6 +104,31 @@ export class PlannerRuleEngine {
       });
     }
 
+    // 2b. Recurring commitments (e.g. "University Classes" Mon/Tue/Wed
+    //     08:00–11:00). These are hard, immovable obligations that fall on the
+    //     plan date — treated like calendar events: they outrank protected
+    //     rest/unavailable/break windows and all tasks, but yield to explicitly
+    //     locked items and fixed reminders above. The Personal Context module
+    //     already filtered these to the plan date's weekday and active status.
+    for (const commitment of context.commitments) {
+      if (!isTime(commitment.start) || !isTime(commitment.end)) continue;
+      if (toMinutes(commitment.end) <= toMinutes(commitment.start)) continue;
+      pushIfFree({
+        id: `commitment-${commitment.id}`,
+        type: 'calendar',
+        title: commitment.placeName
+          ? `${commitment.title} · ${commitment.placeName}`
+          : commitment.title,
+        startMinutes: toMinutes(commitment.start),
+        endMinutes: toMinutes(commitment.end),
+        priority: 'high',
+        category: 'Commitment',
+        isFocusTask: false,
+        locked: false,
+        rationale: 'Recurring commitment — kept clear; nothing is scheduled over it.',
+      });
+    }
+
     // 3. Protected rest windows: sleep and lunch. Sleep may cross midnight, so
     //    each window can contribute one or two same-day ranges — only the parts
     //    that fall inside working hours matter.

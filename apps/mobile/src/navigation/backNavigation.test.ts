@@ -33,6 +33,10 @@ test('a non-root screen returns to its logical parent', () => {
     type: 'navigate',
     to: 'dashboard',
   });
+  assert.deepEqual(resolveHardwareBack({ screen: 'settings', sheetOpen: false }), {
+    type: 'navigate',
+    to: 'dashboard',
+  });
 });
 
 test('back within the reset-password flow returns to auth', () => {

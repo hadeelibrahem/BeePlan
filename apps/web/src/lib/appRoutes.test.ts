@@ -17,6 +17,9 @@ describe('app routes', () => {
     expect(resolveAppRoute('/notifications').screen).toBe('notifications')
     expect(resolveAppRoute('/people').screen).toBe('social')
     expect(resolveAppRoute('/sign-in').screen).toBe('dashboard')
+    expect(resolveAppRoute('/settings')).toEqual({ screen: 'settings' })
+    expect(resolveAppRoute('/settings/')).toEqual({ screen: 'settings' })
+    expect(pathForScreen('settings')).toBe('/settings')
   })
 
   it('returns a safe fallback for unknown paths', () => {

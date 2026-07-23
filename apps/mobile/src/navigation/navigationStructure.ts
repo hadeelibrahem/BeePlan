@@ -47,6 +47,7 @@ export const STACK_SCREENS = [
   'notifications',
   'calendar',
   'aiDailyPlanner',
+  'settings',
 ] as const;
 export type StackScreen = (typeof STACK_SCREENS)[number];
 

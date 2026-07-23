@@ -24,6 +24,7 @@ export type SidebarPage =
   | 'calendar'
   | 'notes'
   | 'analytics'
+  | 'settings'
 
 export type SidebarNavHandlers = {
   onNavigateDashboard?: () => void
@@ -36,12 +37,22 @@ export type SidebarNavHandlers = {
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
   onNavigateAnalytics?: () => void
+  onNavigateSettings?: () => void
 }
 
 function BellIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px]" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" />
+    </svg>
+  )
+}
+
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px]" aria-hidden>
+      <circle cx="12" cy="12" r="3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
 }
@@ -66,13 +77,14 @@ const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon;
   { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
   { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
   { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
+  { page: 'settings', label: 'Settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
 ]
 
 export function Sidebar({ active, panelTitle, panelCaption, panelPercent, mobileOpen, onCloseMobile, ...nav }: SidebarProps) {
   return (
     <>
-      <aside className="hidden w-48 shrink-0 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 p-3 lg:block">
-        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} />
+      <aside className="sticky top-5 hidden h-[calc(100dvh-2.5rem)] w-48 shrink-0 flex-col overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 p-3 lg:flex">
+        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} scrollable />
       </aside>
 
       {mobileOpen && (
@@ -111,6 +123,7 @@ function SidebarContent({
   panelPercent,
   nav,
   onNavigate,
+  scrollable = false,
 }: {
   active: SidebarPage
   panelTitle?: string
@@ -118,9 +131,10 @@ function SidebarContent({
   panelPercent?: number
   nav: SidebarNavHandlers
   onNavigate?: () => void
+  scrollable?: boolean
 }) {
   return (
-    <>
+    <div className={`flex min-h-0 flex-col ${scrollable ? 'h-full overflow-x-hidden overflow-y-auto' : ''}`}>
       <div className="mb-5 flex items-center gap-2 px-1">
         <BeePlanLogo showTagline size={34} />
       </div>
@@ -161,7 +175,7 @@ function SidebarContent({
           {panelPercent}%
         </div>
       </div> : null}
-    </>
+    </div>
   )
 }
 

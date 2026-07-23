@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Post,
+  Patch,
   Query,
   Req,
   Res,
@@ -25,6 +27,24 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   logout(@Req() request: AuthenticatedRequest) {
     return this.authService.logout(request.user.id);
+  }
+
+  @Patch('profile')
+  @UseGuards(JwtAuthGuard)
+  updateProfile(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.authService.updateProfile(request.user.id, body);
+  }
+
+  @Patch('password')
+  @UseGuards(JwtAuthGuard)
+  changePassword(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.authService.changePassword(request.user.id, body);
+  }
+
+  @Delete('account')
+  @UseGuards(JwtAuthGuard)
+  deleteAccount(@Req() request: AuthenticatedRequest) {
+    return this.authService.deleteAccount(request.user.id);
   }
 
   @Post('register')

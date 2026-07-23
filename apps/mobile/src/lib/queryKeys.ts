@@ -8,6 +8,10 @@ export const queryKeys = {
   },
   dashboard: { summary: ['dashboard', 'summary'] as const },
   reminders: { list: ['reminders'] as const },
+  context: {
+    places: ['context', 'places'] as const,
+    commitments: ['context', 'commitments'] as const,
+  },
   focus: { stats: ['focus', 'stats'] as const },
   aiCollaboration: {
     capacity: (taskId: string) => ['aiCollaboration', 'capacity', taskId] as const,

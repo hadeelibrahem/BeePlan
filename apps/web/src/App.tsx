@@ -48,6 +48,7 @@ import FocusSessionScreen from './screens/FocusSessionScreen'
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
 import NotesScreen from './screens/NotesScreen'
 import ResetPasswordScreen from './screens/ResetPasswordScreen'
+import SettingsScreen from './screens/SettingsScreen'
 import TaskCollaborationScreen from './screens/TaskCollaborationScreen'
 import TaskDetailsScreen from './screens/TaskDetailsScreen'
 import TasksDashboardScreen from './screens/TasksDashboardScreen'
@@ -473,6 +474,7 @@ function ThemedApp() {
     onNavigateCalendar: () => setScreen('calendar'),
     onNavigateNotes: () => setScreen('notes'),
     onNavigateAnalytics: () => setScreen('analytics'),
+    onNavigateSettings: () => setScreen('settings'),
   }
 
   function renderWithRecurrenceSuggestionModal(content: ReactNode) {
@@ -671,6 +673,10 @@ function ThemedApp() {
 
   if (screen === 'analytics') {
     return <AnalyticsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
+  }
+
+  if (screen === 'settings') {
+    return <SettingsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
   }
 
   if (screen === 'aiPlanTask') {
