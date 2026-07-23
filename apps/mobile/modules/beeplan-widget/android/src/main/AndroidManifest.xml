@@ -1,0 +1,21 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!--
+      Glance-backed home-screen widget. Declared here in the module manifest so
+      it merges into the host app manifest via Expo autolinking — no app-level
+      manifest edits required. `exported=true` is mandatory for the launcher to
+      enumerate the provider in the widget picker.
+    -->
+    <receiver
+      android:name="com.beeplan.widget.BeePlanWidgetReceiver"
+      android:exported="true"
+      android:label="@string/beeplan_widget_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/beeplan_widget_info" />
+    </receiver>
+  </application>
+</manifest>

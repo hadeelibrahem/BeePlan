@@ -18,6 +18,12 @@ export class StartFocusSessionDto {
   @IsUUID()
   taskId?: string;
 
+  // Optional link to the specific subtask being worked on. Requires taskId and
+  // must belong to it (validated in the service). Null = task-level session.
+  @IsOptional()
+  @IsUUID()
+  subtaskId?: string;
+
   @IsInt()
   @Min(1)
   @Max(600)

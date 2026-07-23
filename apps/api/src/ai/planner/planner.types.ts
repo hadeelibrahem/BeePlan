@@ -106,6 +106,8 @@ export type DailyPlanItem = {
   id: string;
   type: PlanItemType;
   taskId?: string;
+  /** Set when this item schedules an incomplete subtask (scheduled in place of its parent). */
+  subtaskId?: string;
   reminderId?: string;
   title: string;
   startTime: string;
@@ -120,6 +122,8 @@ export type DailyPlanItem = {
 
 export type UnscheduledItem = {
   taskId?: string;
+  /** Set when the postponed item is an incomplete subtask, so the row keeps its real subtask identity. */
+  subtaskId?: string;
   reminderId?: string;
   title: string;
   /** Human-readable explanation shown to the user. */
@@ -171,7 +175,23 @@ export type DailyPlan = {
 // -------- Layer 1 input: collected user context -----------------------------
 
 export interface PlannerTask {
+  /**
+   * Unique scheduling identity for this candidate. For a task-level candidate it
+   * is the task id; for a subtask candidate it is the subtask id. Used as the key
+   * everywhere the pipeline tracks a candidate (reasoning order, tasksById).
+   */
   id: string;
+  /**
+   * Parent task id, used for output linkage (DailyPlanItem.taskId) and starting a
+   * focus session. Equals `id` for task-level candidates.
+   */
+  taskId: string;
+  /**
+   * Set when this candidate is an incomplete subtask scheduled in place of its
+   * parent. Threaded to the output item / postponed row so the real subtask
+   * identity (id + title) is never collapsed into the parent.
+   */
+  subtaskId?: string | null;
   title: string;
   priority: Priority;
   status: string;
@@ -189,7 +209,14 @@ export interface PlannerTask {
   progress: number;
   isFocusTask: boolean;
   updatedAt: string; // ISO
+  /** Cross-task dependencies (other task ids that must complete first). */
   dependencyTaskIds: string[];
+  /**
+   * Sibling subtask-candidate ids that must be scheduled earlier than this one
+   * (intra-task ordering). Unlike dependencyTaskIds these never block — the
+   * scheduler simply places the dependency first so a valid order is preserved.
+   */
+  orderDependencyIds?: string[];
 }
 
 export interface PlannerReminder {
@@ -211,6 +238,13 @@ export interface PlannerContext {
   tasks: PlannerTask[];
   reminders: PlannerReminder[];
   preferences: PlannerPreferences;
+  /**
+   * Every incomplete parent task id (whether it is scheduled directly or via its
+   * subtasks). Cross-task dependency resolution uses this so a dependency on a
+   * task that was expanded into subtasks still blocks its dependents — the
+   * expanded parent no longer appears as a candidate id.
+   */
+  activeTaskIds?: Set<string>;
 }
 
 // -------- Layer 1 output: hard constraints ----------------------------------
@@ -220,6 +254,7 @@ export interface FixedBlock {
   id: string;
   type: PlanItemType;
   taskId?: string;
+  subtaskId?: string;
   reminderId?: string;
   title: string;
   startMinutes: number;

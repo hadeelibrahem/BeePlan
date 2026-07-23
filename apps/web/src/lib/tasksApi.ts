@@ -32,6 +32,7 @@ export type ApiSubtask = {
   description?: string
   priority: ApiSubtaskPriority
   status: ApiSubtaskStatus
+  isFocusTask?: boolean
   startDate?: string
   dueDate?: string
   estimatedDurationMinutes?: number
@@ -60,6 +61,7 @@ export type SubtaskPayload = Partial<
     | 'description'
     | 'priority'
     | 'status'
+    | 'isFocusTask'
     | 'startDate'
     | 'dueDate'
     | 'estimatedDurationMinutes'
@@ -171,9 +173,13 @@ export type ApiTask = {
   notes: string
   estimatedTimeMinutes: number
   spentTimeMinutes: number
+  // Manual half of spent time (spentTimeMinutes = manual + focused). Optional
+  // for backward compatibility with older cached payloads / fixtures.
+  manualSpentMinutes?: number
   remainingTimeMinutes: number
   estimatedHours: number
   spentHours: number
+  manualSpentHours?: number
   remainingHours: number
   progressPercentage: number
   reminderEnabled: boolean
@@ -296,6 +302,26 @@ export type DashboardSummary = {
 
 export function getDashboardSummary(accessToken: string) {
   return request<DashboardSummary>(accessToken, '/dashboard/summary')
+}
+
+export type DashboardStatusTone = 'success' | 'positive' | 'warning' | 'danger'
+export type DashboardFocus = { id: string; taskId: string | null; taskTitle: string | null; subtaskId: string | null; subtaskTitle: string | null; startedAt: string; endedAt: string | null; plannedMinutes: number; actualMinutes: number | null; status: string; sessionType: string; notes: string | null; createdAt: string }
+export type DashboardRecommendation = { taskId: string; taskTitle: string; subtaskId: string | null; subtaskTitle: string | null; estimatedMinutes: number | null; reason: string; recommendationReason: string; score: number }
+export type DashboardWhyNow = { code: string; label: string; value?: string }
+export type DashboardTimelineBlock = { id: string; type: 'focus' | 'task' | 'break' | 'event' | 'commitment' | 'meal' | 'free' | 'reminder'; startTime: string; endTime: string | null; title: string; taskId: string | null; subtaskId: string | null; status: string; source: string }
+export type DashboardSuggestion = { id: string; type: string; title: string; explanation: string; actionLabel: string; actionPayload: Record<string, unknown>; confidence?: string; source?: string }
+export type DashboardLocationContext = { label: string; tasks: { id: string; title: string }[] } | null
+export type TodayDashboard = {
+  generatedAt: string; timezone: string; greeting: string
+  dailyStatus: { status: string; statusTone: DashboardStatusTone; summaryLines: string[] }
+  activeFocus: DashboardFocus | null; recommendation: DashboardRecommendation | null; whyNow: DashboardWhyNow[]
+  timeline: DashboardTimelineBlock[]; locationContext: DashboardLocationContext; suggestions: DashboardSuggestion[]
+  progress: { percent: number; completedWorkUnits: number; totalWorkUnits: number; focusMinutes: number; remainingEstimatedMinutes: number; basis: string }
+  tomorrowPreview: { date: string; calendarEvents: unknown[]; dueWorkUnits: number; estimatedWorkMinutes: number; highPriorityItems: number; capacityMinutes: number | null; overloadStatus: 'overloaded' | 'within_capacity' | 'unavailable' }
+}
+
+export function getTodayDashboard(accessToken: string) {
+  return request<TodayDashboard>(accessToken, '/dashboard/today')
 }
 
 export type TaskDueFilter = 'today' | 'upcoming' | 'overdue'

@@ -18,6 +18,7 @@ type FormValues = {
   dueTime: string
   estimatedDurationMinutes: string
   assignee: string
+  isFocusTask: boolean
   reminderEnabled: boolean
   reminderMinutesBeforeDue: string
   tags: string
@@ -56,6 +57,7 @@ function fromSubtask(subtask?: ApiSubtask): FormValues {
     dueTime: due.time,
     estimatedDurationMinutes: subtask?.estimatedDurationMinutes ? String(subtask.estimatedDurationMinutes) : '',
     assignee: subtask?.assignee ?? '',
+    isFocusTask: subtask?.isFocusTask ?? false,
     reminderEnabled: subtask?.reminderEnabled ?? false,
     reminderMinutesBeforeDue: subtask?.reminderMinutesBeforeDue ? String(subtask.reminderMinutesBeforeDue) : '',
     tags: subtask?.tags?.join(', ') ?? '',
@@ -78,6 +80,7 @@ function toPayload(values: FormValues): SubtaskPayload {
     estimatedDurationMinutes: Number.isFinite(estimated) && estimated > 0 ? estimated : undefined,
     // A person edited it, so any estimate is now user-owned.
     estimatedDurationSource: 'user',
+    isFocusTask: values.isFocusTask,
     assignee: values.assignee.trim() || undefined,
     reminderEnabled: values.reminderEnabled,
     reminderMinutesBeforeDue:
@@ -250,6 +253,23 @@ export default function SubtaskFormModal({
                 onChange={(e) => update('assignee', e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-[var(--bp-border)] p-4">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={values.isFocusTask}
+                onChange={(e) => update('isFocusTask', e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[var(--bp-accent)]"
+              />
+              <span>
+                <span className="block text-sm font-bold text-[var(--bp-text)]">🎯 Focus task</span>
+                <span className="block text-xs text-slate-400">
+                  Eligible for deep-work Focus sessions and “Do This Now”.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="rounded-xl border border-[var(--bp-border)] p-4">

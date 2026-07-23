@@ -219,7 +219,11 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
 
       let latestTask = createdTask;
       for (const subtask of plan.subtasks) {
-        latestTask = await addSubtask(accessToken ?? '', latestTask.id, { title: subtask.title });
+        latestTask = await addSubtask(accessToken ?? '', latestTask.id, {
+          title: subtask.title,
+          // Keep the plan's explicit Focus choice on each executable unit.
+          isFocusTask: plan.focusSessions.length > 0,
+        });
       }
 
       let reminderFailures = 0;

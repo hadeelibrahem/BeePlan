@@ -1,5 +1,6 @@
 import {
   computeFocusStats,
+  rankFocusTasks,
   recommendFocusTask,
   type FocusCandidate,
   type FocusSessionForStats,
@@ -125,5 +126,19 @@ describe('recommendFocusTask', () => {
     );
 
     expect(recommendation?.taskId).toBe('b');
+  });
+});
+
+describe('rankFocusTasks', () => {
+  it('uses the same deterministic order as the task-level recommendation', () => {
+    const ranked = rankFocusTasks(
+      [
+        candidate({ id: 'low', title: 'Low task', priority: 'low' }),
+        candidate({ id: 'urgent', title: 'Urgent task', priority: 'urgent' }),
+      ],
+      NOW,
+    );
+
+    expect(ranked.map((item) => item.taskId)).toEqual(['urgent', 'low']);
   });
 });

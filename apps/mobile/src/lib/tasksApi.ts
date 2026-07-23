@@ -70,6 +70,7 @@ export type ApiSubtask = {
   description?: string;
   priority: ApiSubtaskPriority;
   status: ApiSubtaskStatus;
+  isFocusTask?: boolean;
   startDate?: string;
   dueDate?: string;
   estimatedDurationMinutes?: number;
@@ -98,6 +99,7 @@ export type SubtaskPayload = Partial<
     | 'description'
     | 'priority'
     | 'status'
+    | 'isFocusTask'
     | 'startDate'
     | 'dueDate'
     | 'estimatedDurationMinutes'
@@ -150,9 +152,13 @@ export type ApiTask = {
   notes: string;
   estimatedTimeMinutes: number;
   spentTimeMinutes: number;
+  // Manual half of spent time (spentTimeMinutes = manual + focused). Optional
+  // for backward compatibility with older cached payloads / fixtures.
+  manualSpentMinutes?: number;
   remainingTimeMinutes: number;
   estimatedHours: number;
   spentHours: number;
+  manualSpentHours?: number;
   remainingHours: number;
   progressPercentage: number;
   reminderEnabled: boolean;
@@ -274,6 +280,11 @@ export type DashboardSummary = {
 export function getDashboardSummary(accessToken: string) {
   return request<DashboardSummary>(accessToken, '/dashboard/summary');
 }
+
+export type TodayDashboardFocus = { id: string; taskId: string | null; taskTitle: string | null; subtaskId: string | null; subtaskTitle: string | null; startedAt: string; endedAt: string | null; plannedMinutes: number; actualMinutes: number | null; status: string; sessionType: string; notes: string | null; createdAt: string };
+export type TodayDashboardRecommendation = { taskId: string; taskTitle: string; subtaskId: string | null; subtaskTitle: string | null; estimatedMinutes: number | null; reason: string; recommendationReason: string; score: number; priority: string | null; dueAt: string | null };
+export type TodayDashboard = { generatedAt: string; timezone: string; greeting: string; dailyStatus: { status: string; statusTone: 'success' | 'positive' | 'warning' | 'danger'; summaryLines: string[] }; activeFocus: TodayDashboardFocus | null; recommendation: TodayDashboardRecommendation | null; whyNow: { code: string; label: string; value?: string }[]; timeline: { id: string; type: string; startTime: string; endTime: string | null; title: string; taskId: string | null; subtaskId: string | null; status: string; source: string }[]; locationContext: { label: string; tasks: { id: string; title: string }[] } | null; suggestions: { id: string; type: string; title: string; explanation: string; actionLabel: string; actionPayload: Record<string, unknown> }[]; progress: { percent: number; completedWorkUnits: number; totalWorkUnits: number; focusMinutes: number; remainingEstimatedMinutes: number; basis: string }; tomorrowPreview: { date: string; calendarEvents: unknown[]; dueWorkUnits: number; estimatedWorkMinutes: number; highPriorityItems: number; capacityMinutes: number | null; overloadStatus: 'overloaded' | 'within_capacity' | 'unavailable' } };
+export function getTodayDashboard(accessToken: string) { return request<TodayDashboard>(accessToken, '/dashboard/today'); }
 
 export function getTasks(accessToken: string, filters?: TaskFilters) {
   return request<ApiTask[]>(accessToken, `/tasks${buildTaskQuery(filters)}`);

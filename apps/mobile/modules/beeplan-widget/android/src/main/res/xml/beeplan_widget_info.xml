@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AppWidgetProviderInfo for the BeePlan "What should I do now?" widget.
+  `initialLayout` is Glance's built-in loading layout (the real UI is composed
+  in provideGlance). `updatePeriodMillis` is a conservative 30-minute heartbeat
+  (the OS floor) so the countdown/staleness label stay reasonably current even
+  with no app events — per-second refresh is deliberately NOT attempted.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:minWidth="180dp"
+  android:minHeight="110dp"
+  android:targetCellWidth="3"
+  android:targetCellHeight="2"
+  android:minResizeWidth="140dp"
+  android:minResizeHeight="90dp"
+  android:maxResizeWidth="320dp"
+  android:maxResizeHeight="300dp"
+  android:resizeMode="horizontal|vertical"
+  android:widgetCategory="home_screen"
+  android:updatePeriodMillis="1800000"
+  android:initialLayout="@layout/glance_default_loading_layout"
+  android:previewImage="@drawable/beeplan_widget_preview"
+  android:description="@string/beeplan_widget_description" />

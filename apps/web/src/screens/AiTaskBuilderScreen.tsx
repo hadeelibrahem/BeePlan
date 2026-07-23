@@ -157,6 +157,9 @@ export default function AiTaskBuilderScreen({
           title: subtask.title,
           isDone: false,
           orderIndex: subtask.order,
+          // The plan's Focus choice applies to the executable units it creates,
+          // not only to their parent task.
+          isFocusTask: plan.focusSessions.length > 0,
         })),
       })
 

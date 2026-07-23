@@ -3,7 +3,7 @@ import { Alert, Pressable, Text, TextInput, View } from 'react-native'
 import { addSubtask, deleteSubtask, reorderSubtasks, updateSubtask, type ApiSubtask, type ApiTask } from '../lib/tasksApi'
 import { useTheme } from '../theme/useTheme'
 
-type Draft = { id?: string; title: string; description: string }
+type Draft = { id?: string; title: string; description: string; isFocusTask: boolean }
 
 type Props = {
   task: ApiTask
@@ -44,7 +44,7 @@ export function SubtaskManagementSection({ task, accessToken, canEdit, onTaskUpd
     if (!draft?.title.trim() || saving) return
     const previous = items
     setSaving(true)
-    const payload = { title: draft.title.trim(), description: draft.description.trim() }
+    const payload = { title: draft.title.trim(), description: draft.description.trim(), isFocusTask: draft.isFocusTask }
     try {
       if (draft.id) {
         replaceItems(items.map((item) => item.id === draft.id ? { ...item, ...payload } : item))
@@ -85,12 +85,17 @@ export function SubtaskManagementSection({ task, accessToken, canEdit, onTaskUpd
   return <View className="gap-2">
     {items.map((item, index) => <View key={item.id} className="flex-row items-center gap-2 rounded-xl p-2" style={{ backgroundColor: colors.background }}>
       <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: item.isDone }} accessibilityLabel={item.isDone ? 'Reopen subtask' : 'Complete subtask'} disabled={!canEdit} onPress={() => void toggle(item)} className="h-6 w-6 items-center justify-center rounded-md border" style={{ borderColor: item.isDone ? colors.success : colors.border, backgroundColor: item.isDone ? colors.success : 'transparent' }}><Text style={{ color: colors.accentText }}>{item.isDone ? '✓' : ''}</Text></Pressable>
-      <Pressable className="min-w-0 flex-1" onPress={() => canEdit && setDraft({ id: item.id, title: item.title, description: item.description ?? '' })}><Text className={`text-sm font-bold ${item.isDone ? 'line-through' : ''}`} style={{ color: colors.text }}>{item.title}</Text>{item.description ? <Text className="text-xs" style={{ color: colors.secondaryText }} numberOfLines={1}>{item.description}</Text> : null}</Pressable>
+      <Pressable className="min-w-0 flex-1" onPress={() => canEdit && setDraft({ id: item.id, title: item.title, description: item.description ?? '', isFocusTask: item.isFocusTask ?? false })}><View className="flex-row items-center gap-1.5"><Text className={`shrink text-sm font-bold ${item.isDone ? 'line-through' : ''}`} style={{ color: colors.text }}>{item.title}</Text>{item.isFocusTask ? <FocusBadge /> : null}</View>{item.description ? <Text className="text-xs" style={{ color: colors.secondaryText }} numberOfLines={1}>{item.description}</Text> : null}</Pressable>
       {canEdit ? <View className="flex-row gap-1"><TinyButton label="↑" disabled={index === 0} onPress={() => void move(index, -1)} /><TinyButton label="↓" disabled={index === items.length - 1} onPress={() => void move(index, 1)} /><TinyButton label="Delete" onPress={() => remove(item)} /></View> : null}
     </View>)}
-    {canEdit ? <Pressable onPress={() => setDraft({ title: '', description: '' })} className="rounded-xl border border-dashed py-3" style={{ borderColor: colors.border }}><Text className="text-center text-sm font-bold" style={{ color: colors.accent }}>+ Add Subtask</Text></Pressable> : null}
-    {draft ? <View className="rounded-xl border p-3" style={{ borderColor: colors.border, backgroundColor: colors.input }}><Text className="mb-2 text-sm font-bold" style={{ color: colors.text }}>{draft.id ? 'Edit Subtask' : 'New Subtask'}</Text><TextInput value={draft.title} onChangeText={(title) => setDraft((current) => current ? { ...current, title } : current)} placeholder="Subtask title" placeholderTextColor={colors.placeholder} className="mb-2 rounded-lg border px-3 py-2" style={{ borderColor: colors.border, color: colors.text }} /><TextInput value={draft.description} onChangeText={(description) => setDraft((current) => current ? { ...current, description } : current)} multiline placeholder="Description (optional)" placeholderTextColor={colors.placeholder} className="mb-2 rounded-lg border px-3 py-2" style={{ borderColor: colors.border, color: colors.text }} /><View className="flex-row gap-2"><TinyButton label="Cancel" onPress={() => setDraft(null)} /><TinyButton label={saving ? 'Saving...' : 'Save'} onPress={() => void saveDraft()} /></View></View> : null}
+    {canEdit ? <Pressable onPress={() => setDraft({ title: '', description: '', isFocusTask: false })} className="rounded-xl border border-dashed py-3" style={{ borderColor: colors.border }}><Text className="text-center text-sm font-bold" style={{ color: colors.accent }}>+ Add Subtask</Text></Pressable> : null}
+    {draft ? <View className="rounded-xl border p-3" style={{ borderColor: colors.border, backgroundColor: colors.input }}><Text className="mb-2 text-sm font-bold" style={{ color: colors.text }}>{draft.id ? 'Edit Subtask' : 'New Subtask'}</Text><TextInput value={draft.title} onChangeText={(title) => setDraft((current) => current ? { ...current, title } : current)} placeholder="Subtask title" placeholderTextColor={colors.placeholder} className="mb-2 rounded-lg border px-3 py-2" style={{ borderColor: colors.border, color: colors.text }} /><TextInput value={draft.description} onChangeText={(description) => setDraft((current) => current ? { ...current, description } : current)} multiline placeholder="Description (optional)" placeholderTextColor={colors.placeholder} className="mb-2 rounded-lg border px-3 py-2" style={{ borderColor: colors.border, color: colors.text }} /><Pressable accessibilityRole="switch" accessibilityState={{ checked: draft.isFocusTask }} onPress={() => setDraft((current) => current ? { ...current, isFocusTask: !current.isFocusTask } : current)} className="mb-2 flex-row items-center justify-between rounded-lg border px-3 py-2.5" style={{ borderColor: draft.isFocusTask ? colors.accent : colors.border, backgroundColor: draft.isFocusTask ? `${colors.accent}14` : 'transparent' }}><View className="flex-1 pr-2"><Text className="text-sm font-bold" style={{ color: colors.text }}>🎯 Focus task</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>Eligible for deep-work Focus sessions</Text></View><View className="h-5 w-5 items-center justify-center rounded-md border" style={{ borderColor: draft.isFocusTask ? colors.accent : colors.border, backgroundColor: draft.isFocusTask ? colors.accent : 'transparent' }}><Text className="text-[10px] font-black" style={{ color: colors.accentText }}>{draft.isFocusTask ? '✓' : ''}</Text></View></Pressable><View className="flex-row gap-2"><TinyButton label="Cancel" onPress={() => setDraft(null)} /><TinyButton label={saving ? 'Saving...' : 'Save'} onPress={() => void saveDraft()} /></View></View> : null}
   </View>
+}
+
+function FocusBadge() {
+  const { theme } = useTheme()
+  return <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${theme.colors.accent}22` }}><Text className="text-[10px] font-black" style={{ color: theme.colors.accent }}>🎯 Focus</Text></View>
 }
 
 function TinyButton({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) {

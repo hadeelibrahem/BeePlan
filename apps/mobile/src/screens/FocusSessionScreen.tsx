@@ -9,6 +9,7 @@ import type { UseFocusSession } from '../lib/useFocusSession';
 import type { ApiTask } from '../lib/tasksApi';
 import type { AppTheme } from '../theme/colors';
 import { useTheme } from '../theme/useTheme';
+import { focusParentLabel, focusPrimaryTitle } from '../lib/focusDisplay';
 import { MobileIcon } from '../components/layout';
 import { useStrictFocus } from '../features/focus/StrictFocusContext';
 import { StrictStatsSheet } from '../features/focus/StrictStatsSheet';
@@ -87,6 +88,14 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
   }, [strictActive, focus]);
 
   const activeTask = useMemo(() => tasks.find((task) => task.id === active?.taskId) ?? null, [tasks, active?.taskId]);
+  const activeSubtask = useMemo(
+    () => activeTask?.subtasks?.find((subtask) => subtask.id === active?.subtaskId) ?? null,
+    [activeTask, active?.subtaskId],
+  );
+  // Disable "Mark Complete"/"mark done" when the unit is already done.
+  const completionAlreadyDone = active?.subtaskId
+    ? Boolean(activeSubtask?.isDone)
+    : activeTask?.status === 'done';
 
   // Nothing left to show (cancelled, break skipped) → return to Focus page.
   const nothingToShow = !active && !breakState && !pendingBreak && !breakFinished;
@@ -128,7 +137,8 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
           {active ? (
             <ActiveTimer
               theme={theme}
-              title={active.taskTitle ?? 'Focus session'}
+              title={focusPrimaryTitle(active)}
+              subtitle={focusParentLabel(active)}
               typeLabel={`${labelForFocusType(active.sessionType)} • ${active.plannedMinutes} min`}
               priority={active.priority}
               category={active.category}
@@ -215,8 +225,10 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
           theme={theme}
           minutes={completedMinutes}
           busy={busy}
-          taskAlreadyDone={activeTask?.status === 'done'}
+          isSubtask={Boolean(active?.subtaskId)}
+          alreadyDone={completionAlreadyDone}
           onOutcome={(outcome) => void focus.finishWithOutcome(outcome)}
+          onAddTime={() => focus.extendSession(10)}
         />
       </Modal>
 
@@ -558,6 +570,7 @@ function MobileVolumeSlider({
 function ActiveTimer({
   theme,
   title,
+  subtitle,
   typeLabel,
   priority,
   category,
@@ -567,6 +580,7 @@ function ActiveTimer({
 }: {
   theme: AppTheme;
   title: string;
+  subtitle?: string | null;
   typeLabel: string;
   priority: string | null;
   category: string | null;
@@ -583,6 +597,11 @@ function ActiveTimer({
       <Text numberOfLines={1} className="mt-2 text-center text-xl font-black" style={{ color: colors.text }}>
         {title}
       </Text>
+      {subtitle ? (
+        <Text numberOfLines={1} className="mt-1 text-center text-sm font-semibold" style={{ color: colors.secondaryText }}>
+          {subtitle}
+        </Text>
+      ) : null}
       <View className="mt-2 flex-row items-center gap-2">
         {priority ? <Badge theme={theme} label={priority} type={priority} /> : null}
         {category ? (
@@ -715,14 +734,18 @@ function CompletionModal({
   theme,
   minutes,
   busy,
-  taskAlreadyDone,
+  isSubtask,
+  alreadyDone,
   onOutcome,
+  onAddTime,
 }: {
   theme: AppTheme;
   minutes: number;
   busy: boolean;
-  taskAlreadyDone: boolean;
+  isSubtask: boolean;
+  alreadyDone: boolean;
   onOutcome: (outcome: FocusTaskOutcome) => void;
+  onAddTime: () => void;
 }) {
   const { colors } = theme;
   return (
@@ -735,19 +758,33 @@ function CompletionModal({
           You completed {minutes} {minutes === 1 ? 'minute' : 'minutes'} of focus.
         </Text>
         <Text className="mt-4 text-center text-sm font-black" style={{ color: colors.text }}>
-          Did you finish this task?
+          Did you finish this {isSubtask ? 'subtask' : 'task'}?
         </Text>
-        <View className="mt-4 gap-2">
-          <PrimaryButton fullWidth disabled={busy || taskAlreadyDone} onPress={() => onOutcome('done')}>
-            Yes, mark task done
-          </PrimaryButton>
-          <SecondaryButton fullWidth disabled={busy} onPress={() => onOutcome('partial')}>
-            Partially completed
-          </SecondaryButton>
-          <OutlineButton fullWidth disabled={busy} onPress={() => onOutcome('keep')}>
-            Not yet
-          </OutlineButton>
-        </View>
+        {isSubtask ? (
+          <View className="mt-4 gap-2">
+            <PrimaryButton fullWidth disabled={busy || alreadyDone} onPress={() => onOutcome('done')}>
+              Mark Complete
+            </PrimaryButton>
+            <SecondaryButton fullWidth disabled={busy} onPress={() => onOutcome('keep')}>
+              Continue Later
+            </SecondaryButton>
+            <OutlineButton fullWidth disabled={busy} onPress={onAddTime}>
+              Add More Time
+            </OutlineButton>
+          </View>
+        ) : (
+          <View className="mt-4 gap-2">
+            <PrimaryButton fullWidth disabled={busy || alreadyDone} onPress={() => onOutcome('done')}>
+              Yes, mark task done
+            </PrimaryButton>
+            <SecondaryButton fullWidth disabled={busy} onPress={() => onOutcome('partial')}>
+              Partially completed
+            </SecondaryButton>
+            <OutlineButton fullWidth disabled={busy} onPress={() => onOutcome('keep')}>
+              Not yet
+            </OutlineButton>
+          </View>
+        )}
       </View>
     </View>
   );

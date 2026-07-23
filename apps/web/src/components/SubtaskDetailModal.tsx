@@ -134,6 +134,11 @@ export default function SubtaskDetailModal({
             <div className="flex items-center gap-2">
               <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
               <h2 className="truncate text-2xl font-black">{subtask.title}</h2>
+              {subtask.isFocusTask ? (
+                <span className="shrink-0 rounded-full bg-[var(--bp-accent)]/15 px-2 py-0.5 text-xs font-black text-[var(--bp-accent)]">
+                  🎯 Focus
+                </span>
+              ) : null}
             </div>
           </div>
           {canEdit ? (

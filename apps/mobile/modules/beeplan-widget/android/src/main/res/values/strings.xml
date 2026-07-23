@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="beeplan_widget_label">BeePlan — What to do now</string>
+  <string name="beeplan_widget_description">Always see your most useful next action: the recommended task, an active Focus session, or what\'s next.</string>
+</resources>
