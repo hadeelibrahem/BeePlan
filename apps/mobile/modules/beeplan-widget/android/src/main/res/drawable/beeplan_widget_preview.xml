@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static picker preview: BeePlan dark card with the brand bee + "DO THIS NOW". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="250dp"
+  android:height="140dp"
+  android:viewportWidth="250"
+  android:viewportHeight="140">
+
+  <!-- Dark BeePlan card -->
+  <path
+    android:pathData="M8,4h234a4,4 0,0 1,4 4v124a4,4 0,0 1,-4 4H8a4,4 0,0 1,-4 -4V8a4,4 0,0 1,4 -4z"
+    android:fillColor="#2B323F" />
+
+  <!-- Brand bee mark (top-left) -->
+  <group android:rotation="14" android:pivotX="28" android:pivotY="24">
+    <path android:fillColor="#FDEF4B"
+      android:pathData="M21,15 H35 A4,4 0 0 1 39,19 V29 A4,4 0 0 1 35,33 H21 A4,4 0 0 1 17,29 V19 A4,4 0 0 1 21,15 Z" />
+    <path android:fillColor="#2B323F" android:pathData="M22,20 h12 v2.4 h-12 z" />
+    <path android:fillColor="#2B323F" android:pathData="M21,25 h14 v2.4 h-14 z" />
+  </group>
+
+  <!-- Wordmark + labels -->
+  <path android:pathData="M48,18h44v9h-44z" android:fillColor="#FFFFFF" />
+  <path android:pathData="M50,42h60v8h-60z" android:fillColor="#FDEF4B" />
+  <path android:pathData="M16,62h150v14h-150z" android:fillColor="#FFFFFF" />
+  <path android:pathData="M16,86h96v9h-96z" android:fillColor="#A1A7B3" />
+
+  <!-- Primary action -->
+  <path
+    android:pathData="M16,106h218a10,10 0,0 1,10 10v0a10,10 0,0 1,-10 10H16a10,10 0,0 1,-10 -10v0a10,10 0,0 1,10 -10z"
+    android:fillColor="#FDEF4B" />
+</vector>

@@ -33,6 +33,10 @@ export class PlannerRuleEngine {
     // but we guard again so the rule is enforced here and not just at the query.
     const activeTasks = tasks.filter((task) => task.status !== 'done');
     const activeIds = new Set(activeTasks.map((task) => task.id));
+    // Cross-task dependencies are resolved against every incomplete parent task,
+    // not just the candidate ids — a task expanded into subtask candidates no
+    // longer appears under its own id, but a dependency on it must still block.
+    const depActiveIds = context.activeTaskIds ?? activeIds;
 
     const lockedTaskIds = new Set<string>();
     const lockedReminderIds = new Set<string>();
@@ -188,7 +192,7 @@ export class PlannerRuleEngine {
 
       if (lockedTaskIds.has(task.id)) continue; // already fixed on the timeline
 
-      const openDependency = task.dependencyTaskIds.find((depId) => activeIds.has(depId));
+      const openDependency = task.dependencyTaskIds.find((depId) => depActiveIds.has(depId));
       if (openDependency) {
         blockedTasks.push({
           task,
@@ -297,10 +301,13 @@ export class PlannerRuleEngine {
       }
     }
 
-    // A dependency-blocked task must never appear on the timeline.
+    // A dependency-blocked candidate must never appear on the timeline. Blocked
+    // entries are keyed by candidate id (a subtask id for subtask candidates),
+    // so match against the item's subtaskId first, then its taskId.
     const blockedIds = new Set(constraints.blockedTasks.map((entry) => entry.task.id));
     for (const item of items) {
-      if (item.taskId && blockedIds.has(item.taskId)) {
+      const candidateId = item.subtaskId ?? item.taskId;
+      if (candidateId && blockedIds.has(candidateId)) {
         issues.push({ code: 'dependency', message: `Blocked task "${item.title}" was scheduled before its dependency.` });
       }
     }

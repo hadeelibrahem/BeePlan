@@ -41,24 +41,30 @@ import {
   SESSION_TYPE_PRESETS,
   formatFocusMinutes,
   getFocusRecommendation,
+  getFocusQueue,
   getFocusStats,
   getTodayFocusSessions,
   labelForFocusType,
   type FocusRecommendation,
+  type FocusQueueItem,
   type FocusSession,
   type FocusSessionType,
   type FocusStats,
 } from "../lib/focusApi";
 import { formatFocusClock } from "../lib/focusApi";
+import { focusParentLabel, focusPrimaryTitle } from "../lib/focusDisplay";
 import type { UseFocusSession } from "../lib/useFocusSession";
 import type { AppTheme } from "../theme/colors";
 import { useTheme } from "../theme/useTheme";
 
 type StartTarget = {
-  id: string;
-  title: string;
+  id: string; // taskId
+  title: string; // display title (subtask title when focusing a subtask)
+  taskTitle: string; // parent task title (for "Part of:")
   priority: string;
   category: string;
+  subtaskId: string | null;
+  subtaskTitle: string | null;
 };
 
 type Props = {
@@ -89,6 +95,7 @@ export default function FocusScreen({
   const [recommendation, setRecommendation] =
     useState<FocusRecommendation | null>(null);
   const [todaySessions, setTodaySessions] = useState<FocusSession[]>([]);
+  const [focusQueue, setFocusQueue] = useState<FocusQueueItem[]>([]);
   const [startModalTask, setStartModalTask] = useState<StartTarget | null>(
     null,
   );
@@ -118,22 +125,20 @@ export default function FocusScreen({
     if (__DEV__) console.log("[StrictMode] setup sheet visible", setupOpen);
   }, [setupOpen]);
 
-  const focusTasks = useMemo(
-    () => tasks.filter((task) => task.isFocusTask),
-    [tasks],
-  );
 
   const refreshFocusData = useCallback(async () => {
     if (!accessToken) return;
     try {
-      const [statsData, sessions, rec] = await Promise.all([
+      const [statsData, sessions, rec, queue] = await Promise.all([
         getFocusStats(accessToken),
         getTodayFocusSessions(accessToken),
         getFocusRecommendation(accessToken).catch(() => null),
+        getFocusQueue(accessToken),
       ]);
       setStats(statsData);
       setTodaySessions(sessions);
       setRecommendation(rec);
+      setFocusQueue(queue);
     } catch {
       // Keep the last-known data on transient failures.
     }
@@ -152,9 +157,11 @@ export default function FocusScreen({
       const ok = await focus.start(
         {
           id: startModalTask.id,
-          title: startModalTask.title,
+          title: startModalTask.taskTitle,
           priority: startModalTask.priority,
           category: startModalTask.category,
+          subtaskId: startModalTask.subtaskId,
+          subtaskTitle: startModalTask.subtaskTitle,
         },
         type,
         minutes,
@@ -225,10 +232,31 @@ export default function FocusScreen({
     setStartModalTask({
       id: task.id,
       title: task.title,
+      taskTitle: task.title,
       priority: toUiPriority(task.priority),
       category: task.category || "General",
+      subtaskId: null,
+      subtaskTitle: null,
     });
   }, []);
+
+  // Start from the recommendation: focuses the recommended subtask when present,
+  // otherwise the task itself (falls back to today's behaviour).
+  const startRecommendation = useCallback(
+    (rec: FocusRecommendation) => {
+      const task = tasks.find((item) => item.id === rec.taskId);
+      setStartModalTask({
+        id: rec.taskId,
+        title: focusPrimaryTitle(rec),
+        taskTitle: rec.taskTitle,
+        priority: task ? toUiPriority(task.priority) : "Medium",
+        category: task?.category || "General",
+        subtaskId: rec.subtaskId ?? null,
+        subtaskTitle: rec.subtaskTitle ?? null,
+      });
+    },
+    [tasks],
+  );
 
   const handleRemoveFocus = useCallback(
     async (taskId: string) => {
@@ -269,7 +297,8 @@ export default function FocusScreen({
       {focus.active ? (
         <InProgressCard
           theme={theme}
-          title={focus.active.taskTitle ?? "Focus session"}
+          title={focusPrimaryTitle(focus.active)}
+          subtitle={focusParentLabel(focus.active)}
           remaining={formatFocusClock(focus.remainingMs)}
           complete={focus.sessionComplete}
           onResume={onOpenWorkspace}
@@ -278,8 +307,7 @@ export default function FocusScreen({
         <RecommendationCard
           theme={theme}
           recommendation={recommendation}
-          tasks={tasks}
-          onFocus={openStartModal}
+          onStart={startRecommendation}
         />
       )}
 
@@ -287,19 +315,19 @@ export default function FocusScreen({
         className="mb-2 mt-2 text-sm font-black"
         style={{ color: colors.text }}
       >
-        Focus Queue · {focusTasks.length} tasks
+        Focus Queue · {focusQueue.length} items
       </Text>
 
-      {focusTasks.length ? (
-        focusTasks.map((task) => (
-          <FocusCard
-            key={task.id}
-            task={task}
+      {focusQueue.length ? (
+        focusQueue.map((item) => (
+          <QueueFocusCard
+            key={item.subtaskId ?? item.taskId}
+            item={item}
             theme={theme}
             disabled={Boolean(focus.active)}
-            onView={() => onViewTaskDetails(task)}
-            onStart={() => openStartModal(task)}
-            onRemove={() => void handleRemoveFocus(task.id)}
+            onView={() => { const task = tasks.find((entry) => entry.id === item.taskId); if (task) onViewTaskDetails(task); }}
+            onStart={() => setStartModalTask({ id: item.taskId, title: focusPrimaryTitle(item), taskTitle: item.taskTitle, priority: item.priority, category: 'General', subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle })}
+            onRemove={item.subtaskId ? undefined : () => void handleRemoveFocus(item.taskId)}
           />
         ))
       ) : (
@@ -363,12 +391,14 @@ export default function FocusScreen({
 function InProgressCard({
   theme,
   title,
+  subtitle,
   remaining,
   complete,
   onResume,
 }: {
   theme: AppTheme;
   title: string;
+  subtitle?: string | null;
   remaining: string;
   complete: boolean;
   onResume: () => void;
@@ -392,6 +422,15 @@ function InProgressCard({
       >
         {title}
       </Text>
+      {subtitle ? (
+        <Text
+          numberOfLines={1}
+          className="mt-0.5 text-xs font-semibold"
+          style={{ color: colors.secondaryText }}
+        >
+          {subtitle}
+        </Text>
+      ) : null}
       <Text
         className="mt-0.5 text-sm font-semibold"
         style={{ color: colors.secondaryText }}
@@ -470,13 +509,11 @@ function StatsRow({
 function RecommendationCard({
   recommendation,
   theme,
-  tasks,
-  onFocus,
+  onStart,
 }: {
   recommendation: FocusRecommendation | null;
   theme: AppTheme;
-  tasks: ApiTask[];
-  onFocus: (task: ApiTask) => void;
+  onStart: (rec: FocusRecommendation) => void;
 }) {
   const { colors } = theme;
   if (!recommendation) {
@@ -499,7 +536,9 @@ function RecommendationCard({
     );
   }
 
-  const task = tasks.find((item) => item.id === recommendation.taskId);
+  const isSubtask = Boolean(recommendation.subtaskId);
+  const primary = focusPrimaryTitle(recommendation);
+  const parent = focusParentLabel(recommendation);
 
   return (
     <View
@@ -510,26 +549,43 @@ function RecommendationCard({
         className="text-[10px] font-black uppercase"
         style={{ color: colors.accent }}
       >
-        Recommended now
+        {isSubtask ? "Do this now" : "Recommended now"}
       </Text>
       <Text className="mt-1 text-lg font-black" style={{ color: colors.text }}>
-        {recommendation.taskTitle}
+        {primary}
       </Text>
+      {parent ? (
+        <Text
+          className="mt-0.5 text-xs font-semibold"
+          style={{ color: colors.secondaryText }}
+        >
+          {parent}
+        </Text>
+      ) : null}
+      {recommendation.estimatedMinutes ? (
+        <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
+          Estimated: {formatFocusMinutes(recommendation.estimatedMinutes)}
+        </Text>
+      ) : null}
       <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
         Reason: {recommendation.reason}
       </Text>
-      {task ? (
-        <View className="mt-3">
-          <PrimaryButton size="sm" onPress={() => onFocus(task)}>
-            Start Focus
-          </PrimaryButton>
-        </View>
-      ) : null}
+      <View className="mt-3">
+        <PrimaryButton size="sm" onPress={() => onStart(recommendation)}>
+          Start Focus
+        </PrimaryButton>
+      </View>
     </View>
   );
 }
 
 // --- Focus card ------------------------------------------------------------
+
+function QueueFocusCard({ item, theme, disabled, onView, onStart, onRemove }: { item: FocusQueueItem; theme: AppTheme; disabled: boolean; onView: () => void; onStart: () => void; onRemove?: () => void }) {
+  const { colors } = theme;
+  const parent = focusParentLabel(item);
+  return <View className="mb-2 rounded-2xl border p-3" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Pressable onPress={onView}><View className="flex-row flex-wrap gap-2"><PriorityBadge label={toUiPriority(item.priority as ApiTask['priority'])} theme={theme} /><StatusBadge label={toUiStatus(item.status as ApiTask['status'])} theme={theme} /></View><Text numberOfLines={1} className="mt-2 text-sm font-black" style={{ color: colors.text }}>{focusPrimaryTitle(item)}</Text>{parent ? <Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.secondaryText }}>{parent}</Text> : null}</Pressable><View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1"><Meta label="Due" value={formatDue(item.dueDate ?? undefined, '')} theme={theme} /><Meta label="Est." value={item.estimatedMinutes ? formatFocusMinutes(item.estimatedMinutes) : '—'} theme={theme} /><Meta label="Ready" value={item.hasOpenDependencies ? 'Waiting' : 'Ready'} theme={theme} /></View><View className="mt-3 flex-row gap-2"><View className="flex-1"><PrimaryButton size="sm" fullWidth disabled={disabled} onPress={onStart}>Start Focus</PrimaryButton></View>{onRemove ? <OutlineButton size="sm" onPress={onRemove}>Remove</OutlineButton> : null}</View></View>;
+}
 
 function FocusCard({
   task,
@@ -708,8 +764,9 @@ function TodaySessions({
               className="text-sm font-bold"
               style={{ color: colors.text }}
             >
-              {session.taskTitle ?? "Focus session"}
+              {focusPrimaryTitle(session)}
             </Text>
+            {focusParentLabel(session) ? <Text className="text-xs" style={{ color: colors.secondaryText }}>{focusParentLabel(session)}</Text> : null}
             <Text className="text-xs" style={{ color: colors.secondaryText }}>
               {labelForFocusType(session.sessionType)} ·{" "}
               {formatTime(session.startedAt)}

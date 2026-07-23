@@ -169,6 +169,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         notes text,
         estimated_time_minutes integer not null default 0,
         spent_time_minutes integer not null default 0,
+        manual_spent_minutes integer not null default 0,
         remaining_time_minutes integer not null default 0,
         reminder_enabled boolean not null default false,
         reminder_before_minutes integer,
@@ -196,6 +197,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists attachments jsonb,
         add column if not exists is_favorite boolean not null default false,
         add column if not exists is_focus_task boolean not null default false,
+        add column if not exists manual_spent_minutes integer not null default 0,
         add column if not exists updated_at timestamp default now() not null,
         add column if not exists recurrence_root_id uuid references tasks(id) on delete set null
     `);
@@ -266,12 +268,17 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists semantic_type varchar(30),
         add column if not exists subject_keys jsonb,
         add column if not exists shared_session_group_id varchar(64),
-        add column if not exists is_shared boolean not null default false
+        add column if not exists is_shared boolean not null default false,
+        add column if not exists is_focus_task boolean not null default false
     `);
 
     await this.getPool().query(`
       create index if not exists idx_subtasks_assignee_user_id
         on subtasks (assignee_user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_subtasks_focus
+        on subtasks (is_focus_task)
     `);
     await this.getPool().query(`
       create index if not exists idx_subtasks_task_source
@@ -488,9 +495,21 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
       )
     `);
 
+    // Subtask-scoped Focus (Phase 2): a session may target a single subtask
+    // while keeping its task as context. Nullable + ON DELETE SET NULL so a
+    // session outlives its subtask being removed (historical stats stay intact).
+    await this.getPool().query(`
+      alter table focus_sessions
+        add column if not exists subtask_id uuid references subtasks(id) on delete set null
+    `);
+
     await this.getPool().query(`
       create index if not exists idx_focus_sessions_user_id
         on focus_sessions (user_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_focus_sessions_subtask_id
+        on focus_sessions (subtask_id)
     `);
     await this.getPool().query(`
       create index if not exists idx_focus_sessions_started_at
@@ -499,6 +518,29 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists idx_focus_sessions_task_id
         on focus_sessions (task_id)
+    `);
+
+    // Backfill the manual half of the spent-time model for rows created before
+    // manual_spent_minutes existed. Legacy spent_time_minutes = manual entry +
+    // accumulated focus minutes, so the manual portion is spent minus the sum of
+    // the task's completed Focus Sessions. Idempotent: once the invariant
+    // spent = manual + focus holds, the WHERE guard matches nothing on later
+    // boots. Runs here (not in ensureTasksTables) because it reads focus_sessions,
+    // which is created just above.
+    await this.getPool().query(`
+      update tasks t
+      set manual_spent_minutes = greatest(0, t.spent_time_minutes - fsum.total)
+      from (
+        select t2.id as task_id,
+          coalesce((
+            select sum(f.actual_minutes)
+            from focus_sessions f
+            where f.task_id = t2.id and f.status = 'completed'
+          ), 0)::int as total
+        from tasks t2
+      ) fsum
+      where fsum.task_id = t.id
+        and t.manual_spent_minutes <> greatest(0, t.spent_time_minutes - fsum.total)
     `);
   }
 

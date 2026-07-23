@@ -12,6 +12,7 @@ import {
   type FocusTaskOutcome,
 } from '../lib/focusApi'
 import { formatClock, type ActiveFocus, type UseFocusSession } from '../lib/useFocusSession'
+import { focusParentLabel, focusPrimaryTitle } from '../lib/focusDisplay'
 import { FOCUS_SOUND_CATEGORIES, FOCUS_SOUNDS, type FocusSound } from '../lib/focusSounds'
 import type { ApiTask } from '../lib/tasksApi'
 
@@ -85,6 +86,10 @@ export default function FocusSessionScreen({
     () => tasks.find((task) => task.id === active?.taskId) ?? null,
     [tasks, active?.taskId],
   )
+  // Whether the unit being focused is already complete (disables "Mark Complete").
+  const completionAlreadyDone = active?.subtaskId
+    ? Boolean(activeTask?.subtasks?.find((subtask) => subtask.id === active.subtaskId)?.isDone)
+    : activeTask?.status === 'done'
 
   const flashToast = useCallback((message: string) => {
     setToast(message)
@@ -177,8 +182,10 @@ export default function FocusSessionScreen({
         <CompletionModal
           minutes={completedMinutes}
           busy={busy}
-          taskAlreadyDone={activeTask?.status === 'done'}
+          isSubtask={Boolean(active.subtaskId)}
+          alreadyDone={completionAlreadyDone}
           onOutcome={(outcome) => void focus.finishWithOutcome(outcome)}
+          onAddTime={() => focus.extendSession(10)}
         />
       ) : null}
 
@@ -261,8 +268,13 @@ function ActiveTimer({
         {labelForType(active.sessionType)} • {active.plannedMinutes} min
       </p>
       <h1 className="mt-2 max-w-xl truncate text-center text-2xl font-black text-[var(--bp-text)]">
-        {active.taskTitle ?? 'Focus session'}
+        {focusPrimaryTitle(active)}
       </h1>
+      {focusParentLabel(active) ? (
+        <p className="mt-1 max-w-xl truncate text-center text-sm font-semibold text-[var(--bp-muted)]">
+          {focusParentLabel(active)}
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
         {active.priority ? <Badge label={active.priority} type={active.priority} /> : null}
         {active.category ? (
@@ -396,13 +408,17 @@ function BreakFinished({ onNew, onExit }: { onNew: () => void; onExit: () => voi
 function CompletionModal({
   minutes,
   busy,
-  taskAlreadyDone,
+  isSubtask,
+  alreadyDone,
   onOutcome,
+  onAddTime,
 }: {
   minutes: number
   busy: boolean
-  taskAlreadyDone: boolean
+  isSubtask: boolean
+  alreadyDone: boolean
   onOutcome: (outcome: FocusTaskOutcome) => void
+  onAddTime: () => void
 }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
@@ -414,18 +430,34 @@ function CompletionModal({
         <p className="mt-1 text-sm text-[var(--bp-muted)]">
           You completed {minutes} {minutes === 1 ? 'minute' : 'minutes'} of focus.
         </p>
-        <p className="mt-4 text-sm font-black text-[var(--bp-text)]">Did you finish this task?</p>
-        <div className="mt-4 grid gap-2">
-          <PrimaryButton onClick={() => onOutcome('done')} disabled={busy || taskAlreadyDone}>
-            Yes, mark task done
-          </PrimaryButton>
-          <SecondaryButton onClick={() => onOutcome('partial')} disabled={busy}>
-            Partially completed
-          </SecondaryButton>
-          <OutlineButton onClick={() => onOutcome('keep')} disabled={busy}>
-            Not yet
-          </OutlineButton>
-        </div>
+        <p className="mt-4 text-sm font-black text-[var(--bp-text)]">
+          Did you finish this {isSubtask ? 'subtask' : 'task'}?
+        </p>
+        {isSubtask ? (
+          <div className="mt-4 grid gap-2">
+            <PrimaryButton onClick={() => onOutcome('done')} disabled={busy || alreadyDone}>
+              Mark Complete
+            </PrimaryButton>
+            <SecondaryButton onClick={() => onOutcome('keep')} disabled={busy}>
+              Continue Later
+            </SecondaryButton>
+            <OutlineButton onClick={onAddTime} disabled={busy}>
+              Add More Time
+            </OutlineButton>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-2">
+            <PrimaryButton onClick={() => onOutcome('done')} disabled={busy || alreadyDone}>
+              Yes, mark task done
+            </PrimaryButton>
+            <SecondaryButton onClick={() => onOutcome('partial')} disabled={busy}>
+              Partially completed
+            </SecondaryButton>
+            <OutlineButton onClick={() => onOutcome('keep')} disabled={busy}>
+              Not yet
+            </OutlineButton>
+          </div>
+        )}
       </div>
     </div>
   )

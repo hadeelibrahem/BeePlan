@@ -4,6 +4,8 @@ export type DailyPlanItem = {
   id: string
   type: 'task' | 'reminder' | 'break' | 'calendar'
   taskId?: string
+  /** Set when this item schedules an incomplete subtask (in place of its parent). */
+  subtaskId?: string
   reminderId?: string
   title: string
   startTime: string
@@ -36,6 +38,8 @@ export type PostponeReasonCode =
 
 export type UnscheduledItem = {
   taskId?: string
+  /** Set when the postponed item is an incomplete subtask, keeping its real identity. */
+  subtaskId?: string
   reminderId?: string
   title: string
   reason: string

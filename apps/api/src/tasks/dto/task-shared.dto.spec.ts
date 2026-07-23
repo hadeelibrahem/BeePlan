@@ -1,6 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { TaskRecurrenceDto } from './task-shared.dto';
+import { SubtaskDto, TaskRecurrenceDto } from './task-shared.dto';
 
 // Mirrors what the global ValidationPipe ({ transform: true }) does: run the
 // class-transformer @Transform hooks, then validate.
@@ -40,5 +40,40 @@ describe('TaskRecurrenceDto endDate normalization', () => {
     expect(Object.values(errors[0].constraints ?? {})).toContain(
       'Recurrence end date must be a valid date (YYYY-MM-DD).',
     );
+  });
+});
+
+describe('SubtaskDto isFocusTask', () => {
+  function buildSubtask(overrides: Record<string, unknown>) {
+    const instance = plainToInstance(SubtaskDto, {
+      title: 'Review Chapter 1',
+      ...overrides,
+    });
+    const errors = validateSync(instance as object);
+    return { instance, errors };
+  }
+
+  it('accepts an explicit true focus flag', () => {
+    const { instance, errors } = buildSubtask({ isFocusTask: true });
+    expect(instance.isFocusTask).toBe(true);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts an explicit false focus flag', () => {
+    const { instance, errors } = buildSubtask({ isFocusTask: false });
+    expect(instance.isFocusTask).toBe(false);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('is optional — omitting it leaves it undefined and validates', () => {
+    const { instance, errors } = buildSubtask({});
+    expect(instance.isFocusTask).toBeUndefined();
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a non-boolean focus flag', () => {
+    const { errors } = buildSubtask({ isFocusTask: 'yes' });
+    const focusError = errors.find((e) => e.property === 'isFocusTask');
+    expect(focusError).toBeDefined();
   });
 });

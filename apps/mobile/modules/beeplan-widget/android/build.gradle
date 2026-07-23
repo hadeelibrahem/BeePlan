@@ -1,0 +1,71 @@
+buildscript {
+  repositories {
+    mavenCentral()
+  }
+  dependencies {
+    classpath("org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:${kotlinVersion}")
+  }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+group = 'com.beeplan.widget'
+version = '1.0.0'
+
+def expoModulesCorePlugin = new File(
+  project(':expo-modules-core').projectDir.absolutePath,
+  'ExpoModulesCorePlugin.gradle'
+)
+
+apply from: expoModulesCorePlugin
+
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useExpoPublishing()
+
+// Falls back to a default when the host app does not define the ext property.
+def safeExtGet(prop, fallback) {
+  return rootProject.ext.has(prop)
+    ? rootProject.ext.get(prop)
+    : fallback
+}
+
+android {
+  namespace 'com.beeplan.widget'
+
+  compileSdk safeExtGet('compileSdkVersion', 35)
+
+  defaultConfig {
+    minSdk safeExtGet('minSdkVersion', 24)
+    targetSdk safeExtGet('targetSdkVersion', 35)
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  buildFeatures {
+    compose true
+  }
+}
+
+dependencies {
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+  implementation 'androidx.core:core-ktx:1.13.1'
+
+  // Jetpack Glance — the home-screen widget is authored in Compose-for-Glance.
+  implementation 'androidx.glance:glance:1.1.1'
+  implementation 'androidx.glance:glance-appwidget:1.1.1'
+
+  // Unit tests. `org.json:json` shadows the stubbed org.json in android.jar so
+  // the widget snapshot's JSON (de)serialization can be exercised on the JVM.
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20180813'
+}

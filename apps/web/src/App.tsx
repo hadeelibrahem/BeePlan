@@ -15,7 +15,6 @@ import {
 import { SocialScreen } from './features/social'
 import { NotificationsScreen } from './features/collaboration'
 import { notificationTarget } from './features/collaboration/notificationRoutes'
-import { useSharedTaskIds } from './features/collaboration/useSharedTaskIds'
 import { useAuth } from './hooks/useAuth'
 import { LanguageProvider } from './i18n/LanguageContext'
 import {
@@ -23,7 +22,7 @@ import {
   createTask,
   deleteTask,
   dismissRecurrenceSuggestion,
-  getDashboardSummary,
+  getTodayDashboard,
   getRecurrenceSuggestions,
   getTask,
   getTasks,
@@ -32,7 +31,7 @@ import {
   saveRecurrence,
   updateTask,
   type ApiTask,
-  type DashboardSummary,
+  type TodayDashboard,
   type RecurrenceSuggestion,
   type TaskPayload,
 } from './lib/tasksApi'
@@ -95,7 +94,7 @@ function ThemedApp() {
   const [createTaskInitialDueDate, setCreateTaskInitialDueDate] = useState<string | undefined>(undefined)
   const [taskActionError, setTaskActionError] = useState('')
   const [taskDetailsNotice, setTaskDetailsNotice] = useState('')
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [summary, setSummary] = useState<TodayDashboard | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState('')
   const [recurrenceSuggestions, setRecurrenceSuggestions] = useState<RecurrenceSuggestion[]>([])
@@ -151,7 +150,7 @@ function ThemedApp() {
 
     setSummaryLoading(true)
     setSummaryError('')
-    getDashboardSummary(accessToken)
+    getTodayDashboard(accessToken)
       .then(setSummary)
       .catch((error) => {
         setSummaryError(error instanceof Error ? error.message : 'Unable to load dashboard summary.')
@@ -463,8 +462,6 @@ function ThemedApp() {
     ? recurrenceSuggestionToSettings(activeRecurrenceSuggestion)
     : null
 
-  const sharedTaskIds = useSharedTaskIds(accessToken ?? undefined)
-
   const sidebarNav = {
     onNavigateDashboard: () => setScreen('dashboard'),
     onNavigateTasks: () => setScreen('tasks'),
@@ -521,14 +518,14 @@ function ThemedApp() {
   if (screen === 'dashboard') {
     return renderWithRecurrenceSuggestionModal(
       <TasksDashboardScreen
-        reminders={reminders}
-        tasks={tasks}
-        summary={summary}
+        dashboard={summary}
         summaryLoading={summaryLoading}
         summaryError={summaryError}
-        tasksLoading={tasksLoading}
-        recurrenceSuggestions={recurrenceSuggestions}
-        sharedTaskIds={sharedTaskIds}
+        onStartFocus={async (recommendation) => {
+          const started = await focus.start({ id: recommendation.taskId, title: recommendation.taskTitle, subtaskId: recommendation.subtaskId, subtaskTitle: recommendation.subtaskTitle }, 'pomodoro', recommendation.estimatedMinutes ?? 25)
+          if (started) setScreen('focusSession')
+        }}
+        onContinueFocus={() => setScreen('focusSession')}
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
@@ -538,9 +535,6 @@ function ThemedApp() {
           setCreateReminderType(undefined)
           setScreen('create')
         }}
-        onViewTaskDetails={openTaskDetails}
-        onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}
-        onDismissRecurrenceSuggestion={(suggestion) => void handleDismissRecurrenceSuggestion(suggestion)}
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigatePeople={sidebarNav.onNavigatePeople}

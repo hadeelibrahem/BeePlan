@@ -153,9 +153,16 @@ export default function SubtaskDetailSheet({
           <View className="mx-auto mb-4 h-1.5 w-14 rounded-full" style={{ backgroundColor: colors.border }} />
 
           <View className="mb-4 flex-row items-start justify-between gap-3">
-            <Text className="flex-1 text-xl font-black" style={{ color: colors.text }}>
-              {displaySubtaskTitle(subtask)}
-            </Text>
+            <View className="flex-1 flex-row flex-wrap items-center gap-2">
+              <Text className="text-xl font-black" style={{ color: colors.text }}>
+                {displaySubtaskTitle(subtask)}
+              </Text>
+              {subtask.isFocusTask ? (
+                <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
+                  <Text className="text-[11px] font-black" style={{ color: colors.accent }}>🎯 Focus</Text>
+                </View>
+              ) : null}
+            </View>
             {canEdit ? (
               <Pressable
                 onPress={() => onEdit(subtask)}

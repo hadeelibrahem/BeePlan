@@ -98,7 +98,7 @@ export default function EditTaskScreen({
   const [focusEnabled, setFocusEnabled] = useState(task.isFocusTask)
   const [notice, setNotice] = useState('')
   const [estimatedHours, setEstimatedHours] = useState(String(task.estimatedHours))
-  const [spentHours, setSpentHours] = useState(String(task.spentHours))
+  const [spentHours, setSpentHours] = useState(String(task.manualSpentHours ?? task.spentHours))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(task.progress)
@@ -135,7 +135,7 @@ export default function EditTaskScreen({
       reminderBeforeMinutes: task.reminderBeforeMinutes ?? 30,
       focusEnabled: task.isFocusTask,
       estimatedHours: String(task.estimatedHours),
-      spentHours: String(task.spentHours),
+      spentHours: String(task.manualSpentHours ?? task.spentHours),
       recurrenceSummary: createRecurrenceSummary(recurrenceToUi(task.recurrence)),
     }),
     [task],
@@ -182,7 +182,7 @@ export default function EditTaskScreen({
     setReminderBeforeMinutes(task.reminderBeforeMinutes ?? 30)
     setFocusEnabled(task.isFocusTask)
     setEstimatedHours(String(task.estimatedHours))
-    setSpentHours(String(task.spentHours))
+    setSpentHours(String(task.manualSpentHours ?? task.spentHours))
     setProgress(task.progress)
     setRecurrence(recurrenceToUi(task.recurrence))
     setSubtasks(task.subtasks)
@@ -731,7 +731,7 @@ export default function EditTaskScreen({
                     />
                   </div>
                   <div>
-                    <FieldLabel label="Spent Hours" />
+                    <FieldLabel label="Manual Spent Hours" />
                     <input
                       type="number"
                       min="0"
@@ -740,6 +740,10 @@ export default function EditTaskScreen({
                       value={spentHours}
                       onChange={(event) => setSpentHours(event.target.value)}
                     />
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      Time you log by hand. Focus Sessions are tracked automatically and added on
+                      top — the total spent time appears on the task details.
+                    </p>
                   </div>
                 </div>
                 <InfoRow label="Remaining Time" value={`${remainingHoursDisplay}h`} />

@@ -776,7 +776,7 @@ function PostponedList({ items }: { items: UnscheduledItem[] }) {
           const meta = postponeMeta(item.status)
           return (
             <div
-              key={`${item.taskId ?? item.reminderId ?? index}`}
+              key={`${item.subtaskId ?? item.taskId ?? item.reminderId ?? index}`}
               className="rounded-xl border border-dashed border-amber-500/30 bg-[var(--bp-bg)] p-3"
             >
               <div className="flex flex-wrap items-center gap-2">
@@ -1651,7 +1651,9 @@ function priorityTone(priority: DailyPlanItem['priority']) {
 }
 
 function itemKey(item: DailyPlanItem) {
-  return item.taskId ?? item.reminderId ?? item.id
+  // Subtask granularity first: two subtasks of the same parent share a taskId but
+  // must lock / dedupe independently, so they never collapse into one entry.
+  return item.subtaskId ?? item.taskId ?? item.reminderId ?? item.id
 }
 
 function updatePlanItem(plan: DailyPlan, target: DailyPlanItem, field: 'startTime' | 'endTime', value: string): DailyPlan {

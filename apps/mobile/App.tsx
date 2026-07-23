@@ -9,7 +9,7 @@ import {
 } from 'expo-notifications/build/NotificationsEmitter';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Linking, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, BackHandler, Linking, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   CreateReminderScreen,
@@ -47,6 +47,7 @@ import FocusSessionScreen from './src/screens/FocusSessionScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import { useFocusSession } from './src/lib/useFocusSession';
+import { syncWidget, pushSignedOutWidget } from './src/lib/widgetSync';
 import { StrictFocusProvider } from './src/features/focus/StrictFocusContext';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
@@ -55,12 +56,12 @@ import {
   changeTaskStatus,
   createTask,
   deleteTask,
-  getDashboardSummary,
+  getTodayDashboard,
   getTask,
   getTasks,
   updateTask,
   type ApiTask,
-  type DashboardSummary,
+  type TodayDashboard,
   type TaskPayload,
 } from './src/lib/tasksApi';
 import { queryKeys } from './src/lib/queryKeys';
@@ -112,9 +113,16 @@ function ThemedApp() {
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState('');
   const [taskDetailsNotice, setTaskDetailsNotice] = useState('');
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [summary, setSummary] = useState<TodayDashboard | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState('');
+  // Transient flag so the home-screen widget can acknowledge a just-finished
+  // session ("Great job") and surface the next recommendation before settling
+  // back to the normal recommended-work state.
+  const [justCompleted, setJustCompleted] = useState(false);
+  // Latest session presence, readable from the deep-link handler (whose effect
+  // is created once) so a widget "Resume" tap can open the live session.
+  const focusHasSessionRef = useRef(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
   const [addTaskSheetVisible, setAddTaskSheetVisible] = useState(false);
@@ -183,8 +191,21 @@ function ThemedApp() {
 
   useEffect(() => {
     const handleUrl = (url: string | null) => {
-      if (!url || !url.includes('reset-password')) return;
-      setScreen('reset');
+      if (!url) return;
+      if (url.includes('reset-password')) {
+        setScreen('reset');
+        return;
+      }
+      // Widget deep links (beeplan://focus?action=…). React Navigation's linking
+      // config already routes `focus` to the Focus tab — where the Start-Focus
+      // flow surfaces the same recommendation with its validation intact, so we
+      // deliberately do NOT auto-start a session here. For Resume we additionally
+      // open the live full-screen session when one exists.
+      if (url.includes('focus') && url.includes('action=resume') && focusHasSessionRef.current) {
+        requestAnimationFrame(() => {
+          if (navigationRef.isReady()) navigationRef.navigate('FocusSession');
+        });
+      }
     };
 
     Linking.getInitialURL().then(handleUrl);
@@ -326,7 +347,7 @@ function ThemedApp() {
 
     setSummaryLoading(true);
     setSummaryError('');
-    getDashboardSummary(accessToken)
+    getTodayDashboard(accessToken)
       .then(setSummary)
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Could not load dashboard summary.';
@@ -386,9 +407,49 @@ function ThemedApp() {
         );
       }
       invalidateTaskFilters();
+      // Drive the widget's "completed → next" acknowledgement; the reload below
+      // refreshes the recommendation the widget will offer as the next action.
+      setJustCompleted(true);
       loadDashboardSummary();
     },
   });
+
+  // Keep the deep-link handler's view of session presence current.
+  useEffect(() => {
+    focusHasSessionRef.current = focus.hasSession;
+  }, [focus.hasSession]);
+
+  // The completed-next acknowledgement is momentary: after a minute the widget
+  // reverts to the normal recommendation. Starting a new session also clears it
+  // (an active focus overrides everything in the mapper).
+  useEffect(() => {
+    if (!justCompleted) return;
+    const timer = setTimeout(() => setJustCompleted(false), 60_000);
+    return () => clearTimeout(timer);
+  }, [justCompleted]);
+
+  // Central widget sync: re-push whenever any input the snapshot depends on
+  // changes — dashboard data, the live Focus session, auth, or a completion.
+  // `focus.active` is a stable object (only changes on start/pause/extend/
+  // finish), so this never fires on the per-second countdown tick.
+  useEffect(() => {
+    void syncWidget({
+      dashboard: summary,
+      active: focus.active,
+      isAuthenticated: Boolean(user && accessToken),
+      justCompleted,
+    });
+  }, [summary, focus.active, user, accessToken, justCompleted]);
+
+  // "App returns to the foreground" trigger: refresh dashboard data (which then
+  // re-pushes the widget through the effect above).
+  useEffect(() => {
+    if (!user || !accessToken) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadDashboardSummary();
+    });
+    return () => subscription.remove();
+  }, [user, accessToken, loadDashboardSummary]);
 
   // Restore the full-screen workspace once if a session was live at launch.
   const focusRestoredRef = useRef(false);
@@ -437,6 +498,9 @@ function ThemedApp() {
     setTasks([]);
     setSummary(null);
     setSummaryError('');
+    setJustCompleted(false);
+    // Wipe private task details from the widget and show the signed-out prompt.
+    void pushSignedOutWidget();
     screenHistory.current.clear();
   }
 
@@ -606,9 +670,7 @@ function ThemedApp() {
     const rootNavigation = navigation.getParent<import('@react-navigation/native-stack').NativeStackNavigationProp<RootStackParamList>>();
     return (<>
     <TasksDashboardScreen
-      userName={user?.fullName}
-      tasks={tasks}
-      summary={summary}
+      dashboard={summary}
       summaryLoading={summaryLoading}
       summaryError={summaryError}
       onRetrySummary={loadDashboardSummary}
@@ -623,9 +685,8 @@ function ThemedApp() {
       onViewAiDailyPlanner={() => rootNavigation?.navigate('AiDailyPlanner')}
       onViewNotifications={() => rootNavigation?.navigate('Notifications')}
       unreadCount={unreadNotificationCount}
-      sharedTaskIds={sharedTaskIds}
-      onCreateTask={() => setAddTaskSheetVisible(true)}
-      onViewTaskDetails={(task) => rootNavigation?.navigate('TaskDetails', { taskId: task.id })}
+      onStartFocus={async (item) => { const started = await focus.start({ id: item.taskId, title: item.taskTitle, subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle }, 'pomodoro', item.estimatedMinutes ?? 25); if (started) rootNavigation?.navigate('FocusSession'); }}
+      onContinueFocus={() => rootNavigation?.navigate('FocusSession')}
     />
     <AddTaskSheet
       visible={addTaskSheetVisible}

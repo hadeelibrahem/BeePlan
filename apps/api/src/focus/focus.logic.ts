@@ -157,12 +157,29 @@ export type FocusCandidate = {
   isFocusTask: boolean;
   totalSubtasks: number;
   incompleteSubtasks: number;
+  // Whether the parent task itself may be a task-level Focus target (the "focus
+  // the whole task" fallback). True for personal tasks and for an owned shared
+  // task with no incomplete subtasks; false for any shared task that still has
+  // incomplete subtasks, so its parent is never used as a fallback (the user
+  // focuses their assigned subtasks instead). Defaults to true when omitted so
+  // existing callers/tests that don't set it keep the prior behavior.
+  parentFocusEligible?: boolean;
 };
 
 export type FocusRecommendation = {
   taskId: string;
   taskTitle: string;
+  // Populated when the recommendation narrows to a focus-eligible subtask; null
+  // for task-level recommendations (no subtasks, or none focus-eligible).
+  subtaskId: string | null;
+  subtaskTitle: string | null;
+  // Estimated minutes for the recommended unit — the subtask's estimate when a
+  // subtask is chosen, otherwise the task's estimate.
+  estimatedMinutes: number | null;
   reason: string;
+  // Canonical human-readable reason for the recommended unit. Mirrors `reason`
+  // (kept for backward compatibility with existing clients).
+  recommendationReason: string;
   score: number;
 };
 
@@ -183,10 +200,22 @@ export function recommendFocusTask(
   candidates: FocusCandidate[],
   now: Date = new Date(),
 ): FocusRecommendation | null {
+  return rankFocusTasks(candidates, now)[0] ?? null;
+}
+
+/**
+ * Returns every actionable task in the same deterministic recommendation order.
+ * The Focus service uses this to prefer a parent task that has an executable
+ * focus subtask, while retaining the task-level recommendation as fallback.
+ */
+export function rankFocusTasks(
+  candidates: FocusCandidate[],
+  now: Date = new Date(),
+): FocusRecommendation[] {
   const actionable = candidates.filter(
     (task) => task.status !== 'done' && task.status !== 'missed',
   );
-  if (actionable.length === 0) return null;
+  if (actionable.length === 0) return [];
 
   const scored = actionable.map((task) => {
     const factors = scoreCandidate(task, now);
@@ -202,13 +231,19 @@ export function recommendFocusTask(
     return a.task.title.localeCompare(b.task.title);
   });
 
-  const best = scored[0];
-  return {
-    taskId: best.task.id,
-    taskTitle: best.task.title,
-    reason: buildReason(best.reasons),
-    score: best.score,
-  };
+  return scored.map(({ task, score, reasons }) => {
+    const reason = buildReason(reasons);
+    return {
+      taskId: task.id,
+      taskTitle: task.title,
+      subtaskId: null,
+      subtaskTitle: null,
+      estimatedMinutes: task.estimatedMinutes || null,
+      reason,
+      recommendationReason: reason,
+      score,
+    };
+  });
 }
 
 function scoreCandidate(
