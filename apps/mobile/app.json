@@ -11,7 +11,14 @@
       "bundleIdentifier": "com.beeplan.app",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "BeePlan uses your location for category-based location reminders and to alert you when you are near a friend for a person reminder. Your location is shared only as proximity — never exact coordinates."
+        "NSLocationWhenInUseUsageDescription": "BeePlan uses your location for location reminders and to alert you when you are near a friend for a person reminder. Your location is shared only as proximity, never exact coordinates.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BeePlan uses background location to trigger active location reminders when you arrive at or leave a saved place.",
+        "NSLocationAlwaysUsageDescription": "BeePlan uses background location to trigger active location reminders when you arrive at or leave a saved place.",
+        "UIBackgroundModes": [
+          "location",
+          "location"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -26,8 +33,16 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "POST_NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -37,7 +52,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "BeePlan uses your location for category-based location reminders and to alert you when you are near a friend for a person reminder. Your location is shared only as proximity — never exact coordinates."
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "locationWhenInUsePermission": "BeePlan uses your location for location reminders and to alert you when you are near a friend for a person reminder. Your location is shared only as proximity, never exact coordinates.",
+          "locationAlwaysAndWhenInUsePermission": "BeePlan uses background location to trigger active location reminders when you arrive at or leave a saved place."
         }
       ],
       [
@@ -55,6 +73,11 @@
         }
       ],
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0139b386-b626-4906-903d-b3a0338d42cf"
+      }
+    }
   }
 }

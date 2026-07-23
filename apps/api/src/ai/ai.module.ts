@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ContextModule } from '../context/context.module';
 import { DatabaseModule } from '../db/database.module';
 import { SocialModule } from '../social/social.module';
 import { SpeechModule } from '../speech/speech.module';
@@ -15,10 +16,11 @@ import { PlannerRuleEngine } from './planner/planner-rule-engine';
 import { PlannerSchedulerEngine } from './planner/planner-scheduler-engine';
 import { RecurrenceParseService } from './recurrence-parse.service';
 import { RecurrenceSuggestionsService } from './recurrence-suggestions.service';
+import { SmartLocationInferenceService } from './smart-location-inference.service';
 import { TaskPlanChatService } from './task-plan-chat.service';
 
 @Module({
-  imports: [DatabaseModule, SpeechModule, SocialModule],
+  imports: [DatabaseModule, SpeechModule, SocialModule, ContextModule],
   controllers: [AiController, AiPlannerController],
   providers: [
     AiService,
@@ -26,6 +28,7 @@ import { TaskPlanChatService } from './task-plan-chat.service';
     TaskPlanChatService,
     RecurrenceParseService,
     RecurrenceSuggestionsService,
+    SmartLocationInferenceService,
     PlannerRuleEngine,
     PlannerReasoningEngine,
     PlannerSchedulerEngine,

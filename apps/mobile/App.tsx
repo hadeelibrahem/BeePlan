@@ -3,6 +3,10 @@ import './global.css';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { createNavigationContainerRef, NavigationContainer, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import {
+  addNotificationResponseReceivedListener,
+  getLastNotificationResponseAsync,
+} from 'expo-notifications/build/NotificationsEmitter';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, BackHandler, Linking, Text, View } from 'react-native';
@@ -17,6 +21,10 @@ import {
   toggleReminderStatus,
   type Reminder,
 } from './src/features/reminders';
+import {
+  startSmartLocationReminderMonitor,
+  stopSmartLocationReminderMonitor,
+} from './src/features/reminders/utils/smartLocationReminderMonitor';
 import { AddTaskSheet } from './src/components/AddTaskSheet';
 import { PeopleScreen } from './src/features/social';
 import { createPersonReminderParams } from './src/features/reminders/personReminderNavigation';
@@ -42,6 +50,7 @@ import { useFocusSession } from './src/lib/useFocusSession';
 import { syncWidget, pushSignedOutWidget } from './src/lib/widgetSync';
 import { StrictFocusProvider } from './src/features/focus/StrictFocusContext';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { useTheme } from './src/theme/useTheme';
 import {
@@ -209,6 +218,38 @@ function ThemedApp() {
     return () => subscription.remove();
   }, []);
 
+  // Open the relevant reminder when the user taps a reminder notification
+  // (cold start via getLastNotificationResponseAsync, or while running via the
+  // listener). Routes through React Navigation's ReminderDetails screen.
+  useEffect(() => {
+    const openReminderFromResponse = (response: unknown) => {
+      const data = (
+        response as {
+          notification?: { request?: { content?: { data?: Record<string, unknown> } } };
+        }
+      )?.notification?.request?.content?.data;
+
+      const reminderId = typeof data?.reminderId === 'string' ? data.reminderId : undefined;
+      const url = typeof data?.url === 'string' ? data.url : undefined;
+      const urlMatch = url?.match(/reminders\/([^/?#]+)/)?.[1];
+      const targetId = reminderId ?? (urlMatch ? decodeURIComponent(urlMatch) : undefined);
+      if (!targetId) return;
+
+      const navigateToReminder = () => navigationRef.navigate('ReminderDetails', { reminderId: targetId });
+      // On cold start the navigation container may not be ready the instant the
+      // last response resolves; defer briefly if so.
+      if (navigationRef.isReady()) navigateToReminder();
+      else setTimeout(navigateToReminder, 500);
+    };
+
+    getLastNotificationResponseAsync().then((response) => {
+      if (response) openReminderFromResponse(response);
+    });
+
+    const subscription = addNotificationResponseReceivedListener(openReminderFromResponse);
+    return () => subscription.remove();
+  }, []);
+
   useEffect(() => {
     if (!user || !accessToken) return;
 
@@ -321,6 +362,39 @@ function ThemedApp() {
     const fetched = await fetchReminders(accessToken);
     setReminders(fetched);
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!user || !accessToken || !reminders.length) return;
+
+    let active = true;
+    let subscription: { remove: () => void } | null = null;
+
+    startSmartLocationReminderMonitor({
+      reminders,
+      accessToken,
+      onReminderTriggered: (updatedReminder) => {
+        setReminders((current) =>
+          current.map((reminder) => (reminder.id === updatedReminder.id ? updatedReminder : reminder)),
+        );
+        loadDashboardSummary();
+      },
+    })
+      .then((createdSubscription) => {
+        if (!active) {
+          stopSmartLocationReminderMonitor(createdSubscription);
+          return;
+        }
+        subscription = createdSubscription;
+      })
+      .catch((error: unknown) => {
+        console.error('[App] failed to start smart location reminder monitor:', error);
+      });
+
+    return () => {
+      active = false;
+      stopSmartLocationReminderMonitor(subscription);
+    };
+  }, [accessToken, loadDashboardSummary, reminders, user]);
 
   // Single shared focus-session instance so the Focus page and the full-screen
   // workspace stay in sync (AsyncStorage writes are async, so a per-screen
@@ -608,6 +682,7 @@ function ThemedApp() {
       onViewReminders={() => navigation.navigate('Reminders')}
       onViewNotes={() => rootNavigation?.navigate('Notes')}
       onViewAnalytics={() => rootNavigation?.navigate('Analytics')}
+      onViewSettings={() => rootNavigation?.navigate('Settings')}
       onViewCalendar={() => rootNavigation?.navigate('Calendar')}
       onViewAiDailyPlanner={() => rootNavigation?.navigate('AiDailyPlanner')}
       onViewNotifications={() => rootNavigation?.navigate('Notifications')}
@@ -772,6 +847,14 @@ function ThemedApp() {
   const NotesStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Notes'>) => (
     <NotesScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
   );
+  const SettingsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Settings'>) => (
+    <SettingsScreen
+      accessToken={accessToken ?? ''}
+      onBack={() => props.navigation.goBack()}
+      onSignOut={() => void handleSignOut()}
+      onOpenPlanner={() => props.navigation.navigate('AiDailyPlanner')}
+    />
+  );
   const AnalyticsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Analytics'>) => (
     <AnalyticsScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
   );
@@ -821,7 +904,7 @@ function ThemedApp() {
   if (user) {
     return (
       <StrictFocusProvider active={focus.active} remainingMs={focus.remainingMs}>
-        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} />
+        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} settingsRoute={SettingsStackRoute} />
       </StrictFocusProvider>
     );
   }

@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CollaborationModule } from './collaboration/collaboration.module';
+import { ContextModule } from './context/context.module';
 import { validateEnv } from './config/env';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './db/database.module';
@@ -40,6 +41,7 @@ import { TasksModule } from './tasks/tasks.module';
     SocialModule,
     NotificationsModule,
     CollaborationModule,
+    ContextModule,
     SpeechModule,
     AiModule,
     AiCollaborationPlannerModule,

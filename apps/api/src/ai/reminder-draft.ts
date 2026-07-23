@@ -31,6 +31,12 @@ export interface ReminderDraft {
     category: string;
     trigger: ReminderDraftLocationTrigger;
     radius: number;
+    // Present only when a mention resolved to one of the user's saved places
+    // (Personal Context). Carries the canonical place's exact coordinates so the
+    // client can target it precisely instead of re-geocoding the name.
+    latitude?: number | null;
+    longitude?: number | null;
+    savedPlaceId?: string | null;
   };
   context: {
     condition: string;
@@ -73,6 +79,9 @@ export function createEmptyReminderDraft(): ReminderDraft {
       category: '',
       trigger: 'arrive',
       radius: 100,
+      latitude: null,
+      longitude: null,
+      savedPlaceId: null,
     },
     context: { condition: '' },
     checklist: [],
@@ -102,6 +111,10 @@ function asOneOf<T extends string>(
 
 function asNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function asNullableNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -138,6 +151,10 @@ export function normalizeReminderDraft(input: unknown): ReminderDraft {
       category: asString(location.category),
       trigger: asOneOf(location.trigger, LOCATION_TRIGGERS, 'arrive'),
       radius: asNumber(location.radius, 100),
+      latitude: asNullableNumber(location.latitude),
+      longitude: asNullableNumber(location.longitude),
+      savedPlaceId:
+        typeof location.savedPlaceId === 'string' ? location.savedPlaceId : null,
     },
     context: {
       condition: asString(context.condition),

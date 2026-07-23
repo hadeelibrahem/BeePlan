@@ -1,4 +1,4 @@
-import type { GeoapifyPlaceSelection } from '../types/reminders.types';
+import type { GeneralLocationCategory, GeoapifyPlaceSelection } from '../types/reminders.types';
 
 const BASE_URL = 'https://api.geoapify.com';
 
@@ -26,6 +26,52 @@ type GeoapifyAutocompleteResult = {
   city?: string;
   lat?: number;
   lon?: number;
+};
+
+type GeoapifyPlaceFeature = {
+  properties?: GeoapifyAutocompleteResult & {
+    name?: string;
+    distance?: number;
+    categories?: string[];
+  };
+  geometry?: {
+    type?: string;
+    coordinates?: [number, number];
+  };
+};
+
+export type NearbyGeoapifyPlace = GeoapifyPlaceSuggestion & {
+  distanceMeters: number;
+  categories: string[];
+};
+
+const GEOAPIFY_CATEGORY_BY_REMINDER_CATEGORY: Partial<Record<GeneralLocationCategory, string[]>> = {
+  pharmacy: ['healthcare.pharmacy', 'commercial.health_and_beauty.pharmacy'],
+  supermarket: ['commercial.supermarket'],
+  grocery_store: ['commercial.supermarket'],
+  cafe: ['catering.cafe'],
+  coffee_shop: ['catering.cafe.coffee_shop', 'catering.cafe.coffee', 'commercial.food_and_drink.coffee_and_tea'],
+  restaurant: ['catering.restaurant'],
+  bakery: ['commercial.food_and_drink.bakery'],
+  atm: ['service.financial.atm'],
+  bank: ['service.financial.bank'],
+  gas_station: ['service.vehicle.fuel', 'commercial.gas'],
+  hospital: ['healthcare.hospital'],
+  clinic: ['healthcare.clinic_or_praxis'],
+  gym: ['sport.fitness.gym', 'sport.fitness.fitness_centre'],
+  school: ['education.school'],
+  university: ['education.university'],
+  library: ['education.library'],
+  bookstore: ['commercial.books'],
+  electronics_store: ['commercial.elektronics'],
+  shopping_mall: ['commercial.shopping_mall'],
+  hardware_store: ['commercial.houseware_and_hardware.hardware_and_tools', 'commercial.houseware_and_hardware.doityourself'],
+  pet_store: ['pet.shop'],
+  laundry: ['service.cleaning.laundry', 'service.cleaning.dry_cleaning'],
+  post_office: ['service.post.office'],
+  airport: ['airport', 'airport.terminal'],
+  train_station: ['public_transport.train'],
+  bus_station: ['public_transport.bus'],
 };
 
 /**
@@ -58,6 +104,68 @@ export async function searchPlaces(query: string, limit = 5): Promise<GeoapifyPl
       longitude: Number(result.lon),
       label: result.formatted,
     }));
+}
+
+export async function searchNearbyPlacesByCategory({
+  category,
+  latitude,
+  longitude,
+  radiusMeters,
+  limit = 10,
+}: {
+  category: GeneralLocationCategory;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  limit?: number;
+}): Promise<NearbyGeoapifyPlace[]> {
+  const categories = GEOAPIFY_CATEGORY_BY_REMINDER_CATEGORY[category];
+  if (!categories?.length) return [];
+
+  const apiKey = getApiKey();
+  const params = new URLSearchParams({
+    categories: categories.join(','),
+    filter: `circle:${longitude},${latitude},${radiusMeters}`,
+    bias: `proximity:${longitude},${latitude}`,
+    limit: String(limit),
+    apiKey,
+  });
+  const response = await fetch(`${BASE_URL}/v2/places?${params.toString()}`);
+
+  if (!response.ok) {
+    throw new Error('Failed to search nearby places.');
+  }
+
+  const data = await response.json();
+  const features = (data.features ?? []) as GeoapifyPlaceFeature[];
+
+  return features
+    .map((feature): NearbyGeoapifyPlace | null => {
+      const properties = feature.properties;
+      const coordinates = feature.geometry?.coordinates;
+      const resultLatitude = properties?.lat ?? coordinates?.[1];
+      const resultLongitude = properties?.lon ?? coordinates?.[0];
+
+      if (!properties || !Number.isFinite(resultLatitude) || !Number.isFinite(resultLongitude)) {
+        return null;
+      }
+
+      const placeName = properties.name ?? properties.address_line1 ?? properties.formatted;
+      const address = properties.address_line2 ?? properties.formatted;
+
+      return {
+        geoapifyPlaceId: properties.place_id,
+        placeName,
+        address,
+        city: properties.city,
+        latitude: Number(resultLatitude),
+        longitude: Number(resultLongitude),
+        label: properties.formatted,
+        distanceMeters: properties.distance ?? 0,
+        categories: properties.categories ?? [],
+      };
+    })
+    .filter((place): place is NearbyGeoapifyPlace => Boolean(place));
 }
 
 type GeoapifyReverseResult = GeoapifyAutocompleteResult;

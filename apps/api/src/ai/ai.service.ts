@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { SavedPlacesService } from '../context/saved-places.service';
 import { FriendsService, FriendSummary } from '../social/friends.service';
 import { buildReminderParsePrompt } from './prompts/reminder-parse.prompt';
 import { normalizeReminderDraft, ReminderDraft } from './reminder-draft';
+import { inferSmartLocationWithRules } from './smart-location-inference.service';
 import { parseJsonResponse } from './utils/json-response';
 
 export type PersonReminderMatch = {
@@ -39,6 +41,7 @@ export class AiService {
   constructor(
     private readonly configService: ConfigService,
     private readonly friendsService: FriendsService,
+    private readonly savedPlaces: SavedPlacesService,
   ) {
     const apiKey = this.configService.get<string>('QWEN_API_KEY');
     const baseURL = this.configService.get<string>('QWEN_BASE_URL');
@@ -47,7 +50,14 @@ export class AiService {
     this.model = model ?? null;
   }
 
-  async parseReminder(text: string): Promise<ReminderDraft> {
+  /**
+   * Parse a natural-language reminder. When `userId` is provided, the user's
+   * Personal Context saved places are resolved first: a mention of any saved
+   * alias ("home", "البيت", "campus") targets that exact place (coordinates +
+   * radius). Only if nothing resolves do we fall back to the generic smart place
+   * category inference.
+   */
+  async parseReminder(text: string, userId?: string): Promise<ReminderDraft> {
     if (!this.client || !this.model) {
       throw new InternalServerErrorException('AI reminder parsing is not configured.');
     }
@@ -76,7 +86,10 @@ export class AiService {
       throw new InternalServerErrorException('Failed to parse reminder with AI.');
     }
 
-    return this.toDraft(raw);
+    const draft = this.toDraft(raw);
+    const savedPlaceDraft = await this.applySavedPlaceOverride(trimmed, draft, userId);
+    if (savedPlaceDraft) return savedPlaceDraft;
+    return this.applySmartLocationOverride(trimmed, draft);
   }
 
   /**
@@ -90,7 +103,7 @@ export class AiService {
     userId: string,
     text: string,
   ): Promise<ParsePersonReminderResult> {
-    const draft = await this.parseReminder(text);
+    const draft = await this.parseReminder(text, userId);
     const person = draft.person;
 
     const friends = await this.friendsService.listFriends(userId);
@@ -176,6 +189,77 @@ export class AiService {
     }
 
     return normalizeReminderDraft(parsed);
+  }
+
+  /**
+   * If the text mentions one of the user's saved places (via alias, name, or
+   * category), rewrite the draft into a specific-location reminder targeting
+   * that canonical place with its exact coordinates. Returns null when nothing
+   * resolves (or on any lookup failure) so the caller falls back to generic
+   * smart-category inference. Best-effort: resolution never breaks parsing.
+   */
+  private async applySavedPlaceOverride(
+    text: string,
+    draft: ReminderDraft,
+    userId?: string,
+  ): Promise<ReminderDraft | null> {
+    if (!userId) return null;
+    let matches;
+    try {
+      matches = await this.savedPlaces.resolvePlacesFromText(userId, text);
+    } catch (error) {
+      this.logger.warn(
+        `Saved-place resolution failed; falling back to category inference: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return null;
+    }
+    const place = matches[0];
+    if (!place) return null;
+
+    return {
+      ...draft,
+      title: draft.title.trim() || text,
+      reminderType: 'location',
+      location: {
+        mode: 'specific',
+        name: place.name,
+        address: place.address ?? '',
+        category: place.category ?? '',
+        trigger: draft.location.trigger === 'leave' ? 'leave' : 'arrive',
+        radius: place.radiusMeters,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        savedPlaceId: place.id,
+      },
+      context: { condition: '' },
+    };
+  }
+
+  private applySmartLocationOverride(
+    text: string,
+    draft: ReminderDraft,
+  ): ReminderDraft {
+    const smartLocation = inferSmartLocationWithRules(text);
+    if (!smartLocation.category || smartLocation.confidence < 0.55) {
+      return draft;
+    }
+
+    return {
+      ...draft,
+      title: draft.title.trim() || smartLocation.title,
+      reminderType: 'location',
+      location: {
+        mode: 'general',
+        name: '',
+        address: '',
+        category: smartLocation.category,
+        trigger: 'arrive',
+        radius: 200,
+      },
+      context: { condition: '' },
+    };
   }
 }
 

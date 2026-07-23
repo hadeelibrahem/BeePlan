@@ -6,33 +6,47 @@ import type {
   Reminder,
   ReminderLocationTrigger,
   ReminderTimeTrigger,
+  TriggerType,
 } from '../types/reminders.types';
+import { DEFAULT_UNKNOWN_CONFIDENCE, getCategoryDefaultRadius, matchGeneralCategory, SMART_LOCATION_CATEGORIES } from './smartLocationCategories';
 
-const GENERAL_LOCATION_CATEGORIES: GeneralLocationCategory[] = [
-  'home',
-  'work',
-  'university',
-  'school',
-  'gym',
-  'pharmacy',
-  'grocery_store',
-  'coffee_shop',
-  'restaurant',
-  'hospital',
-  'airport',
-  'bank',
-  'atm',
-  'parking',
-  'gas_station',
-  'mosque',
-  'library',
-];
+export type SmartLocationSummary = {
+  category: GeneralLocationCategory;
+  trigger: TriggerType;
+  radius: number;
+  reason: string;
+  confidence: number;
+};
 
-function matchGeneralCategory(rawCategory: string): { category: GeneralLocationCategory; customLabel?: string } {
-  const normalized = rawCategory.trim().toLowerCase().replaceAll(' ', '_');
-  const match = GENERAL_LOCATION_CATEGORIES.find((category) => category === normalized);
-  if (match) return { category: match };
-  return { category: 'custom', customLabel: rawCategory.trim() || undefined };
+export type SmartLocationOverrides = {
+  category?: GeneralLocationCategory;
+  radius?: number;
+  confidence?: number;
+  reason?: string;
+};
+
+/**
+ * Derives the smart-location "understanding" (category/trigger/radius/reason/confidence)
+ * for a location draft, or null if the draft doesn't qualify for smart location.
+ * Every field prefers a real value supplied by the caller (AI/rules inference result,
+ * or the user's own edits) over a computed default — nothing here is a fixed constant.
+ */
+export function getSmartLocationSummary(
+  draft: ReminderDraft,
+  overrides?: SmartLocationOverrides,
+): SmartLocationSummary | null {
+  if (draft.reminderType !== 'location' || draft.location.mode !== 'general') return null;
+
+  const category = overrides?.category ?? matchGeneralCategory(draft.location.category || draft.location.name).category;
+  if (!SMART_LOCATION_CATEGORIES.includes(category)) return null;
+
+  return {
+    category,
+    trigger: draft.location.trigger,
+    radius: overrides?.radius ?? getCategoryDefaultRadius(category),
+    reason: overrides?.reason ?? `This reminder triggers when you're near ${category.replaceAll('_', ' ')}.`,
+    confidence: overrides?.confidence ?? DEFAULT_UNKNOWN_CONFIDENCE,
+  };
 }
 
 /**
@@ -47,15 +61,20 @@ function buildRemindAt(date: string, time: string): string | undefined {
   return candidate.toISOString();
 }
 
-function buildLocationConfig(draft: ReminderDraft): LocationReminderConfig {
+function buildLocationConfig(
+  draft: ReminderDraft,
+  categoryOverride?: GeneralLocationCategory,
+  radiusOverride?: number,
+): LocationReminderConfig {
   const { location } = draft;
 
   if (location.mode === 'general') {
+    const category = categoryOverride ?? matchGeneralCategory(location.category || location.name).category;
     return {
       mode: 'general_category',
-      generalCategory: matchGeneralCategory(location.category || location.name),
+      generalCategory: categoryOverride ? { category: categoryOverride } : matchGeneralCategory(location.category || location.name),
       trigger: location.trigger,
-      radiusMeters: location.radius || 100,
+      radiusMeters: radiusOverride ?? getCategoryDefaultRadius(category),
     };
   }
 
@@ -93,7 +112,15 @@ function buildChecklistTrigger(draft: ReminderDraft): ChecklistReminderTrigger {
  * Fields the AI left empty, or that need geocoding we can't do from text
  * alone, are simply omitted so the form falls back to its own defaults.
  */
-export function mapDraftToReminder(draft: ReminderDraft): Reminder {
+export type ApplyDraftOptions = {
+  categoryOverride?: GeneralLocationCategory;
+  disableSmartLocation?: boolean;
+  radius?: number;
+  confidence?: number;
+  reason?: string;
+};
+
+export function mapDraftToReminder(draft: ReminderDraft, options?: ApplyDraftOptions): Reminder {
   const now = new Date().toISOString();
 
   const reminder: Reminder = {
@@ -115,7 +142,25 @@ export function mapDraftToReminder(draft: ReminderDraft): Reminder {
   }
 
   if (draft.reminderType === 'location') {
-    reminder.location = buildLocationConfig(draft);
+    reminder.location = buildLocationConfig(draft, options?.categoryOverride, options?.radius);
+
+    const summary = options?.disableSmartLocation
+      ? null
+      : getSmartLocationSummary(draft, {
+          category: options?.categoryOverride,
+          radius: options?.radius,
+          confidence: options?.confidence,
+          reason: options?.reason,
+        });
+    if (summary) {
+      reminder.smartLocationEnabled = true;
+      reminder.smartPlaceCategory = summary.category;
+      reminder.triggerRadius = summary.radius;
+      reminder.triggerOnEnter = summary.trigger === 'arrive';
+      reminder.triggerCooldown = 1440;
+      reminder.smartLocationReason = summary.reason;
+      reminder.smartLocationConfidence = summary.confidence;
+    }
   }
 
   if (draft.reminderType === 'context' && draft.context.condition.trim()) {

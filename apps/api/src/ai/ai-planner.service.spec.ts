@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { RecurringCommitmentsService } from '../context/recurring-commitments.service';
 import { DatabaseService } from '../db/database.service';
 import {
   AiPlannerService,
@@ -216,6 +217,9 @@ function buildService(
   const preferences = new PlannerPreferencesService({
     db,
   } as unknown as DatabaseService);
+  const commitments = {
+    getBusyWindowsForDate: jest.fn().mockResolvedValue([]),
+  };
   const service = new AiPlannerService(
     { db } as unknown as DatabaseService,
     new PlannerRuleEngine(),
@@ -224,8 +228,9 @@ function buildService(
     new PlannerDurationEstimator(config),
     preferences,
     config,
+    commitments as unknown as RecurringCommitmentsService,
   );
-  return { service, reasoning, preferences };
+  return { service, reasoning, preferences, commitments };
 }
 
 function withPreferences(
@@ -267,6 +272,84 @@ describe('AiPlannerService (3-layer pipeline)', () => {
 
       expect(plan.source).toBe('fallback');
       expect(taskItems(plan).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('recurring commitments as hard busy blocks', () => {
+    it('renders the commitment and never schedules a task over it', async () => {
+      const { service, commitments } = buildService([makeTask('a')]);
+      // University Classes 08:00–11:00 on the plan date.
+      commitments.getBusyWindowsForDate.mockResolvedValue([
+        {
+          commitmentId: 'c1',
+          title: 'University Classes',
+          start: '08:00',
+          end: '11:00',
+          placeName: 'University',
+        },
+      ]);
+
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: DATE,
+        breaks: [],
+      });
+
+      expect(commitments.getBusyWindowsForDate).toHaveBeenCalledWith(USER_ID, DATE);
+
+      // The commitment appears on the timeline as a calendar block.
+      const commitmentItem = allItems(plan).find(
+        (item) => item.type === 'calendar' && item.title.includes('University Classes'),
+      );
+      expect(commitmentItem).toBeDefined();
+      expect(commitmentItem?.startTime).toBe('08:00');
+      expect(commitmentItem?.endTime).toBe('11:00');
+
+      // No task overlaps the 08:00–11:00 commitment window.
+      const busyStart = toMin('08:00');
+      const busyEnd = toMin('11:00');
+      for (const task of taskItems(plan)) {
+        const overlaps =
+          toMin(task.startTime) < busyEnd && toMin(task.endTime) > busyStart;
+        expect(overlaps).toBe(false);
+      }
+    });
+
+    it('schedules around a large commitment and postpones the overflow instead of overlapping', async () => {
+      // A 10-hour task cannot fully fit around an all-day commitment
+      // (08:00–20:00) inside 08:00–21:00 working hours. Whatever fits goes in the
+      // free gap; the overflow is postponed with a reason — nothing overlaps the
+      // commitment.
+      const { service, commitments } = buildService([
+        makeTask('big', { estimatedTimeMinutes: 600 }),
+      ]);
+      commitments.getBusyWindowsForDate.mockResolvedValue([
+        {
+          commitmentId: 'c1',
+          title: 'All-day event',
+          start: '08:00',
+          end: '20:00',
+          placeName: null,
+        },
+      ]);
+
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: DATE,
+        breaks: [],
+      });
+
+      // No scheduled task segment overlaps the 08:00–20:00 commitment window.
+      const busyStart = toMin('08:00');
+      const busyEnd = toMin('20:00');
+      for (const task of taskItems(plan)) {
+        const overlaps =
+          toMin(task.startTime) < busyEnd && toMin(task.endTime) > busyStart;
+        expect(overlaps).toBe(false);
+      }
+
+      // The task's overflow is postponed with an explanation.
+      const unscheduled = plan.unscheduled.find((item) => item.taskId === 'big');
+      expect(unscheduled).toBeDefined();
+      expect(unscheduled?.reason.length ?? 0).toBeGreaterThan(0);
     });
   });
 

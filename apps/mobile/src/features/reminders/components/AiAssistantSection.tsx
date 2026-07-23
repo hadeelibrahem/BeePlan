@@ -6,17 +6,35 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Animated, Pressable, Text, TextInput, View } from 'react-native';
 import { OutlineButton, PrimaryButton, SectionCard } from '../../../components/layout';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme } from '../../../theme/useTheme';
 import { parsePersonReminder } from '../../social/api/social.api';
 import type { ParsePersonReminderResult } from '../../social/types/social.types';
-import { createVoiceReminderDraft, parseReminderText } from '../api/reminders.api';
+import { createVoiceReminderDraft, inferSmartLocation, parseReminderText, type SmartLocationSuggestion } from '../api/reminders.api';
 import type { AiAssistantMode, AiAssistantState, ReminderDraft } from '../types/aiAssistant.types';
+import type { GeneralLocationCategory } from '../types/reminders.types';
+import { getSmartLocationSummary } from '../utils/aiDraftMapping';
+import {
+  CONFIDENCE_TIER_EMOJI,
+  getCategoryEmoji,
+  getCategoryLabel,
+  getConfidenceTier,
+  SMART_LOCATION_CATEGORIES,
+} from '../utils/smartLocationCategories';
+import { PlaceTypeAutocomplete } from './PlaceTypeAutocomplete';
+
+export type ApplyDraftOptions = {
+  categoryOverride?: GeneralLocationCategory;
+  disableSmartLocation?: boolean;
+  radius?: number;
+  confidence?: number;
+  reason?: string;
+};
 
 type Props = {
-  onApplyDraft: (draft: ReminderDraft) => void;
+  onApplyDraft: (draft: ReminderDraft, options?: ApplyDraftOptions) => void;
   onApplyPersonDraft: (result: ParsePersonReminderResult) => void;
   accessToken: string;
 };
@@ -33,16 +51,6 @@ export function clearAiReminderText() {
 }
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
-
-const TYPE_LABEL_KEYS: Record<ReminderDraft['reminderType'], string> = {
-  time: 'reminders.typeTime',
-  location: 'reminders.typeLocation',
-  context: 'reminders.typeContext',
-  checklist: 'reminders.typeChecklist',
-  // The standard AI assistant never emits 'person' (person reminders are
-  // created via the AI-first People flow), but ReminderType includes it.
-  person: 'reminders.typePerson',
-};
 
 function friendlyErrorKey(error: unknown): string {
   const message = error instanceof Error ? error.message : '';
@@ -93,6 +101,10 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
   const [draft, setDraft] = useState<ReminderDraft | null>(null);
   const [personResult, setPersonResult] = useState<ParsePersonReminderResult | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [categoryOverride, setCategoryOverride] = useState<GeneralLocationCategory | undefined>(undefined);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [inference, setInference] = useState<SmartLocationSuggestion | null>(null);
+  const [inferenceLoading, setInferenceLoading] = useState(false);
 
   const setText = (value: string) => {
     persistedAiText = value;
@@ -101,6 +113,9 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
+
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const applyPulse = useRef(new Animated.Value(1)).current;
 
   // The recorder is a native shared object that `useAudioRecorder` releases on
   // unmount. Track mount status so async callbacks (network round-trips) never
@@ -121,6 +136,31 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
     setPersonResult(null);
     setTranscript('');
     setErrorMessage('');
+    setCategoryOverride(undefined);
+    setShowCategoryPicker(false);
+    setInference(null);
+    setInferenceLoading(false);
+  };
+
+  /**
+   * Runs the real AI/rules smart-location inference (same engine ReminderForm's
+   * inline suggestion uses) against the source text, so category/confidence/reason
+   * on the card reflect an actual computed result instead of a fixed default.
+   */
+  const refreshInference = async (nextDraft: ReminderDraft, sourceText: string) => {
+    setInference(null);
+    const eligible = nextDraft.reminderType === 'location' && nextDraft.location.mode === 'general';
+    if (!eligible || !sourceText.trim()) return;
+
+    setInferenceLoading(true);
+    try {
+      const result = await inferSmartLocation(sourceText, accessToken);
+      setInference(result);
+    } catch (error) {
+      console.error('[AiAssistantSection] smart location inference failed:', error);
+    } finally {
+      setInferenceLoading(false);
+    }
   };
 
   const showError = (error: unknown) => {
@@ -138,8 +178,8 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
     setErrorMessage('');
     setState('processing');
     try {
-      const trimmed = text.trim();
-      const person = await parsePersonReminder(trimmed);
+      const sourceText = text.trim();
+      const person = await parsePersonReminder(sourceText);
       if (!mountedRef.current) return;
       if (person.isPersonReminder && person.confidence >= PERSON_CONFIDENCE_THRESHOLD) {
         setTranscript('');
@@ -148,12 +188,15 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
         setState('draft_ready');
         return;
       }
-      const result = await parseReminderText(trimmed, accessToken);
+      const result = await parseReminderText(sourceText, accessToken);
       if (!mountedRef.current) return;
       setTranscript('');
       setPersonResult(null);
       setDraft(result);
+      setCategoryOverride(undefined);
+      setShowCategoryPicker(false);
       setState('draft_ready');
+      void refreshInference(result, sourceText);
     } catch (error) {
       showError(error);
     }
@@ -209,13 +252,50 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
       if (!mountedRef.current) return;
       setPersonResult(null);
       setDraft(result.draft);
+      setCategoryOverride(undefined);
+      setShowCategoryPicker(false);
       setState('draft_ready');
+      void refreshInference(result.draft, result.transcript);
     } catch (error) {
       showError(error);
     }
   };
 
   const summaryLines = draft ? buildSummaryLines(draft, t) : [];
+
+  const inferredCategory =
+    inference?.category && (SMART_LOCATION_CATEGORIES as string[]).includes(inference.category)
+      ? inference.category
+      : undefined;
+  const overrideReason = categoryOverride
+    ? t('reminders.aiAssistant.userSelectedReason', { category: getCategoryLabel(categoryOverride, t) })
+    : undefined;
+
+  const smartSummary = draft
+    ? getSmartLocationSummary(draft, {
+        category: categoryOverride ?? inferredCategory,
+        confidence: categoryOverride ? 1 : inference?.confidence,
+        reason: categoryOverride ? overrideReason : inference?.reason,
+      })
+    : null;
+  const confidenceTier = smartSummary ? getConfidenceTier(smartSummary.confidence) : null;
+
+  useEffect(() => {
+    if (state !== 'draft_ready') return;
+    cardOpacity.setValue(0);
+    Animated.timing(cardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+  }, [state, cardOpacity]);
+
+  useEffect(() => {
+    if (state !== 'draft_ready' || !smartSummary || confidenceTier === 'low') return;
+    applyPulse.setValue(1);
+    Animated.sequence([
+      Animated.timing(applyPulse, { toValue: 1.05, duration: 250, useNativeDriver: true }),
+      Animated.timing(applyPulse, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.timing(applyPulse, { toValue: 1.05, duration: 250, useNativeDriver: true }),
+      Animated.timing(applyPulse, { toValue: 1, duration: 250, useNativeDriver: true }),
+    ]).start();
+  }, [state, draft, confidenceTier, applyPulse]);
 
   return (
     <SectionCard className="mb-6">
@@ -369,7 +449,10 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
       )}
 
       {state === 'draft_ready' && draft && (
-        <View className="mt-4 gap-3 rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.background }}>
+        <Animated.View
+          className="mt-4 gap-3 rounded-2xl border p-4"
+          style={{ borderColor: colors.border, backgroundColor: colors.background, opacity: cardOpacity }}
+        >
           {!!transcript && (
             <View>
               <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
@@ -380,14 +463,26 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
               </Text>
             </View>
           )}
+
           <View>
-            <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
-              {t('reminders.aiAssistant.detectedType')}
+            <Text className="text-sm font-black" style={{ color: colors.text }}>
+              {smartSummary ? t('reminders.aiAssistant.smartLocationTitle') : `🤖 ${t('reminders.aiAssistant.title')}`}
             </Text>
-            <Text className="mt-1 text-sm font-bold" style={{ color: colors.text }}>
-              {t(TYPE_LABEL_KEYS[draft.reminderType])}
+            <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
+              {t('reminders.aiAssistant.understood')}
             </Text>
+            {!!smartSummary && (
+              <Text className="mt-1 text-sm font-semibold" style={{ color: colors.text }}>
+                {t(
+                  smartSummary.trigger === 'leave'
+                    ? 'reminders.aiAssistant.triggerSentenceLeave'
+                    : 'reminders.aiAssistant.triggerSentenceArrive',
+                  { category: getCategoryLabel(smartSummary.category, t) },
+                )}
+              </Text>
+            )}
           </View>
+
           {!!draft.title && (
             <View>
               <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
@@ -398,29 +493,141 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
               </Text>
             </View>
           )}
-          {summaryLines.map((line) => (
-            <View key={line.label}>
-              <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
-                {line.label}
-              </Text>
-              <Text className="mt-1 text-sm" style={{ color: colors.text }}>
-                {line.value}
-              </Text>
-            </View>
-          ))}
-          <View className="mt-2 flex-row gap-2">
-            <View className="flex-1">
-              <PrimaryButton onPress={() => onApplyDraft(draft)} fullWidth>
-                {t('reminders.aiAssistant.applyToForm')}
-              </PrimaryButton>
-            </View>
-            <View className="flex-1">
-              <OutlineButton onPress={reset} fullWidth>
-                {t('reminders.aiAssistant.clear')}
-              </OutlineButton>
-            </View>
-          </View>
-        </View>
+
+          {inferenceLoading && !categoryOverride && !!smartSummary && (
+            <Text className="text-xs font-semibold" style={{ color: colors.secondaryText }}>
+              {t('reminders.aiAssistant.analyzingCategory')}
+            </Text>
+          )}
+
+          {smartSummary ? (
+            <>
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                    {getCategoryEmoji(smartSummary.category)} {t('reminders.aiAssistant.categoryLabel')}
+                  </Text>
+                  <Text className="mt-1 text-sm font-bold" style={{ color: colors.text }}>
+                    {getCategoryLabel(smartSummary.category, t)}
+                  </Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                    📍 {t('reminders.aiAssistant.triggerLabel')}
+                  </Text>
+                  <Text className="mt-1 text-sm font-bold" style={{ color: colors.text }}>
+                    {t(
+                      smartSummary.trigger === 'leave'
+                        ? 'reminders.aiAssistant.triggerWhenLeaving'
+                        : 'reminders.aiAssistant.triggerWhenArriving',
+                    )}
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                    📏 {t('reminders.aiAssistant.radiusLabel')}
+                  </Text>
+                  <Text className="mt-1 text-sm font-bold" style={{ color: colors.text }}>
+                    {t('reminders.aiAssistant.radiusValue', { radius: smartSummary.radius })}
+                  </Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                    🎯 {t('reminders.aiAssistant.confidenceLabel')}
+                  </Text>
+                  <Text className="mt-1 text-sm font-bold" style={{ color: colors.text }}>
+                    {CONFIDENCE_TIER_EMOJI[confidenceTier!]} {Math.round(smartSummary.confidence * 100)}%
+                  </Text>
+                </View>
+              </View>
+
+              <View>
+                <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                  💡 {t('reminders.aiAssistant.reasonLabel')}
+                </Text>
+                <Text className="mt-1 text-sm leading-6" style={{ color: colors.secondaryText }}>
+                  {smartSummary.reason}
+                </Text>
+              </View>
+
+              {confidenceTier === 'low' && (
+                <View className="rounded-xl border px-3 py-2" style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}>
+                  <Text className="text-xs font-semibold" style={{ color: colors.text }}>
+                    {t('reminders.aiAssistant.lowConfidenceHint')}
+                  </Text>
+                </View>
+              )}
+
+              {showCategoryPicker && (
+                <PlaceTypeAutocomplete
+                  value={categoryOverride ?? smartSummary.category}
+                  onChange={setCategoryOverride}
+                  onCustomLabelChange={() => undefined}
+                />
+              )}
+
+              <View className="flex-row flex-wrap gap-2">
+                <Animated.View style={{ transform: [{ scale: applyPulse }] }}>
+                  <PrimaryButton
+                    onPress={() =>
+                      onApplyDraft(draft, {
+                        categoryOverride: smartSummary.category,
+                        radius: smartSummary.radius,
+                        confidence: smartSummary.confidence,
+                        reason: smartSummary.reason,
+                      })
+                    }
+                  >
+                    {t('reminders.aiAssistant.apply')}
+                  </PrimaryButton>
+                </Animated.View>
+                <OutlineButton
+                  onPress={() => setShowCategoryPicker((open) => !open)}
+                  style={confidenceTier === 'low' ? { borderColor: colors.accent, borderWidth: 2 } : undefined}
+                >
+                  {t('reminders.aiAssistant.changeCategory')}
+                </OutlineButton>
+                <OutlineButton
+                  onPress={() => onApplyDraft(draft, { categoryOverride: smartSummary.category, disableSmartLocation: true })}
+                >
+                  {t('reminders.aiAssistant.disableSmartLocation')}
+                </OutlineButton>
+              </View>
+              <Pressable onPress={reset}>
+                <Text className="text-xs font-bold" style={{ color: colors.secondaryText }}>
+                  {t('reminders.aiAssistant.startOver')}
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              {summaryLines.map((line) => (
+                <View key={line.label}>
+                  <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
+                    {line.label}
+                  </Text>
+                  <Text className="mt-1 text-sm" style={{ color: colors.text }}>
+                    {line.value}
+                  </Text>
+                </View>
+              ))}
+              <View className="mt-2 flex-row gap-2">
+                <View className="flex-1">
+                  <PrimaryButton onPress={() => onApplyDraft(draft)} fullWidth>
+                    {t('reminders.aiAssistant.applyToForm')}
+                  </PrimaryButton>
+                </View>
+                <View className="flex-1">
+                  <OutlineButton onPress={reset} fullWidth>
+                    {t('reminders.aiAssistant.clear')}
+                  </OutlineButton>
+                </View>
+              </View>
+            </>
+          )}
+        </Animated.View>
       )}
     </SectionCard>
   );

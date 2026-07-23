@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { and, eq, inArray, ne } from 'drizzle-orm';
+import { RecurringCommitmentsService } from '../context/recurring-commitments.service';
 import { DatabaseService } from '../db/database.service';
 import {
   reminders,
@@ -85,6 +86,7 @@ export class AiPlannerService {
     private readonly durationEstimator: PlannerDurationEstimator,
     private readonly preferencesService: PlannerPreferencesService,
     private readonly acceptanceService: PlannerAcceptanceService,
+    private readonly commitmentsService: RecurringCommitmentsService,
   ) {}
 
   async generateDailyPlan(userId: string, request: PlannerRequest = {}): Promise<DailyPlan> {
@@ -127,18 +129,22 @@ export class AiPlannerService {
     const requestedHours = normalizeWorkingHours(request.workingHours);
     const breaks = request.breaks?.length ? request.breaks : DEFAULT_BREAKS;
 
-    const [taskRows, reminderRows, dependencyRows, preferences] = await Promise.all([
-      this.databaseService.db
-        .select()
-        .from(tasks)
-        .where(and(eq(tasks.userId, userId), ne(tasks.status, 'done'))),
-      this.databaseService.db
-        .select()
-        .from(reminders)
-        .where(and(eq(reminders.userId, userId), ne(reminders.status, 'done'))),
-      this.databaseService.db.select().from(taskDependencies),
-      this.preferencesService.getPreferences(userId),
-    ]);
+    const [taskRows, reminderRows, dependencyRows, preferences, commitmentWindows] =
+      await Promise.all([
+        this.databaseService.db
+          .select()
+          .from(tasks)
+          .where(and(eq(tasks.userId, userId), ne(tasks.status, 'done'))),
+        this.databaseService.db
+          .select()
+          .from(reminders)
+          .where(and(eq(reminders.userId, userId), ne(reminders.status, 'done'))),
+        this.databaseService.db.select().from(taskDependencies),
+        this.preferencesService.getPreferences(userId),
+        // Active recurring commitments that fall on the plan date, already
+        // reduced to hard busy intervals for the date's weekday.
+        this.commitmentsService.getBusyWindowsForDate(userId, date),
+      ]);
 
     // The focus window is a hard part of the user's availability: extend the
     // working day so it always covers their configured focus hours. Without
@@ -222,6 +228,13 @@ export class AiPlannerService {
       lockedItems: request.lockedItems ?? [],
       tasks: plannerTasks,
       reminders: reminderRows.map((reminder) => toPlannerReminder(reminder, date)),
+      commitments: commitmentWindows.map((window) => ({
+        id: window.commitmentId,
+        title: window.title,
+        start: window.start,
+        end: window.end,
+        placeName: window.placeName,
+      })),
       preferences,
       // Every incomplete parent task, plus any incomplete subtask that blocks one
       // of this user's candidates (e.g. another member's unfinished dependency),

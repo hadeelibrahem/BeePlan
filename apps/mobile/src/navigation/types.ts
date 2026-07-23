@@ -23,6 +23,7 @@ export type RootStackParamList = {
   FocusSession: undefined
   AiCollaboration: { taskId: string }
   Notifications: undefined
+  Settings: undefined
   ReminderDetails: { reminderId: string }
   CreateReminder: { initialType?: 'task' | 'person' | 'checklist'; initialFriendId?: string }
   EditReminder: { reminderId: string }

@@ -9,7 +9,7 @@ export type LocationSnapshot = {
 /**
  * Requests foreground ("while using the app") location permission. This is the
  * minimum needed to send proximity snapshots while BeePlan is open. Returns true
- * only when granted. Never throws — callers decide how to surface a denial.
+ * only when granted. Never throws; callers decide how to surface a denial.
  */
 export async function requestForegroundLocationPermission(): Promise<boolean> {
   try {
@@ -29,18 +29,22 @@ export async function requestForegroundLocationPermission(): Promise<boolean> {
 
 /**
  * Requests background ("always") location permission. Only call this once the
- * user has an active person reminder and has already granted foreground access —
- * asking for background up front is a privacy anti-pattern and iOS rejects it.
- * Background OS-level tracking (app closed) additionally needs expo-task-manager,
- * which is a deliberate follow-up; today snapshots are sent while the app runs.
+ * user has an active reminder and has already granted foreground access.
+ * Asking for background up front is a privacy anti-pattern and iOS rejects it.
+ * Background OS-level tracking is registered by the reminder monitor via
+ * expo-task-manager when there is an active location reminder.
  */
 export async function requestBackgroundLocationPermission(): Promise<boolean> {
   try {
     const foreground = await requestForegroundLocationPermission();
     if (!foreground) return false;
     const current = await Location.getBackgroundPermissionsAsync();
-    if (current.granted) return true;
+    if (current.granted) {
+      if (__DEV__) console.log('[location] background permission already granted');
+      return true;
+    }
     const requested = await Location.requestBackgroundPermissionsAsync();
+    if (__DEV__) console.log(`[location] background permission ${requested.granted ? 'granted' : 'denied'}`);
     return requested.granted;
   } catch (error) {
     console.error('[location] background permission request failed:', error);
@@ -51,7 +55,7 @@ export async function requestBackgroundLocationPermission(): Promise<boolean> {
 /**
  * Reads the current device position as a coarse snapshot. Returns null if
  * permission is missing or the fix fails. The coordinates are sent only to
- * BeePlan's own proximity endpoint — never to any AI service.
+ * BeePlan's own proximity endpoint, never to any AI service.
  */
 export async function getCurrentSnapshot(): Promise<LocationSnapshot | null> {
   try {

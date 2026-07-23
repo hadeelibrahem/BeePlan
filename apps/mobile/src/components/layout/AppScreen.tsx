@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../theme/useTheme'
@@ -10,6 +10,7 @@ type AppScreenProps = {
   fab?: ReactNode
   footer?: ReactNode
   contentClassName?: string
+  scrollRef?: RefObject<ScrollView | null>
   refreshing?: boolean
   onRefresh?: () => void
 }
@@ -27,6 +28,7 @@ export function AppScreen({
   fab,
   footer,
   contentClassName = '',
+  scrollRef,
   refreshing = false,
   onRefresh,
 }: AppScreenProps) {
@@ -36,6 +38,7 @@ export function AppScreen({
 
   const content = scroll ? (
     <ScrollView
+      ref={scrollRef}
       className={`flex-1 px-4 pt-6 ${contentClassName}`}
       contentContainerStyle={{ paddingBottom: bottomPadding }}
       showsVerticalScrollIndicator={false}

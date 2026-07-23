@@ -7,10 +7,10 @@ type TopActionBarProps = {
   searchValue?: string
   onSearchChange?: (value: string) => void
   searchPlaceholder?: string
-  themeMode: 'dark' | 'light'
-  onToggleTheme: () => void
-  languageLabel: string
-  onToggleLanguage: () => void
+  themeMode?: 'dark' | 'light'
+  onToggleTheme?: () => void
+  languageLabel?: string
+  onToggleLanguage?: () => void
   notificationCount?: number
   onOpenNotifications?: () => void
   onSignOut?: () => Promise<void> | void
@@ -100,16 +100,16 @@ export function TopActionBar({
           <button type="button" onClick={() => { setShowSearch(false); onSearchChange?.('') }} aria-label={t('topBar.closeSearch')} className="shrink-0 text-sm font-black text-slate-400 hover:text-[var(--bp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]">x</button>
         </div>
       ) : <button type="button" onClick={() => setShowSearch(true)} aria-label={t('actions.search')} className={ICON_BUTTON}><SearchIcon className="h-3.5 w-3.5" /></button>)}
-      <button type="button" onClick={onToggleTheme} aria-label={themeMode === 'dark' ? t('topBar.switchToLight') : t('topBar.switchToDark')} className={ICON_BUTTON}>{themeMode === 'dark' ? <MoonIcon className="h-3.5 w-3.5" /> : <SunIcon className="h-3.5 w-3.5" />}</button>
-      <button type="button" onClick={onToggleLanguage} aria-label={t('actions.switchLanguage')} className="flex h-9 items-center justify-center rounded-lg bg-[var(--bp-border)] px-3 text-xs font-bold transition-colors hover:bg-[var(--bp-border)]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-bg)]">{languageLabel}</button>
+      {onToggleTheme && <button type="button" onClick={onToggleTheme} aria-label={themeMode === 'dark' ? t('topBar.switchToLight') : t('topBar.switchToDark')} className={ICON_BUTTON}>{themeMode === 'dark' ? <MoonIcon className="h-3.5 w-3.5" /> : <SunIcon className="h-3.5 w-3.5" />}</button>}
+      {onToggleLanguage && <button type="button" onClick={onToggleLanguage} aria-label={t('actions.switchLanguage')} className="flex h-9 items-center justify-center rounded-lg bg-[var(--bp-border)] px-3 text-xs font-bold transition-colors hover:bg-[var(--bp-border)]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-bg)]">{languageLabel}</button>}
       {onOpenNotifications && <button type="button" onClick={onOpenNotifications} aria-label={t('topBar.notifications')} className={`relative ${ICON_BUTTON}`}><BellIcon className="h-3.5 w-3.5" />{notificationCount > 0 && <span className="absolute -end-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--bp-accent)] text-[9px] font-black text-[var(--bp-accent-text)]">{notificationCount > 9 ? '9+' : notificationCount}</span>}</button>}
 
       <div ref={menuRef} className="relative">
         <button ref={avatarRef} type="button" onClick={() => setIsMenuOpen((open) => !open)} aria-label={t('topBar.openAccountMenu')} aria-haspopup="menu" aria-expanded={isMenuOpen} className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--bp-accent)] text-xs font-black text-[var(--bp-accent-text)] transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-bg)]">{userInitial(user?.fullName, user?.email)}</button>
         {isMenuOpen && <div role="menu" aria-label={t('account.title')} onKeyDown={handleMenuKeys} className="absolute end-0 top-11 z-50 w-64 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-2 shadow-xl">
           <div className="border-b border-[var(--bp-border)] px-3 py-2"><p className="truncate text-sm font-black text-[var(--bp-text)]">{user?.fullName || t('account.title')}</p>{user?.email && <p className="truncate text-xs text-[var(--bp-muted)]">{user.email}</p>}</div>
-          <button type="button" role="menuitem" onClick={onToggleTheme} className="mt-1 w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]">{t('account.theme')}: {themeMode === 'dark' ? t('actions.darkMode') : t('actions.lightMode')}</button>
-          <button type="button" role="menuitem" onClick={onToggleLanguage} className="w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]">{t('account.language')}: {languageLabel}</button>
+          {onToggleTheme && <button type="button" role="menuitem" onClick={onToggleTheme} className="mt-1 w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]">{t('account.theme')}: {themeMode === 'dark' ? t('actions.darkMode') : t('actions.lightMode')}</button>}
+          {onToggleLanguage && <button type="button" role="menuitem" onClick={onToggleLanguage} className="w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]">{t('account.language')}: {languageLabel}</button>}
           <button type="button" role="menuitem" onClick={() => { closeMenu(false); setIsSignOutDialogOpen(true) }} className="mt-1 w-full rounded-lg px-3 py-2 text-left text-sm font-black text-red-500 hover:bg-red-500/10">{t('actions.signOut')}</button>
         </div>}
       </div>

@@ -39,6 +39,7 @@ type AuthContextValue = {
   sendPasswordReset: (email: string, redirectTo?: string) => Promise<string | undefined>;
   verifyRecoveryCode: (email: string, code: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
+  updateUser: (user: AuthUser) => void;
   signOut: () => Promise<void>;
 };
 
@@ -253,6 +254,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   }, [session]);
 
+  const updateUser = useCallback((user: AuthUser) => {
+    setSession((current) => {
+      if (!current) return current;
+      const next = { ...current, user };
+      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const clearOAuthError = useCallback(() => {
     setOauthError('');
     setOauthMessage('');
@@ -273,6 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sendPasswordReset,
       verifyRecoveryCode,
       updatePassword,
+      updateUser,
       signOut,
     }),
     [
@@ -286,6 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       signUp,
       updatePassword,
+      updateUser,
       verifyRecoveryCode,
     ],
   );

@@ -73,6 +73,23 @@ const resetPasswordSchema = verifyResetCodeSchema.extend({
   password: passwordSchema,
 });
 
+const updateProfileSchema = z.object({
+  fullName: z.string().trim().min(1, 'Full name is required').max(255),
+  email: z.string().trim().email('Please enter a valid email address'),
+  avatarUrl: z
+    .string()
+    .trim()
+    .url('Please enter a valid photo URL')
+    .nullable()
+    .optional(),
+  timezone: z.string().trim().min(1).max(100).optional(),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: passwordSchema,
+});
+
 type AuthUser = typeof users.$inferSelect;
 
 type GoogleCallbackQuery = {
@@ -199,6 +216,78 @@ export class AuthService {
     );
 
     return this.createAuthResponse(user);
+  }
+
+  async updateProfile(userId: string, payload: unknown) {
+    const parsed = updateProfileSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues[0]?.message);
+    }
+
+    const user = await this.databaseService.db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+    if (!user) throw new UnauthorizedException('Please sign in to continue.');
+
+    const email = parsed.data.email.toLowerCase();
+    const emailOwner = await this.findUserByEmail(email);
+    if (emailOwner && emailOwner.id !== userId) {
+      throw new ConflictException('This email is already registered.');
+    }
+
+    const [updatedUser] = await this.databaseService.db
+      .update(users)
+      .set({
+        fullName: parsed.data.fullName,
+        email,
+        avatarUrl: parsed.data.avatarUrl ?? null,
+        timezone: parsed.data.timezone ?? user.timezone,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    return this.toPublicUser(updatedUser ?? user);
+  }
+
+  async changePassword(userId: string, payload: unknown) {
+    const parsed = changePasswordSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.issues[0]?.message);
+    }
+
+    const user = await this.databaseService.db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+    if (!user) throw new UnauthorizedException('Please sign in to continue.');
+    if (
+      user.authProvider !== 'password' ||
+      user.passwordHash.startsWith('oauth:')
+    ) {
+      throw new BadRequestException(
+        'Password changes are unavailable for social sign-in accounts.',
+      );
+    }
+    if (
+      !(await this.verifyPassword(
+        parsed.data.currentPassword,
+        user.passwordHash,
+      ))
+    ) {
+      throw new UnauthorizedException('Current password is incorrect.');
+    }
+
+    const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+    await this.databaseService.db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+    return { ok: true };
+  }
+
+  async deleteAccount(userId: string) {
+    await this.databaseService.db.delete(users).where(eq(users.id, userId));
+    return { ok: true };
   }
 
   async socialLogin(payload: unknown, options: { notify?: boolean } = {}) {

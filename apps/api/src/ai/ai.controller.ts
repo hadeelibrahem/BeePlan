@@ -21,9 +21,11 @@ import { SpeechService } from '../speech/speech.service';
 import { AiService } from './ai.service';
 import { ParseReminderDto } from './dto/parse-reminder.dto';
 import { ParseRecurrenceDto } from './dto/parse-recurrence.dto';
+import { SmartLocationInferenceDto } from './dto/smart-location-inference.dto';
 import { TaskPlanChatDto } from './dto/task-plan-chat.dto';
 import { RecurrenceParseService } from './recurrence-parse.service';
 import { RecurrenceSuggestionsService } from './recurrence-suggestions.service';
+import { SmartLocationInferenceService } from './smart-location-inference.service';
 import { TaskPlanChatService } from './task-plan-chat.service';
 
 @UseGuards(JwtAuthGuard)
@@ -37,6 +39,7 @@ export class AiController {
     private readonly taskPlanChatService: TaskPlanChatService,
     private readonly recurrenceParseService: RecurrenceParseService,
     private readonly recurrenceSuggestionsService: RecurrenceSuggestionsService,
+    private readonly smartLocationInferenceService: SmartLocationInferenceService,
   ) {}
 
   @Post('task-plan/chat')
@@ -48,8 +51,17 @@ export class AiController {
 
   @Post('parse-reminder')
   @HttpCode(HttpStatus.OK)
-  parseReminder(@Body() dto: ParseReminderDto) {
-    return this.aiService.parseReminder(dto.text);
+  parseReminder(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: ParseReminderDto,
+  ) {
+    return this.aiService.parseReminder(dto.text, request.user.id);
+  }
+
+  @Post('smart-location')
+  @HttpCode(HttpStatus.OK)
+  smartLocation(@Body() dto: SmartLocationInferenceDto) {
+    return this.smartLocationInferenceService.infer(dto.text);
   }
 
   @Post('recurrence/parse')
@@ -84,13 +96,16 @@ export class AiController {
   @Post('voice-reminder-draft')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('audio', audioMulterOptions))
-  async voiceReminderDraft(@UploadedFile() file?: Express.Multer.File) {
+  async voiceReminderDraft(
+    @Req() request: AuthenticatedRequest,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('An audio file is required.');
     }
 
     const transcript = await this.speechService.transcribe(file);
-    const draft = await this.aiService.parseReminder(transcript);
+    const draft = await this.aiService.parseReminder(transcript, request.user.id);
     return { transcript, draft };
   }
 }

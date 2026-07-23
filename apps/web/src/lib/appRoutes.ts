@@ -18,6 +18,7 @@ export type AppScreen =
   | 'analytics'
   | 'social'
   | 'notifications'
+  | 'settings'
   | 'notFound'
 
 export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string }
@@ -39,6 +40,7 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/analytics': 'analytics',
   '/people': 'social',
   '/notifications': 'notifications',
+  '/settings': 'settings',
 }
 
 export function resolveAppRoute(pathname: string): AppRoute {
@@ -86,5 +88,6 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'analytics': return '/analytics'
     case 'social': return '/people'
     case 'notifications': return '/notifications'
+    case 'settings': return '/settings'
   }
 }

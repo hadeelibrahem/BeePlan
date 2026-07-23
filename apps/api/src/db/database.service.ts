@@ -33,6 +33,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureNotificationsTable();
     await this.ensureCollaborationTables();
     await this.ensureAiRecommendationsTable();
+    await this.ensurePersonalContextTables();
   }
 
   async healthCheck() {
@@ -113,6 +114,12 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists context jsonb,
         add column if not exists checklist_items jsonb,
         add column if not exists person jsonb,
+        add column if not exists smart_location_enabled boolean default false not null,
+        add column if not exists smart_place_category varchar(80),
+        add column if not exists trigger_radius integer default 200 not null,
+        add column if not exists trigger_on_enter boolean default true not null,
+        add column if not exists trigger_cooldown integer default 1440 not null,
+        add column if not exists last_triggered_at timestamp,
         add column if not exists updated_at timestamp default now() not null,
         add column if not exists is_orphaned boolean default false not null,
         alter column user_id drop not null,
@@ -450,6 +457,82 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists lunch_start_time varchar(5) not null default '13:00',
         add column if not exists lunch_end_time varchar(5) not null default '13:45',
         add column if not exists unavailable_hours jsonb not null default '[]'::jsonb
+    `);
+  }
+
+  // Personal Context: saved places (canonical locations), their natural-language
+  // aliases, and recurring weekly commitments. saved_locations predates this
+  // feature (originally just name/lat/lng/radius) so we CREATE-if-missing and
+  // then ALTER-add the new columns for existing installs.
+  private async ensurePersonalContextTables() {
+    await this.getPool().query(`
+      create table if not exists saved_locations (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        name varchar(255) not null,
+        latitude decimal(10, 7) not null,
+        longitude decimal(10, 7) not null,
+        radius_meters integer not null default 100,
+        created_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      alter table saved_locations
+        add column if not exists icon varchar(16),
+        add column if not exists address text,
+        add column if not exists category varchar(80),
+        add column if not exists updated_at timestamp default now() not null
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_saved_locations_user
+        on saved_locations (user_id)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists saved_location_aliases (
+        id uuid primary key default gen_random_uuid() not null,
+        saved_location_id uuid not null references saved_locations(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        alias varchar(120) not null,
+        normalized_alias varchar(120) not null,
+        created_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      create unique index if not exists uq_saved_location_alias_user
+        on saved_location_aliases (user_id, normalized_alias)
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_saved_location_aliases_location
+        on saved_location_aliases (saved_location_id)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists recurring_commitments (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        title varchar(255) not null,
+        days_of_week jsonb not null default '[]'::jsonb,
+        start_time varchar(5) not null,
+        end_time varchar(5) not null,
+        saved_location_id uuid references saved_locations(id) on delete set null,
+        repeat_weekly boolean not null default true,
+        start_date date,
+        end_date date,
+        is_active boolean not null default true,
+        notes text,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_recurring_commitments_user
+        on recurring_commitments (user_id)
     `);
   }
 

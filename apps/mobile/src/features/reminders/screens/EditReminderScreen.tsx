@@ -31,6 +31,7 @@ export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }:
       <PageHeader title={t('reminders.editTitle')} subtitle={t('reminders.editSubtitle')} onBack={onCancel} />
       <ReminderForm
         initialReminder={reminder}
+        accessToken={accessToken}
         friends={friends}
         submitLabel={t('reminders.saveChanges')}
         onSubmit={async (values) => {

@@ -35,8 +35,22 @@ type ReminderResponse = {
   items?: { id?: string; title: string; isDone?: boolean }[];
   reminderTrigger?: Reminder['checklistReminderTrigger'];
   person?: Reminder['person'];
+  smartLocationEnabled?: boolean;
+  smartPlaceCategory?: GeneralLocationCategory;
+  triggerRadius?: number;
+  triggerOnEnter?: boolean;
+  triggerCooldown?: number;
+  lastTriggeredAt?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SmartLocationSuggestion = {
+  title: string;
+  category: GeneralLocationCategory | null;
+  confidence: number;
+  reason: string;
+  source: 'ai' | 'rules';
 };
 
 async function apiRequest<T>(path: string, accessToken: string, init?: RequestInit): Promise<T> {
@@ -96,6 +110,17 @@ function toBackendLocation(location: ReminderFormValues['location']): BackendLoc
   };
 }
 
+function toSmartLocationFields(values: ReminderFormValues) {
+  return {
+    smartLocationEnabled: values.smartLocationEnabled ?? false,
+    smartPlaceCategory: values.smartPlaceCategory,
+    triggerRadius: values.triggerRadius ?? values.location?.radiusMeters ?? 200,
+    triggerOnEnter: values.triggerOnEnter ?? values.location?.trigger !== 'leave',
+    triggerCooldown: values.triggerCooldown ?? 1440,
+    lastTriggeredAt: values.lastTriggeredAt,
+  };
+}
+
 function fromBackendLocation(location?: BackendLocationDto): Reminder['location'] {
   if (!location) return undefined;
 
@@ -133,6 +158,7 @@ function toLocationRequestBody(values: ReminderFormValues) {
     priority: normalizePriority(values.priority),
     notes: values.description || undefined,
     location: toBackendLocation(values.location),
+    ...toSmartLocationFields(values),
   };
 }
 
@@ -172,6 +198,7 @@ function toChecklistRequestBody(values: ReminderFormValues) {
             : undefined,
       },
     },
+    ...toSmartLocationFields(values),
   };
 }
 
@@ -189,6 +216,7 @@ function toRequestBody(values: ReminderFormValues) {
     priority: normalizePriority(values.priority),
     context: values.context?.condition ? values.context : undefined,
     checklistItems: values.checklistItems?.filter((item) => item.title.trim()),
+    ...toSmartLocationFields(values),
   };
 }
 
@@ -243,6 +271,12 @@ function fromResponse(data: ReminderResponse): Reminder {
     })),
     checklistReminderTrigger: data.reminderTrigger,
     person: data.person,
+    smartLocationEnabled: data.smartLocationEnabled ?? false,
+    smartPlaceCategory: data.smartPlaceCategory,
+    triggerRadius: data.triggerRadius ?? data.location?.radiusMeters ?? 200,
+    triggerOnEnter: data.triggerOnEnter ?? data.location?.triggerType !== 'leave',
+    triggerCooldown: data.triggerCooldown ?? 1440,
+    lastTriggeredAt: data.lastTriggeredAt,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
@@ -311,6 +345,19 @@ export async function toggleReminderStatus(
   return fromResponse(data);
 }
 
+export async function markSmartLocationTriggered(
+  id: string,
+  accessToken: string,
+  triggeredAt = new Date().toISOString(),
+): Promise<Reminder | null> {
+  const data = await apiRequest<ReminderResponse>(`/reminders/${id}`, accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify({ lastTriggeredAt: triggeredAt, status: 'done' }),
+  });
+
+  return fromResponse(data);
+}
+
 export type RecordedAudioFile = {
   uri: string;
   name: string;
@@ -336,6 +383,21 @@ export async function parseReminderText(text: string, accessToken: string): Prom
     body: JSON.stringify({ text }),
   });
   return readJsonOrThrow<ReminderDraft>(response, `${API_BASE_URL}/ai/parse-reminder`);
+}
+
+export async function inferSmartLocation(
+  text: string,
+  accessToken: string,
+): Promise<SmartLocationSuggestion> {
+  const response = await apiFetch('/ai/smart-location', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ text }),
+  });
+  return readJsonOrThrow<SmartLocationSuggestion>(response, `${API_BASE_URL}/ai/smart-location`);
 }
 
 export async function createVoiceReminderDraft(
