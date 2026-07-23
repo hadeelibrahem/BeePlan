@@ -14,14 +14,17 @@ import {
   SESSION_TYPE_PRESETS,
   formatFocusMinutes,
   getFocusRecommendation,
+  getFocusQueue,
   getFocusStats,
   getTodayFocusSessions,
   type FocusRecommendation,
+  type FocusQueueItem,
   type FocusSession,
   type FocusSessionType,
   type FocusStats,
 } from '../lib/focusApi'
 import { formatClock, type UseFocusSession } from '../lib/useFocusSession'
+import { focusParentLabel, focusPrimaryTitle } from '../lib/focusDisplay'
 
 type FocusScreenProps = SidebarNavHandlers & {
   onBackDashboard?: () => void
@@ -34,7 +37,15 @@ type FocusScreenProps = SidebarNavHandlers & {
   onOpenWorkspace: () => void
 }
 
-type StartTarget = { id: string; title: string; priority: string; category: string }
+type StartTarget = {
+  id: string // taskId
+  title: string // display title (subtask title when focusing a subtask)
+  taskTitle: string // parent task title (for "Part of:")
+  priority: string
+  category: string
+  subtaskId: string | null
+  subtaskTitle: string | null
+}
 
 export default function FocusScreen({
   onBackDashboard,
@@ -54,32 +65,29 @@ export default function FocusScreen({
   const [stats, setStats] = useState<FocusStats | null>(null)
   const [recommendation, setRecommendation] = useState<FocusRecommendation | null>(null)
   const [todaySessions, setTodaySessions] = useState<FocusSession[]>([])
+  const [focusQueue, setFocusQueue] = useState<FocusQueueItem[]>([])
   const [startModalTask, setStartModalTask] = useState<StartTarget | null>(null)
   const [error, setError] = useState('')
   const [loadingFocusData, setLoadingFocusData] = useState(true)
   const removingRef = useRef<Set<string>>(new Set())
 
   // The running timer lives in the dedicated workspace; this page only opens or resumes it.
-  const focusTasks = useMemo(
-    () =>
-      apiTasks
-        .filter((task) => task.isFocusTask)
-        .filter((task) => task.title.toLowerCase().includes(search.toLowerCase())),
-    [apiTasks, search],
-  )
+  const visibleQueue = useMemo(() => focusQueue.filter((item) => `${item.subtaskTitle ?? ''} ${item.taskTitle}`.toLowerCase().includes(search.toLowerCase())), [focusQueue, search])
 
   const refreshFocusData = useCallback(async () => {
     if (!accessToken) return
     setLoadingFocusData(true)
     try {
-      const [statsData, sessions, rec] = await Promise.all([
+      const [statsData, sessions, rec, queue] = await Promise.all([
         getFocusStats(accessToken),
         getTodayFocusSessions(accessToken),
         getFocusRecommendation(accessToken).catch(() => null),
+        getFocusQueue(accessToken),
       ])
       setStats(statsData)
       setTodaySessions(sessions)
       setRecommendation(rec)
+      setFocusQueue(queue)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load focus data.')
     } finally {
@@ -99,9 +107,11 @@ export default function FocusScreen({
       const ok = await focus.start(
         {
           id: startModalTask.id,
-          title: startModalTask.title,
+          title: startModalTask.taskTitle,
           priority: startModalTask.priority,
           category: startModalTask.category,
+          subtaskId: startModalTask.subtaskId,
+          subtaskTitle: startModalTask.subtaskTitle,
         },
         type,
         minutes,
@@ -114,16 +124,24 @@ export default function FocusScreen({
     [startModalTask, focus, onOpenWorkspace],
   )
 
-  const openStartModal = useCallback(
-    (task: { id: string; title: string; priority: ApiTask['priority']; category: string }) => {
+  const openStartModal = useCallback((task: StartTarget) => setStartModalTask(task), [])
+
+  // Start from the recommendation: focuses the recommended subtask when present,
+  // otherwise the task itself (preserves today's behaviour).
+  const startRecommendation = useCallback(
+    (rec: FocusRecommendation) => {
+      const task = apiTasks.find((item) => item.id === rec.taskId)
       setStartModalTask({
-        id: task.id,
-        title: task.title,
-        priority: toUiPriority(task.priority),
-        category: task.category || 'General',
+        id: rec.taskId,
+        title: focusPrimaryTitle(rec),
+        taskTitle: rec.taskTitle,
+        priority: task ? toUiPriority(task.priority) : 'Medium',
+        category: task?.category || 'General',
+        subtaskId: rec.subtaskId ?? null,
+        subtaskTitle: rec.subtaskTitle ?? null,
       })
     },
-    [],
+    [apiTasks],
   )
 
   const handleRemoveFocus = useCallback(
@@ -150,7 +168,7 @@ export default function FocusScreen({
       onNavigateDashboard={onBackDashboard}
       panelTitle="Deep work"
       panelCaption={focus.active ? 'Focus session in progress.' : 'Start a session to get in the zone.'}
-      panelPercent={focus.active ? 100 : focusTasks.length ? 100 : 0}
+      panelPercent={focus.active ? 100 : visibleQueue.length ? 100 : 0}
     >
       <PageHeader
         title={t('taskUi.focus.title')}
@@ -181,7 +199,8 @@ export default function FocusScreen({
 
       {focus.active ? (
         <InProgressCard
-          title={focus.active.taskTitle ?? 'Focus session'}
+          title={focusPrimaryTitle(focus.active)}
+          subtitle={focusParentLabel(focus.active)}
           remaining={formatClock(focus.remainingMs)}
           complete={focus.sessionComplete}
           onResume={onOpenWorkspace}
@@ -189,14 +208,13 @@ export default function FocusScreen({
       ) : (
         <RecommendationCard
           recommendation={recommendation}
-          tasks={apiTasks}
-          onFocus={openStartModal}
+          onStart={startRecommendation}
           onView={onViewTaskDetails}
         />
       )}
 
       <FocusQueue
-        tasks={focusTasks}
+        items={visibleQueue}
         disabled={Boolean(focus.active)}
         onStart={openStartModal}
         onRemove={(taskId) => void handleRemoveFocus(taskId)}
@@ -222,11 +240,13 @@ export default function FocusScreen({
 
 function InProgressCard({
   title,
+  subtitle,
   remaining,
   complete,
   onResume,
 }: {
   title: string
+  subtitle?: string | null
   remaining: string
   complete: boolean
   onResume: () => void
@@ -236,6 +256,7 @@ function InProgressCard({
       <div className="min-w-0">
         <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">Focus session in progress</p>
         <h3 className="mt-1 truncate text-lg font-black text-[var(--bp-text)]">{title}</h3>
+        {subtitle ? <p className="mt-0.5 truncate text-xs font-semibold text-[var(--bp-muted)]">{subtitle}</p> : null}
         <p className="mt-0.5 text-sm font-semibold tabular-nums text-[var(--bp-muted)]">
           {complete ? 'Session complete' : `${remaining} remaining`}
         </p>
@@ -275,13 +296,11 @@ function StatsRow({ stats }: { stats: FocusStats | null }) {
 
 function RecommendationCard({
   recommendation,
-  tasks,
-  onFocus,
+  onStart,
   onView,
 }: {
   recommendation: FocusRecommendation | null
-  tasks: ApiTask[]
-  onFocus: (task: { id: string; title: string; priority: ApiTask['priority']; category: string }) => void
+  onStart: (rec: FocusRecommendation) => void
   onView?: (taskId: string) => void
 }) {
   if (!recommendation) {
@@ -295,29 +314,28 @@ function RecommendationCard({
     )
   }
 
-  const task = tasks.find((item) => item.id === recommendation.taskId)
+  const isSubtask = Boolean(recommendation.subtaskId)
+  const primary = focusPrimaryTitle(recommendation)
+  const parent = focusParentLabel(recommendation)
 
   return (
     <section className="mb-4 rounded-2xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent-soft)] p-4">
-      <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">Recommended now</p>
-      <h3 className="mt-1 text-lg font-black text-[var(--bp-text)]">{recommendation.taskTitle}</h3>
+      <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">
+        {isSubtask ? 'Do this now' : 'Recommended now'}
+      </p>
+      <h3 className="mt-1 text-lg font-black text-[var(--bp-text)]">{primary}</h3>
+      {parent ? <p className="mt-0.5 text-xs font-semibold text-slate-400">{parent}</p> : null}
+      {recommendation.estimatedMinutes ? (
+        <p className="mt-1 text-xs text-slate-400">Estimated: {formatFocusMinutes(recommendation.estimatedMinutes)}</p>
+      ) : null}
       <p className="mt-1 text-sm text-slate-400">Reason: {recommendation.reason}</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        {task ? (
-          <PrimaryButton
-            size="sm"
-            onClick={() =>
-              onFocus({ id: task.id, title: task.title, priority: task.priority, category: task.category })
-            }
-          >
-            Start Focus
-          </PrimaryButton>
-        ) : null}
-        {task ? (
-          <OutlineButton size="sm" onClick={() => onView?.(recommendation.taskId)}>
-            View task
-          </OutlineButton>
-        ) : null}
+        <PrimaryButton size="sm" onClick={() => onStart(recommendation)}>
+          Start Focus
+        </PrimaryButton>
+        <OutlineButton size="sm" onClick={() => onView?.(recommendation.taskId)}>
+          View task
+        </OutlineButton>
       </div>
     </section>
   )
@@ -326,37 +344,36 @@ function RecommendationCard({
 // --- Focus queue -----------------------------------------------------------
 
 function FocusQueue({
-  tasks,
+  items,
   disabled,
   onStart,
   onRemove,
   onView,
 }: {
-  tasks: ApiTask[]
+  items: FocusQueueItem[]
   disabled: boolean
-  onStart: (task: { id: string; title: string; priority: ApiTask['priority']; category: string }) => void
+  onStart: (task: StartTarget) => void
   onRemove: (taskId: string) => void
   onView?: (taskId: string) => void
 }) {
   return (
     <section className="mb-4">
       <h3 className="mb-2 text-sm font-black text-[var(--bp-text)]">
-        Focus Queue <span className="text-xs font-semibold text-slate-400">· {tasks.length} tasks</span>
+        Focus Queue <span className="text-xs font-semibold text-slate-400">· {items.length} items</span>
       </h3>
 
-      {tasks.length ? (
+      {items.length ? (
         <div className="grid gap-3 md:grid-cols-2">
-          {tasks.map((task) => (
-            <FocusCard
-              key={task.id}
-              task={task}
-              disabled={disabled}
-              onStart={() =>
-                onStart({ id: task.id, title: task.title, priority: task.priority, category: task.category })
-              }
-              onRemove={() => onRemove(task.id)}
-              onView={() => onView?.(task.id)}
-            />
+          {items.map((item) => (
+            <div key={item.subtaskId ?? item.taskId} className="flex flex-col rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
+              <button type="button" onClick={() => onView?.(item.taskId)} className="min-w-0 text-start">
+                <div className="mb-2 flex flex-wrap items-center gap-1.5"><Badge label={toUiPriority(item.priority as ApiTask['priority'])} type={toUiPriority(item.priority as ApiTask['priority'])} /><Badge label={toUiStatus(item.status as ApiTask['status'])} type={toUiStatus(item.status as ApiTask['status'])} /></div>
+                <h4 className="truncate text-sm font-black text-[var(--bp-text)]">{focusPrimaryTitle(item)}</h4>
+                {focusParentLabel(item) ? <p className="mt-0.5 text-xs font-semibold text-slate-400">{focusParentLabel(item)}</p> : null}
+              </button>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400"><Meta label="Due" value={formatDue(item.dueDate ?? undefined, '')} /><Meta label="Estimated" value={item.estimatedMinutes ? formatFocusMinutes(item.estimatedMinutes) : '—'} /><Meta label="Ready" value={item.hasOpenDependencies ? 'Waiting' : 'Ready'} /></div>
+              <div className="mt-4 flex gap-2"><PrimaryButton size="sm" disabled={disabled} className="flex-1" onClick={() => onStart({ id: item.taskId, title: focusPrimaryTitle(item), priority: item.priority as ApiTask['priority'], category: '', taskTitle: item.taskTitle, subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle })}>Start Focus</PrimaryButton>{item.subtaskId ? null : <OutlineButton size="sm" onClick={() => onRemove(item.taskId)}>Remove</OutlineButton>}</div>
+            </div>
           ))}
         </div>
       ) : (
@@ -369,7 +386,7 @@ function FocusQueue({
   )
 }
 
-function FocusCard({
+export function FocusCard({
   task,
   disabled,
   onStart,
@@ -448,8 +465,9 @@ function TodaySessions({ sessions }: { sessions: FocusSession[] }) {
             <div key={session.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-[var(--bp-text)]">
-                  {session.taskTitle ?? 'Focus session'}
+                  {focusPrimaryTitle(session)}
                 </p>
+                {focusParentLabel(session) ? <p className="text-xs text-slate-500">{focusParentLabel(session)}</p> : null}
                 <p className="text-xs text-slate-500">
                   {labelForType(session.sessionType) } · {formatTime(session.startedAt)}
                 </p>

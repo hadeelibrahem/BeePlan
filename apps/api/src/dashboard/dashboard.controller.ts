@@ -12,4 +12,9 @@ export class DashboardController {
   getSummary(@Req() request: AuthenticatedRequest) {
     return this.dashboardService.getSummary(request.user.id);
   }
+
+  @Get('today')
+  getToday(@Req() request: AuthenticatedRequest) {
+    return this.dashboardService.getToday(request.user.id);
+  }
 }

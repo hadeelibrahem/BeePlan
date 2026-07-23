@@ -666,6 +666,11 @@ const SubtaskRow = memo(function SubtaskRow({
         <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
           <TaskPriorityBadge priority={item.priority} />
           <TaskStatusBadge status={item.status} />
+          {item.isFocusTask ? (
+            <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
+              <Text className="text-xs font-bold" style={{ color: colors.accent }}>🎯 Focus</Text>
+            </View>
+          ) : null}
           {item.estimatedDurationSource === 'ai' && item.estimatedDurationMinutes ? (
             <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
               <Text className="text-xs font-bold" style={{ color: colors.accent }}>AI Estimate</Text>

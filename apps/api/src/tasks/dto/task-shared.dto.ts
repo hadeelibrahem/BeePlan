@@ -177,6 +177,12 @@ export class SubtaskDto {
   @IsBoolean()
   isShared?: boolean;
 
+  // Deep-work eligibility flag (mirrors the task-level isFocusTask). Explicit
+  // only — the Focus recommender never infers this from duration/title/AI.
+  @IsOptional()
+  @IsBoolean()
+  isFocusTask?: boolean;
+
   @IsOptional()
   @IsString()
   description?: string;

@@ -8,6 +8,8 @@ export type FocusSession = {
   id: string;
   taskId: string | null;
   taskTitle: string | null;
+  subtaskId?: string | null;
+  subtaskTitle?: string | null;
   startedAt: string;
   endedAt: string | null;
   plannedMinutes: number;
@@ -30,12 +32,29 @@ export type FocusStats = {
 export type FocusRecommendation = {
   taskId: string;
   taskTitle: string;
+  subtaskId?: string | null;
+  subtaskTitle?: string | null;
+  estimatedMinutes?: number | null;
   reason: string;
+  recommendationReason?: string;
   score: number;
+};
+
+export type FocusQueueItem = {
+  taskId: string;
+  taskTitle: string;
+  subtaskId: string | null;
+  subtaskTitle: string | null;
+  priority: string;
+  dueDate: string | null;
+  estimatedMinutes: number | null;
+  status: string;
+  hasOpenDependencies: boolean;
 };
 
 export type StartFocusSessionPayload = {
   taskId?: string;
+  subtaskId?: string;
   plannedMinutes: number;
   sessionType?: FocusSessionType;
 };
@@ -99,12 +118,20 @@ export function getTodayFocusSessions(accessToken: string) {
   return request<FocusSession[]>(accessToken, '/focus/sessions/today');
 }
 
+export function getActiveFocusSession(accessToken: string) {
+  return request<FocusSession | null>(accessToken, '/focus/active');
+}
+
 export function getFocusStats(accessToken: string) {
   return request<FocusStats>(accessToken, '/focus/stats');
 }
 
 export function getFocusRecommendation(accessToken: string) {
   return request<FocusRecommendation | null>(accessToken, '/focus/recommendation');
+}
+
+export function getFocusQueue(accessToken: string) {
+  return request<FocusQueueItem[]>(accessToken, '/focus/queue');
 }
 
 export const SESSION_TYPE_PRESETS: {

@@ -66,4 +66,14 @@ export class FocusController {
   recommendation(@Req() request: AuthenticatedRequest) {
     return this.focusService.recommendation(request.user.id);
   }
+
+  @Get('active')
+  active(@Req() request: AuthenticatedRequest) {
+    return this.focusService.active(request.user.id);
+  }
+
+  @Get('queue')
+  queue(@Req() request: AuthenticatedRequest) {
+    return this.focusService.queue(request.user.id);
+  }
 }

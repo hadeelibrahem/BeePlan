@@ -870,6 +870,11 @@ const Subtask = memo(function Subtask({
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <TaskPriorityBadge priority={subtask.priority} />
           <TaskStatusBadge status={subtask.status} />
+          {subtask.isFocusTask ? (
+            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent)]">
+              🎯 Focus
+            </span>
+          ) : null}
           {subtask.estimatedDurationSource === 'ai' && subtask.estimatedDurationMinutes ? (
             <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent)]">
               AI Estimate

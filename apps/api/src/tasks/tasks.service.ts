@@ -25,6 +25,7 @@ import {
 } from '../collaboration/task-access.service';
 import { DatabaseService } from '../db/database.service';
 import {
+  focusSessions,
   subtaskDependencies,
   subtasks,
   taskActivities,
@@ -124,7 +125,10 @@ export class TasksService {
     const status = dto.status ?? 'todo';
     const progress = status === 'done' ? 100 : (dto.progress ?? 0);
     const estimatedTimeMinutes = dto.estimatedTimeMinutes ?? 0;
-    const spentTimeMinutes = dto.spentTimeMinutes ?? 0;
+    // The client's spent time is the user's MANUAL entry. A new task has no
+    // Focus Sessions yet, so its derived total spent equals the manual value.
+    const manualSpentMinutes = dto.spentTimeMinutes ?? 0;
+    const spentTimeMinutes = manualSpentMinutes;
     const [task] = await this.db
       .insert(tasks)
       .values({
@@ -139,13 +143,12 @@ export class TasksService {
         category: dto.category?.trim() || null,
         notes: dto.notes?.trim() || null,
         estimatedTimeMinutes,
+        manualSpentMinutes,
         spentTimeMinutes,
-        remainingTimeMinutes:
-          dto.remainingTimeMinutes ??
-          this.calculateRemainingMinutes(
-            estimatedTimeMinutes,
-            spentTimeMinutes,
-          ),
+        remainingTimeMinutes: this.calculateRemainingMinutes(
+          estimatedTimeMinutes,
+          spentTimeMinutes,
+        ),
         reminderEnabled: dto.reminderEnabled ?? false,
         reminderBeforeMinutes: dto.reminderBeforeMinutes ?? null,
         labels: this.normalizeLabelNames(dto.labels),
@@ -454,30 +457,18 @@ export class TasksService {
     if (dto.estimatedTimeMinutes !== undefined) {
       updateData.estimatedTimeMinutes = dto.estimatedTimeMinutes;
     }
+    // The client's spent time edits the MANUAL half only; the total
+    // (spentTimeMinutes) and remaining are re-derived below via
+    // recomputeTaskSpentTime so focused time is never discarded. Any
+    // client-sent remainingTimeMinutes is ignored — it is always derived.
     if (dto.spentTimeMinutes !== undefined) {
-      updateData.spentTimeMinutes = dto.spentTimeMinutes;
-    }
-    if (dto.remainingTimeMinutes !== undefined) {
-      updateData.remainingTimeMinutes = dto.remainingTimeMinutes;
+      updateData.manualSpentMinutes = dto.spentTimeMinutes;
     }
     if (dto.reminderEnabled !== undefined) {
       updateData.reminderEnabled = dto.reminderEnabled;
     }
     if (dto.reminderBeforeMinutes !== undefined) {
       updateData.reminderBeforeMinutes = dto.reminderBeforeMinutes;
-    }
-    if (
-      dto.estimatedTimeMinutes !== undefined ||
-      dto.spentTimeMinutes !== undefined
-    ) {
-      const estimatedTimeMinutes: number =
-        dto.estimatedTimeMinutes ?? existingTask.estimatedTimeMinutes;
-      const spentTimeMinutes: number =
-        dto.spentTimeMinutes ?? existingTask.spentTimeMinutes;
-      updateData.remainingTimeMinutes = this.calculateRemainingMinutes(
-        estimatedTimeMinutes,
-        spentTimeMinutes,
-      );
     }
     if (dto.labels !== undefined) {
       updateData.labels = this.normalizeLabelNames(dto.labels);
@@ -490,6 +481,15 @@ export class TasksService {
       .update(tasks)
       .set(updateData)
       .where(eq(tasks.id, taskId));
+
+    // Re-derive total spent + remaining whenever the estimate or the manual
+    // spent time changed (focused time is folded back in from the sessions).
+    if (
+      dto.estimatedTimeMinutes !== undefined ||
+      dto.spentTimeMinutes !== undefined
+    ) {
+      await this.recomputeTaskSpentTime(taskId);
+    }
 
     if (dto.recurrence !== undefined) {
       if (!dto.recurrence || dto.recurrence.frequency === 'Never') {
@@ -645,21 +645,20 @@ export class TasksService {
     await this.getTaskForUser(userId, taskId);
 
     const estimatedTimeMinutes = this.hoursToMinutes(dto.estimatedHours);
-    const spentTimeMinutes = this.hoursToMinutes(dto.spentHours);
-    const remainingTimeMinutes = this.calculateRemainingMinutes(
-      estimatedTimeMinutes,
-      spentTimeMinutes,
-    );
+    // The submitted spent hours are the user's MANUAL entry; the derived total
+    // (manual + focused time) and remaining are recomputed below.
+    const manualSpentMinutes = this.hoursToMinutes(dto.spentHours);
 
     await this.db
       .update(tasks)
       .set({
         estimatedTimeMinutes,
-        spentTimeMinutes,
-        remainingTimeMinutes,
+        manualSpentMinutes,
         updatedAt: new Date(),
       })
       .where(eq(tasks.id, taskId));
+
+    await this.recomputeTaskSpentTime(taskId);
 
     await this.addActivity(
       userId,
@@ -668,11 +667,8 @@ export class TasksService {
       'Time estimation updated',
     );
 
-    return this.toTimeEstimationEntity({
-      estimatedTimeMinutes,
-      spentTimeMinutes,
-      remainingTimeMinutes,
-    });
+    const task = await this.getTaskForUser(userId, taskId);
+    return this.toTimeEstimationEntity(task);
   }
 
   async listSubtasks(
@@ -796,6 +792,7 @@ export class TasksService {
         assignee: dto.assignee,
         assigneeUserId: dto.assigneeUserId,
         isShared: dto.isShared,
+        isFocusTask: dto.isFocusTask,
         description: dto.description,
         priority: dto.priority,
         status: nextStatus,
@@ -1331,6 +1328,7 @@ export class TasksService {
       notes: task.notes ?? '',
       estimatedTimeMinutes: task.estimatedTimeMinutes,
       spentTimeMinutes: task.spentTimeMinutes,
+      manualSpentMinutes: task.manualSpentMinutes,
       remainingTimeMinutes: task.remainingTimeMinutes,
       reminderEnabled: task.reminderEnabled,
       reminderBeforeMinutes: task.reminderBeforeMinutes ?? undefined,
@@ -1367,6 +1365,7 @@ export class TasksService {
       assignee: row.assignee ?? '',
       assigneeUserId: row.assigneeUserId ?? undefined,
       isShared: row.isShared,
+      isFocusTask: row.isFocusTask,
       description: row.description ?? '',
       priority: row.priority,
       status: row.status,
@@ -1452,11 +1451,18 @@ export class TasksService {
   private toTimeEstimationEntity(
     task: Pick<
       TaskRow,
-      'estimatedTimeMinutes' | 'spentTimeMinutes' | 'remainingTimeMinutes'
+      | 'estimatedTimeMinutes'
+      | 'spentTimeMinutes'
+      | 'manualSpentMinutes'
+      | 'remainingTimeMinutes'
     >,
   ) {
     const estimatedHours = this.minutesToHours(task.estimatedTimeMinutes);
     const spentHours = this.minutesToHours(task.spentTimeMinutes);
+    // The manual half, surfaced separately so the Edit "Spent hours" field can
+    // seed and write back only the user's entry (never the focus-inclusive
+    // total, which would double-count focused time on the next save).
+    const manualSpentHours = this.minutesToHours(task.manualSpentMinutes);
     const remainingHours = Math.max(
       this.minutesToHours(task.remainingTimeMinutes),
       0,
@@ -1467,6 +1473,7 @@ export class TasksService {
     return {
       estimatedHours,
       spentHours,
+      manualSpentHours,
       remainingHours,
       progressPercentage,
     };
@@ -1530,6 +1537,60 @@ export class TasksService {
     spentMinutes: number,
   ) {
     return Math.max(estimatedMinutes - spentMinutes, 0);
+  }
+
+  /**
+   * Re-derives a task's total spent + remaining time from its two sources of
+   * truth: the user's manual entry (`manualSpentMinutes`) and focused time
+   * measured by completed Focus Sessions. `spentTimeMinutes` and
+   * `remainingTimeMinutes` are caches of this derivation and must never be
+   * written directly. Called by every manual write path here and by
+   * FocusService after a session finishes/cancels. Recomputing (not
+   * incrementing) keeps it idempotent — no double-counting on repeat calls.
+   */
+  async recomputeTaskSpentTime(taskId: string): Promise<void> {
+    const [task] = await this.db
+      .select({
+        manualSpentMinutes: tasks.manualSpentMinutes,
+        estimatedTimeMinutes: tasks.estimatedTimeMinutes,
+      })
+      .from(tasks)
+      .where(eq(tasks.id, taskId))
+      .limit(1);
+    if (!task) return;
+
+    const focusSpentMinutes = await this.sumCompletedFocusMinutes(taskId);
+    const spentTimeMinutes =
+      Math.max(0, task.manualSpentMinutes) + focusSpentMinutes;
+    const remainingTimeMinutes = this.calculateRemainingMinutes(
+      task.estimatedTimeMinutes,
+      spentTimeMinutes,
+    );
+
+    await this.db
+      .update(tasks)
+      .set({ spentTimeMinutes, remainingTimeMinutes, updatedAt: new Date() })
+      .where(eq(tasks.id, taskId));
+  }
+
+  /** Sum of actual minutes across a task's completed Focus Sessions. */
+  private async sumCompletedFocusMinutes(taskId: string): Promise<number> {
+    const rows = await this.db
+      .select({
+        actualMinutes: focusSessions.actualMinutes,
+        status: focusSessions.status,
+      })
+      .from(focusSessions)
+      .where(
+        and(
+          eq(focusSessions.taskId, taskId),
+          eq(focusSessions.status, 'completed'),
+        ),
+      );
+
+    return rows
+      .filter((row) => row.status === 'completed')
+      .reduce((sum, row) => sum + Math.max(0, row.actualMinutes ?? 0), 0);
   }
 
   private hoursToMinutes(hours: number) {
@@ -1689,6 +1750,7 @@ export class TasksService {
       assignee: dto.assignee?.trim() || null,
       assigneeUserId: dto.assigneeUserId ?? null,
       isShared: dto.isShared ?? false,
+      isFocusTask: dto.isFocusTask ?? false,
       description: dto.description?.trim() || null,
       priority: dto.priority ?? 'medium',
       status,

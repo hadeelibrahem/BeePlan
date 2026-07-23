@@ -37,5 +37,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
     SubtaskAttachmentsService,
     JwtAuthGuard,
   ],
+  // Exported so FocusModule can reuse updateSubtask (subtask-scoped finish).
+  exports: [TasksService],
 })
 export class TasksModule {}

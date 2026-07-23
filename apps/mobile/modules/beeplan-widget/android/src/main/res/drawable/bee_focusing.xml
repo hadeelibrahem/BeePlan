@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BeePlan mascot — focusing (active Focus). Wings raised + motion lines. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="40dp"
+  android:height="40dp"
+  android:viewportWidth="64"
+  android:viewportHeight="64">
+
+  <!-- Wings raised higher than idle -->
+  <path android:fillColor="#FFFFFF" android:fillAlpha="0.35"
+    android:pathData="M12,17 a9,6.5 0 1 0 18,0 a9,6.5 0 1 0 -18,0 z" />
+  <path android:fillColor="#FFFFFF" android:fillAlpha="0.35"
+    android:pathData="M35,15 a8,6 0 1 0 16,0 a8,6 0 1 0 -16,0 z" />
+
+  <group android:rotation="14" android:pivotX="32" android:pivotY="37">
+    <clip-path
+      android:pathData="M22,20 H42 A7,7 0 0 1 49,27 V47 A7,7 0 0 1 42,54 H22 A7,7 0 0 1 15,47 V27 A7,7 0 0 1 22,20 Z" />
+    <path android:fillColor="#FDEF4B"
+      android:pathData="M22,20 H42 A7,7 0 0 1 49,27 V47 A7,7 0 0 1 42,54 H22 A7,7 0 0 1 15,47 V27 A7,7 0 0 1 22,20 Z" />
+    <path android:fillColor="#2B323F" android:pathData="M23.5,27.25 h17 v4.5 h-17 z" />
+    <path android:fillColor="#2B323F" android:pathData="M21.5,34.75 h21 v4.5 h-21 z" />
+    <path android:fillColor="#2B323F" android:pathData="M20,42.25 h24 v4.5 h-24 z" />
+  </group>
+
+  <path android:fillColor="#FDEF4B"
+    android:pathData="M19.8,12 a2.2,2.2 0 1 0 4.4,0 a2.2,2.2 0 1 0 -4.4,0 z" />
+  <path android:fillColor="#FDEF4B"
+    android:pathData="M35.8,12 a2.2,2.2 0 1 0 4.4,0 a2.2,2.2 0 1 0 -4.4,0 z" />
+
+  <!-- Motion lines (movement cue, no animation) -->
+  <path android:strokeColor="#C7CCD6" android:strokeWidth="2" android:strokeLineCap="round"
+    android:pathData="M3,34 h7" />
+  <path android:strokeColor="#C7CCD6" android:strokeWidth="2" android:strokeLineCap="round"
+    android:pathData="M1,40 h9" />
+  <path android:strokeColor="#C7CCD6" android:strokeWidth="2" android:strokeLineCap="round"
+    android:pathData="M4,46 h6" />
+</vector>

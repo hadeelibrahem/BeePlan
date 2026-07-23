@@ -161,7 +161,7 @@ export default function EditTaskScreen({
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task?.reminderBeforeMinutes ?? 30);
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [estimatedHours, setEstimatedHours] = useState(String(task?.estimatedHours ?? 0));
-  const [spentHours, setSpentHours] = useState(String(task?.spentHours ?? 0));
+  const [spentHours, setSpentHours] = useState(String(task?.manualSpentHours ?? task?.spentHours ?? 0));
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(
     task ? recurrenceToUi(task.recurrence) : null,
   );
@@ -193,7 +193,7 @@ export default function EditTaskScreen({
       reminderBeforeMinutes: task?.reminderBeforeMinutes ?? 30,
       notes: task?.notes ?? '',
       estimatedHours: String(task?.estimatedHours ?? 0),
-      spentHours: String(task?.spentHours ?? 0),
+      spentHours: String(task?.manualSpentHours ?? task?.spentHours ?? 0),
       focusEnabled: task?.isFocusTask ?? false,
       recurrenceSummary: createRecurrenceSummary(task ? recurrenceToUi(task.recurrence) : null),
     }),
@@ -524,7 +524,7 @@ export default function EditTaskScreen({
             />
           </View>
           <View className="flex-1">
-            <Label text="Spent Hours" />
+            <Label text="Manual Spent Hours" />
             <TextInput
               value={spentHours}
               onChangeText={setSpentHours}
@@ -536,7 +536,9 @@ export default function EditTaskScreen({
           </View>
         </View>
         <Text className="text-xs" style={{ color: colors.secondaryText }}>
-          Remaining time is recalculated automatically from estimated minus spent.
+          Manual spent hours is time you log by hand. Focus Sessions are tracked automatically and
+          added on top — the total spent time appears on the task details. Remaining time is
+          recalculated from estimated minus that total.
         </Text>
       </Card>
 

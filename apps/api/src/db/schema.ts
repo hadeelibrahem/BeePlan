@@ -209,7 +209,15 @@ export const tasks = pgTable(
     estimatedTimeMinutes: integer('estimated_time_minutes')
       .notNull()
       .default(0),
+    // Total time spent, DERIVED as manualSpentMinutes + sum of the task's
+    // completed Focus Session minutes. A cache — never edited directly; both
+    // TasksService (manual writes) and FocusService (session finish/cancel)
+    // recompute it via TasksService.recomputeTaskSpentTime.
     spentTimeMinutes: integer('spent_time_minutes').notNull().default(0),
+    // Time the user logged by hand (Edit Task "Spent hours" / time-estimation).
+    // The manual half of the spent-time model; preserved independently of Focus
+    // Sessions so focus recomputes never discard hand-entered time.
+    manualSpentMinutes: integer('manual_spent_minutes').notNull().default(0),
     remainingTimeMinutes: integer('remaining_time_minutes')
       .notNull()
       .default(0),
@@ -290,6 +298,11 @@ export const subtasks = pgTable(
     // assigneeUserId, and "unassigned" otherwise. Set for genuinely shared
     // planner work (collapsed shared sessions) and manual shared subtasks.
     isShared: boolean('is_shared').notNull().default(false),
+    // Explicit deep-work eligibility flag, mirroring tasks.isFocusTask. When
+    // true (and the subtask is incomplete + unblocked) the subtask is eligible
+    // for the Focus queue and "Do This Now" selection, and a Focus session may
+    // attach to it directly. Never inferred from duration, title, or AI.
+    isFocusTask: boolean('is_focus_task').notNull().default(false),
     description: text('description'),
     // low | medium | high | urgent
     priority: varchar('priority', { length: 20 }).notNull().default('medium'),
@@ -339,6 +352,8 @@ export const subtasks = pgTable(
     index('idx_subtasks_due_date').on(table.dueDate),
     index('idx_subtasks_assignee_user_id').on(table.assigneeUserId),
     index('idx_subtasks_task_source').on(table.taskId, table.source),
+    // Powers focus-eligible subtask selection for the Focus queue / recommender.
+    index('idx_subtasks_focus').on(table.isFocusTask),
   ],
 );
 
@@ -469,6 +484,14 @@ export const focusSessions = pgTable(
     taskId: uuid('task_id').references(() => tasks.id, {
       onDelete: 'set null',
     }),
+    // Optional link to the specific subtask being worked on. Null for
+    // task-level sessions (today's behavior) and for sessions whose subtask was
+    // later deleted. When set, the session targets the smallest work unit while
+    // taskId is retained as context. Both survive their referents' deletion so
+    // historical analytics never break.
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, {
+      onDelete: 'set null',
+    }),
     startedAt: timestamp('started_at').notNull().defaultNow(),
     endedAt: timestamp('ended_at'),
     plannedMinutes: integer('planned_minutes').notNull().default(25),
@@ -486,6 +509,8 @@ export const focusSessions = pgTable(
     index('idx_focus_sessions_user_id').on(table.userId),
     index('idx_focus_sessions_started_at').on(table.startedAt),
     index('idx_focus_sessions_task_id').on(table.taskId),
+    // Powers the subtask actual-time rollup (sum of completed sessions).
+    index('idx_focus_sessions_subtask_id').on(table.subtaskId),
   ],
 );
 

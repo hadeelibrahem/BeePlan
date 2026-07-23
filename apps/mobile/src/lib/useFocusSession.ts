@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   cancelFocusSession,
   finishFocusSession,
   startFocusSession,
+  getActiveFocusSession,
   type FocusSessionType,
   type FocusTaskOutcome,
 } from './focusApi';
@@ -17,6 +19,8 @@ export type ActiveFocus = {
   sessionId: string;
   taskId: string | null;
   taskTitle: string | null;
+  subtaskId: string | null;
+  subtaskTitle: string | null;
   priority: string | null;
   category: string | null;
   sessionType: FocusSessionType;
@@ -34,6 +38,8 @@ export type StartFocusInput = {
   title: string | null;
   priority?: string | null;
   category?: string | null;
+  subtaskId?: string | null;
+  subtaskTitle?: string | null;
 };
 
 export type UseFocusSession = ReturnType<typeof useFocusSession>;
@@ -53,6 +59,23 @@ export function useFocusSession(options: {
   const [error, setError] = useState('');
   const [hydrated, setHydrated] = useState(false);
 
+  const syncFromServer = useCallback(async (): Promise<boolean> => {
+    if (!accessToken) return false;
+    try {
+      const session = await getActiveFocusSession(accessToken);
+      if (!session) { setActive(null); return true; }
+      setActive((current) => ({
+        sessionId: session.id, taskId: session.taskId, taskTitle: session.taskTitle,
+        subtaskId: session.subtaskId ?? null, subtaskTitle: session.subtaskTitle ?? null,
+        priority: current?.priority ?? null, category: current?.category ?? null,
+        sessionType: session.sessionType, plannedMinutes: session.plannedMinutes,
+        startedAtMs: new Date(session.startedAt).getTime(), pausedTotalMs: current?.sessionId === session.id ? current.pausedTotalMs : 0,
+        pausedSinceMs: null, forceComplete: false,
+      }));
+      return true;
+    } catch { return false; }
+  }, [accessToken]);
+
   // Restore any in-flight session/break from storage on first mount.
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +93,12 @@ export function useFocusSession(options: {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => { if (hydrated) void syncFromServer(); }, [hydrated, syncFromServer]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void syncFromServer(); });
+    return () => subscription.remove();
+  }, [syncFromServer]);
 
   useEffect(() => {
     if (!active && !breakState) return;
@@ -118,6 +147,7 @@ export function useFocusSession(options: {
       try {
         const session = await startFocusSession(accessToken, {
           taskId: task.id ?? undefined,
+          subtaskId: task.subtaskId ?? undefined,
           plannedMinutes: minutes,
           sessionType,
         });
@@ -125,6 +155,8 @@ export function useFocusSession(options: {
           sessionId: session.id,
           taskId: session.taskId,
           taskTitle: session.taskTitle ?? task.title,
+          subtaskId: session.subtaskId ?? task.subtaskId ?? null,
+          subtaskTitle: session.subtaskTitle ?? task.subtaskTitle ?? null,
           priority: task.priority ?? null,
           category: task.category ?? null,
           sessionType: session.sessionType,
@@ -137,6 +169,7 @@ export function useFocusSession(options: {
         setBreakState(null);
         setPendingBreak(false);
         setBreakFinished(false);
+        void syncFromServer();
         return true;
       } catch (startError) {
         setError(startError instanceof Error ? startError.message : 'Unable to start focus session.');
@@ -145,7 +178,7 @@ export function useFocusSession(options: {
         setBusy(false);
       }
     },
-    [accessToken, busy],
+    [accessToken, busy, syncFromServer],
   );
 
   const pause = useCallback(() => {
@@ -169,6 +202,26 @@ export function useFocusSession(options: {
     );
   }, []);
 
+  // "Add More Time": extend the planned duration and resume, folding any paused
+  // interval (e.g. from auto-complete) into pausedTotalMs so elapsed time stays
+  // accurate. Clears forceComplete so the completion prompt closes.
+  const extendSession = useCallback((minutes: number) => {
+    setActive((current) => {
+      if (!current) return current;
+      const pausedTotalMs =
+        current.pausedSinceMs !== null
+          ? current.pausedTotalMs + (Date.now() - current.pausedSinceMs)
+          : current.pausedTotalMs;
+      return {
+        ...current,
+        plannedMinutes: current.plannedMinutes + minutes,
+        pausedTotalMs,
+        pausedSinceMs: null,
+        forceComplete: false,
+      };
+    });
+  }, []);
+
   const cancel = useCallback(async () => {
     if (!active || !accessToken) return;
     const current = active;
@@ -180,7 +233,8 @@ export function useFocusSession(options: {
     } catch {
       // Session already cleared from the UI.
     }
-  }, [active, accessToken]);
+    void syncFromServer();
+  }, [active, accessToken, syncFromServer]);
 
   const finishWithOutcome = useCallback(
     async (outcome: FocusTaskOutcome) => {
@@ -201,9 +255,10 @@ export function useFocusSession(options: {
         setError(finishError instanceof Error ? finishError.message : 'Unable to finish focus session.');
       } finally {
         setBusy(false);
+        void syncFromServer();
       }
     },
-    [active, accessToken, busy, onSessionFinished],
+    [active, accessToken, busy, onSessionFinished, syncFromServer],
   );
 
   const startBreak = useCallback((minutes: number, label: string) => {
@@ -243,6 +298,7 @@ export function useFocusSession(options: {
     pause,
     resume,
     requestFinish,
+    extendSession,
     cancel,
     finishWithOutcome,
     startBreak,
@@ -250,6 +306,7 @@ export function useFocusSession(options: {
     endBreak,
     dismissBreakFinished,
     clearError,
+    syncFromServer,
   };
 }
 

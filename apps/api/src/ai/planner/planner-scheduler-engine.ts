@@ -12,6 +12,7 @@ import type {
   PostponeReasonCode,
   ReasoningResult,
   SectionKey,
+  TaskDecision,
   TaskType,
   UnscheduledItem,
   WorkingHours,
@@ -59,7 +60,8 @@ export class PlannerSchedulerEngine {
     ];
 
     const unscheduled: UnscheduledItem[] = constraints.blockedTasks.map((entry) => ({
-      taskId: entry.task.id,
+      taskId: entry.task.taskId,
+      subtaskId: entry.task.subtaskId ?? undefined,
       title: entry.task.title,
       reason: entry.reason,
       status: entry.status,
@@ -71,6 +73,9 @@ export class PlannerSchedulerEngine {
     }));
 
     const tasksById = new Map(constraints.schedulableTasks.map((task) => [task.id, task]));
+    // Preserve valid subtask ordering: place any sibling a candidate depends on
+    // before the candidate itself, keeping the reasoning order otherwise intact.
+    const order = orderRespectingDependencies(reasoning.order, tasksById);
     const workBlock = clamp(preferences.workBlockMinutes, WORK_BLOCK_RANGE);
     const breakLength = clamp(preferences.breakMinutes, BREAK_RANGE);
     const preferredHardWindows = buildPreferredWindows(constraints, workingHours, 'hard');
@@ -86,7 +91,7 @@ export class PlannerSchedulerEngine {
     let postponedTaskCount = 0;
     let postponedMinutes = 0;
 
-    for (const decision of reasoning.order) {
+    for (const decision of order) {
       const task = tasksById.get(decision.taskId);
       if (!task) continue;
 
@@ -127,7 +132,8 @@ export class PlannerSchedulerEngine {
         segments.push({
           id: `task-${task.id}-${segments.length + 1}`,
           type: 'task',
-          taskId: task.id,
+          taskId: task.taskId,
+          subtaskId: task.subtaskId ?? undefined,
           title: task.title,
           startTime: fromMinutes(slot.start),
           endTime: fromMinutes(slot.end),
@@ -204,6 +210,39 @@ export class PlannerSchedulerEngine {
   }
 }
 
+/**
+ * Reorder the reasoning decisions so that, for any candidate with intra-task
+ * ordering dependencies, every sibling it depends on appears earlier. The
+ * original order is preserved wherever the dependency graph allows, so priority
+ * ranking is only overridden when a valid subtask order requires it. Cycles (if
+ * any slipped through) are broken by falling back to the original position.
+ */
+function orderRespectingDependencies(
+  order: TaskDecision[],
+  tasksById: Map<string, PlannerTask>,
+): TaskDecision[] {
+  const byId = new Map(order.map((decision) => [decision.taskId, decision]));
+  const placed = new Set<string>();
+  const visiting = new Set<string>();
+  const result: TaskDecision[] = [];
+
+  const visit = (id: string): void => {
+    if (placed.has(id) || visiting.has(id)) return;
+    const decision = byId.get(id);
+    if (!decision) return;
+    visiting.add(id);
+    for (const depId of tasksById.get(id)?.orderDependencyIds ?? []) {
+      if (byId.has(depId)) visit(depId);
+    }
+    visiting.delete(id);
+    placed.add(id);
+    result.push(decision);
+  };
+
+  for (const decision of order) visit(decision.taskId);
+  return result;
+}
+
 function isHardTask(task: PlannerTask, scheduleHardTasksInFocus: boolean): boolean {
   if (task.isFocusTask) return true;
   if (HARD_TASK_TYPES.has(task.taskType)) return true;
@@ -224,7 +263,8 @@ function capacityPostpone(
     ? `Part of it fit today; the remaining ${minutes} min was moved to ${suggestedDate} to stay within ${limit}.`
     : `Moved to ${suggestedDate} — today is already full to ${limit}.`;
   return {
-    taskId: task.id,
+    taskId: task.taskId,
+    subtaskId: task.subtaskId ?? undefined,
     title: task.title,
     reason,
     status: 'POSTPONED_CAPACITY',
@@ -256,7 +296,8 @@ function noSlotPostpone(
       ? `No free block long enough today (largest gap ${largestGap} min); moved to ${suggestedDate}.`
       : `Your fixed blocks left no free slot today; moved to ${suggestedDate}.`;
   return {
-    taskId: task.id,
+    taskId: task.taskId,
+    subtaskId: task.subtaskId ?? undefined,
     title: task.title,
     reason,
     status: 'NO_VALID_TIME_SLOT',
@@ -354,6 +395,7 @@ function fixedBlockToItem(block: FixedBlock): DailyPlanItem {
     id: block.id,
     type: block.type,
     taskId: block.taskId,
+    subtaskId: block.subtaskId,
     reminderId: block.reminderId,
     title: block.title,
     startTime: fromMinutes(block.startMinutes),
