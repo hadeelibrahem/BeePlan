@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, BackHandler, Linking, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ApiRequestError } from './src/lib/apiClient';
 import {
   CreateReminderScreen,
   EditReminderScreen,
@@ -81,7 +82,17 @@ const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, gcTime: 5 * 60_000, refetchOnReconnect: true, retry: 1 },
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchOnReconnect: true,
+      retry: (failureCount, error) =>
+        failureCount < 1 &&
+        (!(error instanceof ApiRequestError) ||
+          error.kind === 'network' ||
+          error.kind === 'server'),
+      retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 5_000),
+    },
     mutations: { retry: 0 },
   },
 });

@@ -51,13 +51,27 @@ describe('commitmentAppliesOn', () => {
   });
 
   it('never applies when inactive (temporary disable)', () => {
-    expect(commitmentAppliesOn(commitment({ isActive: false }), '2021-01-04')).toBe(false);
+    expect(
+      commitmentAppliesOn(commitment({ isActive: false }), '2021-01-04'),
+    ).toBe(false);
   });
 
   it('respects startDate / endDate bounds', () => {
-    expect(commitmentAppliesOn(commitment({ startDate: '2021-01-05' }), '2021-01-04')).toBe(false);
-    expect(commitmentAppliesOn(commitment({ endDate: '2021-01-05' }), '2021-01-06')).toBe(false);
-    expect(commitmentAppliesOn(commitment({ startDate: '2021-01-01', endDate: '2021-01-31' }), '2021-01-06')).toBe(true);
+    expect(
+      commitmentAppliesOn(
+        commitment({ startDate: '2021-01-05' }),
+        '2021-01-04',
+      ),
+    ).toBe(false);
+    expect(
+      commitmentAppliesOn(commitment({ endDate: '2021-01-05' }), '2021-01-06'),
+    ).toBe(false);
+    expect(
+      commitmentAppliesOn(
+        commitment({ startDate: '2021-01-01', endDate: '2021-01-31' }),
+        '2021-01-06',
+      ),
+    ).toBe(true);
   });
 
   it('limits a non-repeating commitment to the week of its start date', () => {
@@ -113,6 +127,76 @@ describe('commitmentsToBusyWindows', () => {
         end: '11:00',
         placeName: 'University',
       },
+    ]);
+  });
+
+  it('merges overlapping user-defined commitments without fixed times', () => {
+    const base: RecurringCommitment = {
+      id: 'c1',
+      title: 'First',
+      daysOfWeek: [4],
+      startTime: '13:20',
+      endTime: '15:10',
+      savedLocationId: null,
+      savedLocationName: null,
+      repeatWeekly: true,
+      startDate: null,
+      endDate: null,
+      isActive: true,
+      notes: null,
+      createdAt: '2021-01-01T00:00:00.000Z',
+      updatedAt: '2021-01-01T00:00:00.000Z',
+    };
+    const windows = commitmentsToBusyWindows(
+      [
+        base,
+        {
+          ...base,
+          id: 'c2',
+          title: 'Second',
+          startTime: '14:45',
+          endTime: '17:05',
+        },
+      ],
+      '2021-01-07',
+    );
+    expect(windows).toHaveLength(1);
+    expect(windows[0]).toMatchObject({ start: '13:20', end: '17:05' });
+  });
+
+  it('keeps separate non-overlapping commitments and ignores inactive ones', () => {
+    const make = (
+      id: string,
+      startTime: string,
+      endTime: string,
+      isActive = true,
+    ): RecurringCommitment => ({
+      id,
+      title: id,
+      daysOfWeek: [0, 5],
+      startTime,
+      endTime,
+      savedLocationId: null,
+      savedLocationName: null,
+      repeatWeekly: true,
+      startDate: null,
+      endDate: null,
+      isActive,
+      notes: null,
+      createdAt: '2021-01-01T00:00:00.000Z',
+      updatedAt: '2021-01-01T00:00:00.000Z',
+    });
+    const windows = commitmentsToBusyWindows(
+      [
+        make('before', '07:15', '08:05'),
+        make('after', '19:10', '20:25'),
+        make('inactive', '12:00', '13:00', false),
+      ],
+      '2021-01-08',
+    );
+    expect(windows.map(({ start, end }) => [start, end])).toEqual([
+      ['07:15', '08:05'],
+      ['19:10', '20:25'],
     ]);
   });
 });

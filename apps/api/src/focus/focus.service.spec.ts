@@ -3,7 +3,6 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../db/database.service';
 import {
   focusSessions,
@@ -61,6 +60,9 @@ function makeDb(config: DbConfig) {
   const inserts: { table: unknown; vals: AnyRow }[] = [];
   const updates: { table: unknown; vals: AnyRow }[] = [];
   let sessionRow = config.session ? { ...config.session } : null;
+  const select = jest.fn(() => ({
+    from: (table: unknown) => chain(rowsFor(table)),
+  }));
 
   const rowsFor = (table: unknown): unknown[] => {
     if (table === focusSessions) {
@@ -68,7 +70,8 @@ function makeDb(config: DbConfig) {
       const base = sessionRow ? [sessionRow] : [];
       return [...base, ...(config.extraSessions ?? [])];
     }
-    if (table === tasks) return config.tasksList ?? (config.task ? [config.task] : []);
+    if (table === tasks)
+      return config.tasksList ?? (config.task ? [config.task] : []);
     if (table === subtasks) return config.subtasksList ?? [];
     if (table === taskMembers) return config.taskMembersList ?? [];
     if (table === subtaskDependencies) return config.subtaskDepsList ?? [];
@@ -79,7 +82,8 @@ function makeDb(config: DbConfig) {
     insert: (table: unknown) => ({
       values: (vals: AnyRow) => {
         inserts.push({ table, vals });
-        const row = table === focusSessions ? buildInsertedSession(vals) : { ...vals };
+        const row =
+          table === focusSessions ? buildInsertedSession(vals) : { ...vals };
         return chain([row]);
       },
     }),
@@ -94,10 +98,10 @@ function makeDb(config: DbConfig) {
         return { where: () => chain(returned) };
       },
     }),
-    select: (_cols?: unknown) => ({ from: (table: unknown) => chain(rowsFor(table)) }),
+    select,
   };
 
-  return { db, inserts, updates };
+  return { db, inserts, updates, select };
 }
 
 function buildInsertedSession(vals: AnyRow): AnyRow {
@@ -106,7 +110,7 @@ function buildInsertedSession(vals: AnyRow): AnyRow {
     userId: vals.userId,
     taskId: vals.taskId ?? null,
     subtaskId: vals.subtaskId ?? null,
-    startedAt: (vals.startedAt as Date) ?? new Date(),
+    startedAt: vals.startedAt ?? new Date(),
     endedAt: null,
     plannedMinutes: vals.plannedMinutes ?? 25,
     actualMinutes: null,
@@ -154,8 +158,7 @@ function makeSession(overrides: AnyRow = {}): AnyRow {
 }
 
 function buildService(config: DbConfig) {
-  const { db, inserts, updates } = makeDb(config);
-  const configService = { get: () => undefined } as unknown as ConfigService; // no AI keys
+  const { db, inserts, updates, select } = makeDb(config);
   const updateSubtask = jest.fn().mockResolvedValue(undefined);
   const recomputeTaskSpentTime = jest.fn().mockResolvedValue(undefined);
   const tasksService = {
@@ -170,14 +173,34 @@ function buildService(config: DbConfig) {
   } as unknown as DatabaseService);
   const service = new FocusService(
     { db } as unknown as DatabaseService,
-    configService,
     tasksService,
     taskAccess,
   );
-  return { service, inserts, updates, updateSubtask, recomputeTaskSpentTime };
+  return {
+    service,
+    inserts,
+    updates,
+    select,
+    updateSubtask,
+    recomputeTaskSpentTime,
+  };
 }
 
 describe('FocusService', () => {
+  it('shares one batched read graph across concurrent recommendation and queue calls', async () => {
+    const { service, select } = buildService({
+      tasksList: [makeTask()],
+      subtasksList: [],
+    });
+
+    await Promise.all([
+      service.recommendation(USER_ID),
+      service.queue(USER_ID),
+    ]);
+
+    expect(select).toHaveBeenCalledTimes(4);
+  });
+
   describe('start', () => {
     it('creates an active session tied to a task', async () => {
       const { service, inserts } = buildService({ task: makeTask() });
@@ -205,15 +228,20 @@ describe('FocusService', () => {
 
   describe('finish', () => {
     it('completes the session, delegates spent-time recompute, and marks the task done', async () => {
-      const { service, updates, inserts, recomputeTaskSpentTime } = buildService({
-        session: makeSession(),
-        task: makeTask(),
-      });
+      const { service, updates, inserts, recomputeTaskSpentTime } =
+        buildService({
+          session: makeSession(),
+          task: makeTask(),
+        });
 
-      const { session, taskUpdated } = await service.finish(USER_ID, SESSION_ID, {
-        actualMinutes: 25,
-        taskOutcome: 'done',
-      });
+      const { session, taskUpdated } = await service.finish(
+        USER_ID,
+        SESSION_ID,
+        {
+          actualMinutes: 25,
+          taskOutcome: 'done',
+        },
+      );
 
       expect(session.status).toBe('completed');
       expect(session.actualMinutes).toBe(25);
@@ -225,7 +253,11 @@ describe('FocusService', () => {
       // Spent time is now derived by TasksService, not written here.
       expect(recomputeTaskSpentTime).toHaveBeenCalledWith(TASK_ID);
       const taskUpdates = updates.filter((u) => u.table === tasks);
-      expect(taskUpdates.some((u) => u.vals.status === 'done' && u.vals.progress === 100)).toBe(true);
+      expect(
+        taskUpdates.some(
+          (u) => u.vals.status === 'done' && u.vals.progress === 100,
+        ),
+      ).toBe(true);
 
       const activity = inserts.find((i) => i.table === taskActivities);
       expect(activity?.vals.action).toBe('status_changed');
@@ -265,7 +297,9 @@ describe('FocusService', () => {
         task: makeTask(),
       });
 
-      const result = await service.cancel(USER_ID, SESSION_ID, { actualMinutes: 10 });
+      const result = await service.cancel(USER_ID, SESSION_ID, {
+        actualMinutes: 10,
+      });
 
       expect(result.status).toBe('cancelled');
       expect(result.actualMinutes).toBe(10);
@@ -300,8 +334,19 @@ describe('FocusService', () => {
     it('recommends the best focus task using rules', async () => {
       const { service } = buildService({
         tasksList: [
-          makeTask({ id: TASK_ID, title: 'Backend API', priority: 'high', isFocusTask: true }),
-          makeTask({ id: 'other', title: 'Small task', priority: 'low', isFocusTask: false, status: 'todo' }),
+          makeTask({
+            id: TASK_ID,
+            title: 'Backend API',
+            priority: 'high',
+            isFocusTask: true,
+          }),
+          makeTask({
+            id: 'other',
+            title: 'Small task',
+            priority: 'low',
+            isFocusTask: false,
+            status: 'todo',
+          }),
         ],
         subtasksList: [{ taskId: TASK_ID, isDone: false }],
       });
@@ -385,22 +430,33 @@ describe('FocusService', () => {
     it('prefers the highest-ranked task that has an eligible focus subtask', async () => {
       const { service } = buildService({
         tasksList: [
-          makeTask({ id: TASK_ID, title: 'Higher-ranked parent', priority: 'urgent' }),
-          makeTask({ id: 'lower', title: 'Lower-ranked parent', priority: 'low', isFocusTask: false }),
+          makeTask({
+            id: TASK_ID,
+            title: 'Higher-ranked parent',
+            priority: 'urgent',
+          }),
+          makeTask({
+            id: 'lower',
+            title: 'Lower-ranked parent',
+            priority: 'low',
+            isFocusTask: false,
+          }),
+        ],
+        subtasksList: [
+          {
+            id: SUBTASK_ID,
+            taskId: 'lower',
+            title: 'Executable focus step',
+            isDone: false,
+            isFocusTask: true,
+            status: 'todo',
+            priority: 'medium',
+            dueDate: null,
+            estimatedDurationMinutes: 25,
+            orderIndex: 0,
+          },
         ],
       });
-      jest
-        .spyOn(service as unknown as { selectSubtaskForTask: (taskId: string, now: Date) => Promise<unknown> }, 'selectSubtaskForTask')
-        .mockImplementation(async (taskId) =>
-          taskId === 'lower'
-            ? {
-                subtaskId: SUBTASK_ID,
-                subtaskTitle: 'Executable focus step',
-                estimatedMinutes: 25,
-                reason: 'Next up in your plan.',
-              }
-            : null,
-        );
 
       const rec = await service.recommendation(USER_ID);
 
@@ -512,16 +568,22 @@ describe('FocusService', () => {
         });
 
         expect(taskUpdated).toBe(true);
-        expect(updateSubtask).toHaveBeenCalledWith(USER_ID, TASK_ID, SUBTASK_ID, {
-          status: 'done',
-          isDone: true,
-        });
+        expect(updateSubtask).toHaveBeenCalledWith(
+          USER_ID,
+          TASK_ID,
+          SUBTASK_ID,
+          {
+            status: 'done',
+            isDone: true,
+          },
+        );
         // The parent task is NOT force-completed directly (progress rolls up
         // through updateSubtask instead).
         const taskUpdates = updates.filter((u) => u.table === tasks);
         expect(taskUpdates.some((u) => u.vals.status === 'done')).toBe(false);
         const statusActivity = inserts.find(
-          (i) => i.table === taskActivities && i.vals.action === 'status_changed',
+          (i) =>
+            i.table === taskActivities && i.vals.action === 'status_changed',
         );
         expect(statusActivity).toBeUndefined();
       });
@@ -689,7 +751,10 @@ describe('FocusService', () => {
           tasksList: [makeTask({ isFocusTask: true })],
           taskMembersList: SHARED_MEMBERS,
           subtasksList: [
-            makeSubtask({ id: FOREIGN_SUBTASK_ID, assigneeUserId: OTHER_USER_ID }),
+            makeSubtask({
+              id: FOREIGN_SUBTASK_ID,
+              assigneeUserId: OTHER_USER_ID,
+            }),
           ],
         });
 
@@ -810,7 +875,10 @@ describe('FocusService', () => {
           taskMembersList: SHARED_MEMBERS,
           subtasksList: [
             makeSubtask({ id: SUBTASK_ID, assigneeUserId: USER_ID }),
-            makeSubtask({ id: FOREIGN_SUBTASK_ID, assigneeUserId: OTHER_USER_ID }),
+            makeSubtask({
+              id: FOREIGN_SUBTASK_ID,
+              assigneeUserId: OTHER_USER_ID,
+            }),
           ],
         });
 
@@ -841,7 +909,10 @@ describe('FocusService', () => {
           tasksList: [makeTask({ isFocusTask: true })],
           subtasksList: [
             makeSubtask({ id: SUBTASK_ID, assigneeUserId: null }),
-            makeSubtask({ id: FOREIGN_SUBTASK_ID, assigneeUserId: OTHER_USER_ID }),
+            makeSubtask({
+              id: FOREIGN_SUBTASK_ID,
+              assigneeUserId: OTHER_USER_ID,
+            }),
           ],
         });
 
@@ -906,7 +977,10 @@ describe('FocusService', () => {
         taskMembersList: MEMBERSHIP,
         subtasksList: [
           makeSubtask({ id: SUBTASK_ID, assigneeUserId: USER_ID }),
-          makeSubtask({ id: FOREIGN_SUBTASK_ID, assigneeUserId: OTHER_USER_ID }),
+          makeSubtask({
+            id: FOREIGN_SUBTASK_ID,
+            assigneeUserId: OTHER_USER_ID,
+          }),
         ],
       });
 
@@ -998,7 +1072,10 @@ describe('FocusService', () => {
         tasksList: [sharedTask()],
         taskMembersList: MEMBERSHIP,
         subtasksList: [
-          makeSubtask({ id: FOREIGN_SUBTASK_ID, assigneeUserId: OTHER_USER_ID }),
+          makeSubtask({
+            id: FOREIGN_SUBTASK_ID,
+            assigneeUserId: OTHER_USER_ID,
+          }),
         ],
       });
 
@@ -1046,15 +1123,22 @@ describe('FocusService', () => {
         // Owned by the current user AND carrying a membership row for them.
         tasksList: [makeTask({ userId: USER_ID, isFocusTask: true })],
         taskMembersList: [
-          { taskId: TASK_ID, userId: USER_ID, status: 'accepted', role: 'owner' },
+          {
+            taskId: TASK_ID,
+            userId: USER_ID,
+            status: 'accepted',
+            role: 'owner',
+          },
         ],
-        subtasksList: [makeSubtask({ id: SUBTASK_ID, assigneeUserId: USER_ID })],
+        subtasksList: [
+          makeSubtask({ id: SUBTASK_ID, assigneeUserId: USER_ID }),
+        ],
       });
 
       const queue = await service.queue(USER_ID);
-      expect(queue.filter((item) => item.subtaskId === SUBTASK_ID)).toHaveLength(
-        1,
-      );
+      expect(
+        queue.filter((item) => item.subtaskId === SUBTASK_ID),
+      ).toHaveLength(1);
     });
 
     it('keeps the member’s subtask blocked by a foreign dependency without exposing it', async () => {

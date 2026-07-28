@@ -2,12 +2,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { and, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
-import OpenAI from 'openai';
 import { TaskAccessService } from '../collaboration/task-access.service';
 import { DatabaseService } from '../db/database.service';
 import {
@@ -40,12 +37,16 @@ import {
   type FocusStats,
 } from './focus.logic';
 
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
-const PROVIDER_TIMEOUT_MS = 6_000;
 const STATS_WINDOW_DAYS = 60;
 
 type FocusSessionRow = typeof focusSessions.$inferSelect;
+type FocusTaskRow = typeof tasks.$inferSelect;
+type FocusSubtaskRow = typeof subtasks.$inferSelect;
+
+type FocusReadGraph = {
+  candidates: FocusCandidate[];
+  subtaskCandidatesByTask: Map<string, FocusSubtaskCandidate[]>;
+};
 
 export type FocusSessionEntity = {
   id: string;
@@ -77,34 +78,16 @@ export type FocusQueueItem = {
 
 @Injectable()
 export class FocusService {
-  private readonly logger = new Logger(FocusService.name);
-  private readonly client: OpenAI | null;
-  private readonly model: string;
+  private readonly readGraphCache = new Map<
+    string,
+    { promise: Promise<FocusReadGraph>; expiresAt: number }
+  >();
 
   constructor(
     private readonly databaseService: DatabaseService,
-    private readonly configService: ConfigService,
     private readonly tasksService: TasksService,
     private readonly taskAccess: TaskAccessService,
-  ) {
-    const apiKey = this.configService.get<string>('OPENROUTER_API_KEY');
-    const baseURL =
-      this.configService.get<string>('OPENROUTER_BASE_URL') ??
-      OPENROUTER_BASE_URL;
-    this.model =
-      this.configService.get<string>('OPENROUTER_MODEL') ??
-      DEFAULT_OPENROUTER_MODEL;
-    this.client = apiKey
-      ? new OpenAI({
-          apiKey,
-          baseURL,
-          defaultHeaders: {
-            'HTTP-Referer': 'https://beeplan.local',
-            'X-Title': 'BeePlan',
-          },
-        })
-      : null;
-  }
+  ) {}
 
   private get db() {
     return this.databaseService.db;
@@ -130,13 +113,14 @@ export class FocusService {
       // (updateSubtask also requires editor, so anyone allowed to START a
       // subtask session is also allowed to complete it): missing access → 404,
       // viewers → 403. Owners resolve to the 'owner' role and are unaffected.
-      const access = await this.taskAccess.require(userId, dto.taskId, 'editor');
+      const access = await this.taskAccess.require(
+        userId,
+        dto.taskId,
+        'editor',
+      );
       taskTitle = access.task.title;
       if (dto.subtaskId) {
-        const subtask = await this.getSubtaskForTask(
-          dto.taskId,
-          dto.subtaskId,
-        );
+        const subtask = await this.getSubtaskForTask(dto.taskId, dto.subtaskId);
         // Collaboration authorization (server-side, not just picker hiding): on a
         // shared task a member may only focus on subtasks assigned to them. This
         // rejects a stale client or a direct API call that names another
@@ -347,21 +331,21 @@ export class FocusService {
     return computeFocusStats(sessionsForStats, titles, new Date());
   }
 
-  async recommendation(
-    userId: string,
-  ): Promise<FocusRecommendation | null> {
+  async recommendation(userId: string): Promise<FocusRecommendation | null> {
     const now = new Date();
-    const candidates = await this.loadCandidates(userId);
+    const graph = await this.getReadGraph(userId);
+    const candidates = graph.candidates;
     const ranked = rankFocusTasks(candidates, now);
-    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const byId = new Map(
+      candidates.map((candidate) => [candidate.id, candidate]),
+    );
 
     // Prefer the highest-ranked parent containing an executable (owned) focus
     // subtask.
     let recommendation: FocusRecommendation | null = null;
     for (const candidate of ranked) {
-      const subtask = await this.selectSubtaskForTask(
-        candidate.taskId,
-        userId,
+      const subtask = selectFocusSubtask(
+        graph.subtaskCandidatesByTask.get(candidate.taskId) ?? [],
         now,
       );
       if (!subtask) continue;
@@ -382,22 +366,16 @@ export class FocusService {
     // incomplete subtasks is never used as a fallback.
     if (!recommendation) {
       const base = ranked.find(
-        (candidate) => byId.get(candidate.taskId)?.parentFocusEligible !== false,
+        (candidate) =>
+          byId.get(candidate.taskId)?.parentFocusEligible !== false,
       );
       if (!base) return null;
       recommendation = base;
     }
 
-    // 3. Optionally polish the reason for the recommended unit.
-    const polished = await this.maybePolishReason(
-      recommendation.subtaskTitle ?? recommendation.taskTitle,
-      recommendation.reason,
-    );
-    return {
-      ...recommendation,
-      reason: polished,
-      recommendationReason: polished,
-    };
+    // AI copy polishing is deliberately outside this request path. The
+    // deterministic reason is complete, stable, and available immediately.
+    return recommendation;
   }
 
   /** Canonical resumable session: active/paused only, newest start wins if data is corrupt. */
@@ -417,23 +395,27 @@ export class FocusService {
     const taskTitle = row.taskId
       ? await this.findTaskTitleById(row.taskId)
       : null;
-    const subtaskTitle = row.subtaskId && row.taskId
-      ? ((await this.findSubtask(row.taskId, row.subtaskId))?.title ?? null)
-      : null;
+    const subtaskTitle =
+      row.subtaskId && row.taskId
+        ? ((await this.findSubtask(row.taskId, row.subtaskId))?.title ?? null)
+        : null;
     return this.toEntity(row, taskTitle, subtaskTitle);
   }
 
   async queue(userId: string): Promise<FocusQueueItem[]> {
     const now = new Date();
-    const candidates = await this.loadCandidates(userId);
-    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const graph = await this.getReadGraph(userId);
+    const candidates = graph.candidates;
+    const byId = new Map(
+      candidates.map((candidate) => [candidate.id, candidate]),
+    );
     const subtasks: FocusQueueItem[] = [];
     const fallbacks: FocusQueueItem[] = [];
 
     for (const task of rankFocusTasks(candidates, now)) {
       const parent = byId.get(task.taskId)!;
       const rankedSubtasks = rankFocusSubtasks(
-        await this.loadFocusSubtaskCandidates(task.taskId, userId),
+        graph.subtaskCandidatesByTask.get(task.taskId) ?? [],
         now,
       );
 
@@ -542,6 +524,185 @@ export class FocusService {
         orderIndex: row.orderIndex,
         hasOpenDependencies: hasOpenDeps.has(row.id),
       }));
+  }
+
+  /**
+   * Loads the complete Focus read model in two database rounds:
+   * accessible tasks first, then memberships, subtasks, and dependencies in
+   * parallel. Recommendation and queue ranking are entirely in-memory after
+   * this point, so their cost does not grow by three queries per candidate.
+   */
+  private async loadReadGraph(userId: string): Promise<FocusReadGraph> {
+    const taskRows = await this.db
+      .select()
+      .from(tasks)
+      .where(
+        or(
+          eq(tasks.userId, userId),
+          sql<boolean>`exists (
+              select 1
+              from ${taskMembers} accepted_member
+              where accepted_member.task_id = ${tasks.id}
+                and accepted_member.user_id = ${userId}
+                and accepted_member.status = 'accepted'
+            )`,
+        ),
+      )
+      .orderBy(desc(tasks.updatedAt))
+      .limit(200);
+
+    if (taskRows.length === 0) {
+      return {
+        candidates: [],
+        subtaskCandidatesByTask: new Map(),
+      };
+    }
+
+    const taskIds = taskRows.map((task) => task.id);
+    const [sharedRows, subtaskRows, dependencyRows] = await Promise.all([
+      this.db
+        .select({ taskId: taskMembers.taskId })
+        .from(taskMembers)
+        .where(inArray(taskMembers.taskId, taskIds)),
+      this.db.select().from(subtasks).where(inArray(subtasks.taskId, taskIds)),
+      this.db
+        .select({
+          subtaskId: subtaskDependencies.subtaskId,
+          dependsOnSubtaskId: subtaskDependencies.dependsOnSubtaskId,
+        })
+        .from(subtaskDependencies)
+        .where(
+          sql<boolean>`exists (
+              select 1
+              from ${subtasks} dependency_source
+              where dependency_source.id = ${subtaskDependencies.subtaskId}
+                and dependency_source.task_id in (${sql.join(
+                  taskIds.map((taskId) => sql`${taskId}`),
+                  sql`, `,
+                )})
+            )`,
+        ),
+    ]);
+
+    return this.buildReadGraph(
+      userId,
+      taskRows,
+      subtaskRows,
+      sharedRows.map((row) => row.taskId),
+      dependencyRows,
+    );
+  }
+
+  private getReadGraph(userId: string): Promise<FocusReadGraph> {
+    const cached = this.readGraphCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+    const promise = this.loadReadGraph(userId).catch((error) => {
+      if (this.readGraphCache.get(userId)?.promise === promise) {
+        this.readGraphCache.delete(userId);
+      }
+      throw error;
+    });
+    this.readGraphCache.set(userId, {
+      promise,
+      expiresAt: Date.now() + 1_000,
+    });
+
+    const expiryTimer = setTimeout(() => {
+      if (this.readGraphCache.get(userId)?.promise === promise) {
+        this.readGraphCache.delete(userId);
+      }
+    }, 1_000);
+    expiryTimer.unref();
+
+    return promise;
+  }
+
+  private buildReadGraph(
+    userId: string,
+    taskRows: FocusTaskRow[],
+    subtaskRows: FocusSubtaskRow[],
+    sharedTaskIdRows: string[],
+    dependencyRows: Array<{
+      subtaskId: string;
+      dependsOnSubtaskId: string;
+    }>,
+  ): FocusReadGraph {
+    const sharedTaskIds = new Set(sharedTaskIdRows);
+    const isDoneById = new Map(
+      subtaskRows.map((row) => [row.id, row.status === 'done' || row.isDone]),
+    );
+    const hasOpenDependencies = new Set<string>();
+    for (const dependency of dependencyRows) {
+      if (!(isDoneById.get(dependency.dependsOnSubtaskId) ?? false)) {
+        hasOpenDependencies.add(dependency.subtaskId);
+      }
+    }
+
+    const allByTask = new Map<string, FocusSubtaskRow[]>();
+    for (const subtask of subtaskRows) {
+      const existing = allByTask.get(subtask.taskId);
+      if (existing) existing.push(subtask);
+      else allByTask.set(subtask.taskId, [subtask]);
+    }
+
+    const candidates: FocusCandidate[] = [];
+    const subtaskCandidatesByTask = new Map<string, FocusSubtaskCandidate[]>();
+
+    for (const task of taskRows) {
+      if (task.status === 'done' || task.status === 'missed') continue;
+
+      const taskSubtasks = allByTask.get(task.id) ?? [];
+      const shared = sharedTaskIds.has(task.id);
+      const incomplete = taskSubtasks.filter(
+        (subtask) =>
+          !subtask.isDone &&
+          subtask.status !== 'done' &&
+          subtask.status !== 'missed',
+      );
+      const ownedIncomplete = incomplete.filter((subtask) =>
+        isSubtaskOwnedByUser(subtask, userId, shared),
+      );
+
+      if (shared) {
+        if (incomplete.length > 0 && ownedIncomplete.length === 0) continue;
+        if (incomplete.length === 0 && task.userId !== userId) continue;
+      }
+
+      candidates.push({
+        id: task.id,
+        title: task.title,
+        priority: task.priority,
+        status: task.status,
+        dueDate: task.dueDate ?? null,
+        estimatedMinutes: task.estimatedTimeMinutes,
+        progress: task.progress,
+        isFocusTask: task.isFocusTask,
+        totalSubtasks: incomplete.length,
+        incompleteSubtasks: ownedIncomplete.length,
+        parentFocusEligible: !shared || incomplete.length === 0,
+      });
+
+      subtaskCandidatesByTask.set(
+        task.id,
+        taskSubtasks
+          .filter((subtask) => isSubtaskOwnedByUser(subtask, userId, shared))
+          .map((subtask) => ({
+            id: subtask.id,
+            title: subtask.title,
+            isDone: subtask.isDone,
+            isFocusTask: subtask.isFocusTask,
+            status: subtask.status,
+            priority: subtask.priority,
+            dueDate: subtask.dueDate ?? null,
+            estimatedDurationMinutes: subtask.estimatedDurationMinutes ?? null,
+            orderIndex: subtask.orderIndex,
+            hasOpenDependencies: hasOpenDependencies.has(subtask.id),
+          })),
+      );
+    }
+
+    return { candidates, subtaskCandidatesByTask };
   }
 
   // --- helpers -------------------------------------------------------------
@@ -687,10 +848,7 @@ export class FocusService {
       .select({ taskId: taskMembers.taskId })
       .from(taskMembers)
       .where(
-        and(
-          eq(taskMembers.userId, userId),
-          eq(taskMembers.status, 'accepted'),
-        ),
+        and(eq(taskMembers.userId, userId), eq(taskMembers.status, 'accepted')),
       );
     return [...new Set(rows.map((row) => row.taskId))];
   }
@@ -713,43 +871,6 @@ export class FocusService {
       .where(eq(taskMembers.taskId, taskId))
       .limit(1);
     return rows.length > 0;
-  }
-
-  private async maybePolishReason(
-    taskTitle: string,
-    reason: string,
-  ): Promise<string> {
-    if (!this.client) return reason;
-
-    try {
-      const response = await this.client.chat.completions.create(
-        {
-          model: this.model,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You write one short, friendly sentence explaining why a task is a good pick for a deep-work focus session now. Return only the sentence, no quotes, max 18 words.',
-            },
-            {
-              role: 'user',
-              content: `Task: ${taskTitle}\nSignals: ${reason}`,
-            },
-          ],
-          temperature: 0.3,
-        },
-        { timeout: PROVIDER_TIMEOUT_MS },
-      );
-      const text = response.choices[0]?.message?.content?.trim();
-      return text ? text.slice(0, 160) : reason;
-    } catch (error) {
-      this.logger.warn(
-        `Focus recommendation polish failed; using rules copy: ${
-          error instanceof Error ? error.message : 'unknown error'
-        }`,
-      );
-      return reason;
-    }
   }
 
   // Titles for the tasks referenced by the user's own session rows. Not
@@ -845,7 +966,9 @@ export class FocusService {
    * Focus Sessions are the source of truth; `actualDurationMinutes` is a derived
    * aggregate. Never touches `estimatedDurationMinutes` (the planning estimate).
    */
-  private async recomputeSubtaskActualMinutes(subtaskId: string): Promise<void> {
+  private async recomputeSubtaskActualMinutes(
+    subtaskId: string,
+  ): Promise<void> {
     const rows = await this.db
       .select({
         actualMinutes: focusSessions.actualMinutes,

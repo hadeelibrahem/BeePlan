@@ -124,15 +124,15 @@ export class FriendsService {
    * Cancels an outgoing pending request. Only the requester may cancel; the row
    * is deleted so a fresh request can be sent later without a stale record.
    */
-  async cancelRequest(userId: string, requestId: string): Promise<{ ok: true }> {
+  async cancelRequest(
+    userId: string,
+    requestId: string,
+  ): Promise<{ ok: true }> {
     const [request] = await this.db
       .select()
       .from(friendships)
       .where(
-        and(
-          eq(friendships.id, requestId),
-          eq(friendships.requesterId, userId),
-        ),
+        and(eq(friendships.id, requestId), eq(friendships.requesterId, userId)),
       );
     if (!request) {
       throw new NotFoundException('Friend request not found.');
@@ -176,10 +176,7 @@ export class FriendsService {
       .select()
       .from(friendships)
       .where(
-        and(
-          eq(friendships.id, requestId),
-          eq(friendships.addresseeId, userId),
-        ),
+        and(eq(friendships.id, requestId), eq(friendships.addresseeId, userId)),
       );
     if (!request) {
       throw new NotFoundException('Friend request not found.');

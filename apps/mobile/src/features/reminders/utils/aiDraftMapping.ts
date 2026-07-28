@@ -78,6 +78,28 @@ function buildLocationConfig(
     };
   }
 
+  if (
+    location.mode === 'specific' &&
+    typeof location.latitude === 'number' &&
+    Number.isFinite(location.latitude) &&
+    typeof location.longitude === 'number' &&
+    Number.isFinite(location.longitude)
+  ) {
+    return {
+      mode: 'specific_place',
+      trigger: location.trigger,
+      radiusMeters: location.radius || 100,
+      specificPlace: {
+        placeName: location.name,
+        address: location.address,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        savedPlaceId: location.savedPlaceId ?? undefined,
+        selectedBy: 'search',
+      },
+    };
+  }
+
   // 'specific' (and 'none') modes need a geocoded place (lat/lng) that free-form
   // AI text can't provide — seed the search field with the extracted name so the
   // user only has to pick the matching suggestion, without guessing coordinates.

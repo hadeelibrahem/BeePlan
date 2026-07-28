@@ -3,6 +3,17 @@ export type ReminderDraftPriority = 'low' | 'medium' | 'high';
 export type ReminderDraftRepeat = 'none' | 'daily' | 'weekly' | 'monthly';
 export type ReminderDraftLocationMode = 'none' | 'specific' | 'general';
 export type ReminderDraftLocationTrigger = 'arrive' | 'leave';
+export type ReminderDraftPlaceMatchStatus =
+  | 'matched'
+  | 'ambiguous'
+  | 'no_match'
+  | 'fallback';
+
+export interface ReminderDraftPlaceCandidate {
+  id: string;
+  name: string;
+  address: string | null;
+}
 
 // Additive, optional block describing a "person nearby" reminder (e.g. "remind
 // me to talk to Ahmad when I see him"). Detected by the parser but ignored by
@@ -37,6 +48,12 @@ export interface ReminderDraft {
     latitude?: number | null;
     longitude?: number | null;
     savedPlaceId?: string | null;
+    match?: {
+      status: ReminderDraftPlaceMatchStatus;
+      confidence: number;
+      clarificationRequired: boolean;
+      candidates: ReminderDraftPlaceCandidate[];
+    };
   };
   context: {
     condition: string;
@@ -82,6 +99,12 @@ export function createEmptyReminderDraft(): ReminderDraft {
       latitude: null,
       longitude: null,
       savedPlaceId: null,
+      match: {
+        status: 'no_match',
+        confidence: 0,
+        clarificationRequired: false,
+        candidates: [],
+      },
     },
     context: { condition: '' },
     checklist: [],
@@ -154,7 +177,10 @@ export function normalizeReminderDraft(input: unknown): ReminderDraft {
       latitude: asNullableNumber(location.latitude),
       longitude: asNullableNumber(location.longitude),
       savedPlaceId:
-        typeof location.savedPlaceId === 'string' ? location.savedPlaceId : null,
+        typeof location.savedPlaceId === 'string'
+          ? location.savedPlaceId
+          : null,
+      match: normalizePlaceMatch(asRecord(location.match)),
     },
     context: {
       condition: asString(context.condition),
@@ -163,6 +189,39 @@ export function normalizeReminderDraft(input: unknown): ReminderDraft {
       ? obj.checklist.filter((item): item is string => typeof item === 'string')
       : [],
     person: normalizePerson(asRecord(obj.person)),
+  };
+}
+
+function normalizePlaceMatch(match: Record<string, unknown>) {
+  const statuses: ReminderDraftPlaceMatchStatus[] = [
+    'matched',
+    'ambiguous',
+    'no_match',
+    'fallback',
+  ];
+  const status = asOneOf(match.status, statuses, 'no_match');
+  const candidates = Array.isArray(match.candidates)
+    ? match.candidates.flatMap((value) => {
+        const candidate = asRecord(value);
+        const id = asString(candidate.id);
+        const name = asString(candidate.name);
+        if (!id || !name) return [];
+        return [
+          {
+            id,
+            name,
+            address:
+              typeof candidate.address === 'string' ? candidate.address : null,
+          },
+        ];
+      })
+    : [];
+  return {
+    status,
+    confidence: Math.max(0, Math.min(1, asNumber(match.confidence, 0))),
+    clarificationRequired:
+      match.clarificationRequired === true || status === 'ambiguous',
+    candidates,
   };
 }
 

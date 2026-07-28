@@ -54,6 +54,7 @@ export class JwtAuthGuard implements CanActivate {
     if (!payload.sub) {
       throw new UnauthorizedException('Please sign in to continue.');
     }
+    const userId = payload.sub;
 
     // Tokens signed before this field existed have no `tokenVersion` claim;
     // treat that the same as version 0 so already-issued tokens keep working
@@ -64,7 +65,7 @@ export class JwtAuthGuard implements CanActivate {
       columns: {
         tokenVersion: true,
       },
-      where: eq(users.id, payload.sub),
+      where: eq(users.id, userId),
     });
 
     if (!currentUser || currentUser.tokenVersion !== claimedVersion) {
@@ -74,7 +75,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     request.user = {
-      id: payload.sub,
+      id: userId,
       email: payload.email,
     };
 

@@ -130,7 +130,9 @@ export class RecurringCommitmentsService {
         endDate: endDate ?? null,
         isActive: dto.isActive ?? existing.isActive,
         notes:
-          dto.notes !== undefined ? normalizeOptional(dto.notes) : existing.notes,
+          dto.notes !== undefined
+            ? normalizeOptional(dto.notes)
+            : existing.notes,
         updatedAt: new Date(),
       })
       .where(
@@ -197,7 +199,9 @@ export class RecurringCommitmentsService {
       )
       .limit(1);
     if (!place) {
-      throw new BadRequestException('savedLocationId does not reference one of your saved places.');
+      throw new BadRequestException(
+        'savedLocationId does not reference one of your saved places.',
+      );
     }
     return place.name;
   }
@@ -241,7 +245,7 @@ export function commitmentsToBusyWindows(
   commitments: RecurringCommitment[],
   date: string,
 ): CommitmentBusyWindow[] {
-  return commitments
+  const windows = commitments
     .filter((commitment) => commitmentAppliesOn(commitment, date))
     .map((commitment) => ({
       commitmentId: commitment.id,
@@ -249,7 +253,26 @@ export function commitmentsToBusyWindows(
       start: commitment.startTime,
       end: commitment.endTime,
       placeName: commitment.savedLocationName,
-    }));
+    }))
+    .sort(
+      (a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end),
+    );
+
+  const merged: CommitmentBusyWindow[] = [];
+  for (const window of windows) {
+    const previous = merged[merged.length - 1];
+    if (!previous || window.start > previous.end) {
+      merged.push({ ...window });
+      continue;
+    }
+    previous.end = previous.end > window.end ? previous.end : window.end;
+    previous.commitmentId = `${previous.commitmentId},${window.commitmentId}`;
+    if (!previous.title.includes(window.title)) {
+      previous.title = `${previous.title} / ${window.title}`;
+    }
+    if (previous.placeName !== window.placeName) previous.placeName = null;
+  }
+  return merged;
 }
 
 /** Weekday (0=Sun..6=Sat) of a YYYY-MM-DD calendar date, or null if malformed. */
@@ -267,7 +290,7 @@ function toCommitment(
   return {
     id: row.id,
     title: row.title,
-    daysOfWeek: normalizeDays(row.daysOfWeek as unknown),
+    daysOfWeek: normalizeDays(row.daysOfWeek),
     startTime: row.startTime,
     endTime: row.endTime,
     savedLocationId: row.savedLocationId ?? null,
@@ -302,10 +325,7 @@ function assertTimeOrder(start: string, end: string): void {
   }
 }
 
-function assertDateOrder(
-  start: string | null,
-  end: string | null,
-): void {
+function assertDateOrder(start: string | null, end: string | null): void {
   if (start && end && end < start) {
     throw new BadRequestException('endDate must be on or after startDate.');
   }

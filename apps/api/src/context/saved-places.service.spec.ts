@@ -60,10 +60,18 @@ describe('SavedPlacesService.resolvePlacesFromText', () => {
   it('resolves an English alias mention to its canonical place', async () => {
     // resolvePlacesFromText -> list() does two selects: places then aliases.
     const service = buildService([[placeRow()], [aliasRow()]]);
-    const resolved = await service.resolvePlacesFromText(USER_ID, 'grab keys from the house before leaving');
+    const resolved = await service.resolvePlacesFromText(
+      USER_ID,
+      'grab keys from the house before leaving',
+    );
 
     expect(resolved).toHaveLength(1);
-    expect(resolved[0]).toMatchObject({ id: 'p1', name: 'Home', category: 'home', latitude: 32.32 });
+    expect(resolved[0]).toMatchObject({
+      id: 'p1',
+      name: 'Home',
+      category: 'home',
+      latitude: 32.32,
+    });
     expect(resolved[0].matchedAlias).toBe('house');
   });
 
@@ -72,27 +80,77 @@ describe('SavedPlacesService.resolvePlacesFromText', () => {
       [placeRow()],
       [aliasRow({ alias: 'البيت', normalizedAlias: 'بيت' })],
     ]);
-    const resolved = await service.resolvePlacesFromText(USER_ID, 'ذكرني اطفي الغاز في البيت');
+    const resolved = await service.resolvePlacesFromText(
+      USER_ID,
+      'ذكرني اطفي الغاز في البيت',
+    );
     expect(resolved).toHaveLength(1);
     expect(resolved[0].name).toBe('Home');
   });
 
   it('matches the canonical place name even without an explicit alias', async () => {
-    const service = buildService([[placeRow({ name: 'University', category: 'university' })], []]);
-    const resolved = await service.resolvePlacesFromText(USER_ID, 'submit the form at university tomorrow');
+    const service = buildService([
+      [placeRow({ name: 'University', category: 'university' })],
+      [],
+    ]);
+    const resolved = await service.resolvePlacesFromText(
+      USER_ID,
+      'submit the form at university tomorrow',
+    );
     expect(resolved).toHaveLength(1);
     expect(resolved[0].name).toBe('University');
   });
 
+  it('matches aliases case-insensitively with normalized whitespace', async () => {
+    const service = buildService([
+      [placeRow()],
+      [aliasRow({ alias: 'My Home', normalizedAlias: 'my home' })],
+    ]);
+    const resolved = await service.resolvePlacesFromText(
+      USER_ID,
+      'Remind me at   MY   HOME',
+    );
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].id).toBe('p1');
+  });
+
+  it('returns every matching place so the caller can require clarification', async () => {
+    const service = buildService([
+      [placeRow(), placeRow({ id: 'p2', name: 'Work', category: 'work' })],
+      [
+        aliasRow(),
+        aliasRow({
+          id: 'a2',
+          savedLocationId: 'p2',
+          alias: 'office',
+          normalizedAlias: 'office',
+        }),
+      ],
+    ]);
+    const resolved = await service.resolvePlacesFromText(
+      USER_ID,
+      'Take the house keys to the office',
+    );
+    expect(new Set(resolved.map((place) => place.id))).toEqual(
+      new Set(['p1', 'p2']),
+    );
+  });
+
   it('returns nothing when no place is mentioned', async () => {
     const service = buildService([[placeRow()], [aliasRow()]]);
-    const resolved = await service.resolvePlacesFromText(USER_ID, 'call the dentist at noon');
+    const resolved = await service.resolvePlacesFromText(
+      USER_ID,
+      'call the dentist at noon',
+    );
     expect(resolved).toEqual([]);
   });
 
   it('returns nothing when the user has no saved places', async () => {
     const service = buildService([[]]);
-    const resolved = await service.resolvePlacesFromText(USER_ID, 'anything at home');
+    const resolved = await service.resolvePlacesFromText(
+      USER_ID,
+      'anything at home',
+    );
     expect(resolved).toEqual([]);
   });
 });
