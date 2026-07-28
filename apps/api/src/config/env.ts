@@ -4,6 +4,10 @@ export const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().url().optional(),
   DB_SSL: z.coerce.boolean().default(false),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(30).default(10),
+  DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  DB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   NODE_ENV: z.string().optional(),
   JWT_SECRET: z.string().min(16),
   RESEND_API_KEY: z.string().optional(),
@@ -31,7 +35,11 @@ export const envSchema = z.object({
   // Provider call timeout for the AI Collaboration Planner only (see
   // AiCollaborationPlannerService) — a full team + task-context prompt can
   // take longer than other single-shot AI endpoints to reason about.
-  AI_COLLABORATION_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
+  AI_COLLABORATION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(90_000),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -47,7 +55,9 @@ export function validateEnv(config: Record<string, unknown>): Env {
 
   if (!result.success) {
     const issues = result.error.issues
-      .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .map(
+        (issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`,
+      )
       .join('\n');
     throw new Error(
       `Invalid or missing environment variables:\n${issues}\n` +

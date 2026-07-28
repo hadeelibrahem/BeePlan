@@ -21,6 +21,15 @@ export type ReminderDraft = {
     category: string
     trigger: TriggerType
     radius: number
+    latitude?: number | null
+    longitude?: number | null
+    savedPlaceId?: string | null
+    match?: {
+      status: 'matched' | 'ambiguous' | 'no_match' | 'fallback'
+      confidence: number
+      clarificationRequired: boolean
+      candidates: { id: string; name: string; address: string | null }[]
+    }
   }
   context: {
     condition: string

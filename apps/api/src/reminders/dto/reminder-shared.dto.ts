@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -87,6 +88,10 @@ export class ReminderLocationDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @IsOptional()
+  @IsUUID()
+  savedPlaceId?: string;
 
   @ValidateIf((dto: ReminderLocationDto) => dto.mode === 'specific')
   @IsNumber()

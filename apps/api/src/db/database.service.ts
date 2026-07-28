@@ -63,6 +63,15 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     this.pool = new Pool({
       connectionString: databaseUrl,
       ssl: dbSsl ? { rejectUnauthorized: false } : undefined,
+      max: this.configService.get<number>('DB_POOL_MAX') ?? 10,
+      connectionTimeoutMillis:
+        this.configService.get<number>('DB_CONNECTION_TIMEOUT_MS') ?? 5_000,
+      idleTimeoutMillis:
+        this.configService.get<number>('DB_IDLE_TIMEOUT_MS') ?? 30_000,
+      query_timeout:
+        this.configService.get<number>('DB_QUERY_TIMEOUT_MS') ?? 10_000,
+      statement_timeout:
+        this.configService.get<number>('DB_QUERY_TIMEOUT_MS') ?? 10_000,
     });
 
     return this.pool;

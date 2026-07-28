@@ -110,6 +110,7 @@ export type GeoapifyPlaceSelection = {
   latitude: number;
   longitude: number;
   geoapifyPlaceId?: string;
+  savedPlaceId?: string;
 };
 
 export type LocationSelectionSource = 'search' | 'map' | 'current_location';

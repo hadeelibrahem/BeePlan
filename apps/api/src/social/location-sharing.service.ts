@@ -80,7 +80,9 @@ export class LocationSharingService {
     const { friendId, mode = 'proximity', expiration } = dto;
 
     if (friendId === viewerId) {
-      throw new BadRequestException('You cannot request sharing with yourself.');
+      throw new BadRequestException(
+        'You cannot request sharing with yourself.',
+      );
     }
     const friends = await this.friendsService.areFriends(viewerId, friendId);
     if (!friends) {
@@ -304,7 +306,10 @@ export class LocationSharingService {
       return 1;
     };
 
-    const best = new Map<string, { status: string; rank: number; createdAt: number }>();
+    const best = new Map<
+      string,
+      { status: string; rank: number; createdAt: number }
+    >();
     for (const row of rows) {
       const status = this.effectiveStatus(row);
       const r = rank(status);

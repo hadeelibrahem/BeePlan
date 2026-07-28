@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { daysBetween, isTime, minutesBetween, toMinutes, todayString, windowToDayRanges } from './planner.util';
+import {
+  daysBetween,
+  isTime,
+  minutesBetween,
+  toMinutes,
+  todayString,
+  windowToDayRanges,
+} from './planner.util';
 import type {
   BlockedTask,
   DailyPlan,
@@ -41,6 +48,7 @@ export class PlannerRuleEngine {
     const lockedTaskIds = new Set<string>();
     const lockedReminderIds = new Set<string>();
     const fixedBlocks: FixedBlock[] = [];
+    const commitmentReservations: { start: number; end: number }[] = [];
 
     // Push a fixed block only if it fits inside working hours and does not
     // overlap one that's already reserved. Blocks are added in priority order
@@ -52,7 +60,10 @@ export class PlannerRuleEngine {
       const end = Math.min(dayEnd, block.endMinutes);
       if (end <= start) return false;
       const clamped = { ...block, startMinutes: start, endMinutes: end };
-      const collides = fixedBlocks.some((existing) => start < existing.endMinutes && end > existing.startMinutes);
+      const collides = fixedBlocks.some(
+        (existing) =>
+          start < existing.endMinutes && end > existing.startMinutes,
+      );
       if (collides) return false;
       fixedBlocks.push(clamped);
       return true;
@@ -62,8 +73,12 @@ export class PlannerRuleEngine {
     for (const locked of context.lockedItems) {
       if (!isTime(locked.startTime) || !isTime(locked.endTime)) continue;
       if (toMinutes(locked.endTime) <= toMinutes(locked.startTime)) continue;
-      const task = locked.taskId ? activeTasks.find((row) => row.id === locked.taskId) : undefined;
-      const reminder = locked.reminderId ? context.reminders.find((row) => row.id === locked.reminderId) : undefined;
+      const task = locked.taskId
+        ? activeTasks.find((row) => row.id === locked.taskId)
+        : undefined;
+      const reminder = locked.reminderId
+        ? context.reminders.find((row) => row.id === locked.reminderId)
+        : undefined;
       if (locked.taskId) lockedTaskIds.add(locked.taskId);
       if (locked.reminderId) lockedReminderIds.add(locked.reminderId);
       // Locked items bypass pushIfFree: they must land exactly where the user
@@ -113,6 +128,10 @@ export class PlannerRuleEngine {
     for (const commitment of context.commitments) {
       if (!isTime(commitment.start) || !isTime(commitment.end)) continue;
       if (toMinutes(commitment.end) <= toMinutes(commitment.start)) continue;
+      commitmentReservations.push({
+        start: Math.max(dayStart, toMinutes(commitment.start)),
+        end: Math.min(dayEnd, toMinutes(commitment.end)),
+      });
       pushIfFree({
         id: `commitment-${commitment.id}`,
         type: 'calendar',
@@ -125,17 +144,31 @@ export class PlannerRuleEngine {
         category: 'Commitment',
         isFocusTask: false,
         locked: false,
-        rationale: 'Recurring commitment — kept clear; nothing is scheduled over it.',
+        rationale:
+          'Recurring commitment — kept clear; nothing is scheduled over it.',
       });
     }
 
     // 3. Protected rest windows: sleep and lunch. Sleep may cross midnight, so
     //    each window can contribute one or two same-day ranges — only the parts
     //    that fall inside working hours matter.
-    for (const range of windowToDayRanges(preferences.sleep.start, preferences.sleep.end)) {
-      pushIfFree(restBlock('sleep', 'Sleep', 'Protected sleep — kept clear for rest.', range));
+    for (const range of windowToDayRanges(
+      preferences.sleep.start,
+      preferences.sleep.end,
+    )) {
+      pushIfFree(
+        restBlock(
+          'sleep',
+          'Sleep',
+          'Protected sleep — kept clear for rest.',
+          range,
+        ),
+      );
     }
-    for (const range of windowToDayRanges(preferences.lunch.start, preferences.lunch.end)) {
+    for (const range of windowToDayRanges(
+      preferences.lunch.start,
+      preferences.lunch.end,
+    )) {
       pushIfFree(restBlock('lunch', 'Lunch', 'Protected lunch break.', range));
     }
 
@@ -178,7 +211,9 @@ export class PlannerRuleEngine {
     // 6. When the user wants a buffer before meetings, reserve time right
     //    before each reminder — pushIfFree drops it if it would collide.
     if (preferences.bufferBeforeMeetings && preferences.bufferMinutes > 0) {
-      const reminderBlocks = fixedBlocks.filter((block) => block.type === 'reminder' && !block.locked);
+      const reminderBlocks = fixedBlocks.filter(
+        (block) => block.type === 'reminder' && !block.locked,
+      );
       for (const reminderBlock of reminderBlocks) {
         const start = reminderBlock.startMinutes;
         const bufferStart = start - preferences.bufferMinutes;
@@ -217,7 +252,9 @@ export class PlannerRuleEngine {
 
       if (lockedTaskIds.has(task.id)) continue; // already fixed on the timeline
 
-      const openDependency = task.dependencyTaskIds.find((depId) => depActiveIds.has(depId));
+      const openDependency = task.dependencyTaskIds.find((depId) =>
+        depActiveIds.has(depId),
+      );
       if (openDependency) {
         blockedTasks.push({
           task,
@@ -229,7 +266,10 @@ export class PlannerRuleEngine {
       }
 
       // Guard against unusable durations so the scheduler never has to guess.
-      if (!Number.isFinite(task.estimatedMinutes) || task.estimatedMinutes <= 0) {
+      if (
+        !Number.isFinite(task.estimatedMinutes) ||
+        task.estimatedMinutes <= 0
+      ) {
         blockedTasks.push({
           task,
           reason: 'Could not determine how long this task takes.',
@@ -243,26 +283,50 @@ export class PlannerRuleEngine {
     }
 
     // Derive the deep-work window from preferences, clamped to working hours.
-    const focusStart = Math.max(dayStart, toMinutes(preferences.focusStartTime));
+    const focusStart = Math.max(
+      dayStart,
+      toMinutes(preferences.focusStartTime),
+    );
     const focusEnd = Math.min(dayEnd, toMinutes(preferences.focusEndTime));
-    const focusWindow = focusEnd > focusStart ? { startMinutes: focusStart, endMinutes: focusEnd } : null;
+    const focusWindow =
+      focusEnd > focusStart
+        ? { startMinutes: focusStart, endMinutes: focusEnd }
+        : null;
 
     // Respect the current time: when planning *today*, work can only start from
     // now (rounded up to the next 5 minutes) — the past is reserved as busy so
     // nothing is ever scheduled behind the clock. For any other date the whole
     // working day is available.
     const planningToday = date === todayString();
-    const nowMinutes = planningToday && isTime(context.currentTime) ? roundUpTo5(toMinutes(context.currentTime)) : dayStart;
-    const effectiveStartMinutes = Math.min(dayEnd, Math.max(dayStart, nowMinutes));
-    const reservedBusy = effectiveStartMinutes > dayStart ? [{ start: dayStart, end: effectiveStartMinutes }] : [];
+    const nowMinutes =
+      planningToday && isTime(context.currentTime)
+        ? roundUpTo5(toMinutes(context.currentTime))
+        : dayStart;
+    const effectiveStartMinutes = Math.min(
+      dayEnd,
+      Math.max(dayStart, nowMinutes),
+    );
+    const reservedBusy = [
+      ...(effectiveStartMinutes > dayStart
+        ? [{ start: dayStart, end: effectiveStartMinutes }]
+        : []),
+      ...commitmentReservations.filter((slot) => slot.end > slot.start),
+    ];
 
     // Capacity: free minutes remaining in the working day after fixed blocks,
     // then the real work budget once the emergency buffer and the max-daily-work
     // cap are applied. This is what the scheduler is allowed to fill.
-    const freeMinutes = freeMinutesInWindow(effectiveStartMinutes, dayEnd, fixedBlocks);
+    const freeMinutes = freeMinutesInWindow(
+      effectiveStartMinutes,
+      dayEnd,
+      fixedBlocks,
+    );
     const workBudgetMinutes = Math.max(
       0,
-      Math.min(freeMinutes - preferences.emergencyBufferMinutes, preferences.maxDailyWorkMinutes),
+      Math.min(
+        freeMinutes - preferences.emergencyBufferMinutes,
+        preferences.maxDailyWorkMinutes,
+      ),
     );
 
     return {
@@ -285,10 +349,15 @@ export class PlannerRuleEngine {
    * plan is realistic; otherwise a list of issues the caller can log and use to
    * decide whether to fall back to deterministic planning.
    */
-  validatePlan(plan: DailyPlan, constraints: PlannerConstraints): ValidationIssue[] {
+  validatePlan(
+    plan: DailyPlan,
+    constraints: PlannerConstraints,
+  ): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
     const items = Object.values(plan.sections).flat();
-    const sorted = [...items].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
+    const sorted = [...items].sort(
+      (a, b) => toMinutes(a.startTime) - toMinutes(b.startTime),
+    );
 
     // No time overlaps.
     for (let i = 1; i < sorted.length; i += 1) {
@@ -304,8 +373,15 @@ export class PlannerRuleEngine {
 
     // Every item has a positive, well-formed duration.
     for (const item of items) {
-      if (!isTime(item.startTime) || !isTime(item.endTime) || minutesBetween(item.startTime, item.endTime) <= 0) {
-        issues.push({ code: 'bad-duration', message: `"${item.title}" has an invalid time range.` });
+      if (
+        !isTime(item.startTime) ||
+        !isTime(item.endTime) ||
+        minutesBetween(item.startTime, item.endTime) <= 0
+      ) {
+        issues.push({
+          code: 'bad-duration',
+          message: `"${item.title}" has an invalid time range.`,
+        });
       }
     }
 
@@ -322,18 +398,26 @@ export class PlannerRuleEngine {
         toMinutes(match.startTime) !== block.startMinutes ||
         toMinutes(match.endTime) !== block.endMinutes
       ) {
-        issues.push({ code: 'locked-moved', message: `Locked item "${block.title}" was moved or dropped.` });
+        issues.push({
+          code: 'locked-moved',
+          message: `Locked item "${block.title}" was moved or dropped.`,
+        });
       }
     }
 
     // A dependency-blocked candidate must never appear on the timeline. Blocked
     // entries are keyed by candidate id (a subtask id for subtask candidates),
     // so match against the item's subtaskId first, then its taskId.
-    const blockedIds = new Set(constraints.blockedTasks.map((entry) => entry.task.id));
+    const blockedIds = new Set(
+      constraints.blockedTasks.map((entry) => entry.task.id),
+    );
     for (const item of items) {
       const candidateId = item.subtaskId ?? item.taskId;
       if (candidateId && blockedIds.has(candidateId)) {
-        issues.push({ code: 'dependency', message: `Blocked task "${item.title}" was scheduled before its dependency.` });
+        issues.push({
+          code: 'dependency',
+          message: `Blocked task "${item.title}" was scheduled before its dependency.`,
+        });
       }
     }
 
@@ -342,8 +426,14 @@ export class PlannerRuleEngine {
     const dayEnd = toMinutes(constraints.workingHours.end);
     for (const item of items) {
       if (item.type !== 'task') continue;
-      if (toMinutes(item.startTime) < dayStart || toMinutes(item.endTime) > dayEnd) {
-        issues.push({ code: 'out-of-hours', message: `"${item.title}" falls outside working hours.` });
+      if (
+        toMinutes(item.startTime) < dayStart ||
+        toMinutes(item.endTime) > dayEnd
+      ) {
+        issues.push({
+          code: 'out-of-hours',
+          message: `"${item.title}" falls outside working hours.`,
+        });
       }
     }
 
@@ -352,12 +442,23 @@ export class PlannerRuleEngine {
 }
 
 export function normalizePriority(value: unknown): Priority {
-  if (value === 'urgent' || value === 'high' || value === 'medium' || value === 'low') return value;
+  if (
+    value === 'urgent' ||
+    value === 'high' ||
+    value === 'medium' ||
+    value === 'low'
+  )
+    return value;
   return 'medium';
 }
 
 /** Build a protected rest block (sleep/lunch) for a same-day minute range. */
-function restBlock(id: string, title: string, rationale: string, range: { start: number; end: number }): FixedBlock {
+function restBlock(
+  id: string,
+  title: string,
+  rationale: string,
+  range: { start: number; end: number },
+): FixedBlock {
   return {
     id: `${id}-${range.start}`,
     type: 'break',
@@ -385,7 +486,10 @@ function freeMinutesInWindow(
   if (end <= start) return 0;
   let busy = 0;
   const sorted = [...fixedBlocks]
-    .map((block) => ({ start: Math.max(start, block.startMinutes), end: Math.min(end, block.endMinutes) }))
+    .map((block) => ({
+      start: Math.max(start, block.startMinutes),
+      end: Math.min(end, block.endMinutes),
+    }))
     .filter((block) => block.end > block.start)
     .sort((a, b) => a.start - b.start);
   // Merge overlaps so shared minutes aren't double-counted.
@@ -410,7 +514,9 @@ export function findSlot(
   const sortedBusy = [...busy].sort((a, b) => a.start - b.start);
 
   while (cursor + duration <= dayEnd) {
-    const conflict = sortedBusy.find((slot) => cursor < slot.end && cursor + duration > slot.start);
+    const conflict = sortedBusy.find(
+      (slot) => cursor < slot.end && cursor + duration > slot.start,
+    );
     if (!conflict) return { start: cursor, end: cursor + duration };
     cursor = Math.max(cursor + 15, conflict.end);
   }

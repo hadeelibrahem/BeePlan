@@ -59,7 +59,9 @@ export class AiService {
    */
   async parseReminder(text: string, userId?: string): Promise<ReminderDraft> {
     if (!this.client || !this.model) {
-      throw new InternalServerErrorException('AI reminder parsing is not configured.');
+      throw new InternalServerErrorException(
+        'AI reminder parsing is not configured.',
+      );
     }
 
     const trimmed = text.trim();
@@ -83,13 +85,32 @@ export class AiService {
       this.logger.error(
         `Qwen request failed: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
-      throw new InternalServerErrorException('Failed to parse reminder with AI.');
+      throw new InternalServerErrorException(
+        'Failed to parse reminder with AI.',
+      );
     }
 
     const draft = this.toDraft(raw);
-    const savedPlaceDraft = await this.applySavedPlaceOverride(trimmed, draft, userId);
+    const savedPlaceDraft = await this.applySavedPlaceOverride(
+      trimmed,
+      draft,
+      userId,
+    );
     if (savedPlaceDraft) return savedPlaceDraft;
-    return this.applySmartLocationOverride(trimmed, draft);
+    const fallback = this.applySmartLocationOverride(trimmed, draft);
+    return {
+      ...fallback,
+      location: {
+        ...fallback.location,
+        match: {
+          status:
+            fallback.reminderType === 'location' ? 'fallback' : 'no_match',
+          confidence: 0,
+          clarificationRequired: false,
+          candidates: [],
+        },
+      },
+    };
   }
 
   /**
@@ -185,7 +206,9 @@ export class AiService {
       parsed = parseJsonResponse(raw);
     } catch {
       this.logger.error('Qwen returned a response that was not valid JSON.');
-      throw new InternalServerErrorException('AI returned an invalid response.');
+      throw new InternalServerErrorException(
+        'AI returned an invalid response.',
+      );
     }
 
     return normalizeReminderDraft(parsed);
@@ -217,6 +240,24 @@ export class AiService {
     }
     const place = matches[0];
     if (!place) return null;
+    if (matches.length > 1) {
+      return {
+        ...draft,
+        location: {
+          ...draft.location,
+          match: {
+            status: 'ambiguous',
+            confidence: 0.5,
+            clarificationRequired: true,
+            candidates: matches.map((candidate) => ({
+              id: candidate.id,
+              name: candidate.name,
+              address: candidate.address,
+            })),
+          },
+        },
+      };
+    }
 
     return {
       ...draft,
@@ -227,11 +268,19 @@ export class AiService {
         name: place.name,
         address: place.address ?? '',
         category: place.category ?? '',
-        trigger: draft.location.trigger === 'leave' ? 'leave' : 'arrive',
+        trigger: detectLocationTrigger(text) ?? draft.location.trigger,
         radius: place.radiusMeters,
         latitude: place.latitude,
         longitude: place.longitude,
         savedPlaceId: place.id,
+        match: {
+          status: 'matched',
+          confidence: 1,
+          clarificationRequired: false,
+          candidates: [
+            { id: place.id, name: place.name, address: place.address },
+          ],
+        },
       },
       context: { condition: '' },
     };
@@ -263,18 +312,37 @@ export class AiService {
   }
 }
 
+export function detectLocationTrigger(text: string): 'arrive' | 'leave' | null {
+  const normalized = text
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const departure =
+    /\b(leave|leaving|go out|going out|depart|departure)\b/u.test(normalized) ||
+    /(لما|عندما|عند)\s*(اطلع|اخرج|اغادر)|عند\s*المغادر/u.test(normalized);
+  if (departure) return 'leave';
+  const arrival =
+    /\b(arrive|arrival|get to|get home|reach)\b/u.test(normalized) ||
+    /(لما|عندما|عند)\s*(اوصل|اصل|ارجع)|عند\s*الوصول/u.test(normalized);
+  return arrival ? 'arrive' : null;
+}
+
 // --- Fuzzy name matching helpers -------------------------------------------
 
 /** Lowercases, trims, and strips Arabic diacritics + punctuation for matching. */
 function normalizeName(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFKD')
-    // Strip combining marks (Latin accents + Arabic harakat).
-    .replace(/\p{M}+/gu, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (
+    value
+      .toLowerCase()
+      .normalize('NFKD')
+      // Strip combining marks (Latin accents + Arabic harakat).
+      .replace(/\p{M}+/gu, '')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
 }
 
 /** Classic Levenshtein edit distance between two short strings. */
@@ -332,7 +400,10 @@ function scoreFriend(query: string, friend: FriendSummary): number {
 
   // Whole-string containment (e.g. query "ahmad" in "ahmad ali") is a strong
   // signal even when no single token is an exact hit.
-  if (best < 0.7 && (fullName.includes(query) || query.includes(nameTokens[0] ?? '\0'))) {
+  if (
+    best < 0.7 &&
+    (fullName.includes(query) || query.includes(nameTokens[0] ?? '\0'))
+  ) {
     best = Math.max(best, 0.7);
   }
 

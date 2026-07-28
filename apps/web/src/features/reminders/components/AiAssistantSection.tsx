@@ -76,6 +76,12 @@ function buildSummaryLines(draft: ReminderDraft, t: Translate): { label: string;
   }
 
   if (draft.reminderType === 'location') {
+    if (draft.location.match?.status === 'ambiguous') {
+      lines.push({
+        label: t('reminders.aiAssistant.summaryWhere'),
+        value: `Choose a saved place: ${draft.location.match.candidates.map((candidate) => candidate.name).join(', ')}`,
+      })
+    }
     const parts = [draft.location.name, draft.location.category].filter(Boolean)
     if (parts.length) {
       lines.push({ label: t('reminders.aiAssistant.summaryWhere'), value: `${parts.join(' · ')} (${draft.location.trigger})` })

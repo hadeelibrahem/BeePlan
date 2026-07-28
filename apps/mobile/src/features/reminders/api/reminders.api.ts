@@ -11,6 +11,7 @@ type BackendLocationDto = {
   address?: string;
   latitude?: number;
   longitude?: number;
+  savedPlaceId?: string;
   category?: string;
   radiusMeters: number;
   triggerType: 'arrive' | 'leave';
@@ -105,6 +106,7 @@ function toBackendLocation(location: ReminderFormValues['location']): BackendLoc
     address: place?.address,
     latitude: place?.latitude,
     longitude: place?.longitude,
+    savedPlaceId: place?.savedPlaceId,
     radiusMeters,
     triggerType,
   };
@@ -140,6 +142,7 @@ function fromBackendLocation(location?: BackendLocationDto): Reminder['location'
       address: location.address ?? '',
       latitude: location.latitude ?? 0,
       longitude: location.longitude ?? 0,
+      savedPlaceId: location.savedPlaceId,
       // The backend only stores place name/address/coordinates — "how the place was
       // selected" is a UI-only concept, so re-hydrating from a saved reminder defaults to
       // 'search' (the form's isValid check just requires this to be truthy).

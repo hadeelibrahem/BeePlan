@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { SavedPlacesService } from '../context/saved-places.service';
 import { DatabaseService } from '../db/database.service';
 import { LocationSharingService } from '../social/location-sharing.service';
 import { RemindersService } from './reminders.service';
@@ -47,6 +48,7 @@ describe('RemindersService (per-user ownership)', () => {
     update: jest.Mock;
     delete: jest.Mock;
   };
+  let savedPlacesService: { findOne: jest.Mock };
 
   beforeEach(async () => {
     db = {
@@ -55,14 +57,18 @@ describe('RemindersService (per-user ownership)', () => {
       update: jest.fn(),
       delete: jest.fn(),
     };
+    savedPlacesService = { findOne: jest.fn().mockResolvedValue({}) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RemindersService,
         { provide: DatabaseService, useValue: { db } },
+        { provide: SavedPlacesService, useValue: savedPlacesService },
         {
           provide: LocationSharingService,
-          useValue: { getViewerPermissionStatuses: jest.fn().mockResolvedValue(new Map()) },
+          useValue: {
+            getViewerPermissionStatuses: jest.fn().mockResolvedValue(new Map()),
+          },
         },
       ],
     }).compile();
@@ -102,6 +108,32 @@ describe('RemindersService (per-user ownership)', () => {
 
     expect(builder.values).toHaveBeenCalledWith(
       expect.objectContaining({ userId: USER_A }),
+    );
+  });
+
+  it('validates that a saved place belongs to the authenticated user', async () => {
+    const builder = createQueryBuilder([baseRow]);
+    db.insert.mockReturnValue(builder);
+    const savedPlaceId = '44444444-4444-4444-4444-444444444444';
+
+    await service.create(USER_A, {
+      title: 'Buy milk',
+      type: 'location',
+      repeat: 'none',
+      priority: 'medium',
+      location: {
+        mode: 'specific',
+        trigger: 'arrive',
+        savedPlaceId,
+        latitude: 31.9,
+        longitude: 35.2,
+        radius: 100,
+      },
+    } as never);
+
+    expect(savedPlacesService.findOne).toHaveBeenCalledWith(
+      USER_A,
+      savedPlaceId,
     );
   });
 

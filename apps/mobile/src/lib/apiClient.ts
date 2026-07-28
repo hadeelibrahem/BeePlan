@@ -89,6 +89,7 @@ function getNetworkDiagnosticHint(error: unknown) {
 }
 
 const DEFAULT_TIMEOUT_MS = 15000;
+const inFlightGetRequests = new Map<string, Promise<Response>>();
 
 /**
  * Fetches `path` against API_BASE_URL with an enforced timeout, logging every
@@ -96,7 +97,7 @@ const DEFAULT_TIMEOUT_MS = 15000;
  * errors so callers (and Metro logs) can tell them apart instead of seeing a
  * single generic "Network request timed out".
  */
-export async function apiFetch(
+async function performApiFetch(
   path: string,
   init: RequestInit = {},
   timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -154,6 +155,34 @@ export async function apiFetch(
     );
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+export async function apiFetch(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (method !== 'GET') {
+    return performApiFetch(path, init, timeoutMs);
+  }
+
+  const authorization = new Headers(init.headers).get('Authorization') ?? '';
+  const key = `${API_BASE_URL}${path}|${authorization}`;
+  const existing = inFlightGetRequests.get(key);
+  if (existing) {
+    return (await existing).clone();
+  }
+
+  const request = performApiFetch(path, init, timeoutMs);
+  inFlightGetRequests.set(key, request);
+  try {
+    return (await request).clone();
+  } finally {
+    if (inFlightGetRequests.get(key) === request) {
+      inFlightGetRequests.delete(key);
+    }
   }
 }
 

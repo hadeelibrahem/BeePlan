@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
+import { SavedPlacesService } from '../context/saved-places.service';
 import { reminders as remindersTable } from '../db/schema';
 import { LocationSharingService } from '../social/location-sharing.service';
 import { CreateReminderDto } from './dto/create-reminder.dto';
@@ -35,6 +36,7 @@ export class RemindersService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly locationSharingService: LocationSharingService,
+    private readonly savedPlacesService: SavedPlacesService,
   ) {}
 
   private get db() {
@@ -97,6 +99,7 @@ export class RemindersService {
   }
 
   async create(userId: string, dto: CreateReminderDto): Promise<Reminder> {
+    await this.assertSavedPlaceOwnership(userId, dto.location);
     const [row] = await this.db
       .insert(remindersTable)
       .values({
@@ -173,6 +176,7 @@ export class RemindersService {
     dto: UpdateReminderDto,
   ): Promise<Reminder> {
     const existing = await this.findOne(userId, id);
+    await this.assertSavedPlaceOwnership(userId, dto.location);
 
     // Person config is a partial patch: merge onto the stored config so
     // permission/targeting/proximity fields survive an edit that only changes
@@ -216,6 +220,14 @@ export class RemindersService {
     }
 
     return this.toEntity(row);
+  }
+
+  private async assertSavedPlaceOwnership(
+    userId: string,
+    location?: ReminderLocationDto,
+  ): Promise<void> {
+    if (!location?.savedPlaceId) return;
+    await this.savedPlacesService.findOne(userId, location.savedPlaceId);
   }
 
   async remove(userId: string, id: string): Promise<void> {
