@@ -120,6 +120,7 @@ export type DailyPlanItem = {
   isFocusTask?: boolean;
   locked?: boolean;
   rationale?: string;
+  destination?: { displayName: string; latitude: number; longitude: number } | null;
 };
 
 export type UnscheduledItem = {
@@ -195,7 +196,9 @@ export type DailyPlan = {
   capacity: CapacitySummary;
   conflicts: ScheduleConflict[];
   taskConflicts: TaskTimeConflict[];
+  travelFeasibilityConflicts?: TravelFeasibilityConflict[];
 };
+export type TravelFeasibilityConflict = { type: 'travel_feasibility_conflict'; affectedItem: { id: string; title: string }; conflictingItem: { id: string; title: string } | null; requiredTravelDurationMinutes: number; requiredDeparture: string; availableGapMinutes: number; suggestedValidAlternative: string; fallbackUsed: boolean };
 
 // -------- Layer 1 input: collected user context -----------------------------
 
@@ -242,6 +245,7 @@ export interface PlannerTask {
    * scheduler simply places the dependency first so a valid order is preserved.
    */
   orderDependencyIds?: string[];
+  destination?: { displayName: string; latitude: number; longitude: number } | null;
 }
 
 export interface PlannerReminder {

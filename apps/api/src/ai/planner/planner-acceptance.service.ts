@@ -138,6 +138,9 @@ export class PlannerAcceptanceService {
         }).where(and(eq(tasks.userId, userId), eq(tasks.id, item.taskId)));
       }
     }
+    if (Array.isArray((plan as DailyPlan).travelFeasibilityConflicts) && (plan as DailyPlan).travelFeasibilityConflicts!.length) {
+      throw new BadRequestException({ code: 'TRAVEL_FEASIBILITY_CONFLICT', conflicts: (plan as DailyPlan).travelFeasibilityConflicts });
+    }
   }
 
   async resolveConflict(

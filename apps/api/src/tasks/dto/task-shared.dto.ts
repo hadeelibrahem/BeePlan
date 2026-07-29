@@ -30,6 +30,15 @@ function normalizeEndDateInput(value: unknown): string | undefined {
 
 export const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 export const TASK_STATUSES = ['todo', 'in_progress', 'done', 'missed'] as const;
+export const TRAVEL_MODES = ['driving', 'walking', 'cycling'] as const;
+
+export class TaskDestinationDto {
+  @IsString() displayName!: string;
+  @IsOptional() @IsString() address?: string | null;
+  @Type(() => Number) @IsNumber() @Min(-90) @Max(90) latitude!: number;
+  @Type(() => Number) @IsNumber() @Min(-180) @Max(180) longitude!: number;
+  @IsOptional() @IsUUID('4') savedPlaceId?: string | null;
+}
 export const SUBTASK_STATUSES = [
   'todo',
   'in_progress',
@@ -220,6 +229,11 @@ export class SubtaskDto {
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   scheduledEndTime?: string | null;
 
+  @IsOptional() @ValidateIf((_object, value) => value !== null) @ValidateNested() @Type(() => TaskDestinationDto)
+  destination?: TaskDestinationDto | null;
+  @IsOptional() @IsBoolean() weatherTravelEnabled?: boolean;
+  @IsOptional() @IsIn(TRAVEL_MODES) travelMode?: (typeof TRAVEL_MODES)[number] | null;
+
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -312,6 +326,11 @@ export class TaskCoreDto {
   @ValidateIf((_object, value) => value !== null)
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   scheduledEndTime?: string | null;
+
+  @IsOptional() @ValidateIf((_object, value) => value !== null) @ValidateNested() @Type(() => TaskDestinationDto)
+  destination?: TaskDestinationDto | null;
+  @IsOptional() @IsBoolean() weatherTravelEnabled?: boolean;
+  @IsOptional() @IsIn(TRAVEL_MODES) travelMode?: (typeof TRAVEL_MODES)[number] | null;
 
   @IsOptional()
   @IsString()

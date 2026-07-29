@@ -39,11 +39,13 @@ import {
   type ApiTask,
   type ApiTaskAttachment,
   type TaskPayload,
+  type TaskDestination,
   type TaskCommitmentConflict,
   type TaskTimeConflict,
 } from '../lib/tasksApi';
 import { TaskTimeConflictModal, type MobileScheduleChoice } from '../components/TaskTimeConflictModal';
 import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal';
+import { WeatherTravelTaskFields } from '../components/WeatherTravelTaskFields';
 import { skipCommitmentOccurrence } from '../lib/plannerApi';
 import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
 import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard';
@@ -172,6 +174,9 @@ export default function EditTaskScreen({
   const [scheduledEndTime, setScheduledEndTime] = useState(task?.scheduledEndTime ?? '');
   const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null);
   const [commitmentConflict, setCommitmentConflict] = useState<TaskCommitmentConflict | null>(null);
+  const [destination, setDestination] = useState<Partial<TaskDestination>>(task?.destination ?? {});
+  const [weatherTravelEnabled, setWeatherTravelEnabled] = useState(Boolean(task?.weatherTravelEnabled));
+  const [travelMode, setTravelMode] = useState<'driving'|'walking'|'cycling'>(task?.travelMode ?? 'driving');
   const [reminderEnabled, setReminderEnabled] = useState(task?.reminderEnabled ?? false);
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task?.reminderBeforeMinutes ?? 30);
   const [notes, setNotes] = useState(task?.notes ?? '');
@@ -370,6 +375,9 @@ export default function EditTaskScreen({
         scheduledDate: scheduledDate || undefined,
         scheduledStartTime: scheduledStartTime || undefined,
         scheduledEndTime: scheduledEndTime || undefined,
+        destination: destination.displayName && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude) ? destination as TaskDestination : undefined,
+        weatherTravelEnabled,
+        travelMode,
         reminderEnabled,
         reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         notes: notes.trim(),
@@ -551,6 +559,7 @@ export default function EditTaskScreen({
         <Label text="Scheduled Date (YYYY-MM-DD)" />
         <TextInput accessibilityLabel="Scheduled date" value={scheduledDate} onChangeText={setScheduledDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.placeholder} className="mb-2 rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} />
         <View className="flex-row gap-2"><View className="flex-1"><Label text="Scheduled Start" /><TextInput accessibilityLabel="Scheduled start time" value={scheduledStartTime} onChangeText={setScheduledStartTime} placeholder="HH:mm" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View><View className="flex-1"><Label text="Scheduled End" /><TextInput accessibilityLabel="Scheduled end time" value={scheduledEndTime} onChangeText={setScheduledEndTime} placeholder="HH:mm or derived" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View></View>
+        <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
       </Card>
 
       <Card title="Progress & Time Estimation">

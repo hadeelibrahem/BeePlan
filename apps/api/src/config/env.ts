@@ -40,6 +40,23 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(90_000),
+  WEATHER_PROVIDER: z.enum(['open-meteo']).default('open-meteo'),
+  WEATHER_API_BASE_URL: z.string().url().default('https://api.open-meteo.com'),
+  WEATHER_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(8_000),
+  WEATHER_CACHE_TTL_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(120)
+    .default(20),
+  GEOAPIFY_API_KEY: z.string().optional(),
+  GEOAPIFY_ROUTING_BASE_URL: z
+    .string()
+    .url()
+    .default('https://api.geoapify.com'),
+  ROUTING_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(8_000),
+  WEATHER_WORKER_INTERVAL_MINUTES: z.coerce.number().int().min(1).default(10),
+  WEATHER_LOOKAHEAD_HOURS: z.coerce.number().int().min(1).max(168).default(48),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -62,6 +79,12 @@ export function validateEnv(config: Record<string, unknown>): Env {
     throw new Error(
       `Invalid or missing environment variables:\n${issues}\n` +
         'Check apps/api/.env against apps/api/.env.example for the required values.',
+    );
+  }
+
+  if (result.data.NODE_ENV === 'production' && !result.data.GEOAPIFY_API_KEY) {
+    throw new Error(
+      'Invalid or missing environment variables:\n  - GEOAPIFY_API_KEY: required in production for route estimates.',
     );
   }
 

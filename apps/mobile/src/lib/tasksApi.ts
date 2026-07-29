@@ -76,6 +76,9 @@ export type ApiSubtask = {
   scheduledDate?: string;
   scheduledStartTime?: string;
   scheduledEndTime?: string;
+  destination?: TaskDestination;
+  weatherTravelEnabled?: boolean;
+  travelMode?: 'driving' | 'walking' | 'cycling';
   estimatedDurationMinutes?: number;
   actualDurationMinutes?: number;
   estimatedDurationSource: 'user' | 'ai';
@@ -105,6 +108,12 @@ export type SubtaskPayload = Partial<
     | 'isFocusTask'
     | 'startDate'
     | 'dueDate'
+    | 'scheduledDate'
+    | 'scheduledStartTime'
+    | 'scheduledEndTime'
+    | 'destination'
+    | 'weatherTravelEnabled'
+    | 'travelMode'
     | 'estimatedDurationMinutes'
     | 'actualDurationMinutes'
     | 'estimatedDurationSource'
@@ -154,6 +163,9 @@ export type ApiTask = {
   scheduledDate?: string;
   scheduledStartTime?: string;
   scheduledEndTime?: string;
+  destination?: TaskDestination;
+  weatherTravelEnabled?: boolean;
+  travelMode?: 'driving' | 'walking' | 'cycling';
   category: string;
   notes: string;
   estimatedTimeMinutes: number;
@@ -204,6 +216,9 @@ export type TaskPayload = Partial<
     | 'scheduledDate'
     | 'scheduledStartTime'
     | 'scheduledEndTime'
+    | 'destination'
+    | 'weatherTravelEnabled'
+    | 'travelMode'
     | 'category'
     | 'notes'
     | 'estimatedTimeMinutes'
@@ -297,6 +312,14 @@ export type TodayDashboard = { generatedAt: string; timezone: string; greeting: 
 export type ScheduledTaskCandidate = { id: string; title: string; priority: string; dueDate: string | null; durationMinutes: number; scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string };
 export type TaskTimeConflict = { id: string; existingTask: ScheduledTaskCandidate; proposedTask: ScheduledTaskCandidate; overlapMinutes: number };
 export type TaskCommitmentConflict = { id: string; conflictType: 'task_commitment'; proposedTask: ScheduledTaskCandidate; commitment: { commitmentId: string; title: string; date: string; startTime: string; endTime: string }; overlapMinutes: number };
+export type TaskDestination = { displayName: string; address?: string | null; latitude: number; longitude: number; savedPlaceId?: string | null };
+export type WeatherTravelPreferences = { enabled: boolean; defaultTravelMode: 'driving' | 'walking' | 'cycling'; homeRadiusMeters: number; preparationBufferMinutes: number; parkingWalkingBufferMinutes: number; uncertaintyBufferMinutes: number; weatherLeadMinutes: number; currentLocationFreshnessMinutes: number; coldThresholdC: number; veryColdThresholdC: number; hotThresholdC: number; extremeHeatThresholdC: number; rainThresholdPercent: number; rainAmountThresholdMm: number; windThresholdKph: number; uvThreshold: number; visibilityThresholdMeters: number; currentLocationFallbackEnabled: boolean; approximateTravelFallbackEnabled: boolean; aiPolishingEnabled: boolean; language: string; timezone: string; advice: Record<string, boolean> };
+export function getWeatherTravelPreferences(accessToken: string) { return request<WeatherTravelPreferences>(accessToken, '/settings/weather-travel'); }
+export function updateWeatherTravelPreferences(accessToken: string, payload: WeatherTravelPreferences) { return request<WeatherTravelPreferences>(accessToken, '/settings/weather-travel', { method: 'PUT', body: JSON.stringify(payload) }); }
+export function getTaskTravelWeatherPreview(accessToken: string, taskId: string, subtaskId?: string) { return request<any>(accessToken, subtaskId ? `/tasks/${taskId}/subtasks/${subtaskId}/travel-weather-preview` : `/tasks/${taskId}/travel-weather-preview`); }
+export type WeatherTravelNotification = { id: string; notificationTime: string; deterministicMessage: string; polishedMessage?: string | null; status: string; payload?: any };
+export function getUpcomingWeatherTravelNotifications(accessToken: string) { return request<WeatherTravelNotification[]>(accessToken, '/weather-travel/notifications/upcoming'); }
+export function acknowledgeWeatherTravelNotification(accessToken: string, id: string) { return request(accessToken, `/weather-travel/notifications/${id}/acknowledge`, { method: 'POST' }); }
 type ScheduleValidationPayload = { id?: string; title: string; priority?: string; dueDate?: string | null; estimatedTimeMinutes?: number; scheduledDate?: string; scheduledStartTime?: string; scheduledEndTime?: string };
 export function validateTaskSchedule(accessToken: string, payload: ScheduleValidationPayload) { return request<{ conflicts: TaskTimeConflict[]; taskConflicts: TaskTimeConflict[]; commitmentConflicts: TaskCommitmentConflict[]; normalizedSchedule: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string } | null }>(accessToken, '/tasks/schedule-conflicts/validate', { method: 'POST', body: JSON.stringify({ ...payload, taskId: payload.id }) }); }
 export function resolveTaskScheduleConflict(accessToken: string, payload: { conflictKey: string; date: string; taskId?: string; commitmentId?: string; resolution: 'move_existing_auto' | 'move_existing_manual' | 'move_new_auto' | 'move_new_manual' | 'cancel_existing' | 'keep_commitment' | 'keep_task' | 'choose_another_time' }) { return request<{ conflictKey: string; lifecycle: 'resolved'; resolution: string }>(accessToken, '/tasks/schedule-conflicts/resolve', { method: 'POST', body: JSON.stringify(payload) }); }

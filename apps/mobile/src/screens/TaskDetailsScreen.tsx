@@ -42,6 +42,7 @@ import { CollaborationPanel } from '../features/collaboration/components/Collabo
 import { SharedBadge } from '../features/collaboration/components/SharedBadge';
 import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
 import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict';
+import { TravelWeatherCard } from '../components/TravelWeatherCard';
 
 type Props = {
   task?: ApiTask | null;
@@ -252,6 +253,7 @@ export default function TaskDetailsScreen({
       }
     >
       <ExistingScheduleConflict accessToken={accessToken} taskId={task.id} onResolved={onRefresh} />
+      <TravelWeatherCard token={accessToken} task={task} />
       <PageHeader title="Task Details" onBack={onBack} />
 
       {error ? <Text className="mb-3 text-sm font-bold text-red-300">{error}</Text> : null}

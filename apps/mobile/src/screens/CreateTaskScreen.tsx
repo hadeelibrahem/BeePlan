@@ -8,9 +8,10 @@ import {
   type RecurrenceSettings,
 } from '../components/TaskRecurrenceSheet'
 import TaskAttachmentPicker from '../components/TaskAttachmentPicker'
-import { addDependencies, addSubtask, changeTaskStatus, getNearestTaskSchedule, recurrenceToApi, resolveTaskScheduleConflict, toUiPriority, toUiStatus, updateTask, validateTaskSchedule, type ApiTask, type TaskPayload, type TaskCommitmentConflict, type TaskTimeConflict, uploadAttachment } from '../lib/tasksApi'
+import { addDependencies, addSubtask, changeTaskStatus, getNearestTaskSchedule, recurrenceToApi, resolveTaskScheduleConflict, toUiPriority, toUiStatus, updateTask, validateTaskSchedule, type ApiTask, type TaskDestination, type TaskPayload, type TaskCommitmentConflict, type TaskTimeConflict, uploadAttachment } from '../lib/tasksApi'
 import { TaskTimeConflictModal, type MobileScheduleChoice } from '../components/TaskTimeConflictModal'
 import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal'
+import { WeatherTravelTaskFields } from '../components/WeatherTravelTaskFields'
 import { skipCommitmentOccurrence } from '../lib/plannerApi'
 import { DraftSubtasksSection } from '../components/DraftSubtasksSection'
 import { persistDraftSubtasks, validateDraftSubtasks, type DraftSubtask } from './createTaskSubtasks'
@@ -86,6 +87,9 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
   const [scheduledEndTime, setScheduledEndTime] = useState('')
   const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null)
   const [commitmentConflict, setCommitmentConflict] = useState<TaskCommitmentConflict | null>(null)
+  const [destination, setDestination] = useState<Partial<TaskDestination>>({})
+  const [weatherTravelEnabled, setWeatherTravelEnabled] = useState(false)
+  const [travelMode, setTravelMode] = useState<'driving'|'walking'|'cycling'>('driving')
   const [reminderEnabled, setReminderEnabled] = useState(true)
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30)
   const [estimatedHours, setEstimatedHours] = useState('')
@@ -163,6 +167,9 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
 
     try {
       const payload = createTaskPayload(formValues, recurrenceToApi(recurrence))
+      payload.destination = destination.displayName && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude) ? destination as TaskDestination : undefined
+      payload.weatherTravelEnabled = weatherTravelEnabled
+      payload.travelMode = travelMode
       if (!parentTaskRef.current && accessToken && scheduledDate) {
         const validation = await validateTaskSchedule(accessToken, { title: payload.title ?? title, priority: payload.priority, dueDate: payload.dueDate, estimatedTimeMinutes: payload.estimatedTimeMinutes, scheduledDate, scheduledStartTime, scheduledEndTime: scheduledEndTime || undefined })
         if (validation.commitmentConflicts.length) { setCommitmentConflict(validation.commitmentConflicts[0]); submissionRef.current = false; setSaving(false); return }
@@ -307,6 +314,7 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
         <Label text="Scheduled Date (YYYY-MM-DD)" />
         <TextInput accessibilityLabel="Scheduled date" value={scheduledDate} onChangeText={setScheduledDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.placeholder} className="mb-2 rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} />
         <View className="flex-row gap-2"><View className="flex-1"><Label text="Scheduled Start" /><TextInput accessibilityLabel="Scheduled start time" value={scheduledStartTime} onChangeText={setScheduledStartTime} placeholder="HH:mm" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View><View className="flex-1"><Label text="Scheduled End" /><TextInput accessibilityLabel="Scheduled end time" value={scheduledEndTime} onChangeText={setScheduledEndTime} placeholder="HH:mm or derived" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View></View>
+        <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
       </Card>
 
       <Card title="Reminder" icon="🔔">

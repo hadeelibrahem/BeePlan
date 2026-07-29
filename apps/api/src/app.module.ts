@@ -20,6 +20,7 @@ import { RemindersModule } from './reminders/reminders.module';
 import { SocialModule } from './social/social.module';
 import { SpeechModule } from './speech/speech.module';
 import { TasksModule } from './tasks/tasks.module';
+import { WeatherTravelModule } from './weather-travel/weather-travel.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { TasksModule } from './tasks/tasks.module';
     DashboardModule,
     NotesModule,
     FocusModule,
+    WeatherTravelModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

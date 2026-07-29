@@ -19,6 +19,7 @@ import { displaySubtaskTitle } from '../lib/subtaskDisplay'
 import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
 import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal'
+import { WeatherTravelTaskFields } from '../components/WeatherTravelTaskFields'
 import { skipCommitmentOccurrence } from '../lib/plannerApi'
 import { ManageMembersSection } from '../features/collaboration/components/ManageMembersSection'
 import { ReminderAudienceSection } from '../features/collaboration/components/ReminderAudienceSection'
@@ -54,6 +55,7 @@ import {
   type TaskPayload,
   type TaskTimeConflict,
   type TaskCommitmentConflict,
+  type TaskDestination,
 } from '../lib/tasksApi'
 
 type EditTaskScreenProps = SidebarNavHandlers & {
@@ -107,6 +109,9 @@ export default function EditTaskScreen({
   const [scheduledEndTime, setScheduledEndTime] = useState(task.scheduledEndTime ?? '')
   const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null)
   const [commitmentConflict, setCommitmentConflict] = useState<TaskCommitmentConflict | null>(null)
+  const [destination, setDestination] = useState<Partial<TaskDestination>>(task.destination ?? {})
+  const [weatherTravelEnabled, setWeatherTravelEnabled] = useState(Boolean(task.weatherTravelEnabled))
+  const [travelMode, setTravelMode] = useState<'driving'|'walking'|'cycling'>(task.travelMode ?? 'driving')
   const [notes, setNotes] = useState(task.notes)
   const [reminderEnabled, setReminderEnabled] = useState(task.reminderEnabled)
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task.reminderBeforeMinutes ?? 30)
@@ -385,6 +390,9 @@ export default function EditTaskScreen({
         scheduledDate: scheduledDate || undefined,
         scheduledStartTime: scheduledStartTime || undefined,
         scheduledEndTime: scheduledEndTime || undefined,
+        destination: destination.displayName && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude) ? destination as TaskDestination : undefined,
+        weatherTravelEnabled,
+        travelMode,
         notes: notes.trim(),
         estimatedTimeMinutes,
         spentTimeMinutes,
@@ -694,6 +702,7 @@ export default function EditTaskScreen({
                   <div><FieldLabel label="Scheduled Start" htmlFor="edit-task-scheduled-start" /><input id="edit-task-scheduled-start" type="time" className={inputClass} value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} /></div>
                   <div><FieldLabel label="Scheduled End" htmlFor="edit-task-scheduled-end" /><input id="edit-task-scheduled-end" type="time" className={inputClass} value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} /></div>
                 </div>
+                <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
               </Card>
 
               <Card title="Progress Overview" code={`${progress}`}>

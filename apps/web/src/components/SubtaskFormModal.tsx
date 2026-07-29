@@ -16,6 +16,14 @@ type FormValues = {
   startTime: string
   dueDate: string
   dueTime: string
+  scheduledDate: string
+  scheduledStartTime: string
+  scheduledEndTime: string
+  destinationName: string
+  destinationLatitude: string
+  destinationLongitude: string
+  weatherTravelEnabled: boolean
+  travelMode: 'driving'|'walking'|'cycling'
   estimatedDurationMinutes: string
   assignee: string
   isFocusTask: boolean
@@ -55,6 +63,14 @@ function fromSubtask(subtask?: ApiSubtask): FormValues {
     startTime: start.time,
     dueDate: due.date,
     dueTime: due.time,
+    scheduledDate: subtask?.scheduledDate ?? '',
+    scheduledStartTime: subtask?.scheduledStartTime ?? '',
+    scheduledEndTime: subtask?.scheduledEndTime ?? '',
+    destinationName: subtask?.destination?.displayName ?? '',
+    destinationLatitude: subtask?.destination ? String(subtask.destination.latitude) : '',
+    destinationLongitude: subtask?.destination ? String(subtask.destination.longitude) : '',
+    weatherTravelEnabled: Boolean(subtask?.weatherTravelEnabled),
+    travelMode: subtask?.travelMode ?? 'driving',
     estimatedDurationMinutes: subtask?.estimatedDurationMinutes ? String(subtask.estimatedDurationMinutes) : '',
     assignee: subtask?.assignee ?? '',
     isFocusTask: subtask?.isFocusTask ?? false,
@@ -77,6 +93,12 @@ function toPayload(values: FormValues): SubtaskPayload {
     isDone: values.status === 'done',
     startDate: combineDateTime(values.startDate, values.startTime),
     dueDate: combineDateTime(values.dueDate, values.dueTime),
+    scheduledDate: values.scheduledDate || undefined,
+    scheduledStartTime: values.scheduledStartTime || undefined,
+    scheduledEndTime: values.scheduledEndTime || undefined,
+    destination: values.destinationName && Number.isFinite(Number(values.destinationLatitude)) && Number.isFinite(Number(values.destinationLongitude)) ? { displayName: values.destinationName, latitude: Number(values.destinationLatitude), longitude: Number(values.destinationLongitude) } : undefined,
+    weatherTravelEnabled: values.weatherTravelEnabled,
+    travelMode: values.travelMode,
     estimatedDurationMinutes: Number.isFinite(estimated) && estimated > 0 ? estimated : undefined,
     // A person edited it, so any estimate is now user-owned.
     estimatedDurationSource: 'user',
@@ -214,6 +236,14 @@ export default function SubtaskFormModal({
               </select>
             </div>
           </div>
+
+          <fieldset className="rounded-xl border border-[var(--bp-border)] p-3">
+            <legend className="px-2 text-sm font-black">Independent Schedule &amp; Weather Travel</legend>
+            <div className="grid gap-3 md:grid-cols-3"><input aria-label="Subtask scheduled date" className={inputClass} type="date" value={values.scheduledDate} onChange={(e) => update('scheduledDate',e.target.value)} /><input aria-label="Subtask scheduled start" className={inputClass} type="time" value={values.scheduledStartTime} onChange={(e) => update('scheduledStartTime',e.target.value)} /><input aria-label="Subtask scheduled end" className={inputClass} type="time" value={values.scheduledEndTime} onChange={(e) => update('scheduledEndTime',e.target.value)} /></div>
+            <label className="mt-3 flex items-center justify-between text-sm font-bold">Enable weather &amp; travel<input type="checkbox" checked={values.weatherTravelEnabled} onChange={(e) => update('weatherTravelEnabled',e.target.checked)} /></label>
+            <div className="mt-3 grid gap-3 md:grid-cols-3"><input aria-label="Subtask destination" className={inputClass} placeholder="Destination" value={values.destinationName} onChange={(e) => update('destinationName',e.target.value)} /><input aria-label="Subtask destination latitude" className={inputClass} placeholder="Latitude" type="number" step="any" value={values.destinationLatitude} onChange={(e) => update('destinationLatitude',e.target.value)} /><input aria-label="Subtask destination longitude" className={inputClass} placeholder="Longitude" type="number" step="any" value={values.destinationLongitude} onChange={(e) => update('destinationLongitude',e.target.value)} /></div>
+            <select aria-label="Subtask travel mode" className={`${inputClass} mt-3`} value={values.travelMode} onChange={(e) => update('travelMode',e.target.value as FormValues['travelMode'])}><option value="driving">Driving</option><option value="walking">Walking</option><option value="cycling">Cycling</option></select>
+          </fieldset>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>

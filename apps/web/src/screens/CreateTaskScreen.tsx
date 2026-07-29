@@ -16,6 +16,7 @@ import { useTheme } from '../theme/ThemeContext'
 import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
 import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal'
+import { WeatherTravelTaskFields } from '../components/WeatherTravelTaskFields'
 import { skipCommitmentOccurrence } from '../lib/plannerApi'
 import {
   recurrenceToApi,
@@ -29,6 +30,7 @@ import {
   type TaskPayload,
   type TaskTimeConflict,
   type TaskCommitmentConflict,
+  type TaskDestination,
   validateTaskSchedule,
   getNearestTaskSchedule,
   resolveTaskScheduleConflict,
@@ -72,6 +74,9 @@ export default function CreateTaskScreen({
   const [scheduledEndTime, setScheduledEndTime] = useState('')
   const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null)
   const [commitmentConflict, setCommitmentConflict] = useState<TaskCommitmentConflict | null>(null)
+  const [destination, setDestination] = useState<Partial<TaskDestination>>({})
+  const [weatherTravelEnabled, setWeatherTravelEnabled] = useState(false)
+  const [travelMode, setTravelMode] = useState<'driving'|'walking'|'cycling'>('driving')
   const [reminderEnabled, setReminderEnabled] = useState(true)
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30)
   const [subtasks, setSubtasks] = useState<(SubtaskPayload & { title: string })[]>([])
@@ -149,6 +154,9 @@ export default function CreateTaskScreen({
         scheduledDate: scheduledDate || undefined,
         scheduledStartTime: scheduledStartTime || undefined,
         scheduledEndTime: scheduledEndTime || undefined,
+        destination: destination.displayName && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude) ? destination as TaskDestination : undefined,
+        weatherTravelEnabled,
+        travelMode,
         reminderEnabled,
         reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         recurrence: recurrenceToApi(recurrence),
@@ -376,6 +384,7 @@ export default function CreateTaskScreen({
                   <div><FieldLabel label="Scheduled Start" htmlFor="create-task-scheduled-start" /><input id="create-task-scheduled-start" type="time" value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
                   <div><FieldLabel label="Scheduled End" htmlFor="create-task-scheduled-end" /><input id="create-task-scheduled-end" type="time" value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
                 </div>
+                <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">

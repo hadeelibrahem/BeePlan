@@ -26,6 +26,7 @@ import {
 import { DatabaseService } from '../db/database.service';
 import { findTaskCommitmentConflicts, findTaskTimeConflicts, nearestAvailableSlot, normalizeScheduledInterval, type ScheduledInterval, type ScheduledTaskCandidate } from './task-schedule-conflicts';
 import { RecurringCommitmentsService } from '../context/recurring-commitments.service';
+import { WeatherTravelService } from '../weather-travel/weather-travel.service';
 import {
   focusSessions,
   subtaskDependencies,
@@ -116,6 +117,7 @@ export class TasksService {
     private readonly access: TaskAccessService,
     private readonly notifications: NotificationsService,
     private readonly commitmentsService: RecurringCommitmentsService,
+    private readonly weatherTravel: WeatherTravelService,
   ) {}
 
   private get db() {
@@ -164,6 +166,9 @@ export class TasksService {
         scheduledDate: schedule?.scheduledDate ?? null,
         scheduledStartTime: schedule?.scheduledStartTime ?? null,
         scheduledEndTime: schedule?.scheduledEndTime ?? null,
+        destination: dto.destination ?? null,
+        weatherTravelEnabled: dto.weatherTravelEnabled ?? false,
+        travelMode: dto.travelMode ?? null,
         category: dto.category?.trim() || null,
         notes: dto.notes?.trim() || null,
         estimatedTimeMinutes,
@@ -627,6 +632,9 @@ export class TasksService {
       updateData.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
     }
     if (dto.dueTime !== undefined) updateData.dueTime = dto.dueTime || null;
+    if (dto.destination !== undefined) updateData.destination = dto.destination;
+    if (dto.weatherTravelEnabled !== undefined) updateData.weatherTravelEnabled = dto.weatherTravelEnabled;
+    if (dto.travelMode !== undefined) updateData.travelMode = dto.travelMode;
     if (dto.category !== undefined) {
       updateData.category = dto.category?.trim() || null;
     }
@@ -658,6 +666,7 @@ export class TasksService {
       .update(tasks)
       .set(updateData)
       .where(eq(tasks.id, taskId));
+    await this.weatherTravel?.invalidateItem(userId, taskId);
 
     // Re-derive total spent + remaining whenever the estimate or the manual
     // spent time changed (focused time is folded back in from the sessions).
@@ -1000,6 +1009,9 @@ export class TasksService {
               estimatedDurationMinutes: dto.estimatedDurationMinutes ?? current.estimatedDurationMinutes ?? undefined,
             })
           : {}),
+        destination: dto.destination,
+        weatherTravelEnabled: dto.weatherTravelEnabled,
+        travelMode: dto.travelMode,
         estimatedDurationMinutes: dto.estimatedDurationMinutes,
         actualDurationMinutes: dto.actualDurationMinutes,
         estimatedDurationSource: dto.estimatedDurationSource,
@@ -1024,6 +1036,7 @@ export class TasksService {
         updatedAt: new Date(),
       })
       .where(and(eq(subtasks.id, subtaskId), eq(subtasks.taskId, taskId)));
+    await this.weatherTravel?.invalidateItem(userId, taskId, subtaskId);
 
     if (dto.dependencyIds !== undefined) {
       await this.replaceSubtaskDependencies(
@@ -1519,6 +1532,9 @@ export class TasksService {
       scheduledDate: task.scheduledDate ?? undefined,
       scheduledStartTime: task.scheduledStartTime ?? undefined,
       scheduledEndTime: task.scheduledEndTime ?? undefined,
+      destination: task.destination ?? undefined,
+      weatherTravelEnabled: task.weatherTravelEnabled,
+      travelMode: task.travelMode ?? undefined,
       category: task.category ?? '',
       notes: task.notes ?? '',
       estimatedTimeMinutes: task.estimatedTimeMinutes,
@@ -1569,6 +1585,9 @@ export class TasksService {
       scheduledDate: row.scheduledDate ?? undefined,
       scheduledStartTime: row.scheduledStartTime ?? undefined,
       scheduledEndTime: row.scheduledEndTime ?? undefined,
+      destination: row.destination ?? undefined,
+      weatherTravelEnabled: row.weatherTravelEnabled,
+      travelMode: row.travelMode ?? undefined,
       estimatedDurationMinutes: row.estimatedDurationMinutes ?? undefined,
       actualDurationMinutes: row.actualDurationMinutes ?? undefined,
       estimatedDurationSource: row.estimatedDurationSource,
@@ -1955,6 +1974,9 @@ export class TasksService {
       startDate: dto.startDate ? new Date(dto.startDate) : null,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       ...scheduleInsert(dto),
+      destination: dto.destination ?? null,
+      weatherTravelEnabled: dto.weatherTravelEnabled ?? false,
+      travelMode: dto.travelMode ?? null,
       estimatedDurationMinutes: dto.estimatedDurationMinutes ?? null,
       actualDurationMinutes: dto.actualDurationMinutes ?? null,
       estimatedDurationSource: dto.estimatedDurationSource ?? 'user',

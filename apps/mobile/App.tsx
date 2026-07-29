@@ -33,6 +33,7 @@ import { NotificationsScreen } from './src/features/collaboration';
 import { getUnreadCount } from './src/features/collaboration/api/collaboration.api';
 import { getLocationSharing } from './src/features/social/api/social.api';
 import { startProximityMonitor, stopProximityMonitor } from './src/services/proximityMonitor';
+import { acknowledgeWeatherTravelDelivery, syncWeatherTravelNotifications } from './src/lib/weatherTravelNotificationSync';
 import { useAuth } from './src/hooks/useAuth';
 import { LanguageProvider } from './src/i18n/LanguageContext';
 import { AuthProvider } from './src/providers/AuthProvider';
@@ -326,6 +327,24 @@ function ThemedApp() {
       cancelled = true;
     };
   }, [reminders, user, accessToken]);
+
+  useEffect(() => {
+    if (!user || !accessToken) return;
+    void syncWeatherTravelNotifications(accessToken);
+    const weatherSync = setInterval(() => void syncWeatherTravelNotifications(accessToken), 10 * 60_000);
+    return () => clearInterval(weatherSync);
+  }, [user, accessToken]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const acknowledge = (response: unknown) => {
+      const data = (response as any)?.notification?.request?.content?.data;
+      if (typeof data?.weatherTravelNotificationId === 'string') void acknowledgeWeatherTravelDelivery(accessToken, data.weatherTravelNotificationId);
+    };
+    void getLastNotificationResponseAsync().then((response) => { if (response) acknowledge(response); });
+    const subscription = addNotificationResponseReceivedListener(acknowledge);
+    return () => subscription.remove();
+  }, [accessToken]);
 
   useEffect(() => {
     if (!user || !accessToken) return;

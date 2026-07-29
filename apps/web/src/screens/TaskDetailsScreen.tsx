@@ -20,6 +20,7 @@ import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
 import { InlineStatusControl } from '../components/InlineStatusControl'
 import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict'
+import { TravelWeatherCard } from '../components/TravelWeatherCard'
 import { ExistingTaskTimeConflict } from '../components/ExistingTaskTimeConflict'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
@@ -375,6 +376,7 @@ export default function TaskDetailsScreen({
           }
         />
         {task ? <ExistingScheduleConflict accessToken={accessToken} taskId={task.id} onResolved={onRefresh} /> : null}
+        {task ? <TravelWeatherCard token={accessToken} task={task} /> : null}
         {task ? <ExistingTaskTimeConflict accessToken={accessToken} taskId={task.id} onResolved={onRefresh} /> : null}
 
         <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">

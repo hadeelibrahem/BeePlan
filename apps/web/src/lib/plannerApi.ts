@@ -90,6 +90,7 @@ export type DailyPlan = {
   capacity: CapacitySummary
   conflicts: ScheduleConflict[]
   taskConflicts?: import('./tasksApi').TaskTimeConflict[]
+  travelFeasibilityConflicts?: { type: 'travel_feasibility_conflict'; affectedItem: { id: string; title: string }; conflictingItem: { id: string; title: string } | null; requiredTravelDurationMinutes: number; requiredDeparture: string; availableGapMinutes: number; suggestedValidAlternative: string; fallbackUsed: boolean }[]
 }
 
 export type GenerateDailyPlanPayload = {

@@ -11,6 +11,7 @@ import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ContextModule } from '../context/context.module';
+import { WeatherTravelModule } from '../weather-travel/weather-travel.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ContextModule } from '../context/context.module';
     CollaborationModule,
     NotificationsModule,
     ContextModule,
+    WeatherTravelModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
