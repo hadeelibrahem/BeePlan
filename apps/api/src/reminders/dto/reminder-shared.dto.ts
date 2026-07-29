@@ -1,10 +1,12 @@
 import {
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -105,8 +107,9 @@ export class ReminderLocationDto {
   @IsIn(REMINDER_PLACE_CATEGORIES)
   category?: ReminderPlaceCategory;
 
-  @IsNumber()
-  @Min(1)
+  @IsInt()
+  @Min(10)
+  @Max(5000)
   radiusMeters!: number;
 
   @IsIn(REMINDER_TRIGGER_TYPES)
@@ -148,8 +151,9 @@ export class ReminderPersonDto {
   message?: string;
 
   @IsOptional()
-  @IsNumber()
-  @Min(1)
+  @IsInt()
+  @Min(10)
+  @Max(5000)
   radiusMeters?: number;
 
   @IsOptional()

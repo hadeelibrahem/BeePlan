@@ -113,4 +113,17 @@ export class ContextController {
   ) {
     await this.commitments.remove(request.user.id, id);
   }
+
+  @Post('commitments/:id/skip')
+  skipCommitmentOccurrence(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { date?: string },
+  ) {
+    return this.commitments.skipOccurrence(
+      request.user.id,
+      id,
+      body.date ?? '',
+    );
+  }
 }

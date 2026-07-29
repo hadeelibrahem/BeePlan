@@ -35,6 +35,9 @@ export type ApiSubtask = {
   isFocusTask?: boolean
   startDate?: string
   dueDate?: string
+  scheduledDate?: string
+  scheduledStartTime?: string
+  scheduledEndTime?: string
   estimatedDurationMinutes?: number
   actualDurationMinutes?: number
   estimatedDurationSource: 'user' | 'ai'
@@ -169,6 +172,9 @@ export type ApiTask = {
   progress: number
   dueDate?: string
   dueTime: string
+  scheduledDate?: string
+  scheduledStartTime?: string
+  scheduledEndTime?: string
   category: string
   notes: string
   estimatedTimeMinutes: number
@@ -220,6 +226,9 @@ export type TaskPayload = Partial<
     | 'progress'
     | 'dueDate'
     | 'dueTime'
+    | 'scheduledDate'
+    | 'scheduledStartTime'
+    | 'scheduledEndTime'
     | 'category'
     | 'notes'
     | 'estimatedTimeMinutes'
@@ -309,6 +318,22 @@ export type DashboardFocus = { id: string; taskId: string | null; taskTitle: str
 export type DashboardRecommendation = { taskId: string; taskTitle: string; subtaskId: string | null; subtaskTitle: string | null; estimatedMinutes: number | null; reason: string; recommendationReason: string; score: number }
 export type DashboardWhyNow = { code: string; label: string; value?: string }
 export type DashboardTimelineBlock = { id: string; type: 'focus' | 'task' | 'break' | 'event' | 'commitment' | 'meal' | 'free' | 'reminder'; startTime: string; endTime: string | null; title: string; taskId: string | null; subtaskId: string | null; status: string; source: string }
+
+export type ScheduledTaskCandidate = { id: string; title: string; priority: string; dueDate: string | null; durationMinutes: number; scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string }
+export type TaskTimeConflict = { id: string; existingTask: ScheduledTaskCandidate; proposedTask: ScheduledTaskCandidate; overlapMinutes: number }
+export type TaskCommitmentConflict = { id: string; conflictType: 'task_commitment'; proposedTask: ScheduledTaskCandidate; commitment: { commitmentId: string; title: string; date: string; startTime: string; endTime: string }; overlapMinutes: number }
+type ScheduleValidationPayload = { id?: string; title: string; priority?: string; dueDate?: string | null; estimatedTimeMinutes?: number; scheduledDate?: string; scheduledStartTime?: string; scheduledEndTime?: string }
+
+export function validateTaskSchedule(accessToken: string, payload: ScheduleValidationPayload) {
+  return request<{ conflicts: TaskTimeConflict[]; taskConflicts: TaskTimeConflict[]; commitmentConflicts: TaskCommitmentConflict[]; normalizedSchedule: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string } | null }>(accessToken, '/tasks/schedule-conflicts/validate', { method: 'POST', body: JSON.stringify({ ...payload, taskId: payload.id }) })
+}
+
+export function resolveTaskScheduleConflict(accessToken: string, payload: { conflictKey: string; date: string; taskId?: string; commitmentId?: string; resolution: 'move_existing_auto' | 'move_existing_manual' | 'move_new_auto' | 'move_new_manual' | 'cancel_existing' | 'keep_commitment' | 'keep_task' | 'choose_another_time' }) {
+  return request<{ conflictKey: string; lifecycle: 'resolved'; resolution: string }>(accessToken, '/tasks/schedule-conflicts/resolve', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function getNearestTaskSchedule(accessToken: string, payload: ScheduleValidationPayload) {
+  return request<{ schedule: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string } | null }>(accessToken, '/tasks/schedule-conflicts/nearest-slot', { method: 'POST', body: JSON.stringify({ ...payload, taskId: payload.id }) })
+}
 export type DashboardSuggestion = { id: string; type: string; title: string; explanation: string; actionLabel: string; actionPayload: Record<string, unknown>; confidence?: string; source?: string }
 export type DashboardLocationContext = { label: string; tasks: { id: string; title: string }[] } | null
 export type TodayDashboard = {

@@ -174,6 +174,9 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         progress integer not null default 0,
         due_date timestamp,
         due_time varchar(20),
+        scheduled_date varchar(10),
+        scheduled_start_time varchar(5),
+        scheduled_end_time varchar(5),
         category_id uuid references categories(id) on delete set null,
         category varchar(120),
         notes text,
@@ -196,6 +199,9 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
       alter table tasks
         add column if not exists progress integer not null default 0,
         add column if not exists due_time varchar(20),
+        add column if not exists scheduled_date varchar(10),
+        add column if not exists scheduled_start_time varchar(5),
+        add column if not exists scheduled_end_time varchar(5),
         add column if not exists category varchar(120),
         add column if not exists notes text,
         add column if not exists estimated_time_minutes integer not null default 0,
@@ -254,6 +260,9 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
       alter table subtasks
         add column if not exists assignee varchar(80),
         add column if not exists due_date timestamp,
+        add column if not exists scheduled_date varchar(10),
+        add column if not exists scheduled_start_time varchar(5),
+        add column if not exists scheduled_end_time varchar(5),
         add column if not exists status varchar(30) not null default 'todo',
         add column if not exists created_at timestamp default now() not null,
         add column if not exists updated_at timestamp default now() not null,
@@ -542,6 +551,43 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists idx_recurring_commitments_user
         on recurring_commitments (user_id)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists skipped_commitment_occurrences (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        commitment_id uuid not null references recurring_commitments(id) on delete cascade,
+        date varchar(10) not null,
+        created_at timestamp default now() not null,
+        unique (user_id, commitment_id, date)
+      )
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_skipped_commitment_occurrences_user_date
+        on skipped_commitment_occurrences (user_id, date)
+    `);
+
+    await this.getPool().query(`
+      create table if not exists schedule_conflict_resolutions (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        conflict_key varchar(500) not null,
+        date varchar(10) not null,
+        task_id uuid,
+        commitment_id uuid references recurring_commitments(id) on delete cascade,
+        resolution varchar(40) not null,
+        resolved_at timestamp default now() not null,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null,
+        unique (user_id, conflict_key)
+      )
+    `);
+
+    await this.getPool().query(`
+      create index if not exists idx_schedule_conflict_resolutions_user_date
+        on schedule_conflict_resolutions (user_id, date)
     `);
   }
 

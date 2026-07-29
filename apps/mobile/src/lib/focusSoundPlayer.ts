@@ -37,12 +37,6 @@ export type SoundVolume = {
   muted: boolean;
 };
 
-// TEMP debug logging while diagnosing the silent-playback regression.
-const debug = (message: string): void => {
-  // eslint-disable-next-line no-console
-  console.log(`[FocusSound] ${message}`);
-};
-
 /** True only for the native "shared object already released" failure. */
 const isReleaseError = (error: unknown): boolean =>
   error instanceof Error && /already released|shared object/i.test(error.message);
@@ -79,11 +73,9 @@ export function createGuardedSoundPlayer(
         // The shared object was released underneath us (unmount / Fast Refresh
         // race). Permanent: short-circuit everything from now on.
         dead = true;
-        debug('released');
       } else {
         // Any other native hiccup fails this one command only — bricking the
         // controller here is what silenced playback after transient errors.
-        debug(`playback skipped (player call failed: ${error instanceof Error ? error.message : String(error)})`);
       }
       return false;
     }
@@ -112,7 +104,6 @@ export function createGuardedSoundPlayer(
     markReleased(): void {
       unmounted = true;
       fadeToken += 1;
-      debug('released');
     },
 
     /**
@@ -127,25 +118,20 @@ export function createGuardedSoundPlayer(
     /** Load a sound by id and start it. No-ops if the asset is missing. */
     loadAndPlay(soundId: string, { volume, muted }: SoundVolume): boolean {
       if (released()) {
-        debug('playback skipped (controller released)');
         return false;
       }
       const asset = resolveAsset(soundId);
       // Guard 1: never hand null/undefined to replace().
       if (asset == null) {
-        debug(`playback skipped (no asset for "${soundId}")`);
         return false;
       }
       fadeToken += 1;
-      debug('loading asset');
       return run(() => {
         player.replace(asset);
-        debug('replace success');
         player.loop = true;
         player.volume = muted ? 0 : volume;
         player.muted = muted;
         player.play();
-        debug('play started');
       });
     },
 
@@ -205,7 +191,6 @@ export function createGuardedSoundPlayer(
       } catch (error) {
         if (isReleaseError(error)) {
           dead = true;
-          debug('released');
         }
         return 0;
       }

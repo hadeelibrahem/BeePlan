@@ -9,6 +9,9 @@ export type CreateTaskFormValues = {
   category: string
   dueDate?: Date
   dueTime: string
+  scheduledDate?: string
+  scheduledStartTime?: string
+  scheduledEndTime?: string
   reminderEnabled: boolean
   reminderBeforeMinutes: number
   estimatedHours: string
@@ -22,6 +25,7 @@ export function validateCreateTask(values: CreateTaskFormValues) {
   if (!values.title.trim()) return 'Task title is required.'
   const estimatedHours = values.estimatedHours.trim() ? Number(values.estimatedHours) : 0
   if (!Number.isFinite(estimatedHours) || estimatedHours < 0) return 'Estimated duration must be a non-negative number.'
+  if ((values.scheduledDate || values.scheduledStartTime || values.scheduledEndTime) && (!values.scheduledDate || !values.scheduledStartTime)) return 'Scheduled date and start time are required together.'
   return ''
 }
 
@@ -36,6 +40,9 @@ export function createTaskPayload(values: CreateTaskFormValues, recurrence: Task
     category: values.category.trim(),
     dueDate: values.dueDate?.toISOString(),
     dueTime: values.dueTime,
+    scheduledDate: values.scheduledDate || undefined,
+    scheduledStartTime: values.scheduledStartTime || undefined,
+    scheduledEndTime: values.scheduledEndTime || undefined,
     reminderEnabled: values.reminderEnabled,
     reminderBeforeMinutes: values.reminderEnabled ? values.reminderBeforeMinutes : undefined,
     estimatedTimeMinutes,
@@ -46,5 +53,5 @@ export function createTaskPayload(values: CreateTaskFormValues, recurrence: Task
 }
 
 export function isCreateTaskDirty(values: CreateTaskFormValues, hasAttachments: boolean, hasRecurrence: boolean) {
-  return Boolean(values.title.trim() || values.description.trim() || values.notes.trim() || values.category || values.dueDate || values.dueTime || values.labelsText.trim() || hasAttachments || hasRecurrence || values.priority !== 'Medium' || values.status !== 'To Do' || !values.reminderEnabled || values.reminderBeforeMinutes !== 30 || values.estimatedHours.trim())
+  return Boolean(values.title.trim() || values.description.trim() || values.notes.trim() || values.category || values.dueDate || values.dueTime || values.scheduledDate || values.scheduledStartTime || values.scheduledEndTime || values.labelsText.trim() || hasAttachments || hasRecurrence || values.priority !== 'Medium' || values.status !== 'To Do' || !values.reminderEnabled || values.reminderBeforeMinutes !== 30 || values.estimatedHours.trim())
 }

@@ -41,6 +41,7 @@ import { useTheme } from '../theme/useTheme';
 import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel';
 import { SharedBadge } from '../features/collaboration/components/SharedBadge';
 import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
+import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict';
 
 type Props = {
   task?: ApiTask | null;
@@ -66,6 +67,7 @@ export default function TaskDetailsScreen({
   notice = '',
   onNoticeShown,
   onTaskUpdated,
+  onRefresh,
   onBack,
   onEdit,
   onDelete,
@@ -224,8 +226,8 @@ export default function TaskDetailsScreen({
   );
 
   if (!task) {
-    return (
-      <AppScreen>
+  return (
+    <AppScreen>
         <PageHeader title="Task Details" onBack={onBack} />
         <SectionCard className="mb-3">
           <Text style={{ color: colors.secondaryText }}>This task could not be loaded. Go back and try again.</Text>
@@ -249,6 +251,7 @@ export default function TaskDetailsScreen({
         )
       }
     >
+      <ExistingScheduleConflict accessToken={accessToken} taskId={task.id} onResolved={onRefresh} />
       <PageHeader title="Task Details" onBack={onBack} />
 
       {error ? <Text className="mb-3 text-sm font-bold text-red-300">{error}</Text> : null}
@@ -272,6 +275,7 @@ export default function TaskDetailsScreen({
           <InfoRow label="Created" value={formatDate(task.createdAt)} />
           <InfoRow label="Updated" value={formatDate(task.updatedAt)} />
           <InfoRow label="Due Date" value={`${formatDate(task.dueDate) || 'No due date'}${task.dueTime ? ` - ${task.dueTime}` : ''}`} />
+          <InfoRow label="Scheduled" value={task.scheduledDate && task.scheduledStartTime ? `${task.scheduledDate} · ${task.scheduledStartTime}–${task.scheduledEndTime ?? 'derived'}` : 'Unscheduled'} />
         </View>
       </SectionCard>
 

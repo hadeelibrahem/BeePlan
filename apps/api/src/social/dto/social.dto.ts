@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -48,9 +49,11 @@ export class CreatePersonReminderDto {
   @IsIn(SHARING_EXPIRATIONS)
   expiration!: SharingExpiration;
 
-  // Normalized/clamped in PersonRemindersService (default 100, 20..1000).
+  // Defaults to 100 in PersonRemindersService when omitted.
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(10)
+  @Max(5000)
   radiusMeters?: number;
 
   @IsOptional()
@@ -58,6 +61,10 @@ export class CreatePersonReminderDto {
   @Min(1)
   @Max(1440)
   cooldownMinutes?: number;
+
+  @IsOptional()
+  @IsIn(['arrival', 'departure'])
+  transition?: 'arrival' | 'departure';
 }
 
 export class UpdateLocationSnapshotDto {

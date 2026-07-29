@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { TaskAccessService } from '../collaboration/task-access.service'
 import { DatabaseService } from '../db/database.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { RecurringCommitmentsService } from '../context/recurring-commitments.service'
 import { TasksService } from './tasks.service'
 
 const USER_ID = '11111111-1111-1111-1111-111111111111'
@@ -78,6 +79,10 @@ describe('TasksService.changeStatus', () => {
         {
           provide: NotificationsService,
           useValue: { create: jest.fn(), createMany: jest.fn() },
+        },
+        {
+          provide: RecurringCommitmentsService,
+          useValue: { getOccurrencesForDate: jest.fn().mockResolvedValue([]) },
         },
       ],
     }).compile()

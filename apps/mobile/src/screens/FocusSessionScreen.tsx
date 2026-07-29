@@ -312,9 +312,7 @@ function useFocusSoundPlayer() {
 
   const play = useCallback(
     async (sound: FocusSound) => {
-      console.log(`[FocusSound] play requested (${sound.id})`); // TEMP debug
       if (controller.isReleased()) {
-        console.log('[FocusSound] playback skipped (controller released)'); // TEMP debug
         return;
       }
 
@@ -333,7 +331,6 @@ function useFocusSoundPlayer() {
         controller.pause();
       }
       if (!controller.isFadeCurrent(token)) {
-        console.log('[FocusSound] playback skipped (superseded during fade)'); // TEMP debug
         return;
       }
 

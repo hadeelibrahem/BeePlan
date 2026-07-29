@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import { OutlineButton, PrimaryButton, SecondaryButton } from '../components/layout/Buttons'
+import { ScheduleConflictModal } from '../components/ScheduleConflictModal'
+import { ExistingTaskTimeConflict } from '../components/ExistingTaskTimeConflict'
+import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
+import { changeTaskStatus, getNearestTaskSchedule, resolveTaskScheduleConflict, updateTask, type TaskTimeConflict } from '../lib/tasksApi'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
   acceptDailyPlan,
@@ -8,12 +12,15 @@ import {
   getDailyPlanAcceptance,
   getPlannerPreferences,
   updatePlannerPreferences,
+  skipCommitmentOccurrence,
+  resolveScheduleConflict,
   type CapacitySummary,
   type DailyPlan,
   type DailyPlanItem,
   type EnergyLevel,
   type PlanAcceptance,
   type PlannerPreferences,
+  type ScheduleConflict,
   type PostponeStatus,
   type UnscheduledItem,
 } from '../lib/plannerApi'
@@ -43,6 +50,65 @@ function planCacheKey(accessToken: string, date: string) {
   return `${accessToken}:${date}`
 }
 
+export function conflictForItem(item: DailyPlanItem, plan: DailyPlan): ScheduleConflict | null {
+  if (item.type !== 'task') return null
+  const taskStart = toMinutes(item.startTime)
+  const taskEnd = toMinutes(item.endTime)
+  if (taskStart === null || taskEnd === null) return null
+  for (const commitment of Object.values(plan.sections).flat()) {
+    if (commitment.type !== 'calendar' || commitment.category !== 'Commitment') continue
+    const commitmentStart = toMinutes(commitment.startTime)
+    const commitmentEnd = toMinutes(commitment.endTime)
+    if (commitmentStart === null || commitmentEnd === null) continue
+    const conflictMinutes = Math.max(
+      0,
+      Math.min(taskEnd, commitmentEnd) - Math.max(taskStart, commitmentStart),
+    )
+    if (conflictMinutes === 0) continue
+    return {
+      id: `${item.id}:${commitment.id}`,
+      task: {
+        itemId: item.id,
+        taskId: item.taskId,
+        subtaskId: item.subtaskId,
+        title: item.title,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        durationMinutes: item.durationMinutes,
+        isFocusTask: Boolean(item.isFocusTask),
+      },
+      commitment: {
+        id: commitment.id.replace(/^commitment-/, ''),
+        title: commitment.title,
+        startTime: commitment.startTime,
+        endTime: commitment.endTime,
+      },
+      conflictMinutes,
+    }
+  }
+  return null
+}
+
+export function taskConflictForItem(item: DailyPlanItem, plan: DailyPlan): TaskTimeConflict | null {
+  if (item.type !== 'task') return null
+  const start = toMinutes(item.startTime)
+  const end = toMinutes(item.endTime)
+  if (start === null || end === null) return null
+  for (const existing of Object.values(plan.sections).flat()) {
+    if (existing.type !== 'task' || existing.id === item.id) continue
+    const existingStart = toMinutes(existing.startTime)
+    const existingEnd = toMinutes(existing.endTime)
+    if (existingStart === null || existingEnd === null) continue
+    const overlapMinutes = Math.max(0, Math.min(end, existingEnd) - Math.max(start, existingStart))
+    if (!overlapMinutes) continue
+    const candidate = (value: DailyPlanItem) => ({ id: value.subtaskId ?? value.taskId ?? value.id, title: value.title, priority: value.priority, dueDate: null, durationMinutes: value.durationMinutes, scheduledDate: plan.date, scheduledStartTime: value.startTime, scheduledEndTime: value.endTime })
+    const existingTask = candidate(existing)
+    const proposedTask = candidate(item)
+    return { id: `task:${existingTask.id}:${plan.date}:${existing.startTime}-${existing.endTime}|task:${proposedTask.id}:${plan.date}:${item.startTime}-${item.endTime}`, existingTask, proposedTask, overlapMinutes }
+  }
+  return null
+}
+
 export default function AiPlannerScreen({
   accessToken,
   refreshKey = 0,
@@ -63,6 +129,15 @@ export default function AiPlannerScreen({
   const [viewMode, setViewMode] = useState<ViewMode>('simple')
   const [preferences, setPreferences] = useState<PlannerPreferences | null>(null)
   const [lockedItems, setLockedItems] = useState<Record<string, DailyPlanItem>>({})
+  const [pendingConflict, setPendingConflict] = useState<{
+    conflict: ScheduleConflict
+    proposedPlan: DailyPlan
+    proposedItem?: DailyPlanItem
+    oldTime?: { startTime: string; endTime: string }
+  } | null>(null)
+  const [resolvingConflict, setResolvingConflict] = useState(false)
+  const [dismissedConflict, setDismissedConflict] = useState<ScheduleConflict | null>(null)
+  const [pendingTaskConflict, setPendingTaskConflict] = useState<{ conflict: TaskTimeConflict; proposedItem: DailyPlanItem } | null>(null)
   const today = new Date().toISOString().slice(0, 10)
 
   const allItems = useMemo(() => (plan ? Object.values(plan.sections).flat() : []), [plan])
@@ -172,6 +247,10 @@ export default function AiPlannerScreen({
         currentTime: currentTime(),
         lockedItems: lockedOverride ?? lockedPayload,
       })
+      if (nextPlan.conflicts?.length) {
+        setPendingConflict({ conflict: nextPlan.conflicts[0], proposedPlan: nextPlan })
+        return
+      }
       setPlan(nextPlan)
       planCache.set(planCacheKey(accessToken, nextPlan.date), { plan: nextPlan, accepted: false })
     } catch (loadError) {
@@ -217,15 +296,119 @@ export default function AiPlannerScreen({
 
   function moveItem(item: DailyPlanItem, field: 'startTime' | 'endTime', value: string) {
     const key = itemKey(item)
-    setLockedItems((current) => ({
-      ...current,
-      [key]: {
-        ...(current[key] ?? item),
-        [field]: value,
-        locked: true,
-      },
-    }))
-    setPlan((current) => (current ? updatePlanItem(current, item, field, value) : current))
+    const proposedItem = { ...(lockedItems[key] ?? item), [field]: value, locked: true }
+    if (!plan) return
+    const proposedPlan = updatePlanItem(plan, item, field, value)
+    const conflict = conflictForItem(proposedItem, plan)
+    if (conflict) {
+      setPendingConflict({
+        conflict,
+        proposedPlan,
+        proposedItem,
+        oldTime: { startTime: item.startTime, endTime: item.endTime },
+      })
+      return
+    }
+    const taskConflict = plan ? taskConflictForItem(proposedItem, plan) : null
+    if (taskConflict) {
+      setPendingTaskConflict({ conflict: taskConflict, proposedItem })
+      return
+    }
+    setLockedItems((current) => ({ ...current, [key]: proposedItem }))
+    setPlan(proposedPlan)
+  }
+
+  function dragItem(item: DailyPlanItem, startTime: string) {
+    const start = toMinutes(startTime)
+    if (start === null) return
+    const endTime = minutesToClock(start + item.durationMinutes)
+    const withStart = updatePlanItem(plan!, item, 'startTime', startTime)
+    const proposedPlan = updatePlanItem(withStart, item, 'endTime', endTime)
+    const proposedItem = { ...item, startTime, endTime, locked: true }
+    const conflict = conflictForItem(proposedItem, plan!)
+    if (conflict) {
+      setPendingConflict({
+        conflict,
+        proposedPlan,
+        proposedItem,
+        oldTime: { startTime: item.startTime, endTime: item.endTime },
+      })
+      return
+    }
+    const taskConflict = plan ? taskConflictForItem(proposedItem, plan) : null
+    if (taskConflict) {
+      setPendingTaskConflict({ conflict: taskConflict, proposedItem })
+      return
+    }
+    setLockedItems((current) => ({ ...current, [itemKey(item)]: proposedItem }))
+    setPlan(proposedPlan)
+  }
+
+  async function keepCommitment() {
+    if (!pendingConflict) return
+    setResolvingConflict(true)
+    try {
+        const conflictItemId = pendingConflict.conflict.task.itemId
+        const remainingLocks = allItems
+          .filter((item) => (item.type === 'task' || item.type === 'reminder') && item.id !== conflictItemId)
+          .map((item) => ({
+            itemId: item.id,
+            taskId: item.taskId,
+            reminderId: item.reminderId,
+            title: item.title,
+            startTime: item.startTime,
+            endTime: item.endTime,
+          }))
+      const next = await generateDailyPlan(accessToken, {
+        date: planDate,
+        currentTime: currentTime(),
+        lockedItems: remainingLocks,
+      })
+      setLockedItems((current) =>
+        Object.fromEntries(
+            Object.entries(current).filter(([itemId]) => itemId !== conflictItemId),
+        ),
+      )
+      setPlan(next)
+      await resolveScheduleConflict(accessToken, { conflictKey: pendingConflict.conflict.id, date: planDate, taskId: pendingConflict.conflict.task.taskId, commitmentId: pendingConflict.conflict.commitment.id, resolution: 'keep_commitment' })
+      setPendingConflict(null)
+      setDismissedConflict(null)
+    } finally {
+      setResolvingConflict(false)
+    }
+  }
+
+  async function keepTask() {
+    if (!pendingConflict) return
+    setResolvingConflict(true)
+    try {
+      await skipCommitmentOccurrence(
+        accessToken,
+        pendingConflict.conflict.commitment.id,
+        planDate,
+      )
+      await resolveScheduleConflict(accessToken, { conflictKey: pendingConflict.conflict.id, date: planDate, taskId: pendingConflict.conflict.task.taskId, commitmentId: pendingConflict.conflict.commitment.id, resolution: 'keep_task' })
+      if (pendingConflict.proposedItem) {
+        const key = itemKey(pendingConflict.proposedItem)
+        setLockedItems((current) => ({ ...current, [key]: pendingConflict.proposedItem! }))
+      }
+      setPlan({ ...pendingConflict.proposedPlan, conflicts: [] })
+      setPendingConflict(null)
+      setDismissedConflict(null)
+    } finally {
+      setResolvingConflict(false)
+    }
+  }
+
+  async function moveTaskConflict(side: 'existing' | 'new', mode: 'auto' | 'manual', manual?: ScheduleChoice) {
+    if (!pendingTaskConflict) return
+    const target = side === 'existing' ? pendingTaskConflict.conflict.existingTask : pendingTaskConflict.conflict.proposedTask
+    const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule
+    if (!schedule || !window.confirm(`Current schedule → Proposed schedule\n${target.scheduledDate} ${target.scheduledStartTime}–${target.scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
+    await updateTask(accessToken, target.id, schedule)
+    await resolveTaskScheduleConflict(accessToken, { conflictKey: pendingTaskConflict.conflict.id, date: planDate, taskId: target.id, resolution: side === 'existing' ? (mode === 'auto' ? 'move_existing_auto' : 'move_existing_manual') : (mode === 'auto' ? 'move_new_auto' : 'move_new_manual') })
+    setPendingTaskConflict(null)
+    await loadPlan()
   }
 
   const planDate = plan?.date ?? new Date().toISOString().slice(0, 10)
@@ -266,6 +449,8 @@ export default function AiPlannerScreen({
       />
 
       {/* HERO — today's plan summary + key stats -------------------------- */}
+      {dismissedConflict ? <div role="alert" className="mb-4 rounded-xl border border-amber-400/50 bg-amber-400/10 p-3 text-sm text-[var(--bp-text)]"><strong>Unresolved Schedule Conflict:</strong> {dismissedConflict.task.title} overlaps {dismissedConflict.commitment.title} by {dismissedConflict.conflictMinutes} minutes. <button type="button" className="underline" onClick={() => { if (plan) setPendingConflict({ conflict: dismissedConflict, proposedPlan: plan }); setDismissedConflict(null) }}>Resolve now</button></div> : null}
+      <ExistingTaskTimeConflict accessToken={accessToken} date={planDate} plan={plan} />
       <section className="mb-4 rounded-2xl border border-[var(--bp-border)] bg-gradient-to-r from-[var(--bp-accent)]/[0.08] via-[var(--bp-surface)] to-[var(--bp-surface)] p-5">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -397,6 +582,7 @@ export default function AiPlannerScreen({
                             current={itemStatus(item, completed, nowMinutes) === 'current'}
                             onLock={() => toggleLock(item)}
                             onMove={(field, value) => moveItem(item, field, value)}
+                            onDropItem={dragItem}
                             onComplete={item.taskId ? () => onCompleteTask?.(item.taskId!) : undefined}
                           />
                         </TimelineRow>
@@ -494,6 +680,19 @@ export default function AiPlannerScreen({
           )}
         </div>
       ) : null}
+      <ScheduleConflictModal
+        conflict={pendingConflict?.conflict ?? null}
+        oldTime={pendingConflict?.oldTime}
+        busy={resolvingConflict}
+        onKeepCommitment={() => void keepCommitment()}
+        onKeepTask={() => void keepTask()}
+        onManual={() => { setDismissedConflict(pendingConflict?.conflict ?? null); setPendingConflict(null) }}
+        onCancel={() => { setDismissedConflict(pendingConflict?.conflict ?? null); setPendingConflict(null) }}
+      />
+      <TaskTimeConflictModal conflict={pendingTaskConflict?.conflict ?? null} onMoveExisting={(mode, schedule) => void moveTaskConflict('existing', mode, schedule)} onMoveNew={(mode, schedule) => void moveTaskConflict('new', mode, schedule)} onCancelExisting={() => {
+        if (!pendingTaskConflict || !window.confirm('Cancel the existing task? It will be marked missed and not deleted.')) return
+        void changeTaskStatus(accessToken, pendingTaskConflict.conflict.existingTask.id, { status: 'missed' }).then(() => setPendingTaskConflict(null)).then(() => loadPlan())
+      }} onCancelNew={() => setPendingTaskConflict(null)} onCancelChanges={() => setPendingTaskConflict(null)} />
     </AppLayout>
   )
 }
@@ -1017,6 +1216,7 @@ function PlanCard({
   current,
   onLock,
   onMove,
+  onDropItem,
   onComplete,
 }: {
   item: DailyPlanItem
@@ -1025,6 +1225,7 @@ function PlanCard({
   current: boolean
   onLock: () => void
   onMove: (field: 'startTime' | 'endTime', value: string) => void
+  onDropItem: (item: DailyPlanItem, startTime: string) => void
   onComplete?: () => Promise<void> | void
 }) {
   const [editing, setEditing] = useState(false)
@@ -1036,6 +1237,24 @@ function PlanCard({
 
   return (
     <div
+      draggable={isTask}
+      onDragStart={(event) => {
+        if (isTask) event.dataTransfer.setData('application/x-beeplan-task', JSON.stringify(item))
+      }}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('application/x-beeplan-task')) event.preventDefault()
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        const raw = event.dataTransfer.getData('application/x-beeplan-task')
+        if (!raw) return
+        try {
+          onDropItem(JSON.parse(raw) as DailyPlanItem, item.startTime)
+        } catch {
+          // Ignore malformed external drag data.
+        }
+      }}
+      aria-label={`${item.title}, ${item.startTime} to ${item.endTime}${isTask ? ', draggable' : ''}`}
       className={`group rounded-xl border p-3 shadow-sm transition-colors duration-200 ${
         locked
           ? 'border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/[0.06]'
@@ -1683,6 +1902,11 @@ function toMinutes(hhmm?: string): number | null {
   const [hours, minutes] = hhmm.split(':').map(Number)
   if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
   return hours * 60 + minutes
+}
+
+function minutesToClock(minutes: number): string {
+  const normalized = Math.max(0, Math.min(23 * 60 + 59, minutes))
+  return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`
 }
 
 function formatClock(hhmm: string): string {

@@ -8,6 +8,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -106,7 +107,8 @@ export class CreateReminderDto {
 
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(10)
+  @Max(5000)
   triggerRadius?: number;
 
   @IsOptional()

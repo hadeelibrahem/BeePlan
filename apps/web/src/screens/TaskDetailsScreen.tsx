@@ -19,6 +19,8 @@ import { SubtaskVisibilityFilter } from '../features/collaboration/components/Su
 import { type DependencyTask } from '../components/TaskDependenciesWorkflowModal'
 import { TaskStatusWorkflowModal, type TaskStatus } from '../components/TaskStatusWorkflowModal'
 import { InlineStatusControl } from '../components/InlineStatusControl'
+import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict'
+import { ExistingTaskTimeConflict } from '../components/ExistingTaskTimeConflict'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel'
@@ -68,6 +70,7 @@ export default function TaskDetailsScreen({
   notice = '',
   onNoticeShown,
   onTaskUpdated,
+  onRefresh,
   onBack,
   onEdit,
   onOpenAiCollaboration,
@@ -371,6 +374,8 @@ export default function TaskDetailsScreen({
             />
           }
         />
+        {task ? <ExistingScheduleConflict accessToken={accessToken} taskId={task.id} onResolved={onRefresh} /> : null}
+        {task ? <ExistingTaskTimeConflict accessToken={accessToken} taskId={task.id} onResolved={onRefresh} /> : null}
 
         <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -425,6 +430,7 @@ export default function TaskDetailsScreen({
               title="Due Date"
               value={`${formatDate(task?.dueDate) || 'No due date'}${task?.dueTime ? ` - ${task.dueTime}` : ''}`}
             />
+            <InfoBox title="Scheduled" value={task?.scheduledDate && task.scheduledStartTime ? `${task.scheduledDate} · ${task.scheduledStartTime}–${task.scheduledEndTime ?? 'derived'}` : 'Unscheduled'} />
           </div>
         </section>
 

@@ -1,10 +1,16 @@
-import { PersonRemindersService, evaluatePersonReminderProximity, type PersonReminderConfig } from './person-reminders.service';
+import {
+  PersonRemindersService,
+  evaluatePersonReminderProximity,
+  type PersonReminderConfig,
+} from './person-reminders.service';
 
 const VIEWER_ID = '11111111-1111-1111-1111-111111111111';
 const TARGET_ID = '22222222-2222-2222-2222-222222222222';
 const REMINDER_ID = '33333333-3333-3333-3333-333333333333';
 
-function baseConfig(overrides: Partial<PersonReminderConfig> = {}): PersonReminderConfig {
+function baseConfig(
+  overrides: Partial<PersonReminderConfig> = {},
+): PersonReminderConfig {
   return {
     targetUserId: TARGET_ID,
     targetName: 'Sara',
@@ -35,7 +41,7 @@ describe('evaluatePersonReminderProximity', () => {
     });
 
     expect(result.action).toBe('skip');
-    expect(result.log).toContain('skip: already nearby');
+    expect(result.log).toContain('decision=baseline-initialized');
     expect(result.updatedConfig).toMatchObject({ proximityState: 'inside' });
   });
 
@@ -49,7 +55,10 @@ describe('evaluatePersonReminderProximity', () => {
     });
 
     expect(result.action).toBe('trigger');
-    expect(result.log).toContain('trigger: entered radius');
+    expect(result.log).toContain('decision=arrival-transition');
+    expect(result.log).toContain(`reminderId=${REMINDER_ID}`);
+    expect(result.log).toContain('distance=80m radius=100m');
+    expect(result.log).toContain('previousState=outside currentState=inside');
     expect(result.updatedConfig).toMatchObject({
       proximityState: 'inside',
       lastNotifiedAt: now.toISOString(),
@@ -60,17 +69,20 @@ describe('evaluatePersonReminderProximity', () => {
     const result = evaluatePersonReminderProximity({
       reminderId: REMINDER_ID,
       repeat: 'daily',
-      config: baseConfig({ proximityState: 'inside', lastEnteredAt: now.toISOString() }),
+      config: baseConfig({
+        proximityState: 'inside',
+        lastEnteredAt: now.toISOString(),
+      }),
       distanceMeters: 90,
       now: new Date('2026-07-18T10:05:00.000Z'),
     });
 
     expect(result.action).toBe('skip');
-    expect(result.log).toContain('skip: already nearby');
+    expect(result.log).toContain('decision=stable-inside');
     expect(result.updatedConfig).toBeUndefined();
   });
 
-  it('re-arms only after leaving the larger exit threshold', () => {
+  it('records departure without triggering an arrival reminder', () => {
     const result = evaluatePersonReminderProximity({
       reminderId: REMINDER_ID,
       repeat: 'daily',
@@ -80,11 +92,50 @@ describe('evaluatePersonReminderProximity', () => {
     });
 
     expect(result.action).toBe('skip');
-    expect(result.log).toContain('re-armed: exited radius');
+    expect(result.log).toContain('decision=departure-rearmed');
     expect(result.updatedConfig).toMatchObject({
       proximityState: 'outside',
       lastExitedAt: now.toISOString(),
     });
+  });
+
+  it('triggers exactly once on an inside-to-outside departure', () => {
+    const result = evaluatePersonReminderProximity({
+      reminderId: REMINDER_ID,
+      repeat: 'daily',
+      config: baseConfig({
+        proximityState: 'inside',
+        transition: 'departure',
+      }),
+      distanceMeters: 121,
+      now,
+    });
+
+    expect(result.action).toBe('trigger');
+    expect(result.log).toContain('decision=departure-transition');
+    expect(result.log).toContain('previousState=inside currentState=outside');
+    expect(result.updatedConfig).toMatchObject({
+      proximityState: 'outside',
+      lastExitedAt: now.toISOString(),
+      lastNotifiedAt: now.toISOString(),
+    });
+  });
+
+  it('does not trigger while already outside', () => {
+    const result = evaluatePersonReminderProximity({
+      reminderId: REMINDER_ID,
+      repeat: 'daily',
+      config: baseConfig({
+        proximityState: 'outside',
+        transition: 'departure',
+      }),
+      distanceMeters: 200,
+      now,
+    });
+
+    expect(result.action).toBe('skip');
+    expect(result.log).toContain('decision=stable-outside');
+    expect(result.updatedConfig).toBeUndefined();
   });
 
   it('triggers again for a recurring reminder after re-arming', () => {
@@ -134,7 +185,7 @@ describe('evaluatePersonReminderProximity', () => {
     });
 
     expect(result.action).toBe('skip');
-    expect(result.log).toContain('one-time reminder already completed');
+    expect(result.log).toContain('decision=already-completed');
     expect(result.updatedStatus).toBe('done');
   });
 
@@ -151,8 +202,31 @@ describe('evaluatePersonReminderProximity', () => {
     });
 
     expect(result.action).toBe('skip');
-    expect(result.log).toContain('skip: already nearby');
+    expect(result.log).toContain('decision=stable-inside');
     expect(result.updatedConfig).toBeUndefined();
+  });
+
+  it('does not repeat after subsequent snapshots remain in the same state', () => {
+    const entered = evaluatePersonReminderProximity({
+      reminderId: REMINDER_ID,
+      repeat: 'daily',
+      config: baseConfig({ proximityState: 'outside' }),
+      distanceMeters: 75,
+      now,
+    });
+    expect(entered.action).toBe('trigger');
+
+    const repeated = evaluatePersonReminderProximity({
+      reminderId: REMINDER_ID,
+      repeat: 'daily',
+      config: entered.updatedConfig!,
+      distanceMeters: 50,
+      now: new Date('2026-07-18T10:01:00.000Z'),
+    });
+
+    expect(repeated.action).toBe('skip');
+    expect(repeated.log).toContain('decision=stable-inside');
+    expect(repeated.updatedConfig).toBeUndefined();
   });
 });
 
@@ -215,7 +289,9 @@ describe('PersonRemindersService.checkNearby persisted state', () => {
     const service = new PersonRemindersService(
       { db } as never,
       { areFriends: jest.fn(), loadSummaries: jest.fn() } as never,
-      { findActivePermission: jest.fn().mockResolvedValue({ id: 'perm-1' }) } as never,
+      {
+        findActivePermission: jest.fn().mockResolvedValue({ id: 'perm-1' }),
+      } as never,
     );
 
     const hits = await service.checkNearby(VIEWER_ID);

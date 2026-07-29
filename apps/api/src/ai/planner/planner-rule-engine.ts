@@ -132,7 +132,7 @@ export class PlannerRuleEngine {
         start: Math.max(dayStart, toMinutes(commitment.start)),
         end: Math.min(dayEnd, toMinutes(commitment.end)),
       });
-      pushIfFree({
+      fixedBlocks.push({
         id: `commitment-${commitment.id}`,
         type: 'calendar',
         title: commitment.placeName

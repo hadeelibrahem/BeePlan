@@ -14,26 +14,12 @@ import { LocationSharingService } from './location-sharing.service';
 import { haversineMeters } from './proximity.util';
 
 const DEFAULT_RADIUS_METERS = 100;
-const MIN_RADIUS_METERS = 20;
-const MAX_RADIUS_METERS = 1000;
 const DEFAULT_COOLDOWN_MINUTES = 30;
 const EXIT_HYSTERESIS_RATIO = 0.2;
 const MIN_EXIT_HYSTERESIS_METERS = 20;
 
-/**
- * Coerces an incoming radius into a valid meter value. Handles junk like "020"
- * (-> 20) or non-numeric input by falling back to the default, then clamps to
- * [20, 1000]. Keeps every stored person reminder within a sane radius.
- */
-function normalizeRadius(value: unknown): number {
-  const parsed = typeof value === 'string' ? Number(value) : (value as number);
-  if (typeof parsed !== 'number' || !Number.isFinite(parsed)) {
-    return DEFAULT_RADIUS_METERS;
-  }
-  return Math.min(
-    MAX_RADIUS_METERS,
-    Math.max(MIN_RADIUS_METERS, Math.round(parsed)),
-  );
+function resolveRadius(value: number | undefined): number {
+  return value ?? DEFAULT_RADIUS_METERS;
 }
 
 function getExitRadius(radiusMeters: number): number {
@@ -60,6 +46,7 @@ export type PersonReminderConfig = {
   lastExitedAt?: string | null;
   lastTransitionAt?: string | null;
   completedAt?: string | null;
+  transition?: 'arrival' | 'departure';
 };
 
 export type NearbyHit = {
@@ -95,98 +82,108 @@ export function evaluatePersonReminderProximity(args: {
   const radius = config.radiusMeters ?? DEFAULT_RADIUS_METERS;
   const exitRadius = getExitRadius(radius);
   const proximityState = config.proximityState ?? null;
+  const transition = config.transition ?? 'arrival';
   const isOneTime = repeat === 'none';
+  const roundedDistance = Math.round(distanceMeters);
+
+  const result = (
+    action: 'skip' | 'trigger',
+    decision: string,
+    currentState: 'inside' | 'outside',
+    updates?: {
+      config?: PersonReminderConfig;
+      status?: 'active' | 'done';
+    },
+  ): ProximityEvaluation =>
+    ({
+      action,
+      log:
+        `[PersonReminder] evaluation reminderId=${reminderId} ` +
+        `distance=${roundedDistance}m radius=${radius}m ` +
+        `previousState=${proximityState ?? 'unknown'} currentState=${currentState} ` +
+        `transition=${transition} decision=${decision}`,
+      ...(updates?.config ? { updatedConfig: updates.config } : {}),
+      ...(updates?.status ? { updatedStatus: updates.status } : {}),
+    }) as ProximityEvaluation;
 
   if (isOneTime && config.completedAt) {
-    return {
-      action: 'skip',
-      log: `[PersonReminder] skip: one-time reminder already completed (reminderId=${reminderId})`,
-      updatedStatus: 'done',
-    };
+    return result(
+      'skip',
+      'already-completed',
+      proximityState ?? (distanceMeters <= radius ? 'inside' : 'outside'),
+      { status: 'done' },
+    );
   }
 
-  if (proximityState === 'inside') {
-    if (distanceMeters > exitRadius) {
-      return {
-        action: 'skip',
-        log: `[PersonReminder] re-armed: exited radius (reminderId=${reminderId}, distance=${Math.round(distanceMeters)}m, exitRadius=${exitRadius}m)`,
-        updatedConfig: {
-          ...config,
-          proximityState: 'outside',
-          lastExitedAt: nowIso,
-          lastTransitionAt: nowIso,
-        },
-      };
-    }
-
-    return {
-      action: 'skip',
-      log: `[PersonReminder] skip: already nearby (reminderId=${reminderId}, distance=${Math.round(distanceMeters)}m, exitRadius=${exitRadius}m)`,
-    };
-  }
-
-  if (proximityState === 'outside') {
-    if (distanceMeters > radius) {
-      return {
-        action: 'skip',
-        log: `[PersonReminder] skip: outside radius (reminderId=${reminderId}, distance=${Math.round(distanceMeters)}m, enterRadius=${radius}m)`,
-      };
-    }
-
-    const cooldownMs =
-      (config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES) * 60 * 1000;
-    const lastNotifiedAt = config.lastNotifiedAt
-      ? new Date(config.lastNotifiedAt).getTime()
-      : 0;
-    if (now.getTime() - lastNotifiedAt < cooldownMs) {
-      return {
-        action: 'skip',
-        log: `[PersonReminder] skip: cooldown safeguard active after entry (reminderId=${reminderId})`,
-        updatedConfig: {
-          ...config,
-          proximityState: 'inside',
-          lastEnteredAt: nowIso,
-          lastTransitionAt: nowIso,
-        },
-      };
-    }
-
-    return {
-      action: 'trigger',
-      log: `[PersonReminder] trigger: entered radius (reminderId=${reminderId}, distance=${Math.round(distanceMeters)}m, enterRadius=${radius}m)`,
-      updatedStatus: isOneTime ? 'done' : 'active',
-      updatedConfig: {
+  if (proximityState === null) {
+    const currentState =
+      distanceMeters <= radius ? ('inside' as const) : ('outside' as const);
+    return result('skip', 'baseline-initialized', currentState, {
+      config: {
         ...config,
-        proximityState: 'inside',
-        lastEnteredAt: nowIso,
-        lastTransitionAt: nowIso,
-        lastNotifiedAt: nowIso,
-        completedAt: isOneTime ? nowIso : config.completedAt ?? null,
-      },
-    };
-  }
-
-  if (distanceMeters <= radius) {
-    return {
-      action: 'skip',
-      log: `[PersonReminder] skip: already nearby (reminderId=${reminderId}, distance=${Math.round(distanceMeters)}m, baseline initialized)`,
-      updatedConfig: {
-        ...config,
-        proximityState: 'inside',
+        proximityState: currentState,
         lastTransitionAt: nowIso,
       },
-    };
+    });
   }
 
-  return {
-    action: 'skip',
-    log: `[PersonReminder] skip: outside radius (reminderId=${reminderId}, distance=${Math.round(distanceMeters)}m, baseline initialized)`,
-    updatedConfig: {
-      ...config,
-      proximityState: 'outside',
-      lastTransitionAt: nowIso,
-    },
+  const currentState =
+    proximityState === 'inside'
+      ? distanceMeters > exitRadius
+        ? ('outside' as const)
+        : ('inside' as const)
+      : distanceMeters <= radius
+        ? ('inside' as const)
+        : ('outside' as const);
+
+  if (currentState === proximityState) {
+    return result('skip', `stable-${currentState}`, currentState);
+  }
+
+  const updatedConfig: PersonReminderConfig = {
+    ...config,
+    proximityState: currentState,
+    lastTransitionAt: nowIso,
+    ...(currentState === 'inside'
+      ? { lastEnteredAt: nowIso }
+      : { lastExitedAt: nowIso }),
   };
+  const isMatchingTransition =
+    (transition === 'arrival' &&
+      proximityState === 'outside' &&
+      currentState === 'inside') ||
+    (transition === 'departure' &&
+      proximityState === 'inside' &&
+      currentState === 'outside');
+
+  if (!isMatchingTransition) {
+    return result(
+      'skip',
+      currentState === 'inside' ? 'arrival-rearmed' : 'departure-rearmed',
+      currentState,
+      { config: updatedConfig },
+    );
+  }
+
+  const cooldownMs =
+    (config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES) * 60 * 1000;
+  const lastNotifiedAt = config.lastNotifiedAt
+    ? new Date(config.lastNotifiedAt).getTime()
+    : 0;
+  if (now.getTime() - lastNotifiedAt < cooldownMs) {
+    return result('skip', 'cooldown-active', currentState, {
+      config: updatedConfig,
+    });
+  }
+
+  return result('trigger', `${transition}-transition`, currentState, {
+    status: isOneTime ? 'done' : 'active',
+    config: {
+      ...updatedConfig,
+      lastNotifiedAt: nowIso,
+      completedAt: isOneTime ? nowIso : (config.completedAt ?? null),
+    },
+  });
 }
 
 @Injectable()
@@ -203,13 +200,8 @@ export class PersonRemindersService {
     return this.databaseService.db;
   }
 
-  // Visible tracing for the notification pipeline. Uses `.log` (not `.debug`,
-  // which the default Nest logger can suppress) but only outside production, so
-  // developers can see exactly why a person reminder does or doesn't fire.
   private trace(message: string): void {
-    if (process.env.NODE_ENV !== 'production') {
-      this.logger.log(message);
-    }
+    this.logger.log(message);
   }
 
   /**
@@ -220,7 +212,7 @@ export class PersonRemindersService {
    */
   async create(userId: string, dto: CreatePersonReminderDto) {
     const { title, targetUserId, message = '', expiration } = dto;
-    const radiusMeters = normalizeRadius(dto.radiusMeters);
+    const radiusMeters = resolveRadius(dto.radiusMeters);
     const cooldownMinutes = dto.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
 
     if (targetUserId === userId) {
@@ -258,6 +250,7 @@ export class PersonRemindersService {
       lastExitedAt: null,
       lastTransitionAt: null,
       completedAt: null,
+      transition: dto.transition ?? 'arrival',
     };
 
     const [row] = await this.db

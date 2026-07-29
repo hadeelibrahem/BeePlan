@@ -206,6 +206,8 @@ export class PlannerSchedulerEngine {
       sections: groupSections(items),
       unscheduled,
       capacity: capacitySummary,
+      conflicts: [],
+      taskConflicts: [],
     };
   }
 }

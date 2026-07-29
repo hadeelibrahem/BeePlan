@@ -262,6 +262,52 @@ export const recurringCommitments = pgTable(
   (table) => [index('idx_recurring_commitments_user').on(table.userId)],
 );
 
+export const skippedCommitmentOccurrences = pgTable(
+  'skipped_commitment_occurrences',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    commitmentId: uuid('commitment_id')
+      .notNull()
+      .references(() => recurringCommitments.id, { onDelete: 'cascade' }),
+    date: varchar('date', { length: 10 }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('skipped_commitment_occurrences_unique').on(
+      table.userId,
+      table.commitmentId,
+      table.date,
+    ),
+    index('idx_skipped_commitment_occurrences_user_date').on(
+      table.userId,
+      table.date,
+    ),
+  ],
+);
+
+export const scheduleConflictResolutions = pgTable(
+  'schedule_conflict_resolutions',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    conflictKey: varchar('conflict_key', { length: 500 }).notNull(),
+    date: varchar('date', { length: 10 }).notNull(),
+    taskId: uuid('task_id'),
+    commitmentId: uuid('commitment_id').references(() => recurringCommitments.id, { onDelete: 'cascade' }),
+    resolution: varchar('resolution', { length: 40 }).notNull(),
+    resolvedAt: timestamp('resolved_at').defaultNow().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('schedule_conflict_resolutions_user_key').on(table.userId, table.conflictKey),
+    index('idx_schedule_conflict_resolutions_user_date').on(table.userId, table.date),
+  ],
+);
+
 export const tasks = pgTable(
   'tasks',
   {
@@ -285,6 +331,9 @@ export const tasks = pgTable(
     progress: integer('progress').notNull().default(0),
     dueDate: timestamp('due_date'),
     dueTime: varchar('due_time', { length: 20 }),
+    scheduledDate: varchar('scheduled_date', { length: 10 }),
+    scheduledStartTime: varchar('scheduled_start_time', { length: 5 }),
+    scheduledEndTime: varchar('scheduled_end_time', { length: 5 }),
     categoryId: uuid('category_id').references(() => categories.id, {
       onDelete: 'set null',
     }),
@@ -394,6 +443,9 @@ export const subtasks = pgTable(
     status: varchar('status', { length: 30 }).notNull().default('todo'),
     startDate: timestamp('start_date'),
     dueDate: timestamp('due_date'),
+    scheduledDate: varchar('scheduled_date', { length: 10 }),
+    scheduledStartTime: varchar('scheduled_start_time', { length: 5 }),
+    scheduledEndTime: varchar('scheduled_end_time', { length: 5 }),
     estimatedDurationMinutes: integer('estimated_duration_minutes'),
     actualDurationMinutes: integer('actual_duration_minutes'),
     // 'user' when the estimate was entered by a person, 'ai' when inferred by

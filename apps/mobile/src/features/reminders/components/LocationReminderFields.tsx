@@ -9,9 +9,9 @@ import type { GeneralLocationCategory, LocationReminderConfig, LocationReminderM
 import { LocationMapPicker } from './LocationMapPicker';
 import { PlaceAutocomplete } from './PlaceAutocomplete';
 import { PlaceTypeAutocomplete } from './PlaceTypeAutocomplete';
+import { RadiusMetersInput } from './RadiusMetersInput';
 
 const MODES: LocationReminderMode[] = ['specific_place', 'general_category'];
-const RADIUS_OPTIONS = [100, 250, 500];
 
 type Props = {
   value: LocationReminderConfig;
@@ -170,31 +170,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
         />
       )}
 
-      <View>
-        <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
-          {t('reminders.radiusMeters')}
-        </Text>
-        <View className="flex-row gap-2">
-          {RADIUS_OPTIONS.map((radius) => {
-            const selected = value.radiusMeters === radius;
-            return (
-              <View key={radius} className="flex-1">
-                <Pressable
-                  onPress={() => setRadius(radius)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  className="rounded-full border px-4 py-2.5 active:opacity-80"
-                  style={{ borderColor: selected ? colors.accent : colors.border, backgroundColor: selected ? colors.accentSoft : colors.input }}
-                >
-                  <Text className="text-center text-xs font-black" style={{ color: selected ? colors.accent : colors.text }}>
-                    {radius}m
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
-      </View>
+      <RadiusMetersInput value={value.radiusMeters} onChange={setRadius} />
 
       <View className="flex-row gap-2">
         {(['arrive', 'leave'] as TriggerType[]).map((triggerType) => {

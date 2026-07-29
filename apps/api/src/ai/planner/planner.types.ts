@@ -4,6 +4,7 @@
 // from the original single-file service so the existing endpoint response and
 // the frontend keep working. The remaining interfaces describe the data that
 // flows between the Rule Engine -> Reasoning Engine -> Scheduler Engine.
+import type { TaskTimeConflict } from '../../tasks/task-schedule-conflicts';
 
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 export type PlanItemType = 'task' | 'reminder' | 'break' | 'calendar';
@@ -162,6 +163,27 @@ export type CapacitySummary = {
   emergencyBufferMinutes: number;
 };
 
+export type ScheduleConflict = {
+  id: string;
+  task: {
+    itemId: string;
+    taskId?: string;
+    subtaskId?: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+    durationMinutes: number;
+    isFocusTask: boolean;
+  };
+  commitment: {
+    id: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+  };
+  conflictMinutes: number;
+};
+
 export type DailyPlan = {
   date: string;
   generatedAt: string;
@@ -171,6 +193,8 @@ export type DailyPlan = {
   sections: Record<SectionKey, DailyPlanItem[]>;
   unscheduled: UnscheduledItem[];
   capacity: CapacitySummary;
+  conflicts: ScheduleConflict[];
+  taskConflicts: TaskTimeConflict[];
 };
 
 // -------- Layer 1 input: collected user context -----------------------------

@@ -93,6 +93,24 @@ export class TasksController {
     return this.tasksService.getFilterSummary(request.user.id);
   }
 
+  @Post('schedule-conflicts/validate')
+  @HttpCode(HttpStatus.OK)
+  validateSchedule(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.tasksService.validateSchedule(request.user.id, body);
+  }
+
+  @Post('schedule-conflicts/resolve')
+  @HttpCode(HttpStatus.OK)
+  resolveScheduleConflict(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.tasksService.resolveScheduleConflict(request.user.id, body);
+  }
+
+  @Post('schedule-conflicts/nearest-slot')
+  @HttpCode(HttpStatus.OK)
+  nearestSchedule(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.tasksService.nearestSchedule(request.user.id, body);
+  }
+
   @Get(':id')
   findOne(
     @Req() request: AuthenticatedRequest,

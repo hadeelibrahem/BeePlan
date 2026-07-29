@@ -1,6 +1,7 @@
 import {
   commitmentAppliesOn,
   commitmentsToBusyWindows,
+  excludeSkippedCommitments,
   weekdayOf,
 } from './recurring-commitments.service';
 import type { RecurringCommitment } from './entities/personal-context.types';
@@ -17,6 +18,36 @@ describe('weekdayOf', () => {
 
   it('returns null for a malformed date', () => {
     expect(weekdayOf('not-a-date')).toBeNull();
+    expect(weekdayOf('2021-02-30')).toBeNull();
+  });
+
+  it('uses calendar-date arithmetic independent of the server timezone', () => {
+    expect(weekdayOf('2026-07-29')).toBe(3);
+  });
+});
+
+describe('one-day commitment skips', () => {
+  it('excludes only the explicitly skipped occurrence without changing the recurring commitment', () => {
+    const recurring = {
+      id: 'c1',
+      title: 'Class',
+      daysOfWeek: [1],
+      startTime: '10:00',
+      endTime: '11:00',
+      savedLocationId: null,
+      savedLocationName: null,
+      repeatWeekly: true,
+      startDate: null,
+      endDate: null,
+      isActive: true,
+      notes: null,
+      createdAt: '2021-01-01T00:00:00.000Z',
+      updatedAt: '2021-01-01T00:00:00.000Z',
+    } satisfies RecurringCommitment;
+
+    expect(excludeSkippedCommitments([recurring], new Set(['c1']))).toEqual([]);
+    expect(excludeSkippedCommitments([recurring], new Set())).toEqual([recurring]);
+    expect(recurring).toMatchObject({ repeatWeekly: true, isActive: true });
   });
 });
 

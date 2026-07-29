@@ -10,8 +10,10 @@ import {
   IsString,
   IsUUID,
   Max,
+  Matches,
   Min,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { toApiDate } from '../../ai/recurrence-parser';
 import { SUBTASK_VIEWS, type SubtaskView } from '../subtask-visibility';
@@ -204,6 +206,21 @@ export class SubtaskDto {
   dueDate?: string;
 
   @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  scheduledDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledStartTime?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledEndTime?: string | null;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   estimatedDurationMinutes?: number;
@@ -280,6 +297,21 @@ export class TaskCoreDto {
   @IsOptional()
   @IsString()
   dueTime?: string;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  scheduledDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledStartTime?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledEndTime?: string | null;
 
   @IsOptional()
   @IsString()

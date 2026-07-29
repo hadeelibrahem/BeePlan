@@ -24,6 +24,8 @@ import {
   type TaskRole,
 } from '../collaboration/task-access.service';
 import { DatabaseService } from '../db/database.service';
+import { findTaskCommitmentConflicts, findTaskTimeConflicts, nearestAvailableSlot, normalizeScheduledInterval, type ScheduledInterval, type ScheduledTaskCandidate } from './task-schedule-conflicts';
+import { RecurringCommitmentsService } from '../context/recurring-commitments.service';
 import {
   focusSessions,
   subtaskDependencies,
@@ -33,6 +35,7 @@ import {
   taskMembers,
   taskRecurrenceRules,
   tasks,
+  scheduleConflictResolutions,
   users,
 } from '../db/schema';
 import type { NotificationType } from '../notifications/notification-types';
@@ -112,6 +115,7 @@ export class TasksService {
     private readonly databaseService: DatabaseService,
     private readonly access: TaskAccessService,
     private readonly notifications: NotificationsService,
+    private readonly commitmentsService: RecurringCommitmentsService,
   ) {}
 
   private get db() {
@@ -125,6 +129,23 @@ export class TasksService {
     const status = dto.status ?? 'todo';
     const progress = status === 'done' ? 100 : (dto.progress ?? 0);
     const estimatedTimeMinutes = dto.estimatedTimeMinutes ?? 0;
+    const schedule = normalizeScheduledInterval({
+      scheduledDate: dto.scheduledDate,
+      scheduledStartTime: dto.scheduledStartTime,
+      scheduledEndTime: dto.scheduledEndTime,
+      estimatedMinutes: estimatedTimeMinutes,
+    });
+    if (schedule) {
+      const validation = await this.validateSchedule(userId, { ...dto, ...schedule, estimatedTimeMinutes });
+      if (validation.taskConflicts.length || validation.commitmentConflicts.length) {
+        throw new ConflictException({
+          code: validation.commitmentConflicts.length ? 'TASK_COMMITMENT_CONFLICT' : 'TASK_TIME_CONFLICT',
+          conflicts: validation.conflicts,
+          taskConflicts: validation.taskConflicts,
+          commitmentConflicts: validation.commitmentConflicts,
+        });
+      }
+    }
     // The client's spent time is the user's MANUAL entry. A new task has no
     // Focus Sessions yet, so its derived total spent equals the manual value.
     const manualSpentMinutes = dto.spentTimeMinutes ?? 0;
@@ -140,6 +161,9 @@ export class TasksService {
         progress,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         dueTime: dto.dueTime || null,
+        scheduledDate: schedule?.scheduledDate ?? null,
+        scheduledStartTime: schedule?.scheduledStartTime ?? null,
+        scheduledEndTime: schedule?.scheduledEndTime ?? null,
         category: dto.category?.trim() || null,
         notes: dto.notes?.trim() || null,
         estimatedTimeMinutes,
@@ -176,6 +200,122 @@ export class TasksService {
     await this.addActivity(userId, task.id, 'created', 'Task created');
 
     return this.findOne(userId, task.id);
+  }
+
+  async validateSchedule(userId: string, input: unknown) {
+    const body = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+    const interval = normalizeScheduledInterval({
+      scheduledDate: typeof body.scheduledDate === 'string' ? body.scheduledDate : null,
+      scheduledStartTime: typeof body.scheduledStartTime === 'string' ? body.scheduledStartTime : null,
+      scheduledEndTime: typeof body.scheduledEndTime === 'string' ? body.scheduledEndTime : null,
+      estimatedMinutes: typeof body.estimatedTimeMinutes === 'number' ? body.estimatedTimeMinutes : 0,
+    });
+    if (!interval) return {
+      conflicts: [],
+      taskConflicts: [],
+      commitmentConflicts: [],
+      normalizedSchedule: null,
+    };
+    const [existingRows, commitmentWindows] = await Promise.all([
+      this.db.select().from(tasks).where(and(
+        eq(tasks.userId, userId),
+        eq(tasks.scheduledDate, interval.scheduledDate),
+        ne(tasks.status, 'done'),
+        ne(tasks.status, 'missed'),
+      )),
+      this.commitmentsService.getOccurrencesForDate(userId, interval.scheduledDate),
+    ]);
+    const proposed: ScheduledTaskCandidate = {
+      id: typeof body.taskId === 'string' ? body.taskId : `new:${String(body.title ?? '').trim()}`,
+      title: String(body.title ?? 'New task'),
+      priority: String(body.priority ?? 'medium'),
+      dueDate: typeof body.dueDate === 'string' ? body.dueDate : null,
+      durationMinutes: minutesBetween(interval.scheduledStartTime, interval.scheduledEndTime),
+      ...interval,
+    };
+    const resolutionRows = await this.db.select({ conflictKey: scheduleConflictResolutions.conflictKey })
+      .from(scheduleConflictResolutions)
+      .where(and(eq(scheduleConflictResolutions.userId, userId), eq(scheduleConflictResolutions.date, interval.scheduledDate)));
+    const existing: ScheduledTaskCandidate[] = existingRows
+      .filter((row) => row.scheduledDate && row.scheduledStartTime && row.scheduledEndTime)
+      .map((row) => ({
+        id: row.id,
+        title: row.title,
+        priority: row.priority,
+        dueDate: row.dueDate?.toISOString() ?? null,
+        durationMinutes: minutesBetween(row.scheduledStartTime!, row.scheduledEndTime!),
+        scheduledDate: row.scheduledDate!,
+        scheduledStartTime: row.scheduledStartTime!,
+        scheduledEndTime: row.scheduledEndTime!,
+      }));
+    const resolvedKeys = new Set(resolutionRows.map((row) => row.conflictKey));
+    const taskConflicts = findTaskTimeConflicts(proposed, existing, resolvedKeys);
+    const commitmentConflicts = findTaskCommitmentConflicts(
+      proposed,
+      commitmentWindows.map((window) => ({
+        commitmentId: window.id,
+        title: window.title,
+        date: interval.scheduledDate,
+        startTime: window.startTime,
+        endTime: window.endTime,
+      })),
+      resolvedKeys,
+    );
+    return {
+      conflicts: taskConflicts,
+      taskConflicts,
+      commitmentConflicts,
+      normalizedSchedule: interval,
+    };
+  }
+
+  async resolveScheduleConflict(userId: string, input: unknown) {
+    const body = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+    const conflictKey = typeof body.conflictKey === 'string' ? body.conflictKey : '';
+    const date = typeof body.date === 'string' ? body.date : '';
+    const resolution = typeof body.resolution === 'string' ? body.resolution : '';
+    if (!conflictKey || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequestException('conflictKey and date are required.');
+    if (!['move_existing_auto', 'move_existing_manual', 'move_new_auto', 'move_new_manual', 'cancel_existing', 'keep_commitment', 'keep_task', 'choose_another_time'].includes(resolution)) throw new BadRequestException('Invalid task conflict resolution.');
+    const values = { userId, conflictKey, date, taskId: typeof body.taskId === 'string' ? body.taskId : null, commitmentId: typeof body.commitmentId === 'string' ? body.commitmentId : null, resolution, resolvedAt: new Date(), updatedAt: new Date() };
+    await this.db.insert(scheduleConflictResolutions).values(values).onConflictDoUpdate({
+      target: [scheduleConflictResolutions.userId, scheduleConflictResolutions.conflictKey],
+      set: values,
+    });
+    return { conflictKey, lifecycle: 'resolved' as const, resolution };
+  }
+
+  async nearestSchedule(userId: string, input: unknown) {
+    const body = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+    const interval = normalizeScheduledInterval({
+      scheduledDate: typeof body.scheduledDate === 'string' ? body.scheduledDate : null,
+      scheduledStartTime: typeof body.scheduledStartTime === 'string' ? body.scheduledStartTime : null,
+      scheduledEndTime: typeof body.scheduledEndTime === 'string' ? body.scheduledEndTime : null,
+      estimatedMinutes: typeof body.estimatedTimeMinutes === 'number' ? body.estimatedTimeMinutes : 0,
+    });
+    if (!interval) throw new BadRequestException('A scheduled interval is required.');
+    const [rows, commitmentWindows] = await Promise.all([
+      this.db.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.scheduledDate, interval.scheduledDate), ne(tasks.status, 'done'), ne(tasks.status, 'missed'))),
+      this.commitmentsService.getOccurrencesForDate(userId, interval.scheduledDate),
+    ]);
+    const task: ScheduledTaskCandidate = {
+      id: typeof body.taskId === 'string' ? body.taskId : 'new',
+      title: String(body.title ?? 'Task'),
+      priority: String(body.priority ?? 'medium'),
+      dueDate: typeof body.dueDate === 'string' ? body.dueDate : null,
+      durationMinutes: minutesBetween(interval.scheduledStartTime, interval.scheduledEndTime),
+      ...interval,
+    };
+    const occupied = rows.filter((row) => row.id !== task.id && row.scheduledDate && row.scheduledStartTime && row.scheduledEndTime).map((row) => ({
+      id: row.id, title: row.title, priority: row.priority, dueDate: row.dueDate?.toISOString() ?? null,
+      durationMinutes: minutesBetween(row.scheduledStartTime!, row.scheduledEndTime!),
+      scheduledDate: row.scheduledDate!, scheduledStartTime: row.scheduledStartTime!, scheduledEndTime: row.scheduledEndTime!,
+    }));
+    const commitmentOccupied: ScheduledInterval[] = commitmentWindows.map((window) => ({
+      scheduledDate: interval.scheduledDate,
+      scheduledStartTime: window.startTime,
+      scheduledEndTime: window.endTime,
+    }));
+    return { schedule: nearestAvailableSlot(task, [...occupied, ...commitmentOccupied]) };
   }
 
   async findAll(userId: string, query?: TaskQueryDto) {
@@ -438,6 +578,43 @@ export class TasksService {
     const updateData: Partial<typeof tasks.$inferInsert> = {
       updatedAt: new Date(),
     };
+    const scheduleWasProvided =
+      dto.scheduledDate !== undefined ||
+      dto.scheduledStartTime !== undefined ||
+      dto.scheduledEndTime !== undefined;
+    if (scheduleWasProvided) {
+      const schedule = normalizeScheduledInterval({
+        scheduledDate: dto.scheduledDate !== undefined ? dto.scheduledDate : existingTask.scheduledDate,
+        scheduledStartTime: dto.scheduledStartTime !== undefined ? dto.scheduledStartTime : existingTask.scheduledStartTime,
+        scheduledEndTime: dto.scheduledEndTime !== undefined
+          ? dto.scheduledEndTime
+          : dto.scheduledStartTime !== undefined
+            ? null
+            : existingTask.scheduledEndTime,
+        estimatedMinutes: dto.estimatedTimeMinutes ?? existingTask.estimatedTimeMinutes,
+      });
+      updateData.scheduledDate = schedule?.scheduledDate ?? null;
+      updateData.scheduledStartTime = schedule?.scheduledStartTime ?? null;
+      updateData.scheduledEndTime = schedule?.scheduledEndTime ?? null;
+      if (schedule) {
+        const validation = await this.validateSchedule(userId, {
+          taskId,
+          title: dto.title ?? existingTask.title,
+          priority: dto.priority ?? existingTask.priority,
+          dueDate: dto.dueDate ?? existingTask.dueDate?.toISOString(),
+          estimatedTimeMinutes: dto.estimatedTimeMinutes ?? existingTask.estimatedTimeMinutes,
+          ...schedule,
+        });
+        if (validation.taskConflicts.length || validation.commitmentConflicts.length) {
+          throw new ConflictException({
+            code: validation.commitmentConflicts.length ? 'TASK_COMMITMENT_CONFLICT' : 'TASK_TIME_CONFLICT',
+            conflicts: validation.conflicts,
+            taskConflicts: validation.taskConflicts,
+            commitmentConflicts: validation.commitmentConflicts,
+          });
+        }
+      }
+    }
 
     if (dto.title !== undefined) updateData.title = dto.title.trim();
     if (dto.description !== undefined) {
@@ -808,6 +985,21 @@ export class TasksService {
               ? new Date(dto.dueDate)
               : null
             : undefined,
+        ...(dto.scheduledDate !== undefined ||
+        dto.scheduledStartTime !== undefined ||
+        dto.scheduledEndTime !== undefined
+          ? scheduleInsert({
+              ...dto,
+              scheduledDate: dto.scheduledDate !== undefined ? dto.scheduledDate : current.scheduledDate,
+              scheduledStartTime: dto.scheduledStartTime !== undefined ? dto.scheduledStartTime : current.scheduledStartTime,
+              scheduledEndTime: dto.scheduledEndTime !== undefined
+                ? dto.scheduledEndTime
+                : dto.scheduledStartTime !== undefined
+                  ? undefined
+                  : current.scheduledEndTime,
+              estimatedDurationMinutes: dto.estimatedDurationMinutes ?? current.estimatedDurationMinutes ?? undefined,
+            })
+          : {}),
         estimatedDurationMinutes: dto.estimatedDurationMinutes,
         actualDurationMinutes: dto.actualDurationMinutes,
         estimatedDurationSource: dto.estimatedDurationSource,
@@ -1324,6 +1516,9 @@ export class TasksService {
       progress: task.progress,
       dueDate: task.dueDate?.toISOString(),
       dueTime: task.dueTime ?? '',
+      scheduledDate: task.scheduledDate ?? undefined,
+      scheduledStartTime: task.scheduledStartTime ?? undefined,
+      scheduledEndTime: task.scheduledEndTime ?? undefined,
       category: task.category ?? '',
       notes: task.notes ?? '',
       estimatedTimeMinutes: task.estimatedTimeMinutes,
@@ -1371,6 +1566,9 @@ export class TasksService {
       status: row.status,
       startDate: row.startDate?.toISOString(),
       dueDate: row.dueDate?.toISOString(),
+      scheduledDate: row.scheduledDate ?? undefined,
+      scheduledStartTime: row.scheduledStartTime ?? undefined,
+      scheduledEndTime: row.scheduledEndTime ?? undefined,
       estimatedDurationMinutes: row.estimatedDurationMinutes ?? undefined,
       actualDurationMinutes: row.actualDurationMinutes ?? undefined,
       estimatedDurationSource: row.estimatedDurationSource,
@@ -1756,6 +1954,7 @@ export class TasksService {
       status,
       startDate: dto.startDate ? new Date(dto.startDate) : null,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+      ...scheduleInsert(dto),
       estimatedDurationMinutes: dto.estimatedDurationMinutes ?? null,
       actualDurationMinutes: dto.actualDurationMinutes ?? null,
       estimatedDurationSource: dto.estimatedDurationSource ?? 'user',
@@ -2081,4 +2280,29 @@ export class TasksService {
       actorId,
     );
   }
+}
+
+function scheduleInsert(input: {
+  scheduledDate?: string | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
+  estimatedDurationMinutes?: number | null;
+}) {
+  const schedule = normalizeScheduledInterval({
+    scheduledDate: input.scheduledDate,
+    scheduledStartTime: input.scheduledStartTime,
+    scheduledEndTime: input.scheduledEndTime,
+    estimatedMinutes: input.estimatedDurationMinutes,
+  });
+  return {
+    scheduledDate: schedule?.scheduledDate ?? null,
+    scheduledStartTime: schedule?.scheduledStartTime ?? null,
+    scheduledEndTime: schedule?.scheduledEndTime ?? null,
+  };
+}
+
+function minutesBetween(start: string, end: string): number {
+  const [startHour, startMinute] = start.split(':').map(Number);
+  const [endHour, endMinute] = end.split(':').map(Number);
+  return endHour * 60 + endMinute - (startHour * 60 + startMinute);
 }

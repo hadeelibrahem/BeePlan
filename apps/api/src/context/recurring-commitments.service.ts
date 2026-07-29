@@ -5,7 +5,11 @@ import {
 } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
-import { recurringCommitments, savedLocations } from '../db/schema';
+import {
+  recurringCommitments,
+  savedLocations,
+  skippedCommitmentOccurrences,
+} from '../db/schema';
 import type {
   CreateRecurringCommitmentDto,
   UpdateRecurringCommitmentDto,
@@ -173,8 +177,67 @@ export class RecurringCommitmentsService {
     userId: string,
     date: string,
   ): Promise<CommitmentBusyWindow[]> {
-    const commitments = await this.list(userId);
-    return commitmentsToBusyWindows(commitments, date);
+    const [commitments, skipped] = await Promise.all([
+      this.list(userId),
+      this.db
+        .select({ commitmentId: skippedCommitmentOccurrences.commitmentId })
+        .from(skippedCommitmentOccurrences)
+        .where(
+          and(
+            eq(skippedCommitmentOccurrences.userId, userId),
+            eq(skippedCommitmentOccurrences.date, date),
+          ),
+        ),
+    ]);
+    const skippedIds = new Set(skipped.map((row) => row.commitmentId));
+    return commitmentsToBusyWindows(excludeSkippedCommitments(commitments, skippedIds), date);
+  }
+
+  /** Dated, unmerged occurrences for conflict UI and one-occurrence resolution. */
+  async getOccurrencesForDate(
+    userId: string,
+    date: string,
+  ): Promise<RecurringCommitment[]> {
+    const [commitments, skipped] = await Promise.all([
+      this.list(userId),
+      this.db
+        .select({ commitmentId: skippedCommitmentOccurrences.commitmentId })
+        .from(skippedCommitmentOccurrences)
+        .where(and(
+          eq(skippedCommitmentOccurrences.userId, userId),
+          eq(skippedCommitmentOccurrences.date, date),
+        )),
+    ]);
+    const skippedIds = new Set(skipped.map((row) => row.commitmentId));
+    return excludeSkippedCommitments(commitments, skippedIds)
+      .filter((commitment) => commitmentAppliesOn(commitment, date));
+  }
+
+  async skipOccurrence(
+    userId: string,
+    commitmentId: string,
+    date: string,
+  ): Promise<{ commitmentId: string; date: string; skipped: true }> {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new BadRequestException('date must be YYYY-MM-DD.');
+    }
+    const [commitment] = await this.db
+      .select({ id: recurringCommitments.id })
+      .from(recurringCommitments)
+      .where(
+        and(
+          eq(recurringCommitments.userId, userId),
+          eq(recurringCommitments.id, commitmentId),
+        ),
+      )
+      .limit(1);
+    if (!commitment) throw new NotFoundException('Commitment not found.');
+
+    await this.db
+      .insert(skippedCommitmentOccurrences)
+      .values({ userId, commitmentId, date })
+      .onConflictDoNothing();
+    return { commitmentId, date, skipped: true };
   }
 
   /** All active commitments (used to give the planner/AI awareness context). */
@@ -275,12 +338,25 @@ export function commitmentsToBusyWindows(
   return merged;
 }
 
+export function excludeSkippedCommitments(
+  commitments: RecurringCommitment[],
+  skippedIds: ReadonlySet<string>,
+): RecurringCommitment[] {
+  return commitments.filter((commitment) => !skippedIds.has(commitment.id));
+}
+
 /** Weekday (0=Sun..6=Sat) of a YYYY-MM-DD calendar date, or null if malformed. */
 export function weekdayOf(date: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
-  const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.getDay();
+  const [year, month, day] = date.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) return null;
+  return parsed.getUTCDay();
 }
 
 function toCommitment(

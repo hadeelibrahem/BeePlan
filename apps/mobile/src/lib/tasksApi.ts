@@ -73,6 +73,9 @@ export type ApiSubtask = {
   isFocusTask?: boolean;
   startDate?: string;
   dueDate?: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   estimatedDurationMinutes?: number;
   actualDurationMinutes?: number;
   estimatedDurationSource: 'user' | 'ai';
@@ -148,6 +151,9 @@ export type ApiTask = {
   progress: number;
   dueDate?: string;
   dueTime: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   category: string;
   notes: string;
   estimatedTimeMinutes: number;
@@ -195,6 +201,9 @@ export type TaskPayload = Partial<
     | 'progress'
     | 'dueDate'
     | 'dueTime'
+    | 'scheduledDate'
+    | 'scheduledStartTime'
+    | 'scheduledEndTime'
     | 'category'
     | 'notes'
     | 'estimatedTimeMinutes'
@@ -284,6 +293,14 @@ export function getDashboardSummary(accessToken: string) {
 export type TodayDashboardFocus = { id: string; taskId: string | null; taskTitle: string | null; subtaskId: string | null; subtaskTitle: string | null; startedAt: string; endedAt: string | null; plannedMinutes: number; actualMinutes: number | null; status: string; sessionType: string; notes: string | null; createdAt: string };
 export type TodayDashboardRecommendation = { taskId: string; taskTitle: string; subtaskId: string | null; subtaskTitle: string | null; estimatedMinutes: number | null; reason: string; recommendationReason: string; score: number; priority: string | null; dueAt: string | null };
 export type TodayDashboard = { generatedAt: string; timezone: string; greeting: string; dailyStatus: { status: string; statusTone: 'success' | 'positive' | 'warning' | 'danger'; summaryLines: string[] }; activeFocus: TodayDashboardFocus | null; recommendation: TodayDashboardRecommendation | null; whyNow: { code: string; label: string; value?: string }[]; timeline: { id: string; type: string; startTime: string; endTime: string | null; title: string; taskId: string | null; subtaskId: string | null; status: string; source: string }[]; locationContext: { label: string; tasks: { id: string; title: string }[] } | null; suggestions: { id: string; type: string; title: string; explanation: string; actionLabel: string; actionPayload: Record<string, unknown> }[]; progress: { percent: number; completedWorkUnits: number; totalWorkUnits: number; focusMinutes: number; remainingEstimatedMinutes: number; basis: string }; tomorrowPreview: { date: string; calendarEvents: unknown[]; dueWorkUnits: number; estimatedWorkMinutes: number; highPriorityItems: number; capacityMinutes: number | null; overloadStatus: 'overloaded' | 'within_capacity' | 'unavailable' } };
+
+export type ScheduledTaskCandidate = { id: string; title: string; priority: string; dueDate: string | null; durationMinutes: number; scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string };
+export type TaskTimeConflict = { id: string; existingTask: ScheduledTaskCandidate; proposedTask: ScheduledTaskCandidate; overlapMinutes: number };
+export type TaskCommitmentConflict = { id: string; conflictType: 'task_commitment'; proposedTask: ScheduledTaskCandidate; commitment: { commitmentId: string; title: string; date: string; startTime: string; endTime: string }; overlapMinutes: number };
+type ScheduleValidationPayload = { id?: string; title: string; priority?: string; dueDate?: string | null; estimatedTimeMinutes?: number; scheduledDate?: string; scheduledStartTime?: string; scheduledEndTime?: string };
+export function validateTaskSchedule(accessToken: string, payload: ScheduleValidationPayload) { return request<{ conflicts: TaskTimeConflict[]; taskConflicts: TaskTimeConflict[]; commitmentConflicts: TaskCommitmentConflict[]; normalizedSchedule: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string } | null }>(accessToken, '/tasks/schedule-conflicts/validate', { method: 'POST', body: JSON.stringify({ ...payload, taskId: payload.id }) }); }
+export function resolveTaskScheduleConflict(accessToken: string, payload: { conflictKey: string; date: string; taskId?: string; commitmentId?: string; resolution: 'move_existing_auto' | 'move_existing_manual' | 'move_new_auto' | 'move_new_manual' | 'cancel_existing' | 'keep_commitment' | 'keep_task' | 'choose_another_time' }) { return request<{ conflictKey: string; lifecycle: 'resolved'; resolution: string }>(accessToken, '/tasks/schedule-conflicts/resolve', { method: 'POST', body: JSON.stringify(payload) }); }
+export function getNearestTaskSchedule(accessToken: string, payload: ScheduleValidationPayload) { return request<{ schedule: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string } | null }>(accessToken, '/tasks/schedule-conflicts/nearest-slot', { method: 'POST', body: JSON.stringify({ ...payload, taskId: payload.id }) }); }
 export function getTodayDashboard(accessToken: string) { return request<TodayDashboard>(accessToken, '/dashboard/today'); }
 
 export function getTasks(accessToken: string, filters?: TaskFilters) {

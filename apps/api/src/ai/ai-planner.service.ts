@@ -17,6 +17,8 @@ import { PlannerPreferencesService } from './planner/planner-preferences.service
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
 import { PlannerRuleEngine, normalizePriority } from './planner/planner-rule-engine';
 import { PlannerSchedulerEngine } from './planner/planner-scheduler-engine';
+import { detectScheduleConflicts } from './planner/schedule-conflicts';
+import { findTaskTimeConflicts, type ScheduledTaskCandidate } from '../tasks/task-schedule-conflicts';
 import {
   currentTimeString,
   isSameLocalDate,
@@ -120,6 +122,21 @@ export class AiPlannerService {
       this.logger.warn(`Deterministic plan reported issues: ${issues.map((issue) => issue.message).join('; ')}`);
     }
 
+    plan.conflicts = detectScheduleConflicts(
+      Object.values(plan.sections).flat(),
+      context.commitments,
+    );
+    const scheduledTasks: ScheduledTaskCandidate[] = Object.values(plan.sections).flat().filter((item) => item.type === 'task').map((item) => ({
+      id: item.subtaskId ?? item.taskId ?? item.id,
+      title: item.title,
+      priority: item.priority,
+      dueDate: null,
+      durationMinutes: item.durationMinutes,
+      scheduledDate: plan.date,
+      scheduledStartTime: item.startTime,
+      scheduledEndTime: item.endTime,
+    }));
+    plan.taskConflicts = scheduledTasks.flatMap((task, index) => findTaskTimeConflicts(task, scheduledTasks.slice(index + 1)));
     return plan;
   }
 
@@ -308,6 +325,10 @@ export class AiPlannerService {
 
   getAcceptance(userId: string, date: string) {
     return this.acceptanceService.getAcceptance(userId, normalizeDate(date));
+  }
+
+  resolveConflict(userId: string, input: unknown) {
+    return this.acceptanceService.resolveConflict(userId, input);
   }
 }
 

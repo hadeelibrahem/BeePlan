@@ -853,7 +853,7 @@ function ThemedApp() {
     <AiDailyPlannerScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />
   );
   const CalendarStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Calendar'>) => (
-    <CalendarScreen tasks={tasks} reminders={reminders} onBack={() => props.navigation.goBack()} onTask={(taskId) => props.navigation.navigate('TaskDetails', { taskId })} onReminder={(reminderId) => props.navigation.navigate('ReminderDetails', { reminderId })} onCreateTask={(params) => props.navigation.navigate('CreateTask', params)} />
+    <CalendarScreen accessToken={accessToken ?? ''} tasks={tasks} reminders={reminders} onBack={() => props.navigation.goBack()} onTask={(taskId) => props.navigation.navigate('TaskDetails', { taskId })} onReminder={(reminderId) => props.navigation.navigate('ReminderDetails', { reminderId })} onCreateTask={(params) => props.navigation.navigate('CreateTask', params)} />
   );
   const NotesStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Notes'>) => (
     <NotesScreen accessToken={accessToken ?? ''} onBack={() => props.navigation.goBack()} />

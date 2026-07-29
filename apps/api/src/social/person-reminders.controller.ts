@@ -2,12 +2,15 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
@@ -42,7 +45,23 @@ export class PersonRemindersController {
   }
 
   @Get('nearby')
-  checkNearby(@Req() request: AuthenticatedRequest) {
+  @Header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate',
+  )
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
+  checkNearby(
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    // Express turns a matching If-None-Match response into 304 after the
+    // controller returns. This endpoint performs stateful geofence evaluation,
+    // so a conditional response is never valid even when its JSON body happens
+    // to match the previous poll.
+    delete request.headers['if-none-match'];
+    delete request.headers['if-modified-since'];
+    response.removeHeader('ETag');
     return this.personRemindersService.checkNearby(request.user.id);
   }
 }

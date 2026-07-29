@@ -14,6 +14,9 @@ import SubtaskFormModal from '../components/SubtaskFormModal'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
+import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
+import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal'
+import { skipCommitmentOccurrence } from '../lib/plannerApi'
 import {
   recurrenceToApi,
   uploadAttachment,
@@ -24,6 +27,13 @@ import {
   type ApiTask,
   type SubtaskPayload,
   type TaskPayload,
+  type TaskTimeConflict,
+  type TaskCommitmentConflict,
+  validateTaskSchedule,
+  getNearestTaskSchedule,
+  resolveTaskScheduleConflict,
+  updateTask,
+  changeTaskStatus,
 } from '../lib/tasksApi'
 
 type CreateTaskScreenProps = SidebarNavHandlers & {
@@ -57,6 +67,11 @@ export default function CreateTaskScreen({
   const [category, setCategory] = useState('')
   const [dueDate, setDueDate] = useState(initialDueDate ?? '')
   const [dueTime, setDueTime] = useState('')
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [scheduledStartTime, setScheduledStartTime] = useState('')
+  const [scheduledEndTime, setScheduledEndTime] = useState('')
+  const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null)
+  const [commitmentConflict, setCommitmentConflict] = useState<TaskCommitmentConflict | null>(null)
   const [reminderEnabled, setReminderEnabled] = useState(true)
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30)
   const [subtasks, setSubtasks] = useState<(SubtaskPayload & { title: string })[]>([])
@@ -82,6 +97,9 @@ export default function CreateTaskScreen({
       category.trim() ||
       dueDate ||
       dueTime ||
+      scheduledDate ||
+      scheduledStartTime ||
+      scheduledEndTime ||
       subtasks.length ||
       dependencies.length ||
       attachments.length ||
@@ -99,6 +117,22 @@ export default function CreateTaskScreen({
       return
     }
 
+    if ((scheduledDate || scheduledStartTime || scheduledEndTime) && (!scheduledDate || !scheduledStartTime || !scheduledEndTime)) {
+      setError('Scheduled date, start time, and end time must be provided together.')
+      return
+    }
+    const schedulePayload = { title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : undefined, scheduledDate: scheduledDate || undefined, scheduledStartTime: scheduledStartTime || undefined, scheduledEndTime: scheduledEndTime || undefined }
+    if (accessToken && scheduledDate) {
+      const validation = await validateTaskSchedule(accessToken, schedulePayload)
+      if (validation.commitmentConflicts.length) {
+        setCommitmentConflict(validation.commitmentConflicts[0])
+        return
+      }
+      if (validation.conflicts.length) {
+        setTimeConflict(validation.conflicts[0])
+        return
+      }
+    }
     setSaving(true)
     setError('')
 
@@ -112,6 +146,9 @@ export default function CreateTaskScreen({
         category,
         dueDate: dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : undefined,
         dueTime,
+        scheduledDate: scheduledDate || undefined,
+        scheduledStartTime: scheduledStartTime || undefined,
+        scheduledEndTime: scheduledEndTime || undefined,
         reminderEnabled,
         reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         recurrence: recurrenceToApi(recurrence),
@@ -135,6 +172,40 @@ export default function CreateTaskScreen({
       setUploadingAttachments(false)
       setSaving(false)
     }
+  }
+
+  async function moveConflictTask(which: 'existing' | 'new', mode: 'auto' | 'manual', manual?: ScheduleChoice) {
+    if (!timeConflict || !accessToken) return
+    const target = which === 'existing' ? timeConflict.existingTask : timeConflict.proposedTask
+    const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule
+    if (!schedule) { setError('No available slot was found.'); return }
+    const validation = await validateTaskSchedule(accessToken, { ...target, ...schedule })
+    if (validation.conflicts.some((item) => item.existingTask.id !== (which === 'existing' ? timeConflict.proposedTask.id : timeConflict.existingTask.id))) {
+      setError('The selected slot conflicts with another task.'); return
+    }
+    if (!window.confirm(`Current schedule → Proposed schedule\n${target.title}: ${target.scheduledDate} ${target.scheduledStartTime}–${target.scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
+    if (which === 'existing') {
+      await updateTask(accessToken, target.id, schedule)
+      await resolveTaskScheduleConflict(accessToken, { conflictKey: timeConflict.id, date: target.scheduledDate, taskId: target.id, resolution: mode === 'auto' ? 'move_existing_auto' : 'move_existing_manual' })
+    } else {
+      setScheduledDate(schedule.scheduledDate); setScheduledStartTime(schedule.scheduledStartTime); setScheduledEndTime(schedule.scheduledEndTime)
+    }
+    setTimeConflict(null)
+  }
+
+  async function keepCommitment() {
+    if (!commitmentConflict || !accessToken) return
+    const schedule = (await getNearestTaskSchedule(accessToken, commitmentConflict.proposedTask)).schedule
+    if (!schedule || !window.confirm(`Current schedule → Proposed schedule\n${scheduledDate} ${scheduledStartTime}–${scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
+    setScheduledDate(schedule.scheduledDate); setScheduledStartTime(schedule.scheduledStartTime); setScheduledEndTime(schedule.scheduledEndTime)
+    setCommitmentConflict(null)
+  }
+
+  async function keepTask() {
+    if (!commitmentConflict || !accessToken) return
+    await skipCommitmentOccurrence(accessToken, commitmentConflict.commitment.commitmentId, commitmentConflict.commitment.date)
+    await resolveTaskScheduleConflict(accessToken, { conflictKey: commitmentConflict.id, date: commitmentConflict.commitment.date, commitmentId: commitmentConflict.commitment.commitmentId, resolution: 'keep_task' })
+    setCommitmentConflict(null)
   }
 
   return (
@@ -300,6 +371,11 @@ export default function CreateTaskScreen({
                     />
                   </div>
                 </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div><FieldLabel label="Scheduled Date" htmlFor="create-task-scheduled-date" /><input id="create-task-scheduled-date" type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label="Scheduled Start" htmlFor="create-task-scheduled-start" /><input id="create-task-scheduled-start" type="time" value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label="Scheduled End" htmlFor="create-task-scheduled-end" /><input id="create-task-scheduled-end" type="time" value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                </div>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
@@ -410,6 +486,19 @@ export default function CreateTaskScreen({
               {saving || uploadingAttachments ? 'Saving...' : 'Save Task'}
             </button>
           </div>
+        <TaskTimeConflictModal
+          conflict={timeConflict}
+          busy={saving}
+          onMoveExisting={(mode, schedule) => void moveConflictTask('existing', mode, schedule)}
+          onMoveNew={(mode, schedule) => void moveConflictTask('new', mode, schedule)}
+          onCancelExisting={() => {
+            if (!timeConflict || !accessToken || !window.confirm('Cancel the existing task? It will be marked missed and not deleted.')) return
+            void changeTaskStatus(accessToken, timeConflict.existingTask.id, { status: 'missed' }).then(() => resolveTaskScheduleConflict(accessToken, { conflictKey: timeConflict.id, date: timeConflict.existingTask.scheduledDate, taskId: timeConflict.existingTask.id, resolution: 'cancel_existing' })).then(() => setTimeConflict(null))
+          }}
+          onCancelNew={() => { setTimeConflict(null); onCancel?.() }}
+          onCancelChanges={() => setTimeConflict(null)}
+        />
+        <TaskCommitmentConflictModal conflict={commitmentConflict} busy={saving} onKeepCommitment={() => void keepCommitment()} onKeepTask={() => void keepTask()} onChooseAnotherTime={() => { setCommitmentConflict(null); document.getElementById('create-task-scheduled-date')?.focus() }} onCancel={() => setCommitmentConflict(null)} />
       </AppLayout>
       <TaskRecurrenceModal
         open={isRecurrenceModalOpen}

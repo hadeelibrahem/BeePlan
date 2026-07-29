@@ -63,6 +63,22 @@ export type CapacitySummary = {
   emergencyBufferMinutes: number
 }
 
+export type ScheduleConflict = {
+  id: string
+  task: {
+    itemId: string
+    taskId?: string
+    subtaskId?: string
+    title: string
+    startTime: string
+    endTime: string
+    durationMinutes: number
+    isFocusTask: boolean
+  }
+  commitment: { id: string; title: string; startTime: string; endTime: string }
+  conflictMinutes: number
+}
+
 export type DailyPlan = {
   date: string
   generatedAt: string
@@ -72,6 +88,8 @@ export type DailyPlan = {
   sections: Record<'morning' | 'afternoon' | 'evening' | 'night', DailyPlanItem[]>
   unscheduled: UnscheduledItem[]
   capacity: CapacitySummary
+  conflicts: ScheduleConflict[]
+  taskConflicts?: import('./tasksApi').TaskTimeConflict[]
 }
 
 export type GenerateDailyPlanPayload = {
@@ -137,6 +155,40 @@ export async function getDailyPlanAcceptance(accessToken: string, date: string) 
   }
 
   return (data ?? null) as PlanAcceptance | null
+}
+
+export async function skipCommitmentOccurrence(
+  accessToken: string,
+  commitmentId: string,
+  date: string,
+) {
+  const response = await fetch(`${apiUrl}/context/commitments/${commitmentId}/skip`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ date }),
+  })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(data?.message ?? 'Unable to skip this commitment for today.')
+  return data as { commitmentId: string; date: string; skipped: true }
+}
+
+export async function resolveScheduleConflict(accessToken: string, payload: {
+  conflictKey: string
+  date: string
+  taskId?: string
+  commitmentId: string
+  resolution: 'keep_commitment' | 'keep_task' | 'postpone_task' | 'cancel_task'
+}) {
+  const response = await fetch(`${apiUrl}/ai/planner/conflicts/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error('Unable to save conflict resolution.')
+  return response.json() as Promise<{ conflictKey: string; lifecycle: 'resolved'; resolution: string }>
 }
 
 export type EnergyLevel = 'high' | 'medium' | 'low'

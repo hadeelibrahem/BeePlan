@@ -24,6 +24,11 @@ import { FocusAudienceSection } from '../features/collaboration/components/Focus
 import {
   deleteAttachment,
   getAttachments,
+  changeTaskStatus,
+  getNearestTaskSchedule,
+  resolveTaskScheduleConflict,
+  updateTask,
+  validateTaskSchedule,
   recurrenceToApi,
   recurrenceToUi,
   toApiPriority,
@@ -34,7 +39,12 @@ import {
   type ApiTask,
   type ApiTaskAttachment,
   type TaskPayload,
+  type TaskCommitmentConflict,
+  type TaskTimeConflict,
 } from '../lib/tasksApi';
+import { TaskTimeConflictModal, type MobileScheduleChoice } from '../components/TaskTimeConflictModal';
+import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal';
+import { skipCommitmentOccurrence } from '../lib/plannerApi';
 import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
 import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard';
 import { SubtaskManagementSection } from '../components/SubtaskManagementSection';
@@ -157,6 +167,11 @@ export default function EditTaskScreen({
   const [priority, setPriority] = useState(task ? toUiPriority(task.priority) : 'Medium');
   const [dueDate, setDueDate] = useState<Date | undefined>(toDateInput(task?.dueDate));
   const [dueTime, setDueTime] = useState(task?.dueTime ?? '');
+  const [scheduledDate, setScheduledDate] = useState(task?.scheduledDate ?? '');
+  const [scheduledStartTime, setScheduledStartTime] = useState(task?.scheduledStartTime ?? '');
+  const [scheduledEndTime, setScheduledEndTime] = useState(task?.scheduledEndTime ?? '');
+  const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null);
+  const [commitmentConflict, setCommitmentConflict] = useState<TaskCommitmentConflict | null>(null);
   const [reminderEnabled, setReminderEnabled] = useState(task?.reminderEnabled ?? false);
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task?.reminderBeforeMinutes ?? 30);
   const [notes, setNotes] = useState(task?.notes ?? '');
@@ -331,11 +346,17 @@ export default function EditTaskScreen({
     const reminderError = validateTaskReminder(reminderEnabled, dueDate, dueTime);
     if (reminderError) { setError(reminderError); return; }
 
-    setSaving(true);
-    setError('');
-
     const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60);
     const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60);
+    if ((scheduledDate || scheduledStartTime || scheduledEndTime) && (!scheduledDate || !scheduledStartTime)) { setError('Scheduled date and start time are required together.'); return; }
+    if (accessToken && scheduledDate) {
+      const validation = await validateTaskSchedule(accessToken, { id: task.id, title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate?.toISOString(), estimatedTimeMinutes, scheduledDate, scheduledStartTime, scheduledEndTime: scheduledEndTime || undefined });
+      if (validation.commitmentConflicts.length) { setCommitmentConflict(validation.commitmentConflicts[0]); return; }
+      if (validation.conflicts.length) { setTimeConflict(validation.conflicts[0]); return; }
+      if (!scheduledEndTime && validation.normalizedSchedule) setScheduledEndTime(validation.normalizedSchedule.scheduledEndTime);
+    }
+    setSaving(true);
+    setError('');
 
     try {
       const updatedTask = await onSave({
@@ -346,6 +367,9 @@ export default function EditTaskScreen({
         priority: toApiPriority(priority),
         dueDate: dueDate ? dueDate.toISOString() : undefined,
         dueTime,
+        scheduledDate: scheduledDate || undefined,
+        scheduledStartTime: scheduledStartTime || undefined,
+        scheduledEndTime: scheduledEndTime || undefined,
         reminderEnabled,
         reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         notes: notes.trim(),
@@ -380,6 +404,22 @@ export default function EditTaskScreen({
       setUploadingAttachments(false);
       setSaving(false);
     }
+  }
+
+  async function moveConflictTask(which: 'existing' | 'new', mode: 'auto' | 'manual', manual?: MobileScheduleChoice) {
+    if (!timeConflict || !accessToken) return;
+    const target = which === 'existing' ? timeConflict.existingTask : timeConflict.proposedTask;
+    const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule;
+    if (!schedule) return Alert.alert('No available slot', 'Please choose another time.');
+    Alert.alert('Proposed schedule', `${target.scheduledDate} ${target.scheduledStartTime}–${target.scheduledEndTime}\n→\n${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Apply', onPress: () => void (async () => {
+      if (which === 'existing') {
+        await updateTask(accessToken, target.id, schedule);
+        await resolveTaskScheduleConflict(accessToken, { conflictKey: timeConflict.id, date: target.scheduledDate, taskId: target.id, resolution: mode === 'auto' ? 'move_existing_auto' : 'move_existing_manual' });
+      } else {
+        setScheduledDate(schedule.scheduledDate); setScheduledStartTime(schedule.scheduledStartTime); setScheduledEndTime(schedule.scheduledEndTime);
+      }
+      setTimeConflict(null);
+    })() }]);
   }
 
   if (!task) {
@@ -508,6 +548,9 @@ export default function EditTaskScreen({
             <Select label={formatTimeLabel(dueTime)} onPress={openTimePicker} />
           </View>
         </View>
+        <Label text="Scheduled Date (YYYY-MM-DD)" />
+        <TextInput accessibilityLabel="Scheduled date" value={scheduledDate} onChangeText={setScheduledDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.placeholder} className="mb-2 rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} />
+        <View className="flex-row gap-2"><View className="flex-1"><Label text="Scheduled Start" /><TextInput accessibilityLabel="Scheduled start time" value={scheduledStartTime} onChangeText={setScheduledStartTime} placeholder="HH:mm" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View><View className="flex-1"><Label text="Scheduled End" /><TextInput accessibilityLabel="Scheduled end time" value={scheduledEndTime} onChangeText={setScheduledEndTime} placeholder="HH:mm or derived" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View></View>
       </Card>
 
       <Card title="Progress & Time Estimation">
@@ -666,6 +709,21 @@ export default function EditTaskScreen({
         onSave={setRecurrence}
         onRemove={() => setRecurrence(null)}
       />
+      <TaskTimeConflictModal conflict={timeConflict} onMoveExisting={(mode, schedule) => void moveConflictTask('existing', mode, schedule)} onMoveNew={(mode, schedule) => void moveConflictTask('new', mode, schedule)} onCancelExisting={() => {
+        if (!timeConflict || !accessToken) return
+        Alert.alert('Cancel existing task?', 'It will be marked missed and not deleted.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Mark missed', style: 'destructive', onPress: () => void changeTaskStatus(accessToken, timeConflict.existingTask.id, { status: 'missed' }).then(() => setTimeConflict(null)) }])
+      }} onCancelNew={() => { setScheduledDate(task?.scheduledDate ?? ''); setScheduledStartTime(task?.scheduledStartTime ?? ''); setScheduledEndTime(task?.scheduledEndTime ?? ''); setTimeConflict(null) }} onCancelChanges={() => setTimeConflict(null)} />
+      <TaskCommitmentConflictModal conflict={commitmentConflict} onKeepCommitment={() => void (async () => {
+        if (!commitmentConflict || !accessToken) return
+        const schedule = (await getNearestTaskSchedule(accessToken, commitmentConflict.proposedTask)).schedule
+        if (!schedule) return Alert.alert('No available slot', 'Choose another time.')
+        Alert.alert('Proposed schedule', `${scheduledDate} ${scheduledStartTime}–${scheduledEndTime}\n→\n${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Apply', onPress: () => { setScheduledDate(schedule.scheduledDate); setScheduledStartTime(schedule.scheduledStartTime); setScheduledEndTime(schedule.scheduledEndTime); setCommitmentConflict(null) } }])
+      })()} onKeepTask={() => void (async () => {
+        if (!commitmentConflict || !accessToken || !task) return
+        await skipCommitmentOccurrence(accessToken, commitmentConflict.commitment.commitmentId, commitmentConflict.commitment.date)
+        await resolveTaskScheduleConflict(accessToken, { conflictKey: commitmentConflict.id, date: commitmentConflict.commitment.date, taskId: task.id, commitmentId: commitmentConflict.commitment.commitmentId, resolution: 'keep_task' })
+        setCommitmentConflict(null)
+      })()} onChooseAnotherTime={() => setCommitmentConflict(null)} onCancel={() => setCommitmentConflict(null)} />
 
       {Platform.OS !== 'android' && (
         <Modal visible={iosPicker !== null} transparent animationType="fade" onRequestClose={() => setIosPicker(null)}>
