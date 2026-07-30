@@ -108,7 +108,7 @@ export default function ForgotPasswordScreen({ onBack, onReset }: ForgotPassword
               <View className="mt-5 flex-row flex-wrap items-center justify-center">
                 <Text className="text-xs" style={{ color: colors.secondaryText }}>Remember your password? </Text>
                 <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to sign in">
-                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accent }}>Back to Sign In</Text>
+                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accentInk }}>Back to Sign In</Text>
                 </Pressable>
               </View>
             </View>
@@ -151,7 +151,7 @@ export default function ForgotPasswordScreen({ onBack, onReset }: ForgotPassword
               <View className="mt-5 flex-row flex-wrap items-center justify-center">
                 <Text className="text-xs" style={{ color: colors.secondaryText }}>Remember your password? </Text>
                 <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to sign in">
-                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accent }}>Back to Sign In</Text>
+                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accentInk }}>Back to Sign In</Text>
                 </Pressable>
               </View>
             </View>

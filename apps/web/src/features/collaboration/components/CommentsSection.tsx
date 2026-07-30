@@ -135,7 +135,7 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
       className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4"
       aria-label="Comments"
     >
-      <h3 className="mb-3 text-sm font-black">Comments</h3>
+      <h3 className="mb-2.5 text-sm font-black">Comments</h3>
 
       <CommentComposer members={members} onSubmit={handleCreate} />
 
@@ -153,11 +153,11 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
           </GhostButton>
         </div>
       ) : comments.length === 0 ? (
-        <p className="mt-6 text-center text-sm text-slate-400">
+        <p className="mt-6 text-center text-sm text-[var(--bp-muted)]">
           No comments yet. Start the conversation.
         </p>
       ) : (
-        <ul className="mt-4 space-y-3">
+        <ul className="mt-3 divide-y divide-[var(--bp-border)]/60 overflow-hidden rounded-xl border border-[var(--bp-border)]/70 bg-[var(--bp-bg)]">
           {comments.map((comment) => (
             <CommentItem
               key={comment.id}
@@ -330,7 +330,7 @@ function CommentItem({
 }) {
   const isPending = comment.id.startsWith('temp-')
   return (
-    <li className={`flex gap-3 ${isPending ? 'opacity-60' : ''}`}>
+    <li className={`flex gap-3 px-3 py-3 transition hover:bg-[var(--bp-border)]/15 ${isPending ? 'opacity-60' : ''}`}>
       <FriendAvatar
         fullName={comment.author?.fullName ?? '?'}
         avatarUrl={comment.author?.avatarUrl}
@@ -341,8 +341,8 @@ function CommentItem({
           <span className="text-xs font-bold text-[var(--bp-text)]">
             {comment.author?.fullName ?? 'Unknown'}
           </span>
-          <span className="text-[10px] text-slate-500">{formatTime(comment.createdAt)}</span>
-          {comment.isEdited ? <span className="text-[10px] text-slate-500">(edited)</span> : null}
+          <span className="text-[10px] opacity-70 text-[var(--bp-muted)]">{formatTime(comment.createdAt)}</span>
+          {comment.isEdited ? <span className="text-[10px] opacity-70 text-[var(--bp-muted)]">(edited)</span> : null}
         </div>
 
         {isEditing ? (
@@ -356,14 +356,14 @@ function CommentItem({
             />
           </div>
         ) : (
-          <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">
+          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--bp-subtle)]">
             {renderWithMentions(comment.message)}
           </p>
         )}
 
         {isOwn && !isEditing && !isPending ? (
-          <div className="mt-1 flex gap-3 text-[11px] font-semibold text-slate-500">
-            <button type="button" className="hover:text-[var(--bp-accent)]" onClick={onStartEdit}>
+          <div className="mt-1 flex gap-3 text-[11px] font-semibold text-[var(--bp-muted)]">
+            <button type="button" className="hover:text-[var(--bp-accent-ink)]" onClick={onStartEdit}>
               Edit
             </button>
             <button type="button" className="hover:text-red-400" onClick={onDelete}>
@@ -381,7 +381,7 @@ function renderWithMentions(message: string) {
   const parts = message.split(/(@[\p{L}\p{N}]+(?:\s[\p{L}\p{N}]+)?)/u)
   return parts.map((part, i) =>
     part.startsWith('@') ? (
-      <span key={i} className="font-bold text-[var(--bp-accent)]">
+      <span key={i} className="font-bold text-[var(--bp-accent-ink)]">
         {part}
       </span>
     ) : (

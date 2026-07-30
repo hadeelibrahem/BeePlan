@@ -174,7 +174,7 @@ export default function FocusScreen({
         title={t('taskUi.focus.title')}
         subtitle={t('taskUi.focus.subtitle')}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search focus tasks..."
@@ -254,7 +254,7 @@ function InProgressCard({
   return (
     <section className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent-soft)] p-4">
       <div className="min-w-0">
-        <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">Focus session in progress</p>
+        <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">Focus session in progress</p>
         <h3 className="mt-1 truncate text-lg font-black text-[var(--bp-text)]">{title}</h3>
         {subtitle ? <p className="mt-0.5 truncate text-xs font-semibold text-[var(--bp-muted)]">{subtitle}</p> : null}
         <p className="mt-0.5 text-sm font-semibold tabular-nums text-[var(--bp-muted)]">
@@ -282,7 +282,7 @@ function StatsRow({ stats }: { stats: FocusStats | null }) {
     <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {tiles.map((tile) => (
         <div key={tile.label} className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-3">
-          <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{tile.label}</p>
+          <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">{tile.label}</p>
           <p className="mt-1 truncate text-lg font-black text-[var(--bp-text)]" title={tile.value}>
             {tile.value}
           </p>
@@ -306,8 +306,8 @@ function RecommendationCard({
   if (!recommendation) {
     return (
       <section className="mb-4 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
-        <p className="text-xs font-black uppercase tracking-wide text-slate-500">Recommended now</p>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Recommended now</p>
+        <p className="mt-1 text-sm text-[var(--bp-muted)]">
           No suggestion yet — add tasks or mark one as a focus task to get a recommendation.
         </p>
       </section>
@@ -320,15 +320,15 @@ function RecommendationCard({
 
   return (
     <section className="mb-4 rounded-2xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent-soft)] p-4">
-      <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">
+      <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">
         {isSubtask ? 'Do this now' : 'Recommended now'}
       </p>
       <h3 className="mt-1 text-lg font-black text-[var(--bp-text)]">{primary}</h3>
-      {parent ? <p className="mt-0.5 text-xs font-semibold text-slate-400">{parent}</p> : null}
+      {parent ? <p className="mt-0.5 text-xs font-semibold text-[var(--bp-muted)]">{parent}</p> : null}
       {recommendation.estimatedMinutes ? (
-        <p className="mt-1 text-xs text-slate-400">Estimated: {formatFocusMinutes(recommendation.estimatedMinutes)}</p>
+        <p className="mt-1 text-xs text-[var(--bp-muted)]">Estimated: {formatFocusMinutes(recommendation.estimatedMinutes)}</p>
       ) : null}
-      <p className="mt-1 text-sm text-slate-400">Reason: {recommendation.reason}</p>
+      <p className="mt-1 text-sm text-[var(--bp-muted)]">Reason: {recommendation.reason}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <PrimaryButton size="sm" onClick={() => onStart(recommendation)}>
           Start Focus
@@ -359,7 +359,7 @@ function FocusQueue({
   return (
     <section className="mb-4">
       <h3 className="mb-2 text-sm font-black text-[var(--bp-text)]">
-        Focus Queue <span className="text-xs font-semibold text-slate-400">· {items.length} items</span>
+        Focus Queue <span className="text-xs font-semibold text-[var(--bp-muted)]">· {items.length} items</span>
       </h3>
 
       {items.length ? (
@@ -369,9 +369,9 @@ function FocusQueue({
               <button type="button" onClick={() => onView?.(item.taskId)} className="min-w-0 text-start">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5"><Badge label={toUiPriority(item.priority as ApiTask['priority'])} type={toUiPriority(item.priority as ApiTask['priority'])} /><Badge label={toUiStatus(item.status as ApiTask['status'])} type={toUiStatus(item.status as ApiTask['status'])} /></div>
                 <h4 className="truncate text-sm font-black text-[var(--bp-text)]">{focusPrimaryTitle(item)}</h4>
-                {focusParentLabel(item) ? <p className="mt-0.5 text-xs font-semibold text-slate-400">{focusParentLabel(item)}</p> : null}
+                {focusParentLabel(item) ? <p className="mt-0.5 text-xs font-semibold text-[var(--bp-muted)]">{focusParentLabel(item)}</p> : null}
               </button>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400"><Meta label="Due" value={formatDue(item.dueDate ?? undefined, '')} /><Meta label="Estimated" value={item.estimatedMinutes ? formatFocusMinutes(item.estimatedMinutes) : '—'} /><Meta label="Ready" value={item.hasOpenDependencies ? 'Waiting' : 'Ready'} /></div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--bp-muted)]"><Meta label="Due" value={formatDue(item.dueDate ?? undefined, '')} /><Meta label="Estimated" value={item.estimatedMinutes ? formatFocusMinutes(item.estimatedMinutes) : '—'} /><Meta label="Ready" value={item.hasOpenDependencies ? 'Waiting' : 'Ready'} /></div>
               <div className="mt-4 flex gap-2"><PrimaryButton size="sm" disabled={disabled} className="flex-1" onClick={() => onStart({ id: item.taskId, title: focusPrimaryTitle(item), priority: item.priority as ApiTask['priority'], category: '', taskTitle: item.taskTitle, subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle })}>Start Focus</PrimaryButton>{item.subtaskId ? null : <OutlineButton size="sm" onClick={() => onRemove(item.taskId)}>Remove</OutlineButton>}</div>
             </div>
           ))}
@@ -379,7 +379,7 @@ function FocusQueue({
       ) : (
         <div className="flex h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--bp-border)] px-4 text-center">
           <p className="text-sm font-black text-[var(--bp-text)]">No focus tasks yet</p>
-          <p className="mt-1 text-xs text-slate-500">Turn on Focus Task from Task Details to add it here.</p>
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">Turn on Focus Task from Task Details to add it here.</p>
         </div>
       )}
     </section>
@@ -409,14 +409,14 @@ export function FocusCard({
         <div className="mb-2 flex flex-wrap items-center gap-1.5">
           <Badge label={priority} type={priority} />
           <Badge label={status} type={status} />
-          <span className="rounded-full bg-[var(--bp-bg)] px-2 py-1 text-[11px] font-bold text-slate-400">
+          <span className="rounded-full bg-[var(--bp-bg)] px-2 py-1 text-[11px] font-bold text-[var(--bp-muted)]">
             {task.category || 'General'}
           </span>
         </div>
         <h4 className="truncate text-sm font-black text-[var(--bp-text)]">{task.title}</h4>
       </button>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--bp-muted)]">
         <Meta label="Due" value={formatDue(task.dueDate, task.dueTime)} />
         <Meta label="Estimated" value={task.estimatedTimeMinutes ? formatFocusMinutes(task.estimatedTimeMinutes) : '—'} />
         <Meta label="Subtasks" value={task.subtasks.length ? `${completedSubtasks}/${task.subtasks.length} done` : 'None'} />
@@ -447,7 +447,7 @@ export function FocusCard({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">{label}</span>
       <p className="truncate font-semibold text-[var(--bp-text)]">{value}</p>
     </div>
   )
@@ -467,13 +467,13 @@ function TodaySessions({ sessions }: { sessions: FocusSession[] }) {
                 <p className="truncate text-sm font-bold text-[var(--bp-text)]">
                   {focusPrimaryTitle(session)}
                 </p>
-                {focusParentLabel(session) ? <p className="text-xs text-slate-500">{focusParentLabel(session)}</p> : null}
-                <p className="text-xs text-slate-500">
+                {focusParentLabel(session) ? <p className="text-xs text-[var(--bp-muted)]">{focusParentLabel(session)}</p> : null}
+                <p className="text-xs text-[var(--bp-muted)]">
                   {labelForType(session.sessionType) } · {formatTime(session.startedAt)}
                 </p>
               </div>
               <div className="flex items-center gap-2 text-end">
-                <span className="text-xs font-semibold text-slate-400">
+                <span className="text-xs font-semibold text-[var(--bp-muted)]">
                   {formatFocusMinutes(session.actualMinutes ?? 0)}
                 </span>
                 <SessionStatusBadge status={session.status} />
@@ -482,7 +482,7 @@ function TodaySessions({ sessions }: { sessions: FocusSession[] }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-slate-500">No sessions yet today. Start one from the queue above.</p>
+        <p className="text-sm text-[var(--bp-muted)]">No sessions yet today. Start one from the queue above.</p>
       )}
     </section>
   )
@@ -583,7 +583,7 @@ function Badge({ label, type }: { label: string; type: string }) {
           ? 'bg-green-500/20 text-green-300'
           : type === 'In Progress'
             ? 'bg-blue-500/20 text-blue-300'
-            : 'bg-slate-500/20 text-slate-300'
+            : 'bg-slate-500/20 text-[var(--bp-subtle)]'
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${color}`}>{label}</span>
 }
 

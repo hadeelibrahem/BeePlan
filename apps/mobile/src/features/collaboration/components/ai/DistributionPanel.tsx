@@ -212,7 +212,7 @@ export function DistributionPanel({ task }: Props) {
 
       {proposal && !showMemberPicker ? (
         <SectionCard className="mb-3">
-          <Text className="mb-1 text-xs font-black uppercase tracking-wide" style={{ color: colors.accent }}>
+          <Text className="mb-1 text-xs font-black uppercase tracking-wide" style={{ color: colors.accentInk }}>
             Proposed split
           </Text>
           <Text className="mb-3 text-sm leading-5" style={{ color: colors.text }}>
@@ -251,7 +251,7 @@ export function DistributionPanel({ task }: Props) {
           </View>
 
           <Pressable onPress={() => setPlanExpanded((v) => !v)} accessibilityRole="button" className="mb-1">
-            <Text className="text-xs font-bold" style={{ color: colors.accent }}>
+            <Text className="text-xs font-bold" style={{ color: colors.accentInk }}>
               {planExpanded ? 'Hide full plan ▴' : `View full plan (${proposal.items.length}) ▾`}
             </Text>
           </Pressable>

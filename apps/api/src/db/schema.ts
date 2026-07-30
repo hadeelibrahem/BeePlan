@@ -638,6 +638,11 @@ export const focusSessions = pgTable(
     }),
     startedAt: timestamp('started_at').notNull().defaultNow(),
     endedAt: timestamp('ended_at'),
+    // Authoritative scheduled end of the session (started_at + planned time,
+    // pushed out by "Add More Time" extensions). Nullable for rows created
+    // before this column existed; the service derives a fallback from
+    // started_at + planned_minutes when absent.
+    endsAt: timestamp('ends_at'),
     plannedMinutes: integer('planned_minutes').notNull().default(25),
     actualMinutes: integer('actual_minutes'),
     // active | paused | completed | cancelled
@@ -991,6 +996,9 @@ export const aiRecommendations = pgTable(
     resolvedByUserId: uuid('resolved_by_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
+    // Why the card left "pending" — see RESOLUTION_REASONS in
+    // recommendation-validation.logic.ts. Null for user-driven approve/dismiss.
+    resolutionReason: varchar('resolution_reason', { length: 40 }),
   },
   (table) => [index('idx_ai_reco_task').on(table.taskId, table.createdAt)],
 );

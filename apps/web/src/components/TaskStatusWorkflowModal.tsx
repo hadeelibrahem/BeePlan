@@ -37,7 +37,7 @@ const statusOptions: {
     icon: 'TD',
     title: 'To Do',
     description: 'Task has not been started yet.',
-    tone: 'text-slate-300',
+    tone: 'text-[var(--bp-subtle)]',
   },
   {
     value: 'In Progress',
@@ -140,7 +140,7 @@ export function TaskStatusWorkflowModal({
                   <span
                     className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-xs font-black ${
                       isSelected && !isDisabled
-                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
+                        ? 'border-[var(--bp-accent)] border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
                         : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${option.tone}`
                     }`}
                   >
@@ -170,7 +170,7 @@ export function TaskStatusWorkflowModal({
               <p className="text-sm font-black text-[var(--bp-text)]">Progress Percentage</p>
               <p className="mt-1 text-xs text-[var(--bp-muted)]">{helperText}</p>
             </div>
-            <span className="text-2xl font-black text-[var(--bp-accent)]">{hasSubtasks ? subtaskProgress : progressValue}%</span>
+            <span className="text-2xl font-black text-[var(--bp-accent-ink)]">{hasSubtasks ? subtaskProgress : progressValue}%</span>
           </div>
 
           {hasSubtasks ? (

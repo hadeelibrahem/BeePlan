@@ -1,9 +1,11 @@
-import { Text, View } from 'react-native';
+import { Switch, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
 import { AppScreen, DangerButton, PageHeader, SectionCard, SecondaryButton } from '../components/layout';
 import { SavedPlacesSection } from '../features/context/components/SavedPlacesSection';
 import { WeeklyCommitmentsSection } from '../features/context/components/WeeklyCommitmentsSection';
 import { useTheme } from '../theme/useTheme';
 import { WeatherTravelSettings } from '../features/settings/WeatherTravelSettings';
+import { loadFocusCompletionSoundEnabled, setFocusCompletionSoundEnabled } from '../lib/focusCompletionPreferences';
 
 type Props = {
   accessToken: string;
@@ -20,6 +22,8 @@ type Props = {
 export default function SettingsScreen({ accessToken, onBack, onSignOut, onOpenPlanner }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const [completionSoundEnabled, setCompletionSoundEnabled] = useState(true);
+  useEffect(() => { void loadFocusCompletionSoundEnabled().then(setCompletionSoundEnabled); }, []);
 
   return (
     <AppScreen>
@@ -38,6 +42,10 @@ export default function SettingsScreen({ accessToken, onBack, onSignOut, onOpenP
         <SavedPlacesSection accessToken={accessToken} />
         <WeeklyCommitmentsSection accessToken={accessToken} />
         <WeatherTravelSettings token={accessToken} />
+
+        <SectionCard>
+          <View className="flex-row items-center justify-between gap-4"><View className="flex-1"><Text className="text-sm font-black" style={{ color: colors.text }}>Focus completion sound</Text><Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>Play a short bell when a focus session ends.</Text></View><Switch value={completionSoundEnabled} onValueChange={(value) => { setCompletionSoundEnabled(value); void setFocusCompletionSoundEnabled(value); }} /></View>
+        </SectionCard>
 
         <SectionCard>
           <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>

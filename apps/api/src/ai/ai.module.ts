@@ -38,5 +38,8 @@ import { WeatherTravelModule } from '../weather-travel/weather-travel.module';
     PlannerAcceptanceService,
     JwtAuthGuard,
   ],
+  // NotesModule consumes the existing configured AI client through this
+  // module boundary; exporting preserves one AiService singleton.
+  exports: [AiService],
 })
 export class AiModule {}

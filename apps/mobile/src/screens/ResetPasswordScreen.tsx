@@ -21,7 +21,7 @@ function getStrength(pwd: string, theme: AppTheme): { label: string; color: stri
   const hasSpecial = /[^A-Za-z0-9]/.test(pwd);
   const score = (len >= 6 ? 1 : 0) + (len >= 10 ? 1 : 0) + (hasUpper ? 1 : 0) + (hasDigit ? 1 : 0) + (hasSpecial ? 1 : 0);
   if (score <= 1) return { label: 'Weak', color: theme.colors.error, pct: 0.25 };
-  if (score <= 3) return { label: 'Fair', color: theme.colors.accent, pct: 0.6 };
+  if (score <= 3) return { label: 'Fair', color: theme.colors.accentInk, pct: 0.6 };
   return { label: 'Strong', color: theme.colors.success, pct: 1 };
 }
 
@@ -247,7 +247,7 @@ export default function ResetPasswordScreen({ initialEmail = '', initialCode = '
                     error={errors.code || submitError || undefined}
                   />
                   {!!initialCode && (
-                    <Text className="mb-1 text-xs font-bold" style={{ color: colors.accent }}>Development code: {initialCode}</Text>
+                    <Text className="mb-1 text-xs font-bold" style={{ color: colors.accentInk }}>Development code: {initialCode}</Text>
                   )}
 
                   <PrimaryButton onPress={() => void handleVerifyCode()} disabled={isLoading} loading={isLoading} fullWidth className="mt-4">
@@ -259,7 +259,7 @@ export default function ResetPasswordScreen({ initialEmail = '', initialCode = '
               <View className="mt-5 flex-row flex-wrap items-center justify-center">
                 <Text className="text-xs" style={{ color: colors.secondaryText }}>Changed your mind? </Text>
                 <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to sign in">
-                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accent }}>Back to Sign In</Text>
+                  <Text className="text-xs font-extrabold underline" style={{ color: colors.accentInk }}>Back to Sign In</Text>
                 </Pressable>
               </View>
             </View>

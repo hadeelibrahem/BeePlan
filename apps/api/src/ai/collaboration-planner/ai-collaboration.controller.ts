@@ -12,17 +12,24 @@ import {
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../../auth/jwt-auth.guard';
 import { TaskAccessService } from '../../collaboration/task-access.service';
+import { AiCollaborationOverviewService } from './ai-collaboration-overview.service';
 import { AiCollaborationViewsService } from './ai-collaboration-views.service';
 import { AiRecommendationsService } from './ai-recommendations.service';
 import { WorkloadCapacityService } from './workload-capacity.service';
+import { TeamInsightsService } from './team-insights.service';
+import { ProjectHealthService } from './project-health.service';
+import { RecommendationPreviewService } from './recommendation-preview.service';
 
 /**
- * The persistent AI Collaboration surface (Capacity/Today/Progress/Timeline/
- * Suggestions tabs). Sits alongside AiCollaborationPlannerController's
+ * The persistent AI Collaboration surface behind the Overview / Plan / Team /
+ * Health / Activity tabs. Sits alongside AiCollaborationPlannerController's
  * generate/apply routes under the same `tasks/:taskId/ai/collaboration*`
  * namespace but under its own `ai/collaboration` segment so the two never
- * clash. Every route is read-only for any accepted viewer+; mutating routes
- * (added in a later stage, for suggestion approve/dismiss) require editor+.
+ * clash.
+ *
+ * Every read route (including the recommendation preview) is available to any
+ * accepted viewer+; the two mutating routes — approve and dismiss — require
+ * editor+, enforced inside AiRecommendationsService.
  */
 @UseGuards(JwtAuthGuard)
 @Controller('tasks/:taskId/ai/collaboration')
@@ -32,7 +39,20 @@ export class AiCollaborationController {
     private readonly capacity: WorkloadCapacityService,
     private readonly views: AiCollaborationViewsService,
     private readonly recommendations: AiRecommendationsService,
+    private readonly overview: AiCollaborationOverviewService,
+    private readonly teamInsights: TeamInsightsService,
+    private readonly projectHealth: ProjectHealthService,
+    private readonly preview: RecommendationPreviewService,
   ) {}
+
+  @Get('overview')
+  async getOverview(
+    @Req() request: AuthenticatedRequest,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ) {
+    // Access enforcement (viewer+) lives inside the service via TaskAccessService.
+    return this.overview.getOverview(request.user.id, taskId);
+  }
 
   @Get('capacity')
   async getCapacity(
@@ -41,6 +61,17 @@ export class AiCollaborationController {
   ) {
     await this.access.require(request.user.id, taskId, 'viewer');
     return { members: await this.capacity.getCapacityBands(taskId) };
+  }
+
+  @Get('team')
+  async getTeam(@Req() request: AuthenticatedRequest, @Param('taskId', ParseUUIDPipe) taskId: string) {
+    return this.teamInsights.get(request.user.id, taskId);
+  }
+
+  @Get('health')
+  async getHealth(@Req() request: AuthenticatedRequest, @Param('taskId', ParseUUIDPipe) taskId: string) {
+    // Read-only for any accepted viewer+; access is enforced inside the service.
+    return this.projectHealth.get(request.user.id, taskId);
   }
 
   @Get('today')
@@ -70,13 +101,34 @@ export class AiCollaborationController {
     return this.views.getTimeline(taskId);
   }
 
+  /**
+   * The AI decision loop's list. Returns each recommendation already enriched
+   * with its explanation, confidence, affected work, the concrete edits
+   * approving performs, and a deep-link target — so clients render only.
+   * `canApprove` is a UI affordance; the mutating routes below re-check editor+.
+   */
   @Get('suggestions')
   async getSuggestions(
     @Req() request: AuthenticatedRequest,
     @Param('taskId', ParseUUIDPipe) taskId: string,
   ) {
-    await this.access.require(request.user.id, taskId, 'viewer');
-    return { items: await this.recommendations.list(taskId) };
+    const { role } = await this.access.require(request.user.id, taskId, 'viewer');
+    return { items: await this.recommendations.listDetailed(taskId, role), viewerRole: role };
+  }
+
+  /**
+   * Before/after impact of approving one recommendation. Read-only for viewer+:
+   * inspecting the consequences of a change is not the same as making it, and
+   * nothing is persisted by this route.
+   */
+  @Get('suggestions/:recommendationId/preview')
+  async previewSuggestion(
+    @Req() request: AuthenticatedRequest,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Param('recommendationId', ParseUUIDPipe) recommendationId: string,
+  ) {
+    // Access enforcement (viewer+) lives inside the service.
+    return this.preview.preview(request.user.id, taskId, recommendationId);
   }
 
   @Post('suggestions/:recommendationId/approve')

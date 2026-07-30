@@ -33,7 +33,7 @@ export function EditReminderScreen({ reminder, accessToken, onCancel, onSaved }:
             type="button"
             onClick={onCancel}
             aria-label={t('actions.back')}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)] hover:bg-[var(--bp-input)]"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)] hover:bg-[var(--bp-input)]"
           >
             <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
           </button>

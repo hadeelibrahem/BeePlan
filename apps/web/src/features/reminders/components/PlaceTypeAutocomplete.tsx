@@ -121,7 +121,7 @@ export function PlaceTypeAutocomplete({ value, customLabel, onChange, onCustomLa
                       aria-selected={value === type}
                       onClick={() => handleSelect(type)}
                       className={`block w-full px-4 py-3 text-start text-sm font-semibold transition hover:bg-[var(--bp-accent-soft)] ${
-                        value === type ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-text)]'
+                        value === type ? 'text-[var(--bp-accent-ink)]' : 'text-[var(--bp-text)]'
                       }`}
                     >
                       {t(`reminders.generalLocationCategory.${type}`)}

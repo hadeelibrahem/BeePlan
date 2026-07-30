@@ -60,7 +60,7 @@ export function InlineStatusControl({
             }}
             className={`rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
               isCurrent
-                ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
+                ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
                 : 'text-[var(--bp-muted)] hover:bg-[var(--bp-surface)] hover:text-[var(--bp-text)]'
             }`}
           >

@@ -21,7 +21,7 @@ export function AddTaskModeChooser({ onClose, onManual, onAiPlan }: AddTaskModeC
           className="mb-3 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-4 py-3.5 text-start transition hover:border-[var(--bp-accent)]/60"
         >
           <p className="font-bold text-[var(--bp-text)]">Manual Task</p>
-          <p className="mt-1 text-xs text-slate-400">Fill in the task details yourself.</p>
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">Fill in the task details yourself.</p>
         </button>
 
         <button
@@ -29,8 +29,8 @@ export function AddTaskModeChooser({ onClose, onManual, onAiPlan }: AddTaskModeC
           onClick={onAiPlan}
           className="w-full rounded-xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/10 px-4 py-3.5 text-start transition hover:border-[var(--bp-accent)]"
         >
-          <p className="font-bold text-[var(--bp-accent)]">AI Plan Task</p>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="font-bold text-[var(--bp-accent-ink)]">AI Plan Task</p>
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">
             Describe a big goal and let AI break it into subtasks, focus sessions, and reminders.
           </p>
         </button>

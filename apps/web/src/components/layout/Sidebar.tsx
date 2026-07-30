@@ -42,7 +42,7 @@ export type SidebarNavHandlers = {
 
 function BellIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px]" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px]" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" />
     </svg>
   )
@@ -50,9 +50,9 @@ function BellIcon() {
 
 function SettingsIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px]" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-[18px] w-[18px]" aria-hidden="true">
       <circle cx="12" cy="12" r="3" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
 }
@@ -66,41 +66,48 @@ type SidebarProps = SidebarNavHandlers & {
   onCloseMobile?: () => void
 }
 
-const NAV_ITEMS: { page: SidebarPage; label: string; Icon: typeof DashboardIcon; handler: keyof SidebarNavHandlers }[] = [
-  { page: 'dashboard', label: 'Dashboard', Icon: DashboardIcon, handler: 'onNavigateDashboard' },
-  { page: 'tasks', label: 'Tasks', Icon: TasksIcon, handler: 'onNavigateTasks' },
-  { page: 'focus', label: 'Focus', Icon: FocusIcon, handler: 'onNavigateFocus' },
-  { page: 'planner', label: 'AI Planner', Icon: PlannerIcon, handler: 'onNavigatePlanner' },
-  { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
-  { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
-  { page: 'notifications', label: 'Notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
-  { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
-  { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
-  { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
-  { page: 'settings', label: 'Settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
-]
+const NAV_GROUPS = [
+  {
+    title: 'MAIN',
+    items: [
+      { page: 'dashboard', label: 'Dashboard', Icon: DashboardIcon, handler: 'onNavigateDashboard' },
+      { page: 'tasks', label: 'Tasks', Icon: TasksIcon, handler: 'onNavigateTasks' },
+      { page: 'focus', label: 'Focus', Icon: FocusIcon, handler: 'onNavigateFocus' },
+      { page: 'planner', label: 'AI Planner', Icon: PlannerIcon, handler: 'onNavigatePlanner' },
+    ]
+  },
+  {
+    title: 'WORKSPACE',
+    items: [
+      { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
+      { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
+      { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
+      { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
+    ]
+  },
+  {
+    title: 'SYSTEM',
+    items: [
+      { page: 'notifications', label: 'Notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
+      { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
+      { page: 'settings', label: 'Settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
+    ]
+  }
+] as const
 
 export function Sidebar({ active, panelTitle, panelCaption, panelPercent, mobileOpen, onCloseMobile, ...nav }: SidebarProps) {
   return (
     <>
-      <aside className="sticky top-5 hidden h-[calc(100dvh-2.5rem)] w-48 shrink-0 flex-col overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 p-3 lg:flex">
-        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} scrollable />
+      {/* Desktop Sidebar: full-height, 230px, flex column */}
+      <aside className="bp-sidebar sticky top-0 hidden h-screen w-[230px] shrink-0 flex-col border-r border-white/5 bg-slate-900/35 lg:flex shadow-[8px_0_18px_rgba(0,0,0,0.08)]">
+        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} />
       </aside>
 
+      {/* Mobile Drawer Sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={onCloseMobile} />
-          <aside className="absolute inset-y-0 start-0 w-72 max-w-[85vw] animate-[beeplanFadeIn_200ms_ease-out] overflow-y-auto border-e border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
-            <div className="mb-4 flex items-center justify-end">
-              <button
-                type="button"
-                onClick={onCloseMobile}
-                aria-label="Close menu"
-                className="rounded-lg p-2 text-slate-300 hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]"
-              >
-                <CloseIcon className="h-5 w-5" />
-              </button>
-            </div>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-[beeplanFadeIn_150ms_ease-out]" onClick={onCloseMobile} />
+          <aside className="bp-sidebar-drawer absolute inset-y-0 start-0 w-[230px] max-w-[85vw] animate-[beeplanFadeIn_200ms_ease-out] border-r border-white/5 bg-slate-900 flex flex-col">
             <SidebarContent
               active={active}
               panelTitle={panelTitle}
@@ -123,7 +130,6 @@ function SidebarContent({
   panelPercent,
   nav,
   onNavigate,
-  scrollable = false,
 }: {
   active: SidebarPage
   panelTitle?: string
@@ -131,60 +137,92 @@ function SidebarContent({
   panelPercent?: number
   nav: SidebarNavHandlers
   onNavigate?: () => void
-  scrollable?: boolean
 }) {
   return (
-    <div className={`flex min-h-0 flex-col ${scrollable ? 'h-full overflow-x-hidden overflow-y-auto' : ''}`}>
-      <div className="mb-5 flex items-center gap-2 px-1">
-        <BeePlanLogo showTagline size={34} />
+    <div className="flex h-full min-h-0 flex-col py-0">
+      {/* Logo container section - aligns perfectly with the h-16 main header bar */}
+      <div className="bp-sidebar-logo px-4 h-16 flex items-center justify-between border-b border-white/5 shrink-0 bg-slate-900/10">
+        <div className="flex items-center gap-2.5">
+          <BeePlanLogo showTagline={false} size={28} />
+          <span className="text-base font-black tracking-tight text-[#FDEF4B]">BeePlan</span>
+        </div>
+        {onNavigate && (
+          <button
+            type="button"
+            onClick={onNavigate}
+            aria-label="Close menu"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden transition-colors"
+          >
+            <CloseIcon className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      <nav className="space-y-0.5 text-sm">
-        {NAV_ITEMS.map(({ page, label, Icon, handler }) => (
-          <SidebarNavItem
-            key={page}
-            active={active === page}
-            icon={<Icon />}
-            label={label}
-            onClick={() => {
-              nav[handler]?.()
-              onNavigate?.()
-            }}
-          />
+      {/* Navigation list (hides vertical scrollbar using tailwind utilities) */}
+      <nav className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] space-y-4 text-sm px-4 mt-4 pr-3">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title} className="space-y-1">
+            <div className="bp-sidebar-group text-[10px] font-bold tracking-wider text-slate-500/60 uppercase px-3 py-1">
+              {group.title}
+            </div>
+            <div className="space-y-1.5">
+              {group.items.map(({ page, label, Icon, handler }) => (
+                <SidebarNavItem
+                  key={page}
+                  active={active === page}
+                  icon={<Icon />}
+                  label={label}
+                  onClick={() => {
+                    nav[handler]?.()
+                    onNavigate?.()
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
-      {/*
-        TODO: these category dots are static placeholders, not real data.
-        There's no dedicated categories API — the `categories` DB table
-        (apps/api/src/db/schema.ts) is defined but has zero backend routes.
-        The closest real source is `GET /tasks/filters/summary`
-        (apps/web/src/lib/tasksApi.ts -> TaskFilterSummary.categories), which
-        derives distinct category names + counts from tasks.category
-        free-text values and is already used by AllTasksScreen's filter
-        sidebar. Wiring that into this persistent Sidebar (rendered by
-        AppLayout on every screen) would mean fetching it at the app root and
-        threading it through every AppLayout call site — left out of this
-        change to keep the fix scoped; do that as a follow-up instead of
-        inventing new backend category endpoints/tables.
-      */}
-      {panelPercent !== undefined ? <div className="mt-6 rounded-xl bg-[var(--bp-bg)] p-3">
-        <p className="text-xs font-bold">{panelTitle}</p>
-        <p className="mt-0.5 text-[11px] text-slate-400">{panelCaption}</p>
-        <div className="mx-auto mt-3 flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[var(--bp-accent)] text-xs font-black text-[var(--bp-accent)]">
-          {panelPercent}%
+      {/* Bottom progress widget aligned cleanly at the bottom using mt-auto */}
+      {panelPercent !== undefined ? (
+        <div className="bp-sidebar-progress mt-auto mb-3 mx-4 p-3 rounded-xl border border-white/8 bg-slate-950/30 shadow-lg shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-200 truncate">{panelTitle}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400 font-medium truncate">{panelCaption}</p>
+            </div>
+
+            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
+              <svg className="absolute inset-0 h-full w-full transform -rotate-90">
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="15"
+                  className="stroke-slate-800"
+                  strokeWidth="3"
+                  fill="transparent"
+                />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="15"
+                  className="stroke-[#FDEF4B]"
+                  strokeWidth="3"
+                  fill="transparent"
+                  strokeDasharray={94.2}
+                  strokeDashoffset={94.2 - (94.2 * (panelPercent ?? 0)) / 100}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="text-[9px] font-black text-[#FDEF4B]">{panelPercent}%</span>
+            </div>
+          </div>
         </div>
-      </div> : null}
+      ) : null}
     </div>
   )
 }
 
-/**
- * Reusable, fully-clickable sidebar/nav row. The `<button>` is the root
- * element so the icon, label, empty space, background, and hover state all
- * share one click/hover/focus target instead of being scoped to the icon or
- * text alone.
- */
 export function SidebarNavItem({
   icon,
   label,
@@ -201,14 +239,19 @@ export function SidebarNavItem({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`group relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-start transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-surface)] ${
-        active ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'text-slate-300 hover:translate-x-0.5 hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]'
+      className={`bp-sidebar-nav-item group relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-all duration-150 min-h-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FDEF4B] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+        active
+          ? 'bg-[#FDEF4B]/12 text-[#FDEF4B]'
+          : 'text-slate-400 hover:bg-slate-800/40 hover:text-white'
       }`}
     >
-      {active && <span className="absolute inset-y-1 start-0 w-1 rounded-full bg-[var(--bp-accent)]" />}
-      <span className={active ? 'text-[var(--bp-accent)]' : 'text-slate-400 transition-colors group-hover:text-[var(--bp-text)]'}>{icon}</span>
-      <span className="text-[13px] font-semibold">{label}</span>
+      {active && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-[#FDEF4B] rounded-r shadow-[0_0_12px_rgba(253,239,75,0.65)]" />
+      )}
+      <span className={`bp-sidebar-icon ${active ? 'text-[#FDEF4B]' : 'text-slate-500 group-hover:text-slate-300 transition-colors'}`}>
+        {icon}
+      </span>
+      <span className={`text-[13px] ${active ? 'font-bold' : 'font-medium'}`}>{label}</span>
     </button>
   )
 }
-

@@ -32,7 +32,7 @@ export function HistoryFeed({ taskId, accessToken }: Props) {
   if (activityQuery.isLoading) {
     return (
       <SectionCard>
-        <p className="text-sm text-slate-400">Loading history…</p>
+        <p className="text-sm text-[var(--bp-muted)]">Loading history…</p>
       </SectionCard>
     )
   }
@@ -48,14 +48,14 @@ export function HistoryFeed({ taskId, accessToken }: Props) {
 
   return (
     <SectionCard>
-      <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-400">History</h3>
+      <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Activity</h3>
       <ul className="space-y-3">
         {items.map((activity) => (
           <li key={activity.id} className="border-s border-[var(--bp-border)] ps-3">
             <p className="text-sm font-bold text-[var(--bp-text)]">
               {activity.description || describeAction(activity.action)}
             </p>
-            <p className="text-[11px] text-slate-400">{new Date(activity.createdAt).toLocaleString()}</p>
+            <p className="text-[11px] text-[var(--bp-muted)]">{new Date(activity.createdAt).toLocaleString()}</p>
           </li>
         ))}
       </ul>

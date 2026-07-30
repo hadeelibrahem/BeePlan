@@ -26,7 +26,7 @@ export function FriendListItem({ friend, onRemove, onSelect }: Props) {
         <FriendAvatar fullName={friend.fullName} avatarUrl={friend.avatarUrl} />
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold text-[var(--bp-text)]">{friend.fullName}</span>
-          <span className="block truncate text-[11px] text-slate-400">{friend.email}</span>
+          <span className="block truncate text-[11px] text-[var(--bp-muted)]">{friend.email}</span>
         </span>
       </button>
       <DangerButton size="sm" onClick={() => onRemove(friend)}>

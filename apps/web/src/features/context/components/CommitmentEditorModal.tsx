@@ -90,7 +90,7 @@ export function CommitmentEditorModal({ open, initial, places, saving, onClose, 
                   aria-pressed={active}
                   className={`h-9 w-11 rounded-lg text-xs font-bold transition ${
                     active
-                      ? 'bg-[var(--bp-accent)] text-black'
+                      ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-black'
                       : 'border border-[var(--bp-border)] text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
                   }`}
                 >

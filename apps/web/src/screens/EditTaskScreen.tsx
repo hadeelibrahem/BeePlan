@@ -494,7 +494,7 @@ export default function EditTaskScreen({
         panelCaption="Last updated today."
         panelPercent={task.progress}
       >
-          <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+          <div className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
             <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">Back</button>
             <span>Tasks</span>
             <span>/</span>
@@ -505,7 +505,7 @@ export default function EditTaskScreen({
             title={t('taskUi.edit.title')}
             subtitle={t('taskUi.edit.subtitle')}
             toolbar={
-              <TopActionBar
+              <TopActionBar pageOnly
                 searchValue={search}
                 onSearchChange={setSearch}
                 searchPlaceholder="Search tasks..."
@@ -570,15 +570,15 @@ export default function EditTaskScreen({
                       </button>
                       <div className="min-w-0 px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <p className={`truncate text-sm ${item.isDone ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}>
+                          <p className={`truncate text-sm ${item.isDone ? 'text-[var(--bp-muted)] line-through' : 'text-[var(--bp-text)]'}`}>
                             {displaySubtaskTitle(item)}
                           </p>
                           {item.isShared ? <SharedBadge /> : null}
                         </div>
                         {item.assigneeUserId && item.assignee ? (
-                          <p className="mt-0.5 text-xs text-slate-400">Assigned to {item.assignee}</p>
+                          <p className="mt-0.5 text-xs text-[var(--bp-muted)]">Assigned to {item.assignee}</p>
                         ) : !item.assigneeUserId && !item.isShared ? (
-                          <p className="mt-0.5 text-xs text-slate-500">Unassigned</p>
+                          <p className="mt-0.5 text-xs text-[var(--bp-muted)]">Unassigned</p>
                         ) : null}
                       </div>
                       <button
@@ -597,7 +597,7 @@ export default function EditTaskScreen({
                       </button>
                     </div>
                   ))}
-                  {!subtasks.length ? <p className="text-sm text-slate-400">No subtasks yet.</p> : null}
+                  {!subtasks.length ? <p className="text-sm text-[var(--bp-muted)]">No subtasks yet.</p> : null}
                 </div>
               </Card>
 
@@ -629,7 +629,7 @@ export default function EditTaskScreen({
                         </span>
                         <span className="min-w-0 flex-1">
                           <p className="truncate text-sm font-bold text-[var(--bp-text)]">{file.fileName ?? file.name}</p>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-[var(--bp-muted)]">
                             {formatFileSize(file.fileSize ?? file.size) || (file.fileType ?? file.type) || 'Attached file'}
                           </p>
                         </span>
@@ -643,7 +643,7 @@ export default function EditTaskScreen({
                       </button>
                     </div>
                   ))}
-                  {!attachments.length ? <p className="text-sm text-slate-400">No attachments yet.</p> : null}
+                  {!attachments.length ? <p className="text-sm text-[var(--bp-muted)]">No attachments yet.</p> : null}
                 </div>
               </Card>
 
@@ -663,14 +663,14 @@ export default function EditTaskScreen({
 
               {accessToken && currentUserId && task.viewerRole === 'owner' ? (
                 <Card title="AI Collaboration" code="AI">
-                  <p className="mb-3 text-sm text-slate-400">
+                  <p className="mb-3 text-sm text-[var(--bp-muted)]">
                     Open the AI Collaboration screen to split work fairly, track today's plan, and review
                     suggestions with your team.
                   </p>
                   <button
                     type="button"
                     onClick={onOpenAiCollaboration}
-                    className="w-full rounded-lg bg-[var(--bp-accent)] px-4 py-2 text-sm font-black text-black"
+                    className="w-full rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-sm font-black text-black"
                   >
                     Open AI Collaboration
                   </button>
@@ -707,10 +707,10 @@ export default function EditTaskScreen({
 
               <Card title="Progress Overview" code={`${progress}`}>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-[var(--bp-muted)]">
                     {completedSubtasksCount} of {subtasks.length} subtasks completed
                   </span>
-                  <span className="text-lg font-black text-[var(--bp-accent)]">{progress}%</span>
+                  <span className="text-lg font-black text-[var(--bp-accent-ink)]">{progress}%</span>
                 </div>
                 <div role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2 rounded-full bg-[var(--bp-border)]">
                   <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
@@ -719,7 +719,7 @@ export default function EditTaskScreen({
 
               <Card title="Reminder & Recurring">
                 <FieldLabel label="Reminder" />
-                <label className="mb-3 flex items-center gap-2 text-sm text-slate-300">
+                <label className="mb-3 flex items-center gap-2 text-sm text-[var(--bp-subtle)]">
                   <input
                     type="checkbox"
                     checked={reminderEnabled}
@@ -791,7 +791,7 @@ export default function EditTaskScreen({
                     }}
                   />
                 ))}
-                {!dependencies.length ? <p className="text-sm text-slate-400">No dependencies yet.</p> : null}
+                {!dependencies.length ? <p className="text-sm text-[var(--bp-muted)]">No dependencies yet.</p> : null}
               </Card>
 
               <Card title="Activity Information">
@@ -822,7 +822,7 @@ export default function EditTaskScreen({
                       value={spentHours}
                       onChange={(event) => setSpentHours(event.target.value)}
                     />
-                    <p className="mt-1.5 text-xs text-slate-400">
+                    <p className="mt-1.5 text-xs text-[var(--bp-muted)]">
                       Time you log by hand. Focus Sessions are tracked automatically and added on
                       top — the total spent time appears on the task details.
                     </p>
@@ -841,7 +841,7 @@ export default function EditTaskScreen({
               <button
                 onClick={() => void handleSave()}
                 disabled={saving}
-                className="rounded-lg bg-[var(--bp-accent)] px-6 py-2.5 text-sm font-black text-[var(--bp-accent-text)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-6 py-2.5 text-sm font-black text-[var(--bp-accent-text)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
@@ -967,11 +967,11 @@ function Card({
     <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-base font-black">
-          {code ? <span className="text-[var(--bp-accent)]">{code}</span> : null}
+          {code ? <span className="text-[var(--bp-accent-ink)]">{code}</span> : null}
           {title}
         </h3>
         {action ? (
-          <button onClick={onAction} className="text-sm font-bold text-[var(--bp-accent)]">
+          <button onClick={onAction} className="text-sm font-bold text-[var(--bp-accent-ink)]">
             {action}
           </button>
         ) : null}
@@ -983,7 +983,7 @@ function Card({
 
 function FieldLabel({ label, required, htmlFor }: { label: string; required?: boolean; htmlFor?: string }) {
   return (
-    <label htmlFor={htmlFor} className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
+    <label htmlFor={htmlFor} className="mb-2 block text-xs font-black uppercase tracking-wide text-[var(--bp-subtle)]">
       {label} {required ? <span className="text-red-400">*</span> : null}
     </label>
   )
@@ -994,7 +994,7 @@ function Segment({ label, active, color, onClick }: { label: string; active?: bo
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border px-3 py-2 text-sm font-bold ${active ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]' : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`}`}
+      className={`rounded-lg border px-3 py-2 text-sm font-bold ${active ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]' : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`}`}
     >
       {label}
     </button>
@@ -1004,7 +1004,7 @@ function Segment({ label, active, color, onClick }: { label: string; active?: bo
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="mb-2 flex items-center justify-between rounded-xl bg-[var(--bp-surface)] px-3 py-2">
-      <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">{label}</span>
       <span className="text-sm font-bold text-[var(--bp-text)]">{value}</span>
     </div>
   )

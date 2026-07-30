@@ -21,18 +21,18 @@ export function ReminderDetailsScreen({ reminder, onBack, onEdit }: Props) {
               type="button"
               onClick={onBack}
               aria-label={t('actions.back')}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-sm font-black text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)]"
             >
               <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
             </button>
             <span className="text-sm font-bold text-[var(--bp-muted)]">{t('actions.back')}</span>
           </div>
-          <button type="button" onClick={onEdit} className="rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-xs font-black text-[var(--bp-accent)] transition hover:brightness-95">
+          <button type="button" onClick={onEdit} className="rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-xs font-black text-[var(--bp-accent-ink)] transition hover:brightness-95">
             {t('actions.edit')}
           </button>
         </div>
         <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
-          <p className="text-xs font-black uppercase tracking-widest text-[var(--bp-accent)]">
+          <p className="text-xs font-black uppercase tracking-widest text-[var(--bp-accent-ink)]">
             {t('reminders.typeReminder', { type: t(`filters.${reminder.type}`) })}
           </p>
           <h1 className="mt-2 text-2xl font-black">{reminder.title}</h1>

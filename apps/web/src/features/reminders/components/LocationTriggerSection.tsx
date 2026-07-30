@@ -38,7 +38,7 @@ function Chip({
       aria-pressed={selected}
       className={`rounded-full border px-4 py-2.5 text-xs font-black transition ${fullWidth ? 'w-full text-center' : ''} ${
         selected
-          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
+          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
           : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]'
       }`}
     >
@@ -172,7 +172,7 @@ export function LocationTriggerSection({ value, onChange }: Props) {
             />
             <p className="mt-1 text-xs text-[var(--bp-subtle)]">{t('reminders.searchPlaceManualHint')}</p>
             {!value.specificLocation && !!value.pendingPlaceName && (
-              <p className="mt-1 text-xs font-semibold text-[var(--bp-accent)]">{t('reminders.pendingPlaceHelp')}</p>
+              <p className="mt-1 text-xs font-semibold text-[var(--bp-accent-ink)]">{t('reminders.pendingPlaceHelp')}</p>
             )}
           </div>
 

@@ -72,8 +72,8 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
               aria-pressed={tab === option}
               className={`px-3 py-1 text-[11px] font-bold capitalize transition disabled:cursor-not-allowed disabled:opacity-40 ${
                 tab === option
-                  ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
-                  : 'text-slate-400 hover:text-[var(--bp-text)]'
+                  ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
+                  : 'text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
               }`}
             >
               {option}
@@ -82,7 +82,7 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
         </div>
       </div>
 
-      <p className="mb-2 text-[11px] leading-5 text-slate-400">
+      <p className="mb-2 text-[11px] leading-5 text-[var(--bp-muted)]">
         {tab === 'shared'
           ? 'A shared reminder notifies every member of this task.'
           : 'A personal reminder notifies only you.'}
@@ -118,7 +118,7 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
             >
               <span aria-hidden>{reminder.audience === 'shared' ? '👥' : '🔒'}</span>
               <span className="flex-1 truncate text-[var(--bp-text)]">{reminder.title}</span>
-              <span className="text-[10px] text-slate-500">
+              <span className="text-[10px] text-[var(--bp-muted)]">
                 {reminder.triggerDateTime
                   ? new Date(reminder.triggerDateTime).toLocaleString(undefined, {
                       month: 'short',

@@ -101,7 +101,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
                 <span className="block text-sm font-black">
                   {t(mode === 'specific_place' ? 'reminders.modeSpecific' : 'reminders.modeCategory')}
                 </span>
-                <span className={`mt-1 block text-xs font-semibold ${selected ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-subtle)]'}`}>
+                <span className={`mt-1 block text-xs font-semibold ${selected ? 'text-[var(--bp-accent-ink)]' : 'text-[var(--bp-subtle)]'}`}>
                   {t(mode === 'specific_place' ? 'reminders.modeSpecificHint' : 'reminders.modeCategoryHint')}
                 </span>
               </button>
@@ -131,7 +131,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
             />
             <p className="mt-1 text-xs text-[var(--bp-subtle)]">{t('reminders.searchPlaceManualHint')}</p>
             {!value.specificPlace && !!value.pendingPlaceName && (
-              <p className="mt-1 text-xs font-semibold text-[var(--bp-accent)]">{t('reminders.pendingPlaceHelp')}</p>
+              <p className="mt-1 text-xs font-semibold text-[var(--bp-accent-ink)]">{t('reminders.pendingPlaceHelp')}</p>
             )}
           </div>
 
@@ -179,7 +179,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
               aria-pressed={selected}
               className={`rounded-full border px-4 py-3 text-xs font-black capitalize transition ${
                 selected
-                  ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
+                  ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
                   : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]'
               }`}
             >

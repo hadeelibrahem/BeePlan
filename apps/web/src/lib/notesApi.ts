@@ -13,6 +13,14 @@ export type NotePayload = {
   content?: string
 }
 
+export type DailyMotivation = {
+  message: string
+  generatedAt: string
+  localDate: string
+  source: 'ai' | 'fallback'
+  summary: { completedTasks: number; completedSubtasks: number; focusMinutes: number }
+}
+
 function authHeaders(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
@@ -53,6 +61,12 @@ async function request<T>(accessToken: string, path: string, init?: RequestInit)
 
 export function getNotes(accessToken: string) {
   return request<ApiNote[]>(accessToken, '/notes')
+}
+
+export function getDailyMotivation(accessToken: string, language: 'en' | 'ar', timezone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const params = new URLSearchParams({ language })
+  if (timezone) params.set('timezone', timezone)
+  return request<DailyMotivation>(accessToken, `/notes/daily-motivation?${params.toString()}`)
 }
 
 export function createNote(accessToken: string, payload: NotePayload) {

@@ -24,7 +24,7 @@ export default function RecurrenceSuggestionCard({
         <button
           type="button"
           onClick={() => onMakeRecurring(suggestion)}
-          className="rounded-xl bg-[var(--bp-accent)] px-3 py-2 text-xs font-black text-[var(--bp-accent-text)] transition active:scale-[0.98]"
+          className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-3 py-2 text-xs font-black text-[var(--bp-accent-text)] transition active:scale-[0.98]"
         >
           Make Recurring
         </button>

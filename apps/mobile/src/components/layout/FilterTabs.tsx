@@ -19,11 +19,11 @@ export function FilterTabs<T extends string>({ tabs, active, onChange }: FilterT
             key={tab.value}
             onPress={() => onChange(tab.value)}
             className="mx-1 rounded-full px-3 py-1.5 active:opacity-80"
-            style={{ backgroundColor: isActive ? theme.colors.accent : theme.colors.surfaceElevated }}
+            style={{ backgroundColor: isActive ? theme.colors.accentSoft : theme.colors.surfaceElevated, borderColor: isActive ? theme.colors.accent : 'transparent', borderWidth: isActive ? 1 : 0 }}
           >
             <Text
               className="text-xs font-bold"
-              style={{ color: isActive ? theme.colors.accentText : theme.colors.secondaryText }}
+              style={{ color: isActive ? theme.colors.accentInk : theme.colors.secondaryText }}
             >
               {tab.label}
             </Text>

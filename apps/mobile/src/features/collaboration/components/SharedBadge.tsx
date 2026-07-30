@@ -9,7 +9,7 @@ const ROLE_LABEL: Record<TaskRole, string> = { owner: 'Owner', editor: 'Editor',
 export function SharedBadge({ memberCount }: { memberCount?: number }) {
   const { theme } = useTheme();
   const { colors } = theme;
-  return <View className="flex-row items-center gap-1 rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.accent}1a`, borderWidth: 1, borderColor: `${colors.accent}4d` }} accessibilityLabel={memberCount ? `Shared task with ${memberCount} members` : 'Shared task'}><MobileIcon name="people" color={colors.accent} size={12} /><Text style={{ color: colors.accent }} className="text-[10px] font-black">Shared{memberCount ? ` · ${memberCount}` : ''}</Text></View>;
+  return <View className="flex-row items-center gap-1 rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.accent}1a`, borderWidth: 1, borderColor: `${colors.accent}4d` }} accessibilityLabel={memberCount ? `Shared task with ${memberCount} members` : 'Shared task'}><MobileIcon name="people" color={colors.accent} size={12} /><Text style={{ color: colors.accentInk }} className="text-[10px] font-black">Shared{memberCount ? ` · ${memberCount}` : ''}</Text></View>;
 }
 
 export function RoleBadge({ role }: { role: TaskRole }) {

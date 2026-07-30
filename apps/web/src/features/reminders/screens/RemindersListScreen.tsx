@@ -43,9 +43,11 @@ export function RemindersListScreen({
   onNavigateFocus,
   onNavigatePlanner,
   onNavigatePeople,
+  onNavigateNotifications,
   onNavigateCalendar,
   onNavigateNotes,
   onNavigateAnalytics,
+  onNavigateSettings,
 }: Props) {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
@@ -95,9 +97,11 @@ export function RemindersListScreen({
       onNavigateFocus={onNavigateFocus}
       onNavigatePlanner={onNavigatePlanner}
       onNavigatePeople={onNavigatePeople}
+      onNavigateNotifications={onNavigateNotifications}
       onNavigateCalendar={onNavigateCalendar}
       onNavigateNotes={onNavigateNotes}
       onNavigateAnalytics={onNavigateAnalytics}
+      onNavigateSettings={onNavigateSettings}
       panelTitle="Keep going!"
       panelCaption={`${activeCount} active reminder${activeCount === 1 ? '' : 's'} to handle.`}
       panelPercent={completionPercent}
@@ -107,7 +111,7 @@ export function RemindersListScreen({
         title={t('dashboard.remindersTitle')}
         subtitle={t('dashboard.remindersSubtitle')}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder={t('dashboard.searchPlaceholder')}

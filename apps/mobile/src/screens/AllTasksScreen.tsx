@@ -267,7 +267,7 @@ export default function AllTasksScreen({
 
             <FilterTabs tabs={FILTERS} active={statusFilter} onChange={setStatusFilter} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2 mt-2"><View className="flex-row gap-2">{(['due', 'priority', 'created', 'title'] as SortField[]).map((field) => <Pressable key={field} onPress={() => updateSort(field)} accessibilityRole="button" accessibilityLabel={`Sort by ${field}`} className="rounded-full border px-3 py-1.5" style={{ borderColor: sort.field === field ? theme.colors.accent : theme.colors.border }}><Text className="text-xs font-bold" style={{ color: sort.field === field ? theme.colors.accent : theme.colors.secondaryText }}>{field === 'due' ? 'Due date' : field === 'created' ? 'Created' : field[0].toUpperCase() + field.slice(1)}{sort.field === field ? ` ${sort.direction === 'asc' ? '↑' : '↓'}` : ''}</Text></Pressable>)}</View></ScrollView>
-            {suggestions.map((suggestion) => <View key={suggestion.id} className="mb-2 rounded-xl border p-3" style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}><Text className="text-xs font-black" style={{ color: theme.colors.text }}>BeePlan noticed a pattern</Text><Text className="mt-1 text-sm" style={{ color: theme.colors.secondaryText }}>{suggestion.reason}</Text><Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>{suggestion.preview}</Text><View className="mt-2 flex-row gap-3"><Pressable onPress={() => onViewTaskDetails({ id: suggestion.sourceTaskId, title: suggestion.taskTitle, category: '', due: '', priority: 'Medium', status: 'To Do', progress: 0 })} accessibilityRole="button" accessibilityLabel={`Review recurrence suggestion for ${suggestion.taskTitle}`}><Text className="text-xs font-bold" style={{ color: theme.colors.accent }}>Review</Text></Pressable><Pressable onPress={() => { setSuggestions((current) => current.filter((item) => item.id !== suggestion.id)); if (accessToken) void dismissRecurrenceSuggestion(accessToken, suggestion.id).catch(() => void getRecurrenceSuggestions(accessToken).then((result) => setSuggestions(result.suggestions))); }} accessibilityRole="button" accessibilityLabel="Dismiss recurrence suggestion"><Text className="text-xs font-bold" style={{ color: theme.colors.secondaryText }}>Dismiss</Text></Pressable></View></View>)}
+            {suggestions.map((suggestion) => <View key={suggestion.id} className="mb-2 rounded-xl border p-3" style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}><Text className="text-xs font-black" style={{ color: theme.colors.text }}>BeePlan noticed a pattern</Text><Text className="mt-1 text-sm" style={{ color: theme.colors.secondaryText }}>{suggestion.reason}</Text><Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>{suggestion.preview}</Text><View className="mt-2 flex-row gap-3"><Pressable onPress={() => onViewTaskDetails({ id: suggestion.sourceTaskId, title: suggestion.taskTitle, category: '', due: '', priority: 'Medium', status: 'To Do', progress: 0 })} accessibilityRole="button" accessibilityLabel={`Review recurrence suggestion for ${suggestion.taskTitle}`}><Text className="text-xs font-bold" style={{ color: theme.colors.accentInk }}>Review</Text></Pressable><Pressable onPress={() => { setSuggestions((current) => current.filter((item) => item.id !== suggestion.id)); if (accessToken) void dismissRecurrenceSuggestion(accessToken, suggestion.id).catch(() => void getRecurrenceSuggestions(accessToken).then((result) => setSuggestions(result.suggestions))); }} accessibilityRole="button" accessibilityLabel="Dismiss recurrence suggestion"><Text className="text-xs font-bold" style={{ color: theme.colors.secondaryText }}>Dismiss</Text></Pressable></View></View>)}
 
             {activeChips.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3 mt-3">
@@ -279,7 +279,7 @@ export default function AllTasksScreen({
                       className="flex-row items-center gap-1.5 rounded-full px-3 py-1.5"
                       style={{ backgroundColor: theme.colors.accentSoft }}
                     >
-                      <Text className="text-xs font-bold" style={{ color: theme.colors.accent }}>
+                      <Text className="text-xs font-bold" style={{ color: theme.colors.accentInk }}>
                         {chip.label} &times;
                       </Text>
                     </Pressable>
@@ -298,7 +298,7 @@ export default function AllTasksScreen({
             )}
 
             {listError ? <Text className="mb-3 text-sm font-bold text-red-300">{listError}</Text> : null}
-            {listLoading ? <Text className="mb-3 text-sm font-bold" style={{ color: theme.colors.accent }}>Loading tasks...</Text> : null}
+            {listLoading ? <Text className="mb-3 text-sm font-bold" style={{ color: theme.colors.accentInk }}>Loading tasks...</Text> : null}
 
             <View className="mb-3 flex-row justify-between">
               <StatsCard icon="tasks" value={String(taskItems.length)} title="All Tasks" width="full" />

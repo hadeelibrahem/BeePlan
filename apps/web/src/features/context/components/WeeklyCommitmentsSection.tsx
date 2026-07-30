@@ -80,7 +80,7 @@ export function WeeklyCommitmentsSection({ accessToken }: Props) {
           type="button"
           onClick={openCreate}
           aria-label="Add commitment"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bp-accent)] text-lg font-black text-black hover:opacity-90"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-lg font-black text-black hover:opacity-90"
         >
           +
         </button>
@@ -110,7 +110,7 @@ export function WeeklyCommitmentsSection({ accessToken }: Props) {
                 onClick={() => toggleActive(commitment)}
                 aria-label={commitment.isActive ? `Disable ${commitment.title}` : `Enable ${commitment.title}`}
                 className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                  commitment.isActive ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'bg-[var(--bp-bg)] text-[var(--bp-muted)]'
+                  commitment.isActive ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]' : 'bg-[var(--bp-bg)] text-[var(--bp-muted)]'
                 }`}
               >
                 {commitment.isActive ? 'Active' : 'Paused'}

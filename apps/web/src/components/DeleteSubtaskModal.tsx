@@ -13,9 +13,9 @@ export default function DeleteSubtaskModal({ subtaskTitle, onCancel, onConfirm }
         </div>
 
         <h2 className="text-2xl font-black">Delete Subtask?</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-400">
+        <p className="mt-3 text-sm leading-6 text-[var(--bp-muted)]">
           This action cannot be undone. Are you sure you want to permanently delete
-          {subtaskTitle ? <span className="font-bold text-slate-300"> "{subtaskTitle}"</span> : ' this subtask'}?
+          {subtaskTitle ? <span className="font-bold text-[var(--bp-subtle)]"> "{subtaskTitle}"</span> : ' this subtask'}?
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">

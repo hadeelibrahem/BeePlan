@@ -345,7 +345,7 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
         <View className="mt-3">
           <Label text="Dependencies" />
           {draftDependencies.map((dependency) => <View key={dependency.id} className="mb-2 rounded-xl p-3" style={{ backgroundColor: colors.background }}><Text className="font-bold" style={{ color: colors.text }}>{dependency.title}</Text><Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{dependency.category} · {dependency.status}</Text></View>)}
-          <Pressable disabled={saving || uploadingAttachments || Boolean(createdParent)} accessibilityRole="button" accessibilityLabel="Add dependency" onPress={() => setDependenciesSheetVisible(true)} className="rounded-xl border border-dashed py-3 active:opacity-70" style={{ borderColor: colors.border, backgroundColor: colors.background, opacity: createdParent ? 0.5 : 1 }}><Text className="text-center text-sm font-bold" style={{ color: colors.accent }}>+ Add Dependency</Text></Pressable>
+          <Pressable disabled={saving || uploadingAttachments || Boolean(createdParent)} accessibilityRole="button" accessibilityLabel="Add dependency" onPress={() => setDependenciesSheetVisible(true)} className="rounded-xl border border-dashed py-3 active:opacity-70" style={{ borderColor: colors.border, backgroundColor: colors.background, opacity: createdParent ? 0.5 : 1 }}><Text className="text-center text-sm font-bold" style={{ color: colors.accentInk }}>+ Add Dependency</Text></Pressable>
         </View>
       </Card>
 
@@ -397,7 +397,7 @@ function Card({ title, icon, children }: { title: string; icon: string; children
   return (
     <SectionCard className="mb-3">
       <Text className="mb-3 text-base font-black" style={{ color: colors.text }}>
-        <Text style={{ color: colors.accent }}>{icon} </Text>
+        <Text style={{ color: colors.accentInk }}>{icon} </Text>
         {title}
       </Text>
       {children}

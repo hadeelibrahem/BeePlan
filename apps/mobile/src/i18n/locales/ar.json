@@ -7,6 +7,12 @@
     "done": "تم",
     "cancel": "إلغاء"
   },
+  "notesMotivation": {
+    "label": "تقدمك اليوم",
+    "basedOnActivity": "بناءً على نشاطك اليوم",
+    "loading": "جارٍ تحميل رسالة تقدمك",
+    "iconLabel": "تقدم اليوم"
+  },
   "dashboard": {
     "greeting": {
       "morning": "\u0635\u0628\u0627\u062d \u0627\u0644\u062e\u064a\u0631",

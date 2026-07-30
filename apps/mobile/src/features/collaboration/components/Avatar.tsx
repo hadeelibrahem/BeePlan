@@ -33,7 +33,7 @@ export function Avatar({
       style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.accentSoft }}
       className="items-center justify-center"
     >
-      <Text style={{ color: colors.accent }} className="text-xs font-black">
+      <Text style={{ color: colors.accentInk }} className="text-xs font-black">
         {initials(fullName)}
       </Text>
     </View>

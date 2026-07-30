@@ -153,7 +153,7 @@ export default function CalendarScreen({
         title={t('taskUi.calendar.title')}
         subtitle={t('taskUi.calendar.subtitle')}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
@@ -201,7 +201,7 @@ export default function CalendarScreen({
             </button>
           </div>
 
-          <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-400">
+          <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-semibold text-[var(--bp-muted)]">
             {WEEKDAY_LABELS.map((label) => (
               <div key={label}>{label}</div>
             ))}
@@ -233,9 +233,9 @@ export default function CalendarScreen({
                     isSelected
                       ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/15'
                       : 'border-transparent hover:border-[var(--bp-border)]'
-                  } ${inCurrentMonth ? 'text-[var(--bp-text)]' : 'text-slate-500'}`}
+                  } ${inCurrentMonth ? 'text-[var(--bp-text)]' : 'text-[var(--bp-muted)]'}`}
                 >
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-full ${isToday ? 'bg-[var(--bp-accent)] font-bold text-[var(--bp-accent-text)]' : ''}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full ${isToday ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] font-bold text-[var(--bp-accent-text)]' : ''}`}>
                     {date.getDate()}
                   </span>
                   <div className="hidden w-full space-y-0.5 md:block">
@@ -247,7 +247,7 @@ export default function CalendarScreen({
                         {item.title}
                       </span>
                     ))}
-                    {dayItems.length > 2 && <span className="block text-[10px] font-semibold text-[var(--bp-accent)]">+{dayItems.length - 2}</span>}
+                    {dayItems.length > 2 && <span className="block text-[10px] font-semibold text-[var(--bp-accent-ink)]">+{dayItems.length - 2}</span>}
                   </div>
                   {dayItems.length > 0 && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bp-accent)] md:hidden" />}
                 </button>
@@ -265,7 +265,7 @@ export default function CalendarScreen({
               <button
                 type="button"
                 onClick={() => onCreateTaskForDate(selectedDateKey)}
-                className="shrink-0 rounded-lg bg-[var(--bp-accent)] px-2.5 py-1.5 text-xs font-bold text-[var(--bp-accent-text)] hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
+                className="shrink-0 rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-2.5 py-1.5 text-xs font-bold text-[var(--bp-accent-text)] hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
               >
                 Add task
               </button>
@@ -278,7 +278,7 @@ export default function CalendarScreen({
             <div className="space-y-3">
               {selectedTasks.length > 0 && (
                 <div>
-                  <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-400">
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--bp-muted)]">
                     <TasksIcon className="h-4 w-4" /> Tasks
                   </h3>
                   <ul className="space-y-2">
@@ -293,7 +293,7 @@ export default function CalendarScreen({
                           className="w-full rounded-lg border border-[var(--bp-border)] px-3 py-2 text-left text-sm transition hover:bg-[var(--bp-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
                         >
                           <p className="font-semibold text-[var(--bp-text)]">{task.title}</p>
-                          <p className="text-xs text-slate-400 capitalize">{task.status.replace('_', ' ')} - {task.priority}</p>
+                          <p className="text-xs text-[var(--bp-muted)] capitalize">{task.status.replace('_', ' ')} - {task.priority}</p>
                         </button>
                       </li>
                     ))}
@@ -303,7 +303,7 @@ export default function CalendarScreen({
 
               {selectedReminders.length > 0 && (
                 <div>
-                  <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-400">
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--bp-muted)]">
                     <RemindersIcon className="h-4 w-4" /> Reminders
                   </h3>
                   <ul className="space-y-2">
@@ -316,7 +316,7 @@ export default function CalendarScreen({
                           className="w-full rounded-lg border border-[var(--bp-border)] px-3 py-2 text-left text-sm transition hover:bg-[var(--bp-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
                         >
                           <p className="font-semibold text-[var(--bp-text)]">{reminder.title}</p>
-                          <p className="text-xs text-slate-400 capitalize">{reminder.status}</p>
+                          <p className="text-xs text-[var(--bp-muted)] capitalize">{reminder.status}</p>
                         </button>
                       </li>
                     ))}

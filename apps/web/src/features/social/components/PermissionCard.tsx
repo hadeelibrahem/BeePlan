@@ -25,7 +25,7 @@ export function PermissionCard({ permission }: Props) {
         </div>
         <PermissionStatusBadge status={permission.status} />
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--bp-muted)]">
         {permission.radiusMeters != null && (
           <span>
             {t('people.permissions.radius')}: {permission.radiusMeters} {t('reminders.person.meters')}

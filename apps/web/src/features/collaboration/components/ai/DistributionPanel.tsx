@@ -148,7 +148,7 @@ export function DistributionPanel({ task, accessToken }: Props) {
   if (!isOwner) {
     return (
       <SectionCard>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-[var(--bp-muted)]">
           Only the task owner can generate or apply an AI split. You can still see the current capacity snapshot
           below.
         </p>
@@ -162,9 +162,9 @@ export function DistributionPanel({ task, accessToken }: Props) {
   return (
     <div className="space-y-4">
       <SectionCard>
-        <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-400">Team capacity</h3>
+        <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Team capacity</h3>
         {capacityQuery.isLoading ? (
-          <p className="text-xs text-slate-400">Loading capacity…</p>
+          <p className="text-xs text-[var(--bp-muted)]">Loading capacity…</p>
         ) : (
           <CapacityOverview members={capacityMembers} />
         )}
@@ -172,7 +172,7 @@ export function DistributionPanel({ task, accessToken }: Props) {
 
       <SectionCard>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-[10px] font-black uppercase tracking-wide text-slate-400">Smart fair split</h3>
+          <h3 className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Smart fair split</h3>
           <div className="flex flex-wrap gap-2">
             {editorCandidates.map((member) => (
               <label
@@ -190,7 +190,7 @@ export function DistributionPanel({ task, accessToken }: Props) {
           </div>
         </div>
         {!editorCandidates.length && (
-          <p className="mb-3 text-xs text-slate-400">
+          <p className="mb-3 text-xs text-[var(--bp-muted)]">
             Only accepted collaborators with an editable role can be selected for planning.
           </p>
         )}
@@ -233,7 +233,7 @@ export function DistributionPanel({ task, accessToken }: Props) {
                   <div key={w.userId}>
                     <div className="mb-1 flex items-center justify-between text-xs">
                       <span className="font-bold text-[var(--bp-text)]">{w.displayName}</span>
-                      <span className="text-slate-400">
+                      <span className="text-[var(--bp-muted)]">
                         {w.itemCount} item{w.itemCount === 1 ? '' : 's'} · {w.totalEstimatedMinutes} min
                       </span>
                     </div>
@@ -251,7 +251,7 @@ export function DistributionPanel({ task, accessToken }: Props) {
             <button
               type="button"
               onClick={() => setShowFullPlan((v) => !v)}
-              className="text-xs font-bold text-[var(--bp-accent)]"
+              className="text-xs font-bold text-[var(--bp-accent-ink)]"
             >
               {showFullPlan ? 'Hide full plan' : `View full plan (${items.length})`}
             </button>
@@ -266,10 +266,10 @@ export function DistributionPanel({ task, accessToken }: Props) {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-bold text-[var(--bp-text)]">{item.title}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">
+                        <p className="mt-0.5 text-xs text-[var(--bp-muted)]">
                           {item.assigneeDisplayName ?? 'Unassigned'} · {item.estimatedDurationMinutes} min
                         </p>
-                        {item.reason ? <p className="mt-1 text-[11px] text-slate-500">Why: {item.reason}</p> : null}
+                        {item.reason ? <p className="mt-1 text-[11px] text-[var(--bp-muted)]">Why: {item.reason}</p> : null}
                       </div>
                       {adjusting ? (
                         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -277,7 +277,7 @@ export function DistributionPanel({ task, accessToken }: Props) {
                             <button
                               type="button"
                               onClick={() => unassignItem(item.proposalId)}
-                              className="text-[11px] font-bold text-slate-400 hover:text-[var(--bp-text)]"
+                              className="text-[11px] font-bold text-[var(--bp-muted)] hover:text-[var(--bp-text)]"
                             >
                               Unassign
                             </button>
@@ -294,7 +294,7 @@ export function DistributionPanel({ task, accessToken }: Props) {
                     </div>
                   </li>
                 ))}
-                {!items.length ? <p className="text-xs text-slate-400">No items left in this plan.</p> : null}
+                {!items.length ? <p className="text-xs text-[var(--bp-muted)]">No items left in this plan.</p> : null}
               </ul>
             ) : null}
 

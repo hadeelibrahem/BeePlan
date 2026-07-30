@@ -30,7 +30,7 @@ export function TeamProgressComb({ taskId, accessToken }: Props) {
   if (progressQuery.isLoading) {
     return (
       <SectionCard>
-        <p className="text-sm text-slate-400">Loading progress…</p>
+        <p className="text-sm text-[var(--bp-muted)]">Loading progress…</p>
       </SectionCard>
     )
   }
@@ -48,10 +48,10 @@ export function TeamProgressComb({ taskId, accessToken }: Props) {
     <div className="space-y-4">
       <SectionCard>
         <div className="flex items-center justify-between">
-          <h3 className="text-[10px] font-black uppercase tracking-wide text-slate-400">Overall progress</h3>
-          <span className="text-2xl font-black text-[var(--bp-accent)]">{data.overallPercent}%</span>
+          <h3 className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Overall progress</h3>
+          <span className="text-2xl font-black text-[var(--bp-accent-ink)]">{data.overallPercent}%</span>
         </div>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs text-[var(--bp-muted)]">
           {data.completedCount} of {data.totalCount} items completed across the team
         </p>
         <div className="mt-2 h-2 rounded-full bg-[var(--bp-border)]">
@@ -60,13 +60,13 @@ export function TeamProgressComb({ taskId, accessToken }: Props) {
       </SectionCard>
 
       <SectionCard>
-        <h3 className="mb-4 text-[10px] font-black uppercase tracking-wide text-slate-400">Team comb</h3>
+        <h3 className="mb-4 text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Team comb</h3>
         <div className="flex flex-wrap gap-6">
           {data.members.map((member, i) => (
             <MemberHex key={member.userId} member={member} color={MEMBER_COLORS[i % MEMBER_COLORS.length]} />
           ))}
         </div>
-        <p className="mt-4 text-xs text-slate-400">{fairnessNote(data.members)}</p>
+        <p className="mt-4 text-xs text-[var(--bp-muted)]">{fairnessNote(data.members)}</p>
       </SectionCard>
     </div>
   )
@@ -88,7 +88,7 @@ function MemberHex({ member, color }: { member: ProgressMember; color: string })
         </div>
       </div>
       <p className="max-w-full truncate text-xs font-bold text-[var(--bp-text)]">{member.displayName}</p>
-      <p className="text-[11px] text-slate-400">
+      <p className="text-[11px] text-[var(--bp-muted)]">
         {member.completedCount}/{member.totalCount}
       </p>
     </div>

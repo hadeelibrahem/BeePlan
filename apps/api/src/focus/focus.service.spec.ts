@@ -290,6 +290,131 @@ describe('FocusService', () => {
     });
   });
 
+  describe('extend', () => {
+    // Session started at 09:00 for 25 min → ends 09:25. Freeze "now" before the
+    // end so extensions anchor on the current end time deterministically.
+    const START = new Date('2026-07-08T09:00:00.000Z');
+    const ENDS = new Date('2026-07-08T09:25:00.000Z');
+
+    function extendableSession(overrides: AnyRow = {}): AnyRow {
+      return makeSession({ startedAt: START, endsAt: ENDS, ...overrides });
+    }
+
+    beforeEach(() => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-08T09:10:00.000Z'));
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('adds 5 minutes to the current end time and persists it', async () => {
+      const { service, updates } = buildService({
+        session: extendableSession(),
+        task: makeTask(),
+      });
+
+      const result = await service.extend(USER_ID, SESSION_ID, {
+        additionalMinutes: 5,
+      });
+
+      expect(result.endsAt).toBe('2026-07-08T09:30:00.000Z'); // 09:25 + 5
+      expect(result.plannedMinutes).toBe(30); // 09:00 → 09:30
+      const sessionUpdate = updates.find((u) => u.table === focusSessions);
+      expect((sessionUpdate?.vals.endsAt as Date).toISOString()).toBe(
+        '2026-07-08T09:30:00.000Z',
+      );
+      expect(sessionUpdate?.vals.plannedMinutes).toBe(30);
+    });
+
+    it('adds a custom 25 minutes', async () => {
+      const { service } = buildService({
+        session: extendableSession(),
+        task: makeTask(),
+      });
+      const result = await service.extend(USER_ID, SESSION_ID, {
+        additionalMinutes: 25,
+      });
+      expect(result.endsAt).toBe('2026-07-08T09:50:00.000Z'); // 09:25 + 25
+      expect(result.plannedMinutes).toBe(50);
+    });
+
+    it('adds 60 minutes', async () => {
+      const { service } = buildService({
+        session: extendableSession(),
+        task: makeTask(),
+      });
+      const result = await service.extend(USER_ID, SESSION_ID, {
+        additionalMinutes: 60,
+      });
+      expect(result.endsAt).toBe('2026-07-08T10:25:00.000Z'); // 09:25 + 60
+    });
+
+    it('compounds when extended multiple times from the latest end', async () => {
+      const { service } = buildService({
+        session: extendableSession(),
+        task: makeTask(),
+      });
+
+      const first = await service.extend(USER_ID, SESSION_ID, {
+        additionalMinutes: 10,
+      });
+      expect(first.endsAt).toBe('2026-07-08T09:35:00.000Z');
+
+      // The mock db mutates the stored row, so the second extension anchors on
+      // the already-updated 09:35 end time.
+      const second = await service.extend(USER_ID, SESSION_ID, {
+        additionalMinutes: 15,
+      });
+      expect(second.endsAt).toBe('2026-07-08T09:50:00.000Z'); // 09:35 + 15
+    });
+
+    it('anchors on now when the session end already elapsed (~26 min from 1 left)', async () => {
+      // Now = 09:24:00, ends at 09:25:00 → 1 minute remaining.
+      jest.setSystemTime(new Date('2026-07-08T09:24:00.000Z'));
+      const { service } = buildService({
+        session: extendableSession(),
+        task: makeTask(),
+      });
+
+      const result = await service.extend(USER_ID, SESSION_ID, {
+        additionalMinutes: 25,
+      });
+
+      const remainingMinutes = Math.round(
+        (new Date(result.endsAt).getTime() - Date.now()) / 60_000,
+      );
+      expect(remainingMinutes).toBe(26);
+    });
+
+    it('derives the base end time for legacy rows without ends_at', async () => {
+      const { service } = buildService({
+        // No endsAt column → fallback is started_at + planned (09:00 + 25).
+        session: makeSession({ startedAt: START, endsAt: null }),
+        task: makeTask(),
+      });
+      const result = await service.extend(USER_ID, SESSION_ID, {
+        additionalMinutes: 5,
+      });
+      expect(result.endsAt).toBe('2026-07-08T09:30:00.000Z');
+    });
+
+    it('rejects extending an already-ended session', async () => {
+      const { service } = buildService({
+        session: extendableSession({ status: 'completed' }),
+      });
+      await expect(
+        service.extend(USER_ID, SESSION_ID, { additionalMinutes: 5 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects extending a session that does not belong to the user', async () => {
+      const { service } = buildService({ sessionsList: [] });
+      await expect(
+        service.extend(USER_ID, SESSION_ID, { additionalMinutes: 5 }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('cancel', () => {
     it('marks the session cancelled without changing task status', async () => {
       const { service, updates } = buildService({

@@ -274,7 +274,7 @@ function DependencyOption({
           <span
             className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[10px] font-black ${
               selected
-                ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
+                ? 'border-[var(--bp-accent)] border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
                 : 'border-[var(--bp-border)] text-transparent'
             }`}
           >

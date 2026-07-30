@@ -14,7 +14,7 @@ type SharedBadgeProps = {
 export function SharedBadge({ memberCount, className = '' }: SharedBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent)] ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full border border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent-ink)] ${className}`}
       aria-label={
         memberCount ? `Shared task with ${memberCount} members` : 'Shared task'
       }

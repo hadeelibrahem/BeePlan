@@ -1,6 +1,7 @@
 export { AppLayout } from './AppLayout'
 export { Sidebar, SidebarNavItem, type SidebarNavHandlers, type SidebarPage } from './Sidebar'
 export { TopActionBar } from './TopActionBar'
+export { GlobalHeader } from './GlobalHeader'
 export { PageHeader } from './PageHeader'
 export { StatsCard } from './StatsCard'
 export { SectionCard } from './SectionCard'

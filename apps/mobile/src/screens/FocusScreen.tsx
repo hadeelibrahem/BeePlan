@@ -411,7 +411,7 @@ function InProgressCard({
     >
       <Text
         className="text-[10px] font-black uppercase"
-        style={{ color: colors.accent }}
+        style={{ color: colors.accentInk }}
       >
         Focus session in progress
       </Text>
@@ -547,7 +547,7 @@ function RecommendationCard({
     >
       <Text
         className="text-[10px] font-black uppercase"
-        style={{ color: colors.accent }}
+        style={{ color: colors.accentInk }}
       >
         {isSubtask ? "Do this now" : "Recommended now"}
       </Text>

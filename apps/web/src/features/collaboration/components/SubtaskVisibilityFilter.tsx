@@ -41,8 +41,8 @@ export function SubtaskVisibilityFilter({
           onClick={() => onFilterChange(chip.value)}
           className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
             filter === chip.value
-              ? 'bg-[var(--bp-accent)] text-black'
-              : 'border border-[var(--bp-border)] text-slate-400 hover:text-[var(--bp-text)]'
+              ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-black'
+              : 'border border-[var(--bp-border)] text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
           }`}
         >
           {chip.label}
@@ -64,8 +64,8 @@ export function SubtaskVisibilityFilter({
           }}
           className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${
             filter === 'member'
-              ? 'border-[var(--bp-accent)] text-[var(--bp-accent)]'
-              : 'border-[var(--bp-border)] text-slate-400'
+              ? 'border-[var(--bp-accent)] text-[var(--bp-accent-ink)]'
+              : 'border-[var(--bp-border)] text-[var(--bp-muted)]'
           } bg-[var(--bp-bg)]`}
         >
           <option value="">By Member…</option>

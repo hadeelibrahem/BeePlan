@@ -44,7 +44,7 @@ function Chip({
       aria-pressed={selected}
       className={`rounded-full border px-4 py-2.5 text-xs font-black transition ${fullWidth ? 'w-full text-center' : ''} ${
         selected
-          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
+          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
           : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]'
       }`}
     >

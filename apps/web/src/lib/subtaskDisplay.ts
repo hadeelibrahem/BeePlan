@@ -11,10 +11,10 @@ export const SUBTASK_STATUS_LABEL: Record<ApiSubtaskStatus, string> = {
 }
 
 export const SUBTASK_STATUS_CLASS: Record<ApiSubtaskStatus, string> = {
-  todo: 'text-slate-400 bg-slate-400/10',
+  todo: 'text-[var(--bp-muted)] bg-slate-400/10',
   in_progress: 'text-blue-400 bg-blue-400/10',
   done: 'text-green-400 bg-green-400/10',
-  blocked: 'text-slate-300 bg-slate-500/20',
+  blocked: 'text-[var(--bp-subtle)] bg-slate-500/20',
   missed: 'text-red-400 bg-red-400/10',
 }
 

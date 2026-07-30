@@ -13,7 +13,7 @@ const STATUS_META: Record<PermissionStatus, { label: string; className: string }
   },
   expired: {
     label: 'Permission expired',
-    className: 'bg-slate-400/15 text-slate-400 border-slate-400/30',
+    className: 'bg-slate-400/15 text-[var(--bp-muted)] border-slate-400/30',
   },
   revoked: {
     label: 'Permission revoked',

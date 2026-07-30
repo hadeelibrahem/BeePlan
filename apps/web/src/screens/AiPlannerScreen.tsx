@@ -434,7 +434,7 @@ export default function AiPlannerScreen({
         title={t('taskUi.planner.title')}
         subtitle={t('taskUi.planner.subtitle')}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search plan..."
@@ -455,13 +455,13 @@ export default function AiPlannerScreen({
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]">
                 <SparkleGlyph />
               </span>
-              <p className="text-xs font-black uppercase tracking-wide text-slate-400">Today&apos;s Plan</p>
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Today&apos;s Plan</p>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
-                  plan?.source === 'ai' ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'bg-slate-500/15 text-slate-300'
+                  plan?.source === 'ai' ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]' : 'bg-slate-500/15 text-[var(--bp-subtle)]'
                 }`}
               >
                 {plan?.source === 'ai' ? 'AI-assisted' : 'Standard plan'}
@@ -521,7 +521,7 @@ export default function AiPlannerScreen({
       ) : null}
 
       {loading && !plan ? (
-        <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-8 text-center text-sm font-bold text-slate-400 shadow-xl">
+        <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-8 text-center text-sm font-bold text-[var(--bp-muted)] shadow-xl">
           Loading your saved plan...
         </div>
       ) : null}
@@ -558,7 +558,7 @@ export default function AiPlannerScreen({
                     <span className="text-lg">{meta.emoji}</span>
                     <span className={meta.accent}>{meta.title}</span>
                   </h3>
-                  <span className="text-xs font-bold text-slate-500">
+                  <span className="text-xs font-bold text-[var(--bp-muted)]">
                     {stats.tasks} {stats.tasks === 1 ? 'task' : 'tasks'} · {formatDuration(stats.minutes)}
                   </span>
                 </div>
@@ -590,7 +590,7 @@ export default function AiPlannerScreen({
                     })}
                   </div>
                 ) : (
-                  <p className="py-2 text-sm text-slate-500">Nothing planned here.</p>
+                  <p className="py-2 text-sm text-[var(--bp-muted)]">Nothing planned here.</p>
                 )}
               </section>
             )
@@ -643,10 +643,10 @@ export default function AiPlannerScreen({
                   />
                   <div className="rounded-xl bg-[var(--bp-bg)] p-3 sm:col-span-2">
                     <div className="flex items-center justify-between">
-                      <p className="flex items-center gap-1.5 text-xs font-black uppercase text-slate-500">
+                      <p className="flex items-center gap-1.5 text-xs font-black uppercase text-[var(--bp-muted)]">
                         <span>📈</span> Productivity Score
                       </p>
-                      <span className="text-lg font-black text-[var(--bp-accent)]">{insights?.productivityScore ?? 0}</span>
+                      <span className="text-lg font-black text-[var(--bp-accent-ink)]">{insights?.productivityScore ?? 0}</span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--bp-border)]">
                       <div
@@ -662,8 +662,8 @@ export default function AiPlannerScreen({
                 <CollapsibleSection title="AI Recommendations" emoji="💡" defaultOpen={false}>
                   <div className="space-y-2">
                     {insights.recommendations.map((rec, index) => (
-                      <div key={index} className="flex items-start gap-2.5 rounded-xl bg-[var(--bp-bg)] p-3 text-sm text-slate-300">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--bp-accent)]/15 text-xs text-[var(--bp-accent)]">
+                      <div key={index} className="flex items-start gap-2.5 rounded-xl bg-[var(--bp-bg)] p-3 text-sm text-[var(--bp-subtle)]">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--bp-accent)]/15 text-xs text-[var(--bp-accent-ink)]">
                           {index + 1}
                         </span>
                         <span className="leading-relaxed">{rec}</span>
@@ -674,7 +674,7 @@ export default function AiPlannerScreen({
               ) : null}
             </div>
           ) : (
-            <p className="pt-1 text-center text-xs text-slate-500">
+            <p className="pt-1 text-center text-xs text-[var(--bp-muted)]">
               Switch to <span className="font-bold text-[var(--bp-text)]">Detailed View</span> to see reasons, validation, and how the AI built this plan.
             </p>
           )}
@@ -710,7 +710,7 @@ function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewM
           type="button"
           onClick={() => onChange(value)}
           className={`rounded-md px-3 py-1.5 text-xs font-black transition ${
-            mode === value ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]' : 'text-slate-400 hover:text-[var(--bp-text)]'
+            mode === value ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
           }`}
         >
           {value === 'simple' ? 'Simple View' : 'Detailed View'}
@@ -788,7 +788,7 @@ function PlanningPreferencesCard({
 
   return (
     <CollapsibleSection title="AI Planning Preferences" emoji="⚙️" defaultOpen={false}>
-      <p className="mb-3 text-xs text-slate-400">
+      <p className="mb-3 text-xs text-[var(--bp-muted)]">
         Teach BeePlan how you like your day planned. Saved preferences apply the next time you generate a plan — they never
         override deadlines, reminders, dependencies, or locked tasks.
       </p>
@@ -841,14 +841,14 @@ function PlanningPreferencesCard({
         <PrefGroup title="Sleep & lunch" hint="Protected hours the planner never schedules work into.">
           <div className="space-y-2">
             <div>
-              <p className="mb-1 text-[11px] font-bold text-slate-500">Sleep (can cross midnight)</p>
+              <p className="mb-1 text-[11px] font-bold text-[var(--bp-muted)]">Sleep (can cross midnight)</p>
               <div className="flex items-end gap-2">
                 <PrefTime label="From" value={draft.sleep.start} onChange={(value) => updateWindow('sleep', 'start', value)} />
                 <PrefTime label="To" value={draft.sleep.end} onChange={(value) => updateWindow('sleep', 'end', value)} />
               </div>
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-bold text-slate-500">Lunch</p>
+              <p className="mb-1 text-[11px] font-bold text-[var(--bp-muted)]">Lunch</p>
               <div className="flex items-end gap-2">
                 <PrefTime label="From" value={draft.lunch.start} onChange={(value) => updateWindow('lunch', 'start', value)} />
                 <PrefTime label="To" value={draft.lunch.end} onChange={(value) => updateWindow('lunch', 'end', value)} />
@@ -876,7 +876,7 @@ function PlanningPreferencesCard({
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-slate-500">No unavailable windows yet.</p>
+            <p className="text-[11px] text-[var(--bp-muted)]">No unavailable windows yet.</p>
           )}
           <button
             type="button"
@@ -894,9 +894,9 @@ function PlanningPreferencesCard({
             rows={3}
             onChange={(event) => update('note', event.target.value)}
             placeholder="Tell BeePlan how you like your day planned..."
-            className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-sm text-[var(--bp-text)] placeholder:text-slate-500"
+            className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-sm text-[var(--bp-text)] placeholder:text-[var(--bp-muted)]"
           />
-          <p className="mt-0.5 text-right text-[11px] text-slate-500">{draft.note.length}/1000</p>
+          <p className="mt-0.5 text-right text-[11px] text-[var(--bp-muted)]">{draft.note.length}/1000</p>
         </PrefGroup>
       </div>
 
@@ -923,7 +923,7 @@ function CapacitySummaryCard({ capacity }: { capacity: CapacitySummary }) {
         <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
           <span>📊</span> Today&apos;s capacity
         </h3>
-        <span className="text-[11px] font-bold text-slate-500">
+        <span className="text-[11px] font-bold text-[var(--bp-muted)]">
           {usedPct}% of {formatDuration(capacity.availableMinutes)} budget used
         </span>
       </div>
@@ -944,7 +944,7 @@ function CapacitySummaryCard({ capacity }: { capacity: CapacitySummary }) {
         <CapacityStat label="Tasks scheduled" value={String(capacity.scheduledTaskCount)} tone="text-green-300" />
         <CapacityStat label="Tasks postponed" value={String(capacity.postponedTaskCount)} tone="text-amber-300" />
       </div>
-      <p className="mt-3 text-[11px] text-slate-500">
+      <p className="mt-3 text-[11px] text-[var(--bp-muted)]">
         Keeps a {formatDuration(capacity.emergencyBufferMinutes)} emergency buffer free and never plans past your max daily work of{' '}
         {formatDuration(capacity.maxDailyWorkMinutes)}.
       </p>
@@ -955,7 +955,7 @@ function CapacitySummaryCard({ capacity }: { capacity: CapacitySummary }) {
 function CapacityStat({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
     <div className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/60 p-2.5">
-      <p className="text-[10px] font-black uppercase text-slate-500">{label}</p>
+      <p className="text-[10px] font-black uppercase text-[var(--bp-muted)]">{label}</p>
       <p className={`mt-0.5 text-base font-black ${tone}`}>{value}</p>
     </div>
   )
@@ -967,7 +967,7 @@ function PostponedList({ items }: { items: UnscheduledItem[] }) {
       <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
         <span>📥</span> Not scheduled today
       </h3>
-      <p className="mb-3 mt-1 text-xs text-slate-400">
+      <p className="mb-3 mt-1 text-xs text-[var(--bp-muted)]">
         {items.length} task{items.length > 1 ? 's' : ''} moved out of today — nothing is silently dropped.
       </p>
       <div className="space-y-2">
@@ -985,12 +985,12 @@ function PostponedList({ items }: { items: UnscheduledItem[] }) {
                 </span>
                 {item.priority ? <Badge tone={priorityTone(item.priority)}>{item.priority}</Badge> : null}
               </div>
-              <p className="mt-1 text-xs text-slate-500">{item.reason}</p>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-xs text-[var(--bp-muted)]">{item.reason}</p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--bp-muted)]">
                 {item.estimatedMinutes ? <span>⏱️ {formatDuration(item.estimatedMinutes)}</span> : null}
                 {item.deadline ? <span>📅 Due {formatShortDate(item.deadline)}</span> : null}
                 {item.suggestedDate ? (
-                  <span className="font-bold text-[var(--bp-accent)]">➡️ Suggested: {formatShortDate(item.suggestedDate)}</span>
+                  <span className="font-bold text-[var(--bp-accent-ink)]">➡️ Suggested: {formatShortDate(item.suggestedDate)}</span>
                 ) : null}
               </div>
             </div>
@@ -1015,7 +1015,7 @@ function PrefGroup({
   return (
     <div className={`rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/40 p-3 ${className}`}>
       <p className="text-xs font-black text-[var(--bp-text)]">{title}</p>
-      <p className="mb-2 mt-0.5 min-h-[14px] text-[11px] text-slate-500">{hint ?? ''}</p>
+      <p className="mb-2 mt-0.5 min-h-[14px] text-[11px] text-[var(--bp-muted)]">{hint ?? ''}</p>
       {children}
     </div>
   )
@@ -1024,7 +1024,7 @@ function PrefGroup({
 function PrefTime({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="flex-1">
-      <span className="mb-1 block text-[11px] font-bold text-slate-500">{label}</span>
+      <span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">{label}</span>
       <input
         type="time"
         value={value}
@@ -1050,7 +1050,7 @@ function PrefNumber({
 }) {
   return (
     <label className="flex-1">
-      <span className="mb-1 block text-[11px] font-bold text-slate-500">{label}</span>
+      <span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">{label}</span>
       <input
         type="number"
         value={value}
@@ -1069,7 +1069,7 @@ function PrefNumber({
 function PrefEnergy({ label, value, onChange }: { label: string; value: EnergyLevel; onChange: (value: EnergyLevel) => void }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-bold text-slate-500">{label}</span>
+      <span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as EnergyLevel)}
@@ -1108,7 +1108,7 @@ function SummaryMetric({ label, value, detail }: { label: string; value: string;
 function StatTile({ emoji, label, value }: { emoji: string; label: string; value: string }) {
   return (
     <div className="bg-[var(--bp-bg)]/45 px-3 py-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-500">
+      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-[var(--bp-muted)]">
         <span className="text-sm">{emoji}</span>
         {label}
       </div>
@@ -1140,7 +1140,7 @@ function CollapsibleSection({
         <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
           <span>{emoji}</span> {title}
         </h3>
-        <ChevronGlyph className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <ChevronGlyph className={`h-4 w-4 text-[var(--bp-muted)] transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open ? <div className="mt-3">{children}</div> : null}
     </section>
@@ -1150,11 +1150,11 @@ function CollapsibleSection({
 function InsightCard({ emoji, title, body, hint }: { emoji: string; title: string; body: string; hint?: string }) {
   return (
     <div className="rounded-xl bg-[var(--bp-bg)] p-3">
-      <p className="flex items-center gap-1.5 text-[11px] font-black uppercase text-slate-500">
+      <p className="flex items-center gap-1.5 text-[11px] font-black uppercase text-[var(--bp-muted)]">
         <span>{emoji}</span> {title}
       </p>
       <p className="mt-1 text-sm font-bold leading-snug text-[var(--bp-text)]">{body}</p>
-      {hint ? <p className="mt-0.5 text-xs text-slate-500">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{hint}</p> : null}
     </div>
   )
 }
@@ -1201,7 +1201,7 @@ function FreeBlock({ start, end, minutes, isLast }: { start: string; end: string
         {!isLast ? <div className="mt-1 w-px flex-1 bg-[var(--bp-border)]" /> : null}
       </div>
       <div className="min-w-0 flex-1 pb-2">
-        <p className="text-[11px] font-semibold text-slate-500">
+        <p className="text-[11px] font-semibold text-[var(--bp-muted)]">
           {formatDuration(minutes)} free · {formatClock(start)} – {formatClock(end)}
         </p>
       </div>
@@ -1287,14 +1287,14 @@ function PlanCard({
             {item.isFocusTask ? <Badge tone="focus">Focus</Badge> : null}
             {item.category ? <Badge tone="plain">{item.category}</Badge> : null}
             {locked ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-[var(--bp-accent)]">
+              <span className="inline-flex items-center gap-1 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-[var(--bp-accent-ink)]">
                 <LockGlyph /> Locked
               </span>
             ) : null}
           </div>
 
           {/* time + duration + Why? */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[var(--bp-muted)]">
             {editing ? (
               <>
                 <input
@@ -1303,7 +1303,7 @@ function PlanCard({
                   onChange={(event) => onMove('startTime', event.target.value)}
                   className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1 text-xs font-bold text-[var(--bp-text)]"
                 />
-                <span className="text-slate-500">to</span>
+                <span className="text-[var(--bp-muted)]">to</span>
                 <input
                   type="time"
                   value={item.endTime}
@@ -1312,18 +1312,18 @@ function PlanCard({
                 />
               </>
             ) : (
-              <span className="inline-flex items-center gap-1.5 font-bold text-slate-300">
+              <span className="inline-flex items-center gap-1.5 font-bold text-[var(--bp-subtle)]">
                 <ClockGlyph />
                 {formatClock(item.startTime)} – {formatClock(item.endTime)}
               </span>
             )}
-            <span className="rounded-md bg-[var(--bp-bg)] px-1.5 py-0.5 font-bold text-slate-400">{formatDuration(item.durationMinutes)}</span>
+            <span className="rounded-md bg-[var(--bp-bg)] px-1.5 py-0.5 font-bold text-[var(--bp-muted)]">{formatDuration(item.durationMinutes)}</span>
             {item.rationale ? (
               <button
                 type="button"
                 onClick={() => setShowWhy((value) => !value)}
                 aria-expanded={showWhy}
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-[var(--bp-accent)] transition hover:bg-[var(--bp-accent)]/10"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-[var(--bp-accent-ink)] transition hover:bg-[var(--bp-accent)]/10"
               >
                 {showWhy ? 'Hide' : 'Why?'}
                 <ChevronGlyph className={`h-3 w-3 transition-transform duration-200 ${showWhy ? 'rotate-180' : ''}`} />
@@ -1334,10 +1334,10 @@ function PlanCard({
           {/* AI reason — hidden until "Why?" is clicked */}
           {showWhy && item.rationale ? (
             <div className="mt-2 rounded-lg border border-[var(--bp-accent)]/20 bg-[var(--bp-accent)]/[0.05] px-2.5 py-2">
-              <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent)]">
+              <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">
                 <SparkleGlyph className="h-3 w-3" /> Scheduled here because
               </p>
-              <p className="mt-0.5 text-xs leading-snug text-slate-300">{item.rationale}</p>
+              <p className="mt-0.5 text-xs leading-snug text-[var(--bp-subtle)]">{item.rationale}</p>
             </div>
           ) : null}
         </div>
@@ -1348,7 +1348,7 @@ function PlanCard({
             type="button"
             onClick={onLock}
             className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-black transition ${
-              locked ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]' : 'bg-[var(--bp-border)] text-[var(--bp-text)] hover:brightness-110'
+              locked ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'bg-[var(--bp-border)] text-[var(--bp-text)] hover:brightness-110'
             }`}
           >
             <LockGlyph /> {locked ? 'Locked' : 'Lock'}
@@ -1356,7 +1356,7 @@ function PlanCard({
           <button
             type="button"
             onClick={() => setEditing((value) => !value)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-300 transition hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)]"
+            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-[var(--bp-subtle)] transition hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)]"
           >
             <EditGlyph /> {editing ? 'Done' : 'Edit Time'}
           </button>
@@ -1369,10 +1369,10 @@ function PlanCard({
 function Badge({ children, tone }: { children: string; tone: 'red' | 'yellow' | 'green' | 'focus' | 'plain' }) {
   const classes = {
     red: 'bg-red-500/15 text-red-300',
-    yellow: 'bg-yellow-500/15 text-yellow-300',
+    yellow: 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]',
     green: 'bg-green-500/15 text-green-300',
     focus: 'bg-blue-500/15 text-blue-300',
-    plain: 'bg-[var(--bp-bg)] text-slate-300',
+    plain: 'bg-[var(--bp-bg)] text-[var(--bp-subtle)]',
   }
   return <span className={`rounded-md px-2 py-0.5 text-[10px] font-black uppercase ${classes[tone]}`}>{children}</span>
 }
@@ -1391,7 +1391,7 @@ function PlanSourceBanner({ source }: { source: DailyPlan['source'] }) {
     >
       <span
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-          ai ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'bg-amber-500/15 text-amber-300'
+          ai ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]' : 'bg-amber-500/15 text-amber-300'
         }`}
       >
         {ai ? <SparkleGlyph className="h-5 w-5" /> : <ShieldGlyph className="h-5 w-5" />}
@@ -1400,7 +1400,7 @@ function PlanSourceBanner({ source }: { source: DailyPlan['source'] }) {
         <p className="text-sm font-black text-[var(--bp-text)]">
           {ai ? 'AI-assisted plan, checked against your schedule.' : 'Standard plan, built from your schedule.'}
         </p>
-        <p className="mt-0.5 text-xs text-slate-400">
+        <p className="mt-0.5 text-xs text-[var(--bp-muted)]">
           {ai
             ? 'Your priorities and available time were used to suggest a practical order for today.'
             : 'This plan uses your tasks, availability, and planning preferences.'}
@@ -1408,7 +1408,7 @@ function PlanSourceBanner({ source }: { source: DailyPlan['source'] }) {
       </div>
       <span
         className={`ml-auto shrink-0 self-center rounded-full px-3 py-1 text-[10px] font-black uppercase ${
-          ai ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]' : 'bg-amber-500/15 text-amber-300'
+          ai ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]' : 'bg-amber-500/15 text-amber-300'
         }`}
       >
         {ai ? 'AI-assisted' : 'Standard plan'}
@@ -1437,7 +1437,7 @@ function HowItWasBuilt({ source }: { source: DailyPlan['source'] }) {
           step={2}
           emoji="🧠"
           title="Priority suggestions"
-          accent="text-[var(--bp-accent)]"
+          accent="text-[var(--bp-accent-ink)]"
           active={source === 'ai'}
           items={[
             'Ranked tasks by urgency, priority, focus, progress & due dates',
@@ -1483,7 +1483,7 @@ function StepCard({
       }`}
     >
       <div className="flex items-center gap-2">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--bp-surface)] text-xs font-black text-slate-300">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--bp-surface)] text-xs font-black text-[var(--bp-subtle)]">
           {step}
         </span>
         <span className="text-base">{emoji}</span>
@@ -1491,7 +1491,7 @@ function StepCard({
       </div>
       <ul className="mt-2 space-y-1">
         {items.map((entry, index) => (
-          <li key={index} className="flex items-start gap-1.5 text-xs text-slate-400">
+          <li key={index} className="flex items-start gap-1.5 text-xs text-[var(--bp-muted)]">
             <CheckGlyph className="mt-0.5 h-3 w-3 shrink-0 text-emerald-400" />
             <span className="leading-snug">{entry}</span>
           </li>
@@ -1545,7 +1545,7 @@ function ValidationRow({
   detail?: string
 }) {
   const tone = neutral
-    ? 'bg-slate-500/15 text-slate-400'
+    ? 'bg-slate-500/15 text-[var(--bp-muted)]'
     : ok
       ? 'bg-green-500/20 text-green-300'
       : 'bg-amber-500/20 text-amber-300'
@@ -1562,7 +1562,7 @@ function ValidationRow({
       </span>
       <div className="min-w-0">
         <p className="text-xs font-bold text-[var(--bp-text)]">{label}</p>
-        {detail ? <p className="text-[11px] text-slate-500">{detail}</p> : null}
+        {detail ? <p className="text-[11px] text-[var(--bp-muted)]">{detail}</p> : null}
       </div>
     </div>
   )
@@ -1582,7 +1582,7 @@ function WhyThisOrder() {
       <ol className="grid gap-2 sm:grid-cols-2">
         {factors.map((factor, index) => (
           <li key={index} className="flex items-center gap-2.5 rounded-xl bg-[var(--bp-bg)] p-2.5">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--bp-surface)] text-xs font-black text-[var(--bp-accent)]">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--bp-surface)] text-xs font-black text-[var(--bp-accent-ink)]">
               {index + 1}
             </span>
             <span className="text-base">{factor.emoji}</span>
@@ -1845,7 +1845,7 @@ function postponeMeta(status: PostponeStatus): { label: string; emoji: string; t
     case 'INVALID_TASK_DATA':
       return { label: 'Needs a duration', emoji: '⚠️', tone: 'bg-red-500/15 text-red-300' }
     default:
-      return { label: 'Not scheduled', emoji: '📥', tone: 'bg-slate-500/15 text-slate-300' }
+      return { label: 'Not scheduled', emoji: '📥', tone: 'bg-slate-500/15 text-[var(--bp-subtle)]' }
   }
 }
 

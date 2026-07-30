@@ -14,7 +14,7 @@ import { AndroidImportance } from 'expo-notifications/build/NotificationChannelM
 import cancelScheduledNotificationAsync from 'expo-notifications/build/cancelScheduledNotificationAsync';
 import scheduleNotificationAsync from 'expo-notifications/build/scheduleNotificationAsync';
 import setNotificationChannelAsync from 'expo-notifications/build/setNotificationChannelAsync';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { ReminderPriority } from '../features/reminders/types/reminders.types';
 
 const DEFAULT_NOTIFICATION_BODY = 'BeePlan Reminder';
@@ -30,13 +30,23 @@ const PRIORITY_NOTIFICATION_COLORS: Record<ReminderPriority, string> = {
 };
 
 setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
+  handleNotification: async (notification) => ({
+    shouldPlaySound: !(notification.request.content.data?.kind === 'focus-completion' && AppState.currentState === 'active'),
     shouldSetBadge: false,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
 });
+
+export async function scheduleFocusCompletionNotification({ endsAtMs, soundEnabled }: { endsAtMs: number; soundEnabled: boolean }): Promise<string | null> {
+  if (endsAtMs <= Date.now() || !(await requestNotificationPermission())) return null;
+  const channelId = soundEnabled ? 'focus-completion' : 'focus-completion-silent';
+  if (Platform.OS === 'android') await setNotificationChannelAsync(channelId, { name: 'Focus completion', importance: AndroidImportance.HIGH, sound: soundEnabled ? 'default' : undefined });
+  return scheduleNotificationAsync({
+    content: { title: 'Focus session complete', body: 'Great work — your focus timer has finished.', sound: soundEnabled ? 'default' : undefined, data: { kind: 'focus-completion' } },
+    trigger: { type: SchedulableTriggerInputTypes.DATE, date: new Date(endsAtMs), channelId: Platform.OS === 'android' ? channelId : undefined },
+  });
+}
 
 export class NotificationPermissionDeniedError extends Error {
   constructor() {

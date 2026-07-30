@@ -30,10 +30,12 @@ export const FloatingActionButton = memo(function FloatingActionButton({
       style={{
         bottom: resolvedBottom,
         backgroundColor: theme.colors.accent,
+        borderColor: '#fff47a',
+        borderWidth: 1,
         shadowColor: theme.colors.accent,
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
-        elevation: 6,
+        shadowOpacity: 0.38,
+        shadowRadius: 18,
+        elevation: 7,
       }}
     >
       <Text className="text-2xl font-black" style={{ color: theme.colors.accentText }}>{label}</Text>

@@ -69,7 +69,7 @@ export function AddTaskSheet({ visible, onClose, onSelectManual, onSelectAi }: A
             className="mb-3 rounded-2xl border px-4 py-4 active:opacity-80"
             style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}
           >
-            <Text className="font-bold" style={{ color: colors.accent }}>
+            <Text className="font-bold" style={{ color: colors.accentInk }}>
               AI Plan Task
             </Text>
             <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>

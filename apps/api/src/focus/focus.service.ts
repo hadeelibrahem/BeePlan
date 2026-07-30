@@ -25,10 +25,12 @@ import {
 } from './focus-subtask-select';
 import type {
   CancelFocusSessionDto,
+  ExtendFocusSessionDto,
   FinishFocusSessionDto,
   StartFocusSessionDto,
 } from './dto/focus.dto';
 import {
+  computeExtendedEndTime,
   computeFocusStats,
   rankFocusTasks,
   type FocusCandidate,
@@ -56,6 +58,9 @@ export type FocusSessionEntity = {
   subtaskTitle: string | null;
   startedAt: string;
   endedAt: string | null;
+  // Authoritative scheduled end of the session. Clients derive the countdown
+  // from this timestamp, so an extension is reflected the instant it returns.
+  endsAt: string;
   plannedMinutes: number;
   actualMinutes: number | null;
   status: string;
@@ -142,6 +147,7 @@ export class FocusService {
       }
     }
 
+    const startedAt = new Date();
     const [row] = await this.db
       .insert(focusSessions)
       .values({
@@ -151,7 +157,9 @@ export class FocusService {
         plannedMinutes: dto.plannedMinutes,
         sessionType: dto.sessionType ?? 'pomodoro',
         status: 'active',
-        startedAt: new Date(),
+        startedAt,
+        // Authoritative deadline the clients count down to.
+        endsAt: new Date(startedAt.getTime() + dto.plannedMinutes * 60_000),
       })
       .returning();
 
@@ -277,6 +285,51 @@ export class FocusService {
     if (session.taskId) {
       await this.tasksService.recomputeTaskSpentTime(session.taskId);
     }
+
+    return this.toEntity(updated, taskTitle, subtaskTitle);
+  }
+
+  /**
+   * "Add More Time": extend an active session by a dynamic number of minutes.
+   * The new end time is computed from the LATEST of the current end time and now
+   * (so repeated extensions always build on the current deadline and a session
+   * whose clock elapsed still gets the full addition). Persists the authoritative
+   * `endsAt` and keeps `plannedMinutes` in sync, then returns the updated session
+   * so the client can adopt the server's end time verbatim.
+   */
+  async extend(
+    userId: string,
+    sessionId: string,
+    dto: ExtendFocusSessionDto,
+  ): Promise<FocusSessionEntity> {
+    const session = await this.getSessionForUser(userId, sessionId);
+    const currentEnd = this.resolveEndsAt(session);
+    const newEndsAt = computeExtendedEndTime(
+      currentEnd,
+      dto.additionalMinutes,
+      new Date(),
+    );
+    // Keep plannedMinutes consistent with the new deadline (used for the stats
+    // clamp and the progress ring); never below 1 minute.
+    const newPlannedMinutes = Math.max(
+      1,
+      Math.round((newEndsAt.getTime() - session.startedAt.getTime()) / 60_000),
+    );
+
+    const [updated] = await this.db
+      .update(focusSessions)
+      .set({ endsAt: newEndsAt, plannedMinutes: newPlannedMinutes })
+      .where(eq(focusSessions.id, sessionId))
+      .returning();
+
+    const taskTitle = session.taskId
+      ? await this.findTaskTitleById(session.taskId)
+      : null;
+    const subtaskTitle =
+      session.subtaskId && session.taskId
+        ? ((await this.findSubtask(session.taskId, session.subtaskId))?.title ??
+          null)
+        : null;
 
     return this.toEntity(updated, taskTitle, subtaskTitle);
   }
@@ -707,6 +760,17 @@ export class FocusService {
 
   // --- helpers -------------------------------------------------------------
 
+  /**
+   * The session's authoritative end time. Falls back to started_at + planned
+   * minutes for legacy rows created before the ends_at column was backfilled.
+   */
+  private resolveEndsAt(session: FocusSessionRow): Date {
+    return (
+      session.endsAt ??
+      new Date(session.startedAt.getTime() + session.plannedMinutes * 60_000)
+    );
+  }
+
   private resolveActualMinutes(
     provided: number | undefined,
     startedAt: Date,
@@ -1025,6 +1089,7 @@ export class FocusService {
       subtaskTitle,
       startedAt: row.startedAt.toISOString(),
       endedAt: row.endedAt ? row.endedAt.toISOString() : null,
+      endsAt: this.resolveEndsAt(row).toISOString(),
       plannedMinutes: row.plannedMinutes,
       actualMinutes: row.actualMinutes,
       status: row.status,

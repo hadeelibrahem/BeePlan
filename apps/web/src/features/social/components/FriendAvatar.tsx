@@ -27,7 +27,7 @@ export function FriendAvatar({ fullName, avatarUrl, size = 40 }: Props) {
   return (
     <div
       style={dimension}
-      className="flex shrink-0 items-center justify-center rounded-full bg-[var(--bp-accent-soft)] text-xs font-black text-[var(--bp-accent)]"
+      className="flex shrink-0 items-center justify-center rounded-full bg-[var(--bp-accent-soft)] text-xs font-black text-[var(--bp-accent-ink)]"
       aria-hidden
     >
       {initials(fullName)}

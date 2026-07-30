@@ -37,7 +37,7 @@ export function ReminderTypeSelector({ value, onChange }: Props) {
             >
               {selected && <span className="absolute end-3 top-3 h-2 w-2 rounded-full bg-[var(--bp-accent)]" />}
               <span className="block pe-4 text-sm font-black">{t(type.labelKey)}</span>
-              <span className={`mt-1 block text-xs font-semibold ${selected ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-subtle)]'}`}>
+              <span className={`mt-1 block text-xs font-semibold ${selected ? 'text-[var(--bp-accent-ink)]' : 'text-[var(--bp-subtle)]'}`}>
                 {t(type.hintKey)}
               </span>
             </button>

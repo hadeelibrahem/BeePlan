@@ -1,47 +1,65 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-yellow: #f9e547;
+  --color-primary-yellow: #fdef4b;
   --color-dark-gray-blue: #2b323f;
 }
 
 :root {
   /* BeePlan brand token: keep this value aligned with mobile BRAND_YELLOW. */
-  --bp-brand-dark: #2b323f;
-  --bp-accent: #f9e547;
-  --bp-bg: #252c3a;
-  --bp-surface: #313848;
-  --bp-surface-elevated: #313848;
-  --bp-input: #313848;
-  --bp-border: #46506a;
+  --bp-brand-dark: #1A1F2C;
+  --bp-accent: #FDEF4B;
+  --bp-bg: #1A1F2C;
+  --bp-surface: #1E2533;
+  --bp-surface-elevated: #242B3D;
+  --bp-input: #1E2533;
+  --bp-border: rgba(255, 255, 255, 0.05);
   --bp-text: #ffffff;
   --bp-muted: #94a3b8;
   --bp-subtle: #aeb7c4;
   --bp-placeholder: rgba(255, 255, 255, 0.45);
-  --bp-accent-soft: rgba(249, 229, 71, 0.16);
-  --bp-accent-text: #2b323f;
+  /* Use the brand yellow for precise accents; surfaces stay deliberately quiet. */
+  --bp-accent-soft: rgba(253, 239, 75, 0.12);
+  --bp-accent-ink: #FDEF4B;
+  --bp-accent-text: #6b5900;
   --bp-disabled: rgba(255, 255, 255, 0.14);
   --bp-disabled-text: rgba(255, 255, 255, 0.42);
-  --bp-shadow: rgba(0, 0, 0, 0.28);
+  --bp-shadow: rgba(0, 0, 0, 0.18);
   --bp-success: #86efac;
   --bp-warning: #fb923c;
   --bp-danger: #fca5a5;
+
+  /* Semantic aliases keep component intent separate from raw palette values. */
+  --color-background: var(--bp-bg);
+  --color-surface: var(--bp-surface);
+  --color-card: var(--bp-surface);
+  --color-border: var(--bp-border);
+  --color-text-primary: var(--bp-text);
+  --color-text-secondary: var(--bp-muted);
+  --color-accent: var(--bp-accent);
+  --color-shadow: var(--bp-shadow);
 }
 
 :root[data-theme='light'] {
-  --bp-bg: #ffffff;
-  --bp-surface: #f4f5f7;
+  /* Independent light palette: page, surface and card layers are intentional. */
+  --bp-brand-dark: #1e293b;
+  --bp-bg: #f6f8fc;
+  --bp-surface: #ffffff;
   --bp-surface-elevated: #ffffff;
-  --bp-input: #f4f5f7;
-  --bp-border: rgba(43, 50, 63, 0.12);
-  --bp-text: #2b323f;
-  --bp-muted: #515b6b;
-  --bp-subtle: #6f7887;
-  --bp-placeholder: rgba(43, 50, 63, 0.42);
-  --bp-accent-soft: rgba(249, 229, 71, 0.28);
+  --bp-input: #ffffff;
+  --bp-input-border: #d7dee8;
+  --bp-input-hover: #cbd5e1;
+  --bp-border: #e5e7eb;
+  --bp-text: #1e293b;
+  --bp-muted: #64748b;
+  --bp-subtle: #94a3b8;
+  --bp-placeholder: #94a3b8;
+  --bp-accent-soft: rgba(253, 239, 75, 0.24);
+  --bp-accent-ink: #6b5900;
+  --bp-accent-text: #6b5900;
   --bp-disabled: #e5e7eb;
   --bp-disabled-text: #9ca3af;
-  --bp-shadow: rgba(43, 50, 63, 0.12);
+  --bp-shadow: rgba(15, 23, 42, 0.05);
   --bp-success: #15803d;
   --bp-warning: #c2410c;
   --bp-danger: #dc2626;
@@ -62,6 +80,37 @@ body {
   outline-offset: 2px;
   box-shadow: 0 0 0 2px var(--bp-bg);
 }
+
+/* Scoped light chrome: dark-mode utility styling remains untouched. */
+:root[data-theme='light'] .bp-app-layout { background: var(--bp-bg); }
+:root[data-theme='light'] .bp-global-header,
+:root[data-theme='light'] .bp-sidebar,
+:root[data-theme='light'] .bp-sidebar-drawer { background: #fff; border-color: var(--bp-border); box-shadow: none; }
+:root[data-theme='light'] .bp-global-header { box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
+:root[data-theme='light'] .bp-sidebar-logo { background: #fff; border-color: var(--bp-border); }
+:root[data-theme='light'] .bp-header-control,
+:root[data-theme='light'] .bp-header-search { background: #fff; border-color: var(--bp-input-border); color: var(--bp-text); }
+:root[data-theme='light'] .bp-header-control:hover { background: #f8fafc; border-color: var(--bp-input-hover); }
+:root[data-theme='light'] .bp-header-search:focus-within { border-color: var(--bp-accent); box-shadow: 0 0 0 3px rgba(253, 239, 75, .28); }
+:root[data-theme='light'] .bp-header-search kbd { background: #f8fafc; border-color: var(--bp-border); color: var(--bp-muted); }
+:root[data-theme='light'] .bp-sidebar-group { color: var(--bp-subtle); }
+:root[data-theme='light'] .bp-sidebar-progress { background: #f8fafc; border-color: var(--bp-border); box-shadow: none; }
+:root[data-theme='light'] .bp-sidebar-nav-item { color: var(--bp-muted); }
+:root[data-theme='light'] .bp-sidebar-nav-item:hover { background: #f8fafc; color: var(--bp-text); }
+:root[data-theme='light'] .bp-sidebar-nav-item[aria-current='page'] { background: var(--bp-accent-soft); color: #5f4e00; }
+:root[data-theme='light'] .bp-sidebar-nav-item .bp-sidebar-icon { color: var(--bp-subtle); }
+:root[data-theme='light'] .bp-sidebar-nav-item[aria-current='page'] .bp-sidebar-icon { color: #7a6500; }
+:root[data-theme='light'] .bp-card,
+:root[data-theme='light'] .bp-modal { background: #fff; border-color: var(--bp-border); box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 6px 20px rgba(15, 23, 42, .05); }
+:root[data-theme='light'] input:not([type='checkbox']):not([type='radio']),
+:root[data-theme='light'] select,
+:root[data-theme='light'] textarea { background-color: var(--bp-input); border-color: var(--bp-input-border); color: var(--bp-text); }
+:root[data-theme='light'] input:not([type='checkbox']):not([type='radio']):hover,
+:root[data-theme='light'] select:hover,
+:root[data-theme='light'] textarea:hover { border-color: var(--bp-input-hover); }
+:root[data-theme='light'] input:not([type='checkbox']):not([type='radio']):focus,
+:root[data-theme='light'] select:focus,
+:root[data-theme='light'] textarea:focus { border-color: var(--bp-accent); box-shadow: 0 0 0 3px rgba(253, 239, 75, .28) !important; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

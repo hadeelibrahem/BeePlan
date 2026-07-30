@@ -20,7 +20,7 @@ export function ChecklistInput({ value, onChange }: Props) {
         <button
           type="button"
           onClick={addItem}
-          className="rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-xs font-black text-[var(--bp-accent)]"
+          className="rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-xs font-black text-[var(--bp-accent-ink)]"
         >
           {t('reminders.addItem')}
         </button>
@@ -28,7 +28,7 @@ export function ChecklistInput({ value, onChange }: Props) {
       <div className="grid gap-3">
         {value.map((item, index) => (
           <div key={item.id} className="flex items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-xs font-black text-[var(--bp-accent)]">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--bp-border)] bg-[var(--bp-surface)] text-xs font-black text-[var(--bp-accent-ink)]">
               {formatNumber(index + 1)}
             </span>
             <input

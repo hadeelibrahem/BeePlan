@@ -140,7 +140,7 @@ export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut
         title="Notifications"
         subtitle="Invitations, mentions, comments and task updates."
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search notifications"
@@ -169,7 +169,7 @@ export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut
             {invitations === null ? (
               <SkeletonList rows={1} />
             ) : invitations.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[var(--bp-border)] px-4 py-6 text-center text-sm text-slate-400">
+              <p className="rounded-2xl border border-dashed border-[var(--bp-border)] px-4 py-6 text-center text-sm text-[var(--bp-muted)]">
                 No pending invitations.
               </p>
             ) : (
@@ -191,7 +191,7 @@ export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut
                         invited you to collaborate on{' '}
                         <span className="font-black">"{invite.taskTitle}"</span>
                       </p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-[var(--bp-muted)]">
                         as {invite.role} · {formatTime(invite.invitedAt)}
                       </p>
                     </div>
@@ -221,7 +221,7 @@ export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut
           <section aria-label="Notifications">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-black">
-                Recent{unread ? <span className="text-[var(--bp-accent)]"> · {unread} new</span> : null}
+                Recent{unread ? <span className="text-[var(--bp-accent-ink)]"> · {unread} new</span> : null}
               </h2>
               {unread ? (
                 <GhostButton size="sm" onClick={() => void markAll()}>
@@ -233,7 +233,7 @@ export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut
             {notifications === null ? (
               <SkeletonList rows={4} />
             ) : visibleNotifications.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[var(--bp-border)] px-4 py-8 text-center text-sm text-slate-400">
+              <p className="rounded-2xl border border-dashed border-[var(--bp-border)] px-4 py-8 text-center text-sm text-[var(--bp-muted)]">
                 {notifications.length === 0 ? 'Nothing here yet.' : 'No matching notifications.'}
               </p>
             ) : (
@@ -256,8 +256,8 @@ export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut
                         <span className="block text-sm font-bold text-[var(--bp-text)]">
                           {notification.title}
                         </span>
-                        <span className="block truncate text-xs text-slate-400">{notification.body}</span>
-                        <span className="block text-[10px] text-slate-500">
+                        <span className="block truncate text-xs text-[var(--bp-muted)]">{notification.body}</span>
+                        <span className="block text-[10px] text-[var(--bp-muted)]">
                           {formatTime(notification.sentAt)}
                         </span>
                       </span>

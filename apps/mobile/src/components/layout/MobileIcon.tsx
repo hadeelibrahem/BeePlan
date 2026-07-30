@@ -2,7 +2,8 @@ import Svg, { Path } from 'react-native-svg'
 
 export type MobileIconName =
   | 'dashboard' | 'tasks' | 'focus' | 'reminders' | 'people' | 'notifications'
-  | 'calendar' | 'check' | 'priority' | 'add' | 'search' | 'filter' | 'folder'
+  | 'calendar' | 'analytics' | 'notes' | 'planner' | 'more'
+  | 'check' | 'priority' | 'add' | 'search' | 'filter' | 'folder'
 
 type Props = { name: MobileIconName; color: string; size?: number; accessibilityLabel?: string }
 
@@ -14,6 +15,10 @@ const PATHS: Record<MobileIconName, string> = {
   people: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m6.5-1a3 3 0 1 0 0-6m2 16v-1a4 4 0 0 0-2-3.65',
   notifications: 'M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
   calendar: 'M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z',
+  analytics: 'M5 20V10m7 10V4m7 16v-7',
+  notes: 'M6 3h9l3 3v15H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm8 0v4h4M8 12h8m-8 4h6',
+  planner: 'M12 3a9 9 0 1 0 9 9M12 7v5l4 2M7 3v2m10-2v2',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
   check: 'M5 12l4 4L19 6',
   priority: 'M12 3v18m0-18 7 7m-7-7-7 7',
   add: 'M12 5v14M5 12h14',

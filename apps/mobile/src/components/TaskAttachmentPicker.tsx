@@ -81,7 +81,7 @@ export default function TaskAttachmentPicker({ files, onChange, disabled, onVali
           opacity: disabled ? 0.6 : 1,
         }}
       >
-        <Text className="text-center text-sm font-black" style={{ color: colors.accent }}>
+        <Text className="text-center text-sm font-black" style={{ color: colors.accentInk }}>
           Upload files
         </Text>
         <Text className="mt-2 text-center text-sm" style={{ color: colors.secondaryText }}>

@@ -11,6 +11,9 @@ type ButtonProps = {
   fullWidth?: boolean
   size?: 'sm' | 'md'
   style?: StyleProp<ViewStyle>
+  /** Screen-reader label when the visible text alone isn't specific enough
+   * (e.g. an "Approve" button among several). Defaults to the button text. */
+  accessibilityLabel?: string
 }
 
 const SIZE_CLASSES = {
@@ -22,7 +25,7 @@ const SIZE_TEXT_CLASSES = {
   md: 'text-sm',
 }
 
-export function PrimaryButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
+export function PrimaryButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md', accessibilityLabel }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -31,10 +34,11 @@ export function PrimaryButton({ children, onPress, disabled, loading, className 
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       className={`items-center justify-center rounded-xl active:scale-[0.98] active:opacity-90 ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
-      style={{ backgroundColor: theme.colors.accent }}
+      style={{ backgroundColor: theme.colors.accent, borderColor: '#fff47a', borderWidth: 1, shadowColor: theme.colors.accent, shadowOpacity: 0.28, shadowRadius: 12, elevation: 4 }}
     >
       {loading ? (
         <ActivityIndicator color={theme.colors.accentText} />
@@ -47,7 +51,7 @@ export function PrimaryButton({ children, onPress, disabled, loading, className 
   )
 }
 
-export function SecondaryButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
+export function SecondaryButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md', accessibilityLabel }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -56,6 +60,7 @@ export function SecondaryButton({ children, onPress, disabled, loading, classNam
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       className={`items-center justify-center rounded-xl active:scale-[0.98] active:opacity-80 ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
@@ -72,7 +77,7 @@ export function SecondaryButton({ children, onPress, disabled, loading, classNam
   )
 }
 
-export function OutlineButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md', style }: ButtonProps) {
+export function OutlineButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md', style, accessibilityLabel }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -81,6 +86,7 @@ export function OutlineButton({ children, onPress, disabled, loading, className 
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       className={`items-center justify-center rounded-xl border bg-transparent active:scale-[0.98] ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}
@@ -97,7 +103,7 @@ export function OutlineButton({ children, onPress, disabled, loading, className 
   )
 }
 
-export function DangerButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md' }: ButtonProps) {
+export function DangerButton({ children, onPress, disabled, loading, className = '', fullWidth, size = 'md', accessibilityLabel }: ButtonProps) {
   const { theme } = useTheme()
   const isDisabled = disabled || loading
 
@@ -106,6 +112,7 @@ export function DangerButton({ children, onPress, disabled, loading, className =
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       className={`items-center justify-center rounded-xl active:scale-[0.98] ${SIZE_CLASSES[size]} ${
         isDisabled ? 'opacity-50' : ''
       } ${fullWidth ? 'w-full' : ''} ${className}`}

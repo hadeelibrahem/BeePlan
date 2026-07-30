@@ -5,6 +5,11 @@
     "cancel": "Cancel",
     "somethingWentWrong": "Something went wrong. Please try again."
   },
+  "notesMotivation": {
+    "label": "Your progress today",
+    "basedOnActivity": "Based on today’s activity",
+    "loading": "Loading your progress message"
+  },
   "topBar": {
     "searchPlaceholder": "Search...",
     "closeSearch": "Close search",

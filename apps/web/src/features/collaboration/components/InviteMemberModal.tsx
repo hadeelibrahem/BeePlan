@@ -84,7 +84,7 @@ export function InviteMemberModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-lg px-2 py-1 text-slate-400 hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)]"
+            className="rounded-lg px-2 py-1 text-[var(--bp-muted)] hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)]"
           >
             ✕
           </button>
@@ -112,7 +112,7 @@ export function InviteMemberModal({
               ))}
             </div>
           ) : results.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">
+            <p className="py-8 text-center text-sm text-[var(--bp-muted)]">
               {friends.length === 0
                 ? 'Add friends first to invite them to tasks.'
                 : 'No matching friends.'}
@@ -138,7 +138,7 @@ export function InviteMemberModal({
                         <span className="block truncate text-sm font-bold text-[var(--bp-text)]">
                           {friend.fullName}
                         </span>
-                        <span className="block truncate text-xs text-slate-400">{friend.email}</span>
+                        <span className="block truncate text-xs text-[var(--bp-muted)]">{friend.email}</span>
                       </span>
                       <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-bold text-green-300">
                         Friend
@@ -153,7 +153,7 @@ export function InviteMemberModal({
 
         <div className="mt-4 border-t border-[var(--bp-border)] pt-4">
           <div className="mb-3 flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400">Role</span>
+            <span className="text-xs font-semibold text-[var(--bp-muted)]">Role</span>
             <div className="flex overflow-hidden rounded-lg border border-[var(--bp-border)]">
               {(['editor', 'viewer'] as const).map((r) => (
                 <button
@@ -163,8 +163,8 @@ export function InviteMemberModal({
                   aria-pressed={role === r}
                   className={`px-3 py-1.5 text-xs font-bold capitalize transition ${
                     role === r
-                      ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
-                      : 'text-slate-400 hover:text-[var(--bp-text)]'
+                      ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
+                      : 'text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
                   }`}
                 >
                   {r === 'editor' ? '✏️ Editor' : '👁 Viewer'}

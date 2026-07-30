@@ -51,7 +51,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
       : reminder.status === 'missed'
         ? { bg: `${colors.error}26`, color: colors.error }
         : reminder.status === 'snoozed'
-          ? { bg: colors.accentSoft, color: colors.accent }
+          ? { bg: colors.accentSoft, color: colors.accentInk }
           : { bg: colors.disabled, color: colors.secondaryText };
 
   const priorityDot: Record<Reminder['priority'], string> = {

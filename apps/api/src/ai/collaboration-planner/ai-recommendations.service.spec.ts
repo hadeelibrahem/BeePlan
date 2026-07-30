@@ -1,4 +1,4 @@
-import { aiRecommendations, subtasks, users } from '../../db/schema';
+import { aiRecommendations, subtasks, tasks, users } from '../../db/schema';
 import {
   AiRecommendationsService,
   detectAheadOfPace,
@@ -6,6 +6,7 @@ import {
   detectInactiveMembers,
   detectWorkloadImbalance,
 } from './ai-recommendations.service';
+import { buildDeltas } from './recommendation-preview.logic';
 
 const OWNER_ID = '11111111-1111-1111-1111-111111111111';
 const MEMBER_A = '22222222-2222-2222-2222-222222222222';
@@ -144,7 +145,7 @@ describe('detectDeadlineRisk', () => {
 
 type AnyRow = Record<string, unknown>;
 
-function makeDb(config: { recommendation: AnyRow; person?: AnyRow }) {
+function makeDb(config: { recommendation: AnyRow; person?: AnyRow; subtaskRows?: AnyRow[] }) {
   const updates: { table: unknown; vals: AnyRow }[] = [];
   const chain = (rows: unknown[]) => {
     const promise = Promise.resolve(rows);
@@ -160,6 +161,8 @@ function makeDb(config: { recommendation: AnyRow; person?: AnyRow }) {
       from: (table: unknown) => {
         if (table === aiRecommendations) return chain([config.recommendation]);
         if (table === users) return chain(config.person ? [config.person] : []);
+        if (table === tasks) return chain([{ userId: OWNER_ID }]);
+        if (table === subtasks) return chain(config.subtaskRows ?? []);
         return chain([]);
       },
     }),
@@ -173,8 +176,83 @@ function makeDb(config: { recommendation: AnyRow; person?: AnyRow }) {
   return { db, updates };
 }
 
-function makeService(recommendation: AnyRow, person?: AnyRow) {
-  const { db, updates } = makeDb({ recommendation, person });
+/** A subtask row shaped the way `toAffectedItem` expects. */
+function affectedRow(over: AnyRow = {}): AnyRow {
+  return {
+    id: 'sub-1',
+    title: 'Write the intro',
+    status: 'todo',
+    isDone: false,
+    assigneeUserId: MEMBER_A,
+    estimatedDurationMinutes: 60,
+    startDate: daysAgo(1),
+    dueDate: daysFromNow(3),
+    ...over,
+  };
+}
+
+/** A snapshot whose only interesting axis is the forecast delay. */
+function previewSnapshot(delayDays: number, over: AnyRow = {}): any {
+  return {
+    forecast: {
+      status: 'available',
+      projectedCompletion: daysFromNow(3).toISOString(),
+      deadline: daysFromNow(2).toISOString(),
+      delayMinutes: delayDays * 1440,
+      delayDays,
+      capacityShortfallMinutes: 0,
+      unscheduledItemCount: 0,
+      bottleneck: null,
+      ...(over.forecast as AnyRow),
+    },
+    health: {
+      overallScore: 70,
+      overallStatus: 'balanced',
+      scheduleScore: 70,
+      capacityScore: 70,
+      dependencyScore: 90,
+      executionScore: 60,
+      collaborationScore: 80,
+    },
+    capacity: {
+      balancePercent: 50,
+      overloadedCount: 1,
+      availableCount: 1,
+      memberCount: 2,
+      remainingMinutes: 240,
+      availableMinutes: 480,
+      members: [],
+      ...(over.capacity as AnyRow),
+    },
+    criticalWork: {
+      status: 'available',
+      itemCount: 2,
+      blockedCount: 0,
+      durationMinutes: 120,
+      projectedCompletion: daysFromNow(3).toISOString(),
+    },
+    work: { blockedItemCount: 0, readyItemCount: 3, openItemCount: 3 },
+  };
+}
+
+function makeService(
+  recommendation: AnyRow,
+  person?: AnyRow,
+  options: {
+    subtaskRows?: AnyRow[];
+    acceptedMemberIds?: string[];
+    taskComplete?: boolean;
+    openItemsByAssignee?: Map<string, number>;
+    /** Baseline / projected forecast delay, driving the deltas. */
+    delay?: { before: number; after: number };
+    omitSimulation?: boolean;
+  } = {},
+) {
+  const { db, updates } = makeDb({
+    recommendation,
+    person,
+    subtaskRows: options.subtaskRows ?? [affectedRow(), affectedRow({ id: 'sub-2' })],
+  });
   const databaseService = { db } as any;
   const access = { require: jest.fn().mockResolvedValue(undefined) } as any;
   const activityLog = jest.fn().mockResolvedValue(undefined);
@@ -182,14 +260,45 @@ function makeService(recommendation: AnyRow, person?: AnyRow) {
   const notifyCreate = jest.fn().mockResolvedValue(undefined);
   const notifications = { create: notifyCreate, createMany: jest.fn() } as any;
   const capacity = {} as any;
+
+  const delay = options.delay ?? { before: 3, after: 1 };
+  const baseline = previewSnapshot(delay.before);
+  const projected = previewSnapshot(delay.after);
+  const simulationInvalidate = jest.fn();
+  const simulations = {
+    invalidate: simulationInvalidate,
+    simulate: jest.fn(async () => ({
+      fingerprint: 'fp',
+      generatedAt: now.toISOString(),
+      baseline,
+      byRecommendation: options.omitSimulation
+        ? new Map()
+        : new Map([
+            [
+              recommendation.id as string,
+              {
+                recommendationId: recommendation.id as string,
+                changes: [],
+                projected,
+                deltas: buildDeltas(baseline, projected),
+              },
+            ],
+          ]),
+      acceptedMemberIds: new Set(options.acceptedMemberIds ?? [OWNER_ID, MEMBER_A, MEMBER_B]),
+      taskComplete: options.taskComplete ?? false,
+      openItemsByAssignee: options.openItemsByAssignee ?? new Map(),
+    })),
+  } as any;
+
   const service = new AiRecommendationsService(
     databaseService,
     access,
     activity,
     notifications,
     capacity,
+    simulations,
   );
-  return { service, updates, activityLog, notifyCreate, access };
+  return { service, updates, activityLog, notifyCreate, access, simulations, simulationInvalidate };
 }
 
 describe('AiRecommendationsService.approve', () => {
@@ -255,5 +364,139 @@ describe('AiRecommendationsService.dismiss', () => {
       'Rebalance',
       expect.anything(),
     );
+  });
+});
+
+// --- Validation at the point of approval -----------------------------------
+// A card can go stale between render and click. Approving must then fail
+// loudly and self-resolve rather than write a change that no longer helps.
+
+describe('AiRecommendationsService.approve — re-validates before writing', () => {
+  const inactiveRec = (over: AnyRow = {}) => ({
+    id: 'rec-v',
+    kind: 'inactive_member',
+    status: 'pending',
+    title: 'No activity',
+    targetUserId: MEMBER_A,
+    createdAt: now,
+    payload: { subtaskId: 'sub-1', fromUserId: MEMBER_A, toUserId: MEMBER_B },
+    ...over,
+  });
+
+  it('refuses when the target subtask has since been completed', async () => {
+    const { service, updates } = makeService(inactiveRec(), { fullName: 'Sara' }, {
+      subtaskRows: [affectedRow({ status: 'done', isDone: true })],
+    });
+
+    await expect(service.approve(OWNER_ID, TASK_ID, 'rec-v')).rejects.toThrow(/already complete/i);
+    // Nothing was written to the work itself...
+    expect(updates.some((u) => u.table === subtasks)).toBe(false);
+    // ...and the card resolved itself with a durable reason.
+    expect(
+      updates.some(
+        (u) =>
+          u.table === aiRecommendations &&
+          u.vals.status === 'auto_resolved' &&
+          u.vals.resolutionReason === 'completed',
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses when the receiving member has left the collaboration', async () => {
+    const { service, updates } = makeService(inactiveRec(), { fullName: 'Sara' }, {
+      acceptedMemberIds: [OWNER_ID, MEMBER_A],
+    });
+
+    await expect(service.approve(OWNER_ID, TASK_ID, 'rec-v')).rejects.toThrow(/no longer applicable/i);
+    expect(updates.some((u) => u.table === subtasks)).toBe(false);
+    expect(
+      updates.some((u) => u.table === aiRecommendations && u.vals.resolutionReason === 'not_applicable'),
+    ).toBe(true);
+  });
+
+  it('refuses when the work is already assigned to the proposed member', async () => {
+    const { service, updates } = makeService(inactiveRec(), { fullName: 'Sara' }, {
+      subtaskRows: [affectedRow({ assigneeUserId: MEMBER_B })],
+    });
+
+    await expect(service.approve(OWNER_ID, TASK_ID, 'rec-v')).rejects.toThrow(/already fixed/i);
+    expect(updates.some((u) => u.table === subtasks)).toBe(false);
+    expect(
+      updates.some((u) => u.table === aiRecommendations && u.vals.resolutionReason === 'already_applied'),
+    ).toBe(true);
+  });
+
+  it('refuses when the change would no longer move any tracked metric', async () => {
+    const { service, updates } = makeService(inactiveRec(), { fullName: 'Sara' }, {
+      delay: { before: 2, after: 2 },
+    });
+
+    await expect(service.approve(OWNER_ID, TASK_ID, 'rec-v')).rejects.toThrow(/no measurable effect/i);
+    expect(updates.some((u) => u.table === subtasks)).toBe(false);
+    expect(
+      updates.some((u) => u.table === aiRecommendations && u.vals.resolutionReason === 'no_impact'),
+    ).toBe(true);
+  });
+
+  it('refuses when the work it referred to was deleted', async () => {
+    const { service, updates } = makeService(inactiveRec(), { fullName: 'Sara' }, { subtaskRows: [] });
+
+    await expect(service.approve(OWNER_ID, TASK_ID, 'rec-v')).rejects.toThrow(/no longer applicable/i);
+    expect(updates.some((u) => u.table === subtasks)).toBe(false);
+  });
+
+  it('refuses when the project itself is already complete', async () => {
+    const { service } = makeService(inactiveRec(), { fullName: 'Sara' }, { taskComplete: true });
+    await expect(service.approve(OWNER_ID, TASK_ID, 'rec-v')).rejects.toThrow(/completed automatically/i);
+  });
+
+  it('applies normally when every rule still passes', async () => {
+    const { service, updates, notifyCreate } = makeService(inactiveRec(), { fullName: 'Sara' });
+
+    await service.approve(OWNER_ID, TASK_ID, 'rec-v');
+
+    expect(updates.some((u) => u.table === subtasks && u.vals.assigneeUserId === MEMBER_B)).toBe(true);
+    expect(updates.some((u) => u.table === aiRecommendations && u.vals.status === 'approved')).toBe(true);
+    expect(notifyCreate).toHaveBeenCalled();
+  });
+
+  it('drops the cached simulation after a successful apply', async () => {
+    const { service, simulationInvalidate } = makeService(inactiveRec(), { fullName: 'Sara' });
+    await service.approve(OWNER_ID, TASK_ID, 'rec-v');
+    expect(simulationInvalidate).toHaveBeenCalledWith(TASK_ID);
+  });
+
+  it('uses the SAME simulation the card and preview used', async () => {
+    const { service, simulations } = makeService(inactiveRec(), { fullName: 'Sara' });
+    await service.approve(OWNER_ID, TASK_ID, 'rec-v');
+
+    // One shared simulation call, keyed to this recommendation — not a private
+    // recomputation that could disagree with what the user was shown.
+    expect(simulations.simulate).toHaveBeenCalledWith(
+      OWNER_ID,
+      TASK_ID,
+      expect.arrayContaining([expect.objectContaining({ id: 'rec-v' })]),
+    );
+  });
+});
+
+describe('AiRecommendationsService.dismiss — always permitted', () => {
+  // Dismissal is a user judgement, not a claim about project state, so it must
+  // work even for a recommendation validation would reject.
+  it('dismisses a recommendation whose target is already complete', async () => {
+    const { service, updates } = makeService(
+      {
+        id: 'rec-d',
+        kind: 'inactive_member',
+        status: 'pending',
+        title: 'Stale',
+        payload: { subtaskId: 'sub-1', toUserId: MEMBER_B },
+      },
+      undefined,
+      { subtaskRows: [affectedRow({ status: 'done', isDone: true })] },
+    );
+
+    await service.dismiss(OWNER_ID, TASK_ID, 'rec-d');
+    expect(updates.some((u) => u.table === aiRecommendations && u.vals.status === 'dismissed')).toBe(true);
   });
 });

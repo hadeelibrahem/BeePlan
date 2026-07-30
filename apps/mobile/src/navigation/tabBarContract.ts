@@ -1,6 +1,8 @@
 import type { MainTabParamList } from './types'
 
-export const TAB_ROUTES = ['Dashboard', 'Tasks', 'Focus', 'Reminders', 'People'] as const satisfies readonly (keyof MainTabParamList)[]
+/** Persistent, high-frequency destinations. Other tab routes remain mounted for
+ * linking and state preservation, and are exposed from the More sheet. */
+export const TAB_ROUTES = ['Dashboard', 'Tasks', 'Focus'] as const satisfies readonly (keyof MainTabParamList)[]
 
 export function pressTab(
   active: boolean,

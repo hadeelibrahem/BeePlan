@@ -4,7 +4,7 @@ import type { Reminder } from '../types/reminders.types'
 import { getLocationLabel } from '../utils/locationLabel'
 
 const TYPE_META = {
-  time: { icon: 'T', color: 'text-[var(--bp-accent)]', bg: 'bg-[var(--bp-accent)]/15', label: 'Time' },
+  time: { icon: 'T', color: 'text-[var(--bp-accent-ink)]', bg: 'bg-[var(--bp-accent)]/15', label: 'Time' },
   location: { icon: 'L', color: 'text-emerald-300', bg: 'bg-emerald-300/15', label: 'Location' },
   context: { icon: 'C', color: 'text-violet-300', bg: 'bg-violet-300/15', label: 'Context' },
   checklist: { icon: 'K', color: 'text-rose-300', bg: 'bg-rose-300/15', label: 'Checklist' },
@@ -22,16 +22,16 @@ const PERSON_PERMISSION_LABEL: Record<string, string> = {
 const PERSON_PERMISSION_CLASS: Record<string, string> = {
   pending: 'border-amber-400/35 bg-amber-400/15 text-amber-300',
   active: 'border-emerald-400/35 bg-emerald-400/15 text-emerald-300',
-  expired: 'border-slate-400/35 bg-slate-400/15 text-slate-300',
+  expired: 'border-slate-400/35 bg-slate-400/15 text-[var(--bp-subtle)]',
   revoked: 'border-rose-400/35 bg-rose-400/15 text-rose-300',
   rejected: 'border-rose-400/35 bg-rose-400/15 text-rose-300',
 }
 
 const STATUS_BADGE: Record<Reminder['status'], string> = {
   active: 'border-emerald-400/35 bg-emerald-400/15 text-emerald-300',
-  done: 'border-[var(--bp-border)] bg-[var(--bp-border)]/60 text-slate-400',
+  done: 'border-[var(--bp-border)] bg-[var(--bp-border)]/60 text-[var(--bp-muted)]',
   missed: 'border-red-400/35 bg-red-400/15 text-red-300',
-  snoozed: 'border-[var(--bp-accent)]/35 bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]',
+  snoozed: 'border-[var(--bp-accent)]/35 bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]',
 }
 
 const priorityDot: Record<Reminder['priority'], string> = {
@@ -93,7 +93,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${priorityDot[reminder.priority]}`} />
             </span>
 
-            {subtitle && <span className="block truncate text-xs leading-snug text-slate-400">{subtitle}</span>}
+            {subtitle && <span className="block truncate text-xs leading-snug text-[var(--bp-muted)]">{subtitle}</span>}
 
             {progress !== null && (
               <span className="mt-2.5 flex items-center gap-2">
@@ -103,7 +103,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
                     style={{ width: `${progress * 100}%` }}
                   />
                 </span>
-                <span className="text-[11px] font-medium text-slate-400">
+                <span className="text-[11px] font-medium text-[var(--bp-muted)]">
                   {formatPercent(Math.round(progress * 100))}
                 </span>
               </span>
@@ -127,7 +127,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
             </span>
 
             {reminder.type === 'person' && reminder.person && (
-              <span className="mt-1.5 block text-[11px] text-slate-500">
+              <span className="mt-1.5 block text-[11px] text-[var(--bp-muted)]">
                 {`Radius ${reminder.person.radiusMeters ?? 100}m`}
                 {reminder.person.lastNotifiedAt
                   ? ` · Last alerted ${new Date(reminder.person.lastNotifiedAt).toLocaleString()}`
@@ -139,7 +139,7 @@ export function ReminderCard({ reminder, onPress, onToggle }: Props) {
           <DirectionalChevron
             direction="forward"
             isRTL={isRTL}
-            className="mt-1 h-4 w-4 shrink-0 text-slate-500"
+            className="mt-1 h-4 w-4 shrink-0 text-[var(--bp-muted)]"
           />
         </button>
       </div>

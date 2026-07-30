@@ -646,7 +646,7 @@ const SubtaskRow = memo(function SubtaskRow({
           </Text>
           {item.isShared ? (
             <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
-              <Text className="text-[10px] font-black" style={{ color: colors.accent }}>👥 Shared</Text>
+              <Text className="text-[10px] font-black" style={{ color: colors.accentInk }}>👥 Shared</Text>
             </View>
           ) : null}
         </View>
@@ -674,12 +674,12 @@ const SubtaskRow = memo(function SubtaskRow({
           <TaskStatusBadge status={item.status} />
           {item.isFocusTask ? (
             <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
-              <Text className="text-xs font-bold" style={{ color: colors.accent }}>🎯 Focus</Text>
+              <Text className="text-xs font-bold" style={{ color: colors.accentInk }}>🎯 Focus</Text>
             </View>
           ) : null}
           {item.estimatedDurationSource === 'ai' && item.estimatedDurationMinutes ? (
             <View className="rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
-              <Text className="text-xs font-bold" style={{ color: colors.accent }}>AI Estimate</Text>
+              <Text className="text-xs font-bold" style={{ color: colors.accentInk }}>AI Estimate</Text>
             </View>
           ) : null}
         </View>

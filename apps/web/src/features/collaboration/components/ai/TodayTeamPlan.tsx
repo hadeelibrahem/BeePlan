@@ -47,7 +47,7 @@ export function TodayTeamPlan({ taskId, accessToken }: Props) {
   if (todayQuery.isLoading) {
     return (
       <SectionCard>
-        <p className="text-sm text-slate-400">Loading today's plan…</p>
+        <p className="text-sm text-[var(--bp-muted)]">Loading today's plan…</p>
       </SectionCard>
     )
   }
@@ -66,19 +66,23 @@ export function TodayTeamPlan({ taskId, accessToken }: Props) {
   return (
     <div className="space-y-4">
       <SectionCard>
-        <h3 className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Today's goal</h3>
+        <h3 className="mb-1 text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Today's goal</h3>
         <p className="text-sm font-bold text-[var(--bp-text)]">{data.goal}</p>
       </SectionCard>
 
       {data.sharedItems.length ? (
         <SectionCard>
-          <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-400">Shared</h3>
+          <details>
+          <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)] [&::-webkit-details-marker]:hidden">Shared <span className="ms-1 text-[var(--bp-text)]">({data.sharedItems.length})</span></summary>
+          <div className="mt-3">
           <ItemList
             items={data.sharedItems}
             busySubtaskId={checkInMutation.variables?.subtaskId}
             pending={checkInMutation.isPending}
             onCheckIn={(subtaskId, checkIn) => void checkInMutation.mutate({ subtaskId, checkIn })}
           />
+          </div>
+          </details>
         </SectionCard>
       ) : null}
 
@@ -93,7 +97,9 @@ export function TodayTeamPlan({ taskId, accessToken }: Props) {
       ) : (
         data.members.map((member) => (
           <SectionCard key={member.userId}>
-            <h3 className="mb-3 text-sm font-black text-[var(--bp-text)]">{member.displayName}</h3>
+            <details>
+            <summary className="cursor-pointer list-none text-sm font-black text-[var(--bp-text)] [&::-webkit-details-marker]:hidden">{member.displayName} <span className="text-xs font-semibold text-[var(--bp-muted)]">({member.items.length})</span></summary>
+            <div className="mt-3">
             {member.items.length ? (
               <ItemList
                 items={member.items}
@@ -102,8 +108,10 @@ export function TodayTeamPlan({ taskId, accessToken }: Props) {
                 onCheckIn={(subtaskId, checkIn) => void checkInMutation.mutate({ subtaskId, checkIn })}
               />
             ) : (
-              <p className="text-xs text-slate-400">Nothing today — starts later.</p>
+              <p className="text-xs text-[var(--bp-muted)]">Nothing today — starts later.</p>
             )}
+            </div>
+            </details>
           </SectionCard>
         ))
       )}
@@ -135,7 +143,7 @@ function ItemList({
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-[var(--bp-text)]">{item.title}</p>
               {item.dueDate ? (
-                <p className="text-[11px] text-slate-400">Due {new Date(item.dueDate).toLocaleDateString()}</p>
+                <p className="text-[11px] text-[var(--bp-muted)]">Due {new Date(item.dueDate).toLocaleDateString()}</p>
               ) : null}
             </div>
             <div className="flex shrink-0 gap-1.5">
@@ -148,7 +156,7 @@ function ItemList({
                   className={`rounded-full border px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
                     current === checkIn
                       ? CHECK_IN_META[checkIn].activeClass
-                      : 'border-[var(--bp-border)] text-slate-400 hover:text-[var(--bp-text)]'
+                      : 'border-[var(--bp-border)] text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
                   }`}
                 >
                   {CHECK_IN_META[checkIn].label}

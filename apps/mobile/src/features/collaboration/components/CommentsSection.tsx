@@ -155,7 +155,7 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
               className="rounded-full border px-2.5 py-1"
               style={{ borderColor: colors.border }}
             >
-              <Text style={{ color: colors.accent }} className="text-xs font-semibold">
+              <Text style={{ color: colors.accentInk }} className="text-xs font-semibold">
                 @{m.user.fullName}
               </Text>
             </Pressable>
@@ -222,7 +222,7 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
                           </Text>
                         </Pressable>
                         <Pressable onPress={() => void saveEdit(comment)}>
-                          <Text style={{ color: colors.accent }} className="text-xs font-black">
+                          <Text style={{ color: colors.accentInk }} className="text-xs font-black">
                             Save
                           </Text>
                         </Pressable>

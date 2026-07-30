@@ -140,7 +140,7 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
         title={t('people.title')}
         subtitle={t('people.subtitle')}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder={t('people.searchPlaceholder')}
@@ -161,7 +161,7 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
         {/* Friends */}
         <Card title={t('people.friends.title')}>
           {filteredFriends.length === 0 ? (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[var(--bp-muted)]">
               {friends.length === 0 ? t('people.friends.empty') : t('people.friends.noMatch')}
             </p>
           ) : (
@@ -178,11 +178,11 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
 
         {/* Friend requests */}
         <Card title={t('people.requests.title')}>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--bp-muted)]">
             {t('people.requests.incoming')}
           </p>
           {incoming.length === 0 ? (
-            <p className="text-xs text-slate-400">{t('people.requests.noIncoming')}</p>
+            <p className="text-xs text-[var(--bp-muted)]">{t('people.requests.noIncoming')}</p>
           ) : (
             incoming.map((req) => (
               <FriendRequestItem
@@ -195,11 +195,11 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
             ))
           )}
 
-          <p className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-[var(--bp-muted)]">
             {t('people.requests.outgoing')}
           </p>
           {outgoing.length === 0 ? (
-            <p className="text-xs text-slate-400">{t('people.requests.noOutgoing')}</p>
+            <p className="text-xs text-[var(--bp-muted)]">{t('people.requests.noOutgoing')}</p>
           ) : (
             outgoing.map((req) => (
               <FriendRequestItem
@@ -214,9 +214,9 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
 
         {/* Location sharing requests */}
         <Card title={t('people.sharing.title')}>
-          <p className="mb-2 text-[11px] text-slate-400">{t('people.sharing.explainer')}</p>
+          <p className="mb-2 text-[11px] text-[var(--bp-muted)]">{t('people.sharing.explainer')}</p>
           {incomingSharing.length === 0 ? (
-            <p className="text-xs text-slate-400">{t('people.sharing.empty')}</p>
+            <p className="text-xs text-[var(--bp-muted)]">{t('people.sharing.empty')}</p>
           ) : (
             incomingSharing.map((perm) => (
               <LocationSharingRequestItem
@@ -234,11 +234,11 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
         <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-5 lg:col-span-2">
           <h3 className="text-sm font-bold text-[var(--bp-text)]">{t('people.permissions.title')}</h3>
 
-          <p className="mb-2 mt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-2 mt-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--bp-muted)]">
             {t('people.permissions.granted')}
           </p>
           {incomingSharing.length === 0 ? (
-            <p className="text-xs text-slate-400">{t('people.permissions.noneGranted')}</p>
+            <p className="text-xs text-[var(--bp-muted)]">{t('people.permissions.noneGranted')}</p>
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {incomingSharing.map((perm) => (
@@ -247,11 +247,11 @@ export function SocialScreen({ accessToken, onSignOut, ...nav }: Props) {
             </div>
           )}
 
-          <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-[var(--bp-muted)]">
             {t('people.permissions.requested')}
           </p>
           {outgoingSharing.length === 0 ? (
-            <p className="text-xs text-slate-400">{t('people.permissions.noneRequested')}</p>
+            <p className="text-xs text-[var(--bp-muted)]">{t('people.permissions.noneRequested')}</p>
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {outgoingSharing.map((perm) => (

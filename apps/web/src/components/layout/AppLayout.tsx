@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { MenuIcon } from './icons'
 import { Sidebar, type SidebarNavHandlers, type SidebarPage } from './Sidebar'
+import { GlobalHeader } from './GlobalHeader'
 
 type AppLayoutProps = SidebarNavHandlers & {
   active: SidebarPage
@@ -15,29 +15,21 @@ export function AppLayout({ active, panelTitle, panelCaption, panelPercent, fab,
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-[var(--bp-bg)] text-[var(--bp-text)]">
-      <div className="mx-auto flex max-w-7xl items-start gap-4 overflow-x-hidden px-5 py-5">
-        <Sidebar
-          active={active}
-          panelTitle={panelTitle}
-          panelCaption={panelCaption}
-          panelPercent={panelPercent}
-          mobileOpen={mobileNavOpen}
-          onCloseMobile={() => setMobileNavOpen(false)}
-          {...nav}
-        />
+    <div className="bp-app-layout flex h-screen w-screen overflow-hidden bg-[#1A1F2C] text-[var(--bp-text)]">
+      <Sidebar
+        active={active}
+        panelTitle={panelTitle}
+        panelCaption={panelCaption}
+        panelPercent={panelPercent}
+        mobileOpen={mobileNavOpen}
+        onCloseMobile={() => setMobileNavOpen(false)}
+        {...nav}
+      />
 
-        <main className="min-w-0 flex-1 animate-[beeplanFadeIn_300ms_ease-out] rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/40 p-5">
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label="Open menu"
-            className="mb-4 flex items-center gap-2 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2 text-sm font-semibold text-[var(--bp-text)] lg:hidden"
-          >
-            <MenuIcon className="h-5 w-5" />
-            Menu
-          </button>
+      <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden">
+        <GlobalHeader onOpenMenu={() => setMobileNavOpen(true)} onOpenNotifications={nav.onNavigateNotifications} onOpenSettings={nav.onNavigateSettings} />
 
+        <main className="flex-1 overflow-y-auto min-w-0 animate-[beeplanFadeIn_300ms_ease-out] px-4 py-3 sm:px-6 lg:px-8">
           {children}
         </main>
       </div>

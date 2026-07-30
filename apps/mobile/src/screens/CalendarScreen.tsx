@@ -81,13 +81,13 @@ export default function CalendarScreen({ tasks, reminders, accessToken = '', onB
       <FilterTabs tabs={tabs} active={mode} onChange={setMode} />
       <View className="mb-3 flex-row items-center justify-between">
         <Pressable onPress={() => move(-1)} accessibilityRole="button" accessibilityLabel="Previous period">
-          <Text style={{ color: colors.accent }}>&lt; Prev</Text>
+          <Text style={{ color: colors.accentInk }}>&lt; Prev</Text>
         </Pressable>
         <Text className="font-black" style={{ color: colors.text }}>
           {cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
         </Text>
         <Pressable onPress={() => move(1)} accessibilityRole="button" accessibilityLabel="Next period">
-          <Text style={{ color: colors.accent }}>Next &gt;</Text>
+          <Text style={{ color: colors.accentInk }}>Next &gt;</Text>
         </Pressable>
       </View>
       <SectionCard>

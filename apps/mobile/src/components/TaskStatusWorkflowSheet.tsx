@@ -208,7 +208,7 @@ export function TaskStatusWorkflowSheet({
                     {helperText}
                   </Text>
                 </View>
-                <Text className="text-3xl font-black" style={{ color: colors.accent }}>
+                <Text className="text-3xl font-black" style={{ color: colors.accentInk }}>
                   {hasSubtasks ? subtaskProgress : progressValue}%
                 </Text>
               </View>

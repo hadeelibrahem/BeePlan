@@ -113,6 +113,31 @@ export class AiService {
     };
   }
 
+  /** Reuses the configured AI provider for privacy-minimized daily summaries. */
+  async generateDailyMotivation(input: { systemPrompt: string; summary: Record<string, unknown> }): Promise<string> {
+    if (!this.client || !this.model) {
+      throw new InternalServerErrorException('AI motivation is not configured.');
+    }
+    try {
+      const response = await Promise.race([
+        this.client.chat.completions.create({
+          model: this.model,
+          messages: [
+            { role: 'system', content: input.systemPrompt },
+            { role: 'user', content: JSON.stringify(input.summary) },
+          ],
+          temperature: 0.35,
+          max_tokens: 80,
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Daily motivation AI timed out.')), 8_000)),
+      ]);
+      return response.choices[0]?.message?.content?.trim() ?? '';
+    } catch (error) {
+      this.logger.error(`Daily motivation request failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      throw new InternalServerErrorException('Failed to generate daily motivation with AI.');
+    }
+  }
+
   /**
    * Parses a person-based reminder ("remind me to talk to Ahmad when I see
    * him") and matches the extracted name against the user's accepted friends.
