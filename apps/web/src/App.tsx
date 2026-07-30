@@ -635,6 +635,7 @@ function ThemedApp() {
     return (
       <CalendarScreen
         {...sidebarNav}
+        accessToken={accessToken ?? ''}
         tasks={tasks}
         reminders={reminders}
         onViewTask={openTaskDetails}

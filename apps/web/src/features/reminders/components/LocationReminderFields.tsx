@@ -5,9 +5,9 @@ import type { GeneralLocationCategory, LocationReminderConfig, LocationReminderM
 import { LocationMapPicker } from './LocationMapPicker'
 import { PlaceAutocomplete } from './PlaceAutocomplete'
 import { PlaceTypeAutocomplete } from './PlaceTypeAutocomplete'
+import { RadiusMetersInput } from './RadiusMetersInput'
 
 const MODES: LocationReminderMode[] = ['specific_place', 'general_category']
-const RADIUS_OPTIONS = [100, 250, 500]
 
 type Props = {
   value: LocationReminderConfig
@@ -166,31 +166,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
         />
       )}
 
-      <label className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-3 transition focus-within:border-[var(--bp-accent)]">
-        <span className="mb-1 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
-          {t('reminders.radiusMeters')}
-        </span>
-        <div className="flex gap-2 pt-1">
-          {RADIUS_OPTIONS.map((radius) => {
-            const selected = value.radiusMeters === radius
-            return (
-              <button
-                key={radius}
-                type="button"
-                onClick={() => setRadius(radius)}
-                aria-pressed={selected}
-                className={`flex-1 rounded-full border px-4 py-2.5 text-center text-xs font-black transition ${
-                  selected
-                    ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
-                    : 'border-[var(--bp-border)] bg-[var(--bp-bg)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]'
-                }`}
-              >
-                {radius}m
-              </button>
-            )
-          })}
-        </div>
-      </label>
+      <RadiusMetersInput value={value.radiusMeters} onChange={setRadius} />
 
       <div className="grid grid-cols-2 gap-2">
         {(['arrive', 'leave'] as TriggerType[]).map((triggerType) => {

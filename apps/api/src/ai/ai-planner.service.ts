@@ -17,6 +17,8 @@ import { PlannerPreferencesService } from './planner/planner-preferences.service
 import { PlannerReasoningEngine } from './planner/planner-reasoning-engine';
 import { PlannerRuleEngine, normalizePriority } from './planner/planner-rule-engine';
 import { PlannerSchedulerEngine } from './planner/planner-scheduler-engine';
+import { detectScheduleConflicts } from './planner/schedule-conflicts';
+import { findTaskTimeConflicts, type ScheduledTaskCandidate } from '../tasks/task-schedule-conflicts';
 import {
   currentTimeString,
   isSameLocalDate,
@@ -33,6 +35,8 @@ import type {
   ReasoningResult,
   WorkingHours,
 } from './planner/planner.types';
+import { GeoapifyTravelProvider } from '../weather-travel/geoapify-travel.provider';
+import { travelFeasibilityConflict } from '../weather-travel/travel-feasibility';
 
 // Re-export the public response types so existing importers keep working.
 export type {
@@ -87,6 +91,7 @@ export class AiPlannerService {
     private readonly preferencesService: PlannerPreferencesService,
     private readonly acceptanceService: PlannerAcceptanceService,
     private readonly commitmentsService: RecurringCommitmentsService,
+    private readonly travelProvider: GeoapifyTravelProvider,
   ) {}
 
   async generateDailyPlan(userId: string, request: PlannerRequest = {}): Promise<DailyPlan> {
@@ -120,7 +125,37 @@ export class AiPlannerService {
       this.logger.warn(`Deterministic plan reported issues: ${issues.map((issue) => issue.message).join('; ')}`);
     }
 
+    plan.conflicts = detectScheduleConflicts(
+      Object.values(plan.sections).flat(),
+      context.commitments,
+    );
+    const scheduledTasks: ScheduledTaskCandidate[] = Object.values(plan.sections).flat().filter((item) => item.type === 'task').map((item) => ({
+      id: item.subtaskId ?? item.taskId ?? item.id,
+      title: item.title,
+      priority: item.priority,
+      dueDate: null,
+      durationMinutes: item.durationMinutes,
+      scheduledDate: plan.date,
+      scheduledStartTime: item.startTime,
+      scheduledEndTime: item.endTime,
+    }));
+    plan.taskConflicts = scheduledTasks.flatMap((task, index) => findTaskTimeConflicts(task, scheduledTasks.slice(index + 1)));
+    plan.travelFeasibilityConflicts = await this.detectTravelFeasibility(plan);
     return plan;
+  }
+
+  private async detectTravelFeasibility(plan: DailyPlan) {
+    const items = Object.values(plan.sections).flat().filter((item) => item.type === 'task').sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const conflicts: DailyPlan['travelFeasibilityConflicts'] = [];
+    for (let index = 1; index < items.length; index++) {
+      const previous = items[index - 1], current = items[index];
+      if (!previous.destination || !current.destination) continue;
+      const route = await this.travelProvider.estimateRoute({ origin: previous.destination, destination: current.destination, mode: 'driving', departureTime: `${plan.date}T${previous.endTime}`, allowFallback: true });
+      if (!route) continue;
+      const conflict = travelFeasibilityConflict(previous, current, route);
+      if (conflict) conflicts.push(conflict);
+    }
+    return conflicts;
   }
 
   /** Step 1 — gather everything the planner needs into a single context object. */
@@ -309,6 +344,10 @@ export class AiPlannerService {
   getAcceptance(userId: string, date: string) {
     return this.acceptanceService.getAcceptance(userId, normalizeDate(date));
   }
+
+  resolveConflict(userId: string, input: unknown) {
+    return this.acceptanceService.resolveConflict(userId, input);
+  }
 }
 
 function normalizeDate(value?: string): string {
@@ -441,6 +480,7 @@ function toPlannerTask(task: TaskRow, dependencyRows: DependencyRow[], estimate?
     updatedAt: task.updatedAt.toISOString(),
     dependencyTaskIds: dependencyRows.filter((row) => row.taskId === task.id).map((row) => row.dependencyTaskId),
     orderDependencyIds: [],
+    destination: plannerDestination(task.destination),
   };
 }
 
@@ -495,7 +535,14 @@ function toPlannerSubtask(
       ...blockingDependencyIds,
     ],
     orderDependencyIds,
+    destination: plannerDestination(subtask.destination),
   };
+}
+
+function plannerDestination(value: unknown) {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as any; const latitude = Number(v.latitude), longitude = Number(v.longitude);
+  return typeof v.displayName === 'string' && Number.isFinite(latitude) && Number.isFinite(longitude) ? { displayName: v.displayName, latitude, longitude } : null;
 }
 
 /** Returns the later of two HH:mm times, ignoring malformed inputs. */

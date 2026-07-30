@@ -14,9 +14,9 @@ import { reverseGeocode, type GeoapifyPlaceSuggestion } from '../services/geoapi
 import { LocationMapPicker } from './LocationMapPicker';
 import { PlaceAutocomplete } from './PlaceAutocomplete';
 import { PlaceTypeAutocomplete } from './PlaceTypeAutocomplete';
+import { RadiusMetersInput } from './RadiusMetersInput';
 
 const LOCATION_TRIGGER_TYPES: LocationTriggerType[] = ['none', 'general_location', 'specific_location'];
-const RADIUS_OPTIONS = [100, 250, 500];
 
 const LOCATION_TRIGGER_LABEL_KEYS: Record<LocationTriggerType, string> = {
   none: 'reminders.noLocationReminder',
@@ -218,22 +218,10 @@ export function LocationTriggerSection({ value, onChange }: Props) {
             ))}
           </View>
 
-          <View>
-            <Text className="mb-2 text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
-              {t('reminders.radiusMeters')}
-            </Text>
-            <View className="flex-row gap-2">
-              {RADIUS_OPTIONS.map((radius) => (
-                <View key={radius} className="flex-1">
-                  <Chip
-                    label={`${radius}m`}
-                    selected={(value.specificLocation?.radius ?? 100) === radius}
-                    onPress={() => setSpecificRadius(radius)}
-                  />
-                </View>
-              ))}
-            </View>
-          </View>
+          <RadiusMetersInput
+            value={value.specificLocation?.radius ?? 100}
+            onChange={setSpecificRadius}
+          />
         </View>
       )}
     </View>

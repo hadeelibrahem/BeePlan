@@ -5,6 +5,7 @@ import type { Reminder } from '../features/reminders'
 import type { ApiTask } from '../lib/tasksApi'
 import { useTheme } from '../theme/useTheme'
 import { createTaskParamsForCalendarDate } from './calendarCreateTask'
+import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict'
 
 type ViewMode = 'month' | 'week' | 'day'
 
@@ -22,9 +23,10 @@ const keyForDateString = (value?: string) => {
   return Number.isNaN(date.getTime()) ? null : dayKey(date)
 }
 
-export default function CalendarScreen({ tasks, reminders, onBack, onTask, onReminder, onCreateTask }: {
+export default function CalendarScreen({ tasks, reminders, accessToken = '', onBack, onTask, onReminder, onCreateTask }: {
   tasks: ApiTask[]
   reminders: Reminder[]
+  accessToken?: string
   onBack: () => void
   onTask: (id: string) => void
   onReminder: (id: string) => void
@@ -39,7 +41,7 @@ export default function CalendarScreen({ tasks, reminders, onBack, onTask, onRem
   const byDate = useMemo(() => {
     const map = new Map<string, { tasks: ApiTask[]; reminders: Reminder[] }>()
     for (const task of tasks) {
-      const key = keyForDateString(task.dueDate)
+      const key = task.scheduledDate ?? keyForDateString(task.dueDate)
       if (!key) continue
       const current = map.get(key) ?? { tasks: [], reminders: [] }
       map.set(key, { ...current, tasks: [...current.tasks, task] })
@@ -75,6 +77,7 @@ export default function CalendarScreen({ tasks, reminders, onBack, onTask, onRem
   return (
     <AppScreen>
       <PageHeader title="Calendar" subtitle="Tasks and reminders" onBack={onBack} />
+      <ExistingScheduleConflict accessToken={accessToken} date={selected} />
       <FilterTabs tabs={tabs} active={mode} onChange={setMode} />
       <View className="mb-3 flex-row items-center justify-between">
         <Pressable onPress={() => move(-1)} accessibilityRole="button" accessibilityLabel="Previous period">

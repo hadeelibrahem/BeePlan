@@ -6,6 +6,8 @@ import { formatDays, formatTimeRange } from '../dayOfWeek';
 import { useCommitmentMutations, useCommitments, useSavedPlaces } from '../hooks';
 import type { RecurringCommitment, RecurringCommitmentInput } from '../types';
 import { CommitmentEditor } from './CommitmentEditor';
+import { ScheduleConflictModal } from '../../../components/ScheduleConflictModal';
+import { acceptDailyPlan, generateDailyPlan, getDailyPlanAcceptance, skipCommitmentOccurrence, type ScheduleConflict } from '../../../lib/plannerApi';
 
 type Props = { accessToken: string | undefined };
 
@@ -17,6 +19,8 @@ export function WeeklyCommitmentsSection({ accessToken }: Props) {
   const { create, update, remove } = useCommitmentMutations(accessToken);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editing, setEditing] = useState<RecurringCommitment | null>(null);
+  const [pendingConflict, setPendingConflict] = useState<{ conflict: ScheduleConflict; input: RecurringCommitmentInput } | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   const openCreate = () => {
     setEditing(null);
@@ -27,12 +31,25 @@ export function WeeklyCommitmentsSection({ accessToken }: Props) {
     setEditorVisible(true);
   };
 
-  const handleSubmit = (input: RecurringCommitmentInput) => {
+  const persist = (input: RecurringCommitmentInput) => {
     const mutation = editing
       ? update.mutateAsync({ id: editing.id, input })
       : create.mutateAsync(input);
-    void mutation
-      .then(() => setEditorVisible(false))
+    return mutation.then(() => setEditorVisible(false));
+  };
+
+  const handleSubmit = (input: RecurringCommitmentInput) => {
+    if (!editing || !accessToken) {
+      void persist(input).catch((error: unknown) => Alert.alert('Could not save commitment', error instanceof Error ? error.message : 'Please try again.'));
+      return;
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    void getDailyPlanAcceptance(accessToken, date)
+      .then((accepted) => {
+        const conflict = accepted?.plan ? conflictForCommitmentEdit(editing.id, input, accepted.plan) : null;
+        if (conflict) setPendingConflict({ conflict, input });
+        else return persist(input);
+      })
       .catch((error: unknown) => Alert.alert('Could not save commitment', error instanceof Error ? error.message : 'Please try again.'));
   };
 
@@ -56,6 +73,7 @@ export function WeeklyCommitmentsSection({ accessToken }: Props) {
   };
 
   return (
+    <>
     <SectionCard>
       <View className="mb-2 flex-row items-center justify-between">
         <View className="flex-1 pr-2">
@@ -141,5 +159,54 @@ export function WeeklyCommitmentsSection({ accessToken }: Props) {
         />
       ) : null}
     </SectionCard>
+    <ScheduleConflictModal
+      conflict={pendingConflict?.conflict ?? null}
+      busy={resolving}
+      onKeepCommitment={() => {
+        if (!pendingConflict || !accessToken) return;
+        setResolving(true);
+        const date = new Date().toISOString().slice(0, 10);
+        void persist(pendingConflict.input)
+          .then(() => generateDailyPlan(accessToken, date))
+          .then((plan) => acceptDailyPlan(accessToken, plan))
+          .finally(() => { setPendingConflict(null); setResolving(false); });
+      }}
+      onKeepTask={() => {
+        if (!pendingConflict || !accessToken || !editing) return;
+        setResolving(true);
+        const date = new Date().toISOString().slice(0, 10);
+        void persist(pendingConflict.input)
+          .then(() => skipCommitmentOccurrence(accessToken, editing.id, date))
+          .finally(() => { setPendingConflict(null); setResolving(false); });
+      }}
+      onManual={() => setPendingConflict(null)}
+      onCancel={() => setPendingConflict(null)}
+    />
+    </>
   );
+}
+
+export function conflictForCommitmentEdit(
+  commitmentId: string,
+  input: RecurringCommitmentInput,
+  plan: import('../../../lib/plannerApi').DailyPlan,
+): ScheduleConflict | null {
+  const start = clockMinutes(input.startTime);
+  const end = clockMinutes(input.endTime);
+  for (const task of Object.values(plan.sections).flat().filter((item) => item.type === 'task')) {
+    const overlap = Math.max(0, Math.min(end, clockMinutes(task.endTime)) - Math.max(start, clockMinutes(task.startTime)));
+    if (!overlap) continue;
+    return {
+      id: `${task.id}:${commitmentId}`,
+      task: { itemId: task.id, taskId: task.taskId, title: task.title, startTime: task.startTime, endTime: task.endTime, durationMinutes: task.durationMinutes, isFocusTask: Boolean(task.isFocusTask) },
+      commitment: { id: commitmentId, title: input.title, startTime: input.startTime, endTime: input.endTime },
+      conflictMinutes: overlap,
+    };
+  }
+  return null;
+}
+
+function clockMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
 }

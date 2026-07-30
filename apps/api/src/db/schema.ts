@@ -262,6 +262,52 @@ export const recurringCommitments = pgTable(
   (table) => [index('idx_recurring_commitments_user').on(table.userId)],
 );
 
+export const skippedCommitmentOccurrences = pgTable(
+  'skipped_commitment_occurrences',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    commitmentId: uuid('commitment_id')
+      .notNull()
+      .references(() => recurringCommitments.id, { onDelete: 'cascade' }),
+    date: varchar('date', { length: 10 }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('skipped_commitment_occurrences_unique').on(
+      table.userId,
+      table.commitmentId,
+      table.date,
+    ),
+    index('idx_skipped_commitment_occurrences_user_date').on(
+      table.userId,
+      table.date,
+    ),
+  ],
+);
+
+export const scheduleConflictResolutions = pgTable(
+  'schedule_conflict_resolutions',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    conflictKey: varchar('conflict_key', { length: 500 }).notNull(),
+    date: varchar('date', { length: 10 }).notNull(),
+    taskId: uuid('task_id'),
+    commitmentId: uuid('commitment_id').references(() => recurringCommitments.id, { onDelete: 'cascade' }),
+    resolution: varchar('resolution', { length: 40 }).notNull(),
+    resolvedAt: timestamp('resolved_at').defaultNow().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('schedule_conflict_resolutions_user_key').on(table.userId, table.conflictKey),
+    index('idx_schedule_conflict_resolutions_user_date').on(table.userId, table.date),
+  ],
+);
+
 export const tasks = pgTable(
   'tasks',
   {
@@ -285,6 +331,13 @@ export const tasks = pgTable(
     progress: integer('progress').notNull().default(0),
     dueDate: timestamp('due_date'),
     dueTime: varchar('due_time', { length: 20 }),
+    scheduledDate: varchar('scheduled_date', { length: 10 }),
+    scheduledStartTime: varchar('scheduled_start_time', { length: 5 }),
+    scheduledEndTime: varchar('scheduled_end_time', { length: 5 }),
+    destination: jsonb('destination'),
+    weatherTravelEnabled: boolean('weather_travel_enabled').notNull().default(false),
+    travelMode: varchar('travel_mode', { length: 24 }),
+    travelOriginPreference: jsonb('travel_origin_preference'),
     categoryId: uuid('category_id').references(() => categories.id, {
       onDelete: 'set null',
     }),
@@ -394,6 +447,13 @@ export const subtasks = pgTable(
     status: varchar('status', { length: 30 }).notNull().default('todo'),
     startDate: timestamp('start_date'),
     dueDate: timestamp('due_date'),
+    scheduledDate: varchar('scheduled_date', { length: 10 }),
+    scheduledStartTime: varchar('scheduled_start_time', { length: 5 }),
+    scheduledEndTime: varchar('scheduled_end_time', { length: 5 }),
+    destination: jsonb('destination'),
+    weatherTravelEnabled: boolean('weather_travel_enabled').notNull().default(false),
+    travelMode: varchar('travel_mode', { length: 24 }),
+    travelOriginPreference: jsonb('travel_origin_preference'),
     estimatedDurationMinutes: integer('estimated_duration_minutes'),
     actualDurationMinutes: integer('actual_duration_minutes'),
     // 'user' when the estimate was entered by a person, 'ai' when inferred by
@@ -825,6 +885,81 @@ export const notifications = pgTable(
   (table) => [
     index('idx_notifications_user_unread').on(table.userId, table.isRead),
     index('idx_notifications_sent_at').on(table.sentAt),
+  ],
+);
+
+export const weatherTravelPreferences = pgTable(
+  'weather_travel_preferences',
+  {
+    userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    enabled: boolean('enabled').notNull().default(false),
+    defaultTravelMode: varchar('default_travel_mode', { length: 24 }).notNull().default('driving'),
+    homeRadiusMeters: integer('home_radius_meters').notNull().default(100),
+    preparationBufferMinutes: integer('preparation_buffer_minutes').notNull().default(10),
+    parkingWalkingBufferMinutes: integer('parking_walking_buffer_minutes').notNull().default(0),
+    uncertaintyBufferMinutes: integer('uncertainty_buffer_minutes').notNull().default(5),
+    weatherLeadMinutes: integer('weather_lead_minutes').notNull().default(15),
+    currentLocationFreshnessMinutes: integer('current_location_freshness_minutes').notNull().default(30),
+    coldThresholdC: decimal('cold_threshold_c', { precision: 5, scale: 2 }).notNull().default('12'),
+    veryColdThresholdC: decimal('very_cold_threshold_c', { precision: 5, scale: 2 }).notNull().default('5'),
+    hotThresholdC: decimal('hot_threshold_c', { precision: 5, scale: 2 }).notNull().default('28'),
+    extremeHeatThresholdC: decimal('extreme_heat_threshold_c', { precision: 5, scale: 2 }).notNull().default('35'),
+    rainThresholdPercent: integer('rain_threshold_percent').notNull().default(50),
+    rainAmountThresholdMm: decimal('rain_amount_threshold_mm', { precision: 6, scale: 2 }).notNull().default('0.5'),
+    windThresholdKph: decimal('wind_threshold_kph', { precision: 6, scale: 2 }).notNull().default('35'),
+    uvThreshold: decimal('uv_threshold', { precision: 5, scale: 2 }).notNull().default('6'),
+    visibilityThresholdMeters: integer('visibility_threshold_meters').notNull().default(1000),
+    advice: jsonb('advice').notNull().default({ coat: true, lightClothing: true, umbrella: true, hydration: true, uv: true, wind: true, severeWeather: true }),
+    currentLocationFallbackEnabled: boolean('current_location_fallback_enabled').notNull().default(false),
+    approximateTravelFallbackEnabled: boolean('approximate_travel_fallback_enabled').notNull().default(true),
+    aiPolishingEnabled: boolean('ai_polishing_enabled').notNull().default(false),
+    language: varchar('language', { length: 8 }).notNull().default('en'),
+    timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
+    selectedOriginSavedPlaceId: uuid('selected_origin_saved_place_id').references(() => savedLocations.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+);
+
+export const taskWeatherNotifications = pgTable(
+  'task_weather_notifications',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, { onDelete: 'cascade' }),
+    fingerprint: varchar('fingerprint', { length: 128 }).notNull(),
+    scheduleVersion: varchar('schedule_version', { length: 160 }).notNull(),
+    originSource: varchar('origin_source', { length: 40 }).notNull(),
+    originSummary: jsonb('origin_summary'),
+    destinationSummary: jsonb('destination_summary').notNull(),
+    scheduledTaskTime: timestamp('scheduled_task_time').notNull(),
+    distanceMeters: integer('distance_meters'),
+    routeDurationMinutes: integer('route_duration_minutes'),
+    travelMode: varchar('travel_mode', { length: 24 }).notNull(),
+    fallbackUsed: boolean('fallback_used').notNull().default(false),
+    recommendedDepartureTime: timestamp('recommended_departure_time'),
+    notificationTime: timestamp('notification_time').notNull(),
+    recommendationTypes: jsonb('recommendation_types').notNull().default([]),
+    deterministicMessage: text('deterministic_message').notNull(),
+    polishedMessage: text('polished_message'),
+    weatherEvidence: jsonb('weather_evidence'),
+    payload: jsonb('payload').notNull().default({}),
+    status: varchar('status', { length: 24 }).notNull().default('pending'),
+    retryCount: integer('retry_count').notNull().default(0),
+    lastErrorCode: varchar('last_error_code', { length: 80 }),
+    deliveredAt: timestamp('delivered_at'),
+    cancelledAt: timestamp('cancelled_at'),
+    invalidatedAt: timestamp('invalidated_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_task_weather_notifications_fingerprint').on(table.fingerprint),
+    index('idx_task_weather_notifications_upcoming').on(table.status, table.notificationTime),
+    index('idx_task_weather_notifications_user').on(table.userId),
+    index('idx_task_weather_notifications_task').on(table.taskId),
+    index('idx_task_weather_notifications_subtask').on(table.subtaskId),
   ],
 );
 

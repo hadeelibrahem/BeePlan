@@ -3,6 +3,7 @@ import { AppScreen, DangerButton, PageHeader, SectionCard, SecondaryButton } fro
 import { SavedPlacesSection } from '../features/context/components/SavedPlacesSection';
 import { WeeklyCommitmentsSection } from '../features/context/components/WeeklyCommitmentsSection';
 import { useTheme } from '../theme/useTheme';
+import { WeatherTravelSettings } from '../features/settings/WeatherTravelSettings';
 
 type Props = {
   accessToken: string;
@@ -36,6 +37,7 @@ export default function SettingsScreen({ accessToken, onBack, onSignOut, onOpenP
 
         <SavedPlacesSection accessToken={accessToken} />
         <WeeklyCommitmentsSection accessToken={accessToken} />
+        <WeatherTravelSettings token={accessToken} />
 
         <SectionCard>
           <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>

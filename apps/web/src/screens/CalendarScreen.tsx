@@ -16,6 +16,10 @@ import { useTheme } from '../theme/ThemeContext'
 import type { ApiTask } from '../lib/tasksApi'
 import type { Reminder } from '../features/reminders'
 import { formatDate, parseLocalDate } from '../lib/dateTime'
+import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict'
+import { ExistingTaskTimeConflict } from '../components/ExistingTaskTimeConflict'
+import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
+import { changeTaskStatus, getNearestTaskSchedule, resolveTaskScheduleConflict, updateTask, validateTaskSchedule, type TaskTimeConflict } from '../lib/tasksApi'
 
 type CalendarScreenProps = SidebarNavHandlers & {
   tasks?: ApiTask[]
@@ -24,6 +28,7 @@ type CalendarScreenProps = SidebarNavHandlers & {
   onViewReminder?: (reminderId: string) => void
   onCreateTaskForDate?: (date: string) => void
   onSignOut?: () => void
+  accessToken?: string
 }
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -45,6 +50,7 @@ export default function CalendarScreen({
   onViewReminder,
   onCreateTaskForDate,
   onSignOut,
+  accessToken = '',
   ...nav
 }: CalendarScreenProps) {
   const { t, toggleLanguage, isRTL } = useLanguage()
@@ -53,11 +59,12 @@ export default function CalendarScreen({
   const today = useMemo(() => new Date(), [])
   const [viewDate, setViewDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(today))
+  const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null)
 
   const tasksByDate = useMemo(() => {
     const map = new Map<string, ApiTask[]>()
     for (const task of tasks) {
-      const key = isoToDateKey(task.dueDate)
+      const key = task.scheduledDate ?? isoToDateKey(task.dueDate)
       if (!key) continue
       map.set(key, [...(map.get(key) ?? []), task])
     }
@@ -122,6 +129,24 @@ export default function CalendarScreen({
     selectDate(next)
   }
 
+  async function moveTaskToDate(taskId: string, date: string) {
+    const task = tasks.find((item) => item.id === taskId)
+    if (!task?.scheduledStartTime || !task.scheduledEndTime || !accessToken) return
+    const validation = await validateTaskSchedule(accessToken, { ...task, scheduledDate: date })
+    if (validation.conflicts.length) { setTimeConflict(validation.conflicts[0]); return }
+    await updateTask(accessToken, task.id, { scheduledDate: date, scheduledStartTime: task.scheduledStartTime, scheduledEndTime: task.scheduledEndTime })
+  }
+
+  async function resolveMove(side: 'existing' | 'new', mode: 'auto' | 'manual', manual?: ScheduleChoice) {
+    if (!timeConflict || !accessToken) return
+    const target = side === 'existing' ? timeConflict.existingTask : timeConflict.proposedTask
+    const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule
+    if (!schedule || !window.confirm(`Current schedule → Proposed schedule\n${target.scheduledDate} ${target.scheduledStartTime}–${target.scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
+    await updateTask(accessToken, target.id, schedule)
+    await resolveTaskScheduleConflict(accessToken, { conflictKey: timeConflict.id, date: target.scheduledDate, taskId: target.id, resolution: side === 'existing' ? (mode === 'auto' ? 'move_existing_auto' : 'move_existing_manual') : (mode === 'auto' ? 'move_new_auto' : 'move_new_manual') })
+    setTimeConflict(null)
+  }
+
   return (
     <AppLayout active="calendar" {...nav}>
       <PageHeader
@@ -138,6 +163,8 @@ export default function CalendarScreen({
           />
         }
       />
+      <ExistingScheduleConflict accessToken={accessToken} date={selectedDateKey} />
+      <ExistingTaskTimeConflict accessToken={accessToken} date={selectedDateKey} />
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <SectionCard>
@@ -197,6 +224,8 @@ export default function CalendarScreen({
                   role="gridcell"
                   onClick={() => selectDate(date)}
                   onKeyDown={(event) => handleDayKeyDown(event, date)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => { event.preventDefault(); void moveTaskToDate(event.dataTransfer.getData('application/x-beeplan-task'), key) }}
                   aria-selected={isSelected}
                   aria-current={isToday ? 'date' : undefined}
                   aria-label={`${date.toLocaleDateString(isRTL ? 'ar' : 'en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${isToday ? ', today' : ''}${dayItems.length ? `, ${dayItems.length} scheduled item${dayItems.length === 1 ? '' : 's'}` : ', no scheduled items'}`}
@@ -257,6 +286,8 @@ export default function CalendarScreen({
                       <li key={task.id}>
                         <button
                           type="button"
+                          draggable={Boolean(task.scheduledStartTime)}
+                          onDragStart={(event) => event.dataTransfer.setData('application/x-beeplan-task', task.id)}
                           onClick={() => onViewTask?.(task.id)}
                           aria-label={`Open task: ${task.title}`}
                           className="w-full rounded-lg border border-[var(--bp-border)] px-3 py-2 text-left text-sm transition hover:bg-[var(--bp-border)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
@@ -296,6 +327,10 @@ export default function CalendarScreen({
           )}
         </SectionCard>
       </div>
+      <TaskTimeConflictModal conflict={timeConflict} onMoveExisting={(mode, schedule) => void resolveMove('existing', mode, schedule)} onMoveNew={(mode, schedule) => void resolveMove('new', mode, schedule)} onCancelExisting={() => {
+        if (!timeConflict || !accessToken || !window.confirm('Cancel the existing task? It will be marked missed and not deleted.')) return
+        void changeTaskStatus(accessToken, timeConflict.existingTask.id, { status: 'missed' }).then(() => setTimeConflict(null))
+      }} onCancelNew={() => setTimeConflict(null)} onCancelChanges={() => setTimeConflict(null)} />
     </AppLayout>
   )
 }

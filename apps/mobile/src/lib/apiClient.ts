@@ -164,7 +164,7 @@ export async function apiFetch(
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
-  if (method !== 'GET') {
+  if (method !== 'GET' || init.cache === 'no-store') {
     return performApiFetch(path, init, timeoutMs);
   }
 

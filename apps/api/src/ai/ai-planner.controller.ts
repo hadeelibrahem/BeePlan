@@ -45,6 +45,12 @@ export class AiPlannerController {
     return this.aiPlannerService.getAcceptance(request.user.id, date ?? '');
   }
 
+  @Post('conflicts/resolve')
+  @HttpCode(HttpStatus.OK)
+  resolveConflict(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.aiPlannerService.resolveConflict(request.user.id, body);
+  }
+
   @Get('preferences')
   getPreferences(@Req() request: AuthenticatedRequest) {
     return this.aiPlannerService.getPreferences(request.user.id);

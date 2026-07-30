@@ -3,8 +3,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme } from '../../../theme/useTheme';
 import type { FriendSummary } from '../../social/types/social.types';
 import type { PersonPermissionStatus, PersonReminderConfig } from '../types/reminders.types';
-
-const RADIUS_OPTIONS = [20, 100, 500, 1000];
+import { RadiusMetersInput } from './RadiusMetersInput';
 
 const PERMISSION_LABEL_KEYS: Record<PersonPermissionStatus, string> = {
   pending: 'reminders.person.status.pending',
@@ -142,19 +141,10 @@ export function PersonReminderFields({ value, onChange, friends, onAddFriend }: 
       </View>
 
       {/* Radius */}
-      <View>
-        {label('reminders.person.radius')}
-        <View className="flex-row flex-wrap gap-2">
-          {RADIUS_OPTIONS.map((r) => {
-            const selected = radius === r;
-            return (
-              <Pressable key={r} onPress={() => onChange({ ...value, radiusMeters: r })} className="rounded-full border px-3 py-2 active:opacity-80" style={chip(selected)}>
-                <Text className="text-xs font-bold" style={{ color: selected ? colors.accent : colors.text }}>{`${r} ${t('reminders.person.meters')}`}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+      <RadiusMetersInput
+        value={radius}
+        onChange={(radiusMeters) => onChange({ ...value, radiusMeters })}
+      />
 
       {/* Permission status */}
       <View>

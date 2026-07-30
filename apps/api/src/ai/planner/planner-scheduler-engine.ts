@@ -134,6 +134,7 @@ export class PlannerSchedulerEngine {
           type: 'task',
           taskId: task.taskId,
           subtaskId: task.subtaskId ?? undefined,
+          destination: task.destination,
           title: task.title,
           startTime: fromMinutes(slot.start),
           endTime: fromMinutes(slot.end),
@@ -206,6 +207,9 @@ export class PlannerSchedulerEngine {
       sections: groupSections(items),
       unscheduled,
       capacity: capacitySummary,
+      conflicts: [],
+      taskConflicts: [],
+      travelFeasibilityConflicts: [],
     };
   }
 }

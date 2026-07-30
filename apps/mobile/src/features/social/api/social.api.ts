@@ -105,5 +105,11 @@ export function updateLocationSnapshot(snapshot: LocationSnapshot) {
 }
 
 export function checkNearby(): Promise<NearbyHit[]> {
-  return apiRequest<NearbyHit[]>('/person-reminders/nearby');
+  return apiRequest<NearbyHit[]>('/person-reminders/nearby', {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    },
+  });
 }

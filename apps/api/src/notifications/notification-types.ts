@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = [
   'mention',
   'ai_plan_applied',
   'ai_recommendation_ready',
+  'weather_travel',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

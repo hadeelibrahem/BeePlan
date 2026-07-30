@@ -2,23 +2,13 @@ import { useLanguage } from '../../../i18n/LanguageContext'
 import { PermissionStatusBadge } from '../../social/components/PermissionStatusBadge'
 import type { FriendSummary } from '../../social/types/social.types'
 import type { PersonReminderConfig } from '../types/reminders.types'
+import { RadiusMetersInput } from './RadiusMetersInput'
 
 type Props = {
   value: PersonReminderConfig
   onChange: (next: PersonReminderConfig) => void
   friends: FriendSummary[]
   onAddFriend?: () => void
-}
-
-const MIN_RADIUS = 20
-const MAX_RADIUS = 1000
-
-// Default 100, clamped to [20, 1000]; "020" → 20, junk → 100. Mirrors the
-// backend normalization so the UI never lets an out-of-range radius through.
-function normalizeRadius(value: string): number {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return 100
-  return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, Math.round(parsed)))
 }
 
 function firstName(fullName: string): string {
@@ -148,22 +138,10 @@ export function PersonReminderFields({ value, onChange, friends, onAddFriend }: 
       </div>
 
       {/* Radius */}
-      <label className="block">
-        <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
-          {t('reminders.person.radius')}
-        </span>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={MIN_RADIUS}
-            max={MAX_RADIUS}
-            value={radius}
-            onChange={(e) => onChange({ ...value, radiusMeters: normalizeRadius(e.target.value) })}
-            className="w-32 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2.5 text-sm text-[var(--bp-text)] outline-none transition focus:border-[var(--bp-accent)]"
-          />
-          <span className="text-sm text-[var(--bp-muted)]">{t('reminders.person.meters')}</span>
-        </div>
-      </label>
+      <RadiusMetersInput
+        value={radius}
+        onChange={(radiusMeters) => onChange({ ...value, radiusMeters })}
+      />
 
       {/* Permission status */}
       <div>

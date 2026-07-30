@@ -229,6 +229,7 @@ function buildService(
     preferences,
     config,
     commitments as unknown as RecurringCommitmentsService,
+    { estimateRoute: jest.fn().mockResolvedValue(null) } as any,
   );
   return { service, reasoning, preferences, commitments };
 }

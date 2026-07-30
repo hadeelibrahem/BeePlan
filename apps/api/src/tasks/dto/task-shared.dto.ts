@@ -10,8 +10,10 @@ import {
   IsString,
   IsUUID,
   Max,
+  Matches,
   Min,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { toApiDate } from '../../ai/recurrence-parser';
 import { SUBTASK_VIEWS, type SubtaskView } from '../subtask-visibility';
@@ -28,6 +30,15 @@ function normalizeEndDateInput(value: unknown): string | undefined {
 
 export const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 export const TASK_STATUSES = ['todo', 'in_progress', 'done', 'missed'] as const;
+export const TRAVEL_MODES = ['driving', 'walking', 'cycling'] as const;
+
+export class TaskDestinationDto {
+  @IsString() displayName!: string;
+  @IsOptional() @IsString() address?: string | null;
+  @Type(() => Number) @IsNumber() @Min(-90) @Max(90) latitude!: number;
+  @Type(() => Number) @IsNumber() @Min(-180) @Max(180) longitude!: number;
+  @IsOptional() @IsUUID('4') savedPlaceId?: string | null;
+}
 export const SUBTASK_STATUSES = [
   'todo',
   'in_progress',
@@ -204,6 +215,26 @@ export class SubtaskDto {
   dueDate?: string;
 
   @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  scheduledDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledStartTime?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledEndTime?: string | null;
+
+  @IsOptional() @ValidateIf((_object, value) => value !== null) @ValidateNested() @Type(() => TaskDestinationDto)
+  destination?: TaskDestinationDto | null;
+  @IsOptional() @IsBoolean() weatherTravelEnabled?: boolean;
+  @IsOptional() @IsIn(TRAVEL_MODES) travelMode?: (typeof TRAVEL_MODES)[number] | null;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   estimatedDurationMinutes?: number;
@@ -280,6 +311,26 @@ export class TaskCoreDto {
   @IsOptional()
   @IsString()
   dueTime?: string;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  scheduledDate?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledStartTime?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  scheduledEndTime?: string | null;
+
+  @IsOptional() @ValidateIf((_object, value) => value !== null) @ValidateNested() @Type(() => TaskDestinationDto)
+  destination?: TaskDestinationDto | null;
+  @IsOptional() @IsBoolean() weatherTravelEnabled?: boolean;
+  @IsOptional() @IsIn(TRAVEL_MODES) travelMode?: (typeof TRAVEL_MODES)[number] | null;
 
   @IsOptional()
   @IsString()

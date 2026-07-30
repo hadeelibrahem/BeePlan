@@ -13,6 +13,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import { AccountSettings, AiSettings, GeneralSettings } from '../features/settings/SettingsHubSections'
+import { WeatherTravelSettings } from '../features/settings/WeatherTravelSettings'
 
 type SettingsScreenProps = SidebarNavHandlers & {
   accessToken?: string
@@ -82,6 +83,7 @@ export default function SettingsScreen({ accessToken, onSignOut, ...nav }: Setti
           </div>
           <SavedPlacesSection accessToken={accessToken} />
           <WeeklyCommitmentsSection accessToken={accessToken} />
+          <WeatherTravelSettings token={accessToken} />
         </div>
 
         {/* 3. AI Preferences */}

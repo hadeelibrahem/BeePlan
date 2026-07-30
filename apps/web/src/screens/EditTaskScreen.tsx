@@ -17,6 +17,10 @@ import { useTheme } from '../theme/ThemeContext'
 import { SharedBadge } from '../features/collaboration/components/SharedBadge'
 import { displaySubtaskTitle } from '../lib/subtaskDisplay'
 import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
+import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
+import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal'
+import { WeatherTravelTaskFields } from '../components/WeatherTravelTaskFields'
+import { skipCommitmentOccurrence } from '../lib/plannerApi'
 import { ManageMembersSection } from '../features/collaboration/components/ManageMembersSection'
 import { ReminderAudienceSection } from '../features/collaboration/components/ReminderAudienceSection'
 import { FocusAudienceSection } from '../features/collaboration/components/FocusAudienceSection'
@@ -37,6 +41,11 @@ import {
   toUiPriority,
   toUiStatus,
   updateSubtask,
+  updateTask,
+  changeTaskStatus,
+  validateTaskSchedule,
+  getNearestTaskSchedule,
+  resolveTaskScheduleConflict,
   uploadAttachment,
   type ApiDependency,
   type ApiSubtask,
@@ -44,6 +53,9 @@ import {
   type ApiTaskAttachment,
   type SubtaskPayload,
   type TaskPayload,
+  type TaskTimeConflict,
+  type TaskCommitmentConflict,
+  type TaskDestination,
 } from '../lib/tasksApi'
 
 type EditTaskScreenProps = SidebarNavHandlers & {
@@ -92,6 +104,14 @@ export default function EditTaskScreen({
   const [priority, setPriority] = useState(toUiPriority(task.priority))
   const [dueDate, setDueDate] = useState(toDateInput(task.dueDate))
   const [dueTime, setDueTime] = useState(task.dueTime)
+  const [scheduledDate, setScheduledDate] = useState(task.scheduledDate ?? '')
+  const [scheduledStartTime, setScheduledStartTime] = useState(task.scheduledStartTime ?? '')
+  const [scheduledEndTime, setScheduledEndTime] = useState(task.scheduledEndTime ?? '')
+  const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null)
+  const [commitmentConflict, setCommitmentConflict] = useState<TaskCommitmentConflict | null>(null)
+  const [destination, setDestination] = useState<Partial<TaskDestination>>(task.destination ?? {})
+  const [weatherTravelEnabled, setWeatherTravelEnabled] = useState(Boolean(task.weatherTravelEnabled))
+  const [travelMode, setTravelMode] = useState<'driving'|'walking'|'cycling'>(task.travelMode ?? 'driving')
   const [notes, setNotes] = useState(task.notes)
   const [reminderEnabled, setReminderEnabled] = useState(task.reminderEnabled)
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(task.reminderBeforeMinutes ?? 30)
@@ -130,6 +150,9 @@ export default function EditTaskScreen({
       priority: toUiPriority(task.priority),
       dueDate: toDateInput(task.dueDate),
       dueTime: task.dueTime,
+      scheduledDate: task.scheduledDate ?? '',
+      scheduledStartTime: task.scheduledStartTime ?? '',
+      scheduledEndTime: task.scheduledEndTime ?? '',
       notes: task.notes,
       reminderEnabled: task.reminderEnabled,
       reminderBeforeMinutes: task.reminderBeforeMinutes ?? 30,
@@ -148,6 +171,9 @@ export default function EditTaskScreen({
     priority !== initialValues.priority ||
     dueDate !== initialValues.dueDate ||
     dueTime !== initialValues.dueTime ||
+    scheduledDate !== initialValues.scheduledDate ||
+    scheduledStartTime !== initialValues.scheduledStartTime ||
+    scheduledEndTime !== initialValues.scheduledEndTime ||
     notes !== initialValues.notes ||
     reminderEnabled !== initialValues.reminderEnabled ||
     reminderBeforeMinutes !== initialValues.reminderBeforeMinutes ||
@@ -177,6 +203,9 @@ export default function EditTaskScreen({
     setPriority(toUiPriority(task.priority))
     setDueDate(toDateInput(task.dueDate))
     setDueTime(task.dueTime)
+    setScheduledDate(task.scheduledDate ?? '')
+    setScheduledStartTime(task.scheduledStartTime ?? '')
+    setScheduledEndTime(task.scheduledEndTime ?? '')
     setNotes(task.notes)
     setReminderEnabled(task.reminderEnabled)
     setReminderBeforeMinutes(task.reminderBeforeMinutes ?? 30)
@@ -334,11 +363,20 @@ export default function EditTaskScreen({
       return
     }
 
-    setSaving(true)
-    setError('')
-
     const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60)
     const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60)
+    if ((scheduledDate || scheduledStartTime || scheduledEndTime) && (!scheduledDate || !scheduledStartTime)) {
+      setError('Scheduled date and start time are required together.')
+      return
+    }
+    if (accessToken && scheduledDate) {
+      const validation = await validateTaskSchedule(accessToken, { id: task.id, title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate || undefined, scheduledDate, scheduledStartTime, scheduledEndTime: scheduledEndTime || undefined, estimatedTimeMinutes })
+      if (validation.commitmentConflicts.length) { setCommitmentConflict(validation.commitmentConflicts[0]); return }
+      if (validation.conflicts.length) { setTimeConflict(validation.conflicts[0]); return }
+      if (!scheduledEndTime && validation.normalizedSchedule) setScheduledEndTime(validation.normalizedSchedule.scheduledEndTime)
+    }
+    setSaving(true)
+    setError('')
 
     try {
       const updatedTask = await onSave?.({
@@ -349,6 +387,12 @@ export default function EditTaskScreen({
         priority: toApiPriority(priority),
         dueDate: dueDate || undefined,
         dueTime,
+        scheduledDate: scheduledDate || undefined,
+        scheduledStartTime: scheduledStartTime || undefined,
+        scheduledEndTime: scheduledEndTime || undefined,
+        destination: destination.displayName && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude) ? destination as TaskDestination : undefined,
+        weatherTravelEnabled,
+        travelMode,
         notes: notes.trim(),
         estimatedTimeMinutes,
         spentTimeMinutes,
@@ -379,6 +423,38 @@ export default function EditTaskScreen({
       setUploadingAttachments(false)
       setSaving(false)
     }
+  }
+
+  async function moveConflictTask(which: 'existing' | 'new', mode: 'auto' | 'manual', manual?: ScheduleChoice) {
+    if (!timeConflict || !accessToken) return
+    const target = which === 'existing' ? timeConflict.existingTask : timeConflict.proposedTask
+    const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule
+    if (!schedule) { setError('No available slot was found.'); return }
+    const validation = await validateTaskSchedule(accessToken, { ...target, ...schedule })
+    if (validation.conflicts.length) { setError('The selected slot conflicts with another task.'); return }
+    if (!window.confirm(`Current schedule → Proposed schedule\n${target.title}: ${target.scheduledDate} ${target.scheduledStartTime}–${target.scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
+    if (which === 'existing') {
+      await updateTask(accessToken, target.id, schedule)
+      await resolveTaskScheduleConflict(accessToken, { conflictKey: timeConflict.id, date: target.scheduledDate, taskId: target.id, resolution: mode === 'auto' ? 'move_existing_auto' : 'move_existing_manual' })
+    } else {
+      setScheduledDate(schedule.scheduledDate); setScheduledStartTime(schedule.scheduledStartTime); setScheduledEndTime(schedule.scheduledEndTime)
+    }
+    setTimeConflict(null)
+  }
+
+  async function keepCommitment() {
+    if (!commitmentConflict || !accessToken) return
+    const schedule = (await getNearestTaskSchedule(accessToken, commitmentConflict.proposedTask)).schedule
+    if (!schedule || !window.confirm(`Current schedule → Proposed schedule\n${scheduledDate} ${scheduledStartTime}–${scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
+    setScheduledDate(schedule.scheduledDate); setScheduledStartTime(schedule.scheduledStartTime); setScheduledEndTime(schedule.scheduledEndTime)
+    setCommitmentConflict(null)
+  }
+
+  async function keepTask() {
+    if (!commitmentConflict || !accessToken) return
+    await skipCommitmentOccurrence(accessToken, commitmentConflict.commitment.commitmentId, commitmentConflict.commitment.date)
+    await resolveTaskScheduleConflict(accessToken, { conflictKey: commitmentConflict.id, date: commitmentConflict.commitment.date, taskId: task.id, commitmentId: commitmentConflict.commitment.commitmentId, resolution: 'keep_task' })
+    setCommitmentConflict(null)
   }
 
   function handlePreviewAttachment(attachment: ApiTaskAttachment) {
@@ -621,6 +697,12 @@ export default function EditTaskScreen({
                     <input id="edit-task-due-time" type="time" className={inputClass} value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
                   </div>
                 </div>
+                <div className="mt-3 grid gap-3">
+                  <div><FieldLabel label="Scheduled Date" htmlFor="edit-task-scheduled-date" /><input id="edit-task-scheduled-date" type="date" className={inputClass} value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} /></div>
+                  <div><FieldLabel label="Scheduled Start" htmlFor="edit-task-scheduled-start" /><input id="edit-task-scheduled-start" type="time" className={inputClass} value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} /></div>
+                  <div><FieldLabel label="Scheduled End" htmlFor="edit-task-scheduled-end" /><input id="edit-task-scheduled-end" type="time" className={inputClass} value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} /></div>
+                </div>
+                <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
               </Card>
 
               <Card title="Progress Overview" code={`${progress}`}>
@@ -770,6 +852,19 @@ export default function EditTaskScreen({
       </AppLayout>
 
       <Toast message={notice} tone="success" onDone={() => setNotice('')} />
+      <TaskTimeConflictModal
+        conflict={timeConflict}
+        busy={saving}
+        onMoveExisting={(mode, schedule) => void moveConflictTask('existing', mode, schedule)}
+        onMoveNew={(mode, schedule) => void moveConflictTask('new', mode, schedule)}
+        onCancelExisting={() => {
+          if (!timeConflict || !accessToken || !window.confirm('Cancel the existing task? It will be marked missed and not deleted.')) return
+          void changeTaskStatus(accessToken, timeConflict.existingTask.id, { status: 'missed' }).then(() => resolveTaskScheduleConflict(accessToken, { conflictKey: timeConflict.id, date: timeConflict.existingTask.scheduledDate, taskId: timeConflict.existingTask.id, resolution: 'cancel_existing' })).then(() => setTimeConflict(null))
+        }}
+        onCancelNew={() => { setScheduledDate(initialValues.scheduledDate); setScheduledStartTime(initialValues.scheduledStartTime); setScheduledEndTime(initialValues.scheduledEndTime); setTimeConflict(null) }}
+        onCancelChanges={() => setTimeConflict(null)}
+      />
+      <TaskCommitmentConflictModal conflict={commitmentConflict} busy={saving} onKeepCommitment={() => void keepCommitment()} onKeepTask={() => void keepTask()} onChooseAnotherTime={() => { setCommitmentConflict(null); document.getElementById('edit-task-scheduled-date')?.focus() }} onCancel={() => setCommitmentConflict(null)} />
 
       {addingSubtask ? (
         <SubtaskFormModal

@@ -43,12 +43,16 @@ function buildService(existingRows: unknown[] = []) {
   const values = jest.fn(() => ({ onConflictDoUpdate }));
   const insert = jest.fn(() => ({ values }));
   const db = {
-    select: jest.fn(() => selectQuery(existingRows)),
+    select: jest.fn()
+      .mockImplementationOnce(() => selectQuery(existingRows))
+      .mockImplementation(() => selectQuery([])),
     insert,
   };
   const service = new PlannerAcceptanceService({
     db,
-  } as unknown as DatabaseService);
+  } as unknown as DatabaseService, {
+    getBusyWindowsForDate: jest.fn().mockResolvedValue([]),
+  } as never);
   return { service, insert, values, onConflictDoUpdate };
 }
 

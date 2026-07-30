@@ -18,9 +18,10 @@ import { RecurrenceParseService } from './recurrence-parse.service';
 import { RecurrenceSuggestionsService } from './recurrence-suggestions.service';
 import { SmartLocationInferenceService } from './smart-location-inference.service';
 import { TaskPlanChatService } from './task-plan-chat.service';
+import { WeatherTravelModule } from '../weather-travel/weather-travel.module';
 
 @Module({
-  imports: [DatabaseModule, SpeechModule, SocialModule, ContextModule],
+  imports: [DatabaseModule, SpeechModule, SocialModule, ContextModule, WeatherTravelModule],
   controllers: [AiController, AiPlannerController],
   providers: [
     AiService,

@@ -10,6 +10,8 @@ import { TaskAttachmentsService } from './task-attachments.service';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ContextModule } from '../context/context.module';
+import { WeatherTravelModule } from '../weather-travel/weather-travel.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
     // imports TasksModule, so there is no circular dependency.
     CollaborationModule,
     NotificationsModule,
+    ContextModule,
+    WeatherTravelModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

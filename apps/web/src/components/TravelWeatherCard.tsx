@@ -1,0 +1,11 @@
+import { useEffect, useState } from 'react'
+import { getTaskTravelWeatherPreview, type ApiTask } from '../lib/tasksApi'
+export function TravelWeatherCard({ token, task }: { token: string; task: ApiTask }) {
+  const [preview, setPreview] = useState<any>(null); const [loading, setLoading] = useState(false)
+  const refresh = async () => { setLoading(true); try { setPreview(await getTaskTravelWeatherPreview(token, task.id)) } finally { setLoading(false) } }
+  useEffect(() => { if (task.destination && task.scheduledDate) void refresh() }, [task.id, task.updatedAt])
+  if (!task.destination || !task.scheduledDate || !task.scheduledStartTime) return null
+  return <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4"><div className="flex items-center justify-between"><h3 className="font-black text-[var(--bp-text)]">Travel &amp; Weather</h3><button type="button" disabled={loading} onClick={() => void refresh()} className="text-sm font-bold text-[var(--bp-accent)]">Refresh preview</button></div>
+    {preview?.eligibility?.eligible ? <div className="mt-3 grid gap-2 text-sm text-[var(--bp-muted)]"><p>Destination: <strong className="text-[var(--bp-text)]">{preview.destination.displayName}</strong></p><p>Origin: {preview.origin.source.replaceAll('_',' ')}</p><p>Distance: {preview.route ? `${(preview.route.distanceMeters/1000).toFixed(1)} km` : 'Unavailable'}</p><p>Travel duration: {preview.route ? `${preview.route.fallbackUsed ? 'Approximately ' : ''}${preview.route.durationMinutes} min` : 'Unavailable'}</p><p>Recommended departure: {preview.recommendedDepartureTime ? new Date(preview.recommendedDepartureTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Unavailable'}</p><p>Notification: {new Date(preview.notificationTime).toLocaleString()}</p><p>Forecast: {preview.destinationForecast ? `${preview.destinationForecast.condition}, feels like ${Math.round(preview.destinationForecast.feelsLikeC)}°C` : 'Unavailable'}</p><p className="font-bold text-[var(--bp-text)]">{preview.deterministicMessage}</p></div> : <p className="mt-2 text-sm text-[var(--bp-muted)]">{preview?.eligibility?.reason ?? 'Loading preview…'}</p>}
+  </section>
+}

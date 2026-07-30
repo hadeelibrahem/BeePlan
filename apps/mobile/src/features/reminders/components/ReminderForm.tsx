@@ -24,6 +24,7 @@ import {
   getCategoryLabel,
   getConfidenceTier,
 } from '../utils/smartLocationCategories';
+import { isValidRadiusMeters } from '../utils/radiusValidation';
 import { ChecklistInput } from './ChecklistInput';
 import { ChecklistReminderSection } from './ChecklistReminderSection';
 import { DateTimeSection } from './DateTimeSection';
@@ -145,7 +146,7 @@ export function ReminderForm({
       const location = values.location;
       if (!location) return false;
       if (!location.trigger) return false;
-      if (!(location.radiusMeters > 0)) return false;
+      if (!isValidRadiusMeters(location.radiusMeters)) return false;
       if (location.mode === 'specific_place') {
         const place = location.specificPlace;
         // A search result or a resolved map/current-location pin is valid;
@@ -184,12 +185,16 @@ export function ReminderForm({
           return false;
         }
         if (!place.trigger) return false;
+        if (!isValidRadiusMeters(place.radius)) return false;
       }
 
       return true;
     }
     if (values.type === 'person') {
-      return Boolean(values.person?.targetUserId);
+      return Boolean(
+        values.person?.targetUserId &&
+          isValidRadiusMeters(values.person.radiusMeters ?? 100),
+      );
     }
     return true;
   }, [values]);

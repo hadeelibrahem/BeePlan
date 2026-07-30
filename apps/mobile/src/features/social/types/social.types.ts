@@ -68,6 +68,7 @@ export type CreatePersonReminderInput = {
   expiration: SharingExpiration;
   radiusMeters?: number;
   cooldownMinutes?: number;
+  transition?: 'arrival' | 'departure';
 };
 
 // Returned by GET /person-reminders/nearby — deliberately no coordinates.
