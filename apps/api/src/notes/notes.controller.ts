@@ -15,12 +15,20 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import { CreateNoteDto, UpdateNoteDto } from './dto/note.dto';
+import { DailyMotivationQueryDto } from './dto/daily-motivation.dto';
+import { DailyMotivationService } from './daily-motivation.service';
+import { Query } from '@nestjs/common';
 import { NotesService } from './notes.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notes')
 export class NotesController {
-  constructor(private readonly notesService: NotesService) {}
+  constructor(private readonly notesService: NotesService, private readonly dailyMotivationService: DailyMotivationService) {}
+
+  @Get('daily-motivation')
+  dailyMotivation(@Req() request: AuthenticatedRequest, @Query() query: DailyMotivationQueryDto) {
+    return this.dailyMotivationService.getForUser(request.user.id, query.timezone, query.language ?? 'en');
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

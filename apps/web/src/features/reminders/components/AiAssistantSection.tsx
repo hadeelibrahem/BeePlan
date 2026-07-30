@@ -327,7 +327,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
           ) : (
             <PrimaryButton onClick={stopRecording}>{t('reminders.aiAssistant.stopRecording')}</PrimaryButton>
           )}
-          {state === 'recording' && <p className="text-xs font-black text-[var(--bp-accent)]">{t('reminders.aiAssistant.recording')}</p>}
+          {state === 'recording' && <p className="text-xs font-black text-[var(--bp-accent-ink)]">{t('reminders.aiAssistant.recording')}</p>}
           {state === 'uploading' && <p className="text-xs font-semibold text-[var(--bp-muted)]">{t('reminders.aiAssistant.uploading')}</p>}
         </div>
       )}
@@ -365,7 +365,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
           <div>
             <div className="flex items-center justify-between">
               <span className="text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">{t('reminders.person.confidence')}</span>
-              <span className="text-xs font-black text-[var(--bp-accent)]">{Math.round(personResult.confidence * 100)}%</span>
+              <span className="text-xs font-black text-[var(--bp-accent-ink)]">{Math.round(personResult.confidence * 100)}%</span>
             </div>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bp-border)]">
               <div className="h-full rounded-full bg-[var(--bp-accent)]" style={{ width: `${Math.round(personResult.confidence * 100)}%` }} />

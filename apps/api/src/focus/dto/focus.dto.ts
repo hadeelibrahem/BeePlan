@@ -8,7 +8,11 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { FOCUS_SESSION_TYPES } from '../focus.logic';
+import {
+  FOCUS_EXTENSION_MAX_MINUTES,
+  FOCUS_EXTENSION_MIN_MINUTES,
+  FOCUS_SESSION_TYPES,
+} from '../focus.logic';
 
 export const FOCUS_TASK_OUTCOMES = ['done', 'partial', 'keep'] as const;
 export type FocusTaskOutcome = (typeof FOCUS_TASK_OUTCOMES)[number];
@@ -49,6 +53,17 @@ export class FinishFocusSessionDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+}
+
+export class ExtendFocusSessionDto {
+  // "Add More Time": how many whole minutes to add to the active session.
+  // Positive integers only; bounded so a single extension can add at most
+  // FOCUS_EXTENSION_MAX_MINUTES. Decimals, zero, negatives, and out-of-range
+  // values are rejected by class-validator before reaching the service.
+  @IsInt()
+  @Min(FOCUS_EXTENSION_MIN_MINUTES)
+  @Max(FOCUS_EXTENSION_MAX_MINUTES)
+  additionalMinutes!: number;
 }
 
 export class CancelFocusSessionDto {

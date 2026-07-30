@@ -12,7 +12,14 @@ import {
   type FocusTaskOutcome,
 } from '../lib/focusApi'
 import { formatClock, type ActiveFocus, type UseFocusSession } from '../lib/useFocusSession'
+import {
+  FOCUS_EXTENSION_MAX_MINUTES,
+  FOCUS_EXTENSION_MIN_MINUTES,
+  QUICK_EXTENSION_OPTIONS,
+  validateExtensionMinutes,
+} from '../lib/focusExtension'
 import { focusParentLabel, focusPrimaryTitle } from '../lib/focusDisplay'
+import { shouldPlayCompletionBell } from '../lib/completionBell'
 import { FOCUS_SOUND_CATEGORIES, FOCUS_SOUNDS, type FocusSound } from '../lib/focusSounds'
 import type { ApiTask } from '../lib/tasksApi'
 
@@ -40,16 +47,19 @@ export default function FocusSessionScreen({
     sessionComplete,
     completedMinutes,
     busy,
+    extending,
   } = focus
 
   const [stats, setStats] = useState<FocusStats | null>(null)
   const [recommendation, setRecommendation] = useState<FocusRecommendation | null>(null)
+  const [showAddTime, setShowAddTime] = useState(false)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [soundsOpen, setSoundsOpen] = useState(false)
   const [toast, setToast] = useState('')
   const soundPlayer = useFocusSoundPlayer()
   const stopSound = soundPlayer.stop
+  useFocusCompletionBell(active?.sessionId, active?.completionReason, sessionComplete, remainingMs)
 
   useEffect(() => {
     if (!accessToken) return
@@ -110,6 +120,16 @@ export default function FocusSessionScreen({
     else onExit()
   }, [active, sessionComplete, onExit])
 
+  // Persist the extension, then close the sheet only if it succeeded (leaving it
+  // open on error so the message stays visible).
+  const handleAddTime = useCallback(
+    async (minutes: number) => {
+      const ok = await focus.extendSession(minutes)
+      if (ok) setShowAddTime(false)
+    },
+    [focus],
+  )
+
   const fullscreenSupported = typeof document !== 'undefined' && document.fullscreenEnabled
 
   return (
@@ -119,7 +139,7 @@ export default function FocusSessionScreen({
       <div className="relative z-10 flex h-full w-full">
         <main className="flex h-full flex-1 flex-col items-center justify-between px-6 py-8">
           <header className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--bp-accent)] text-sm font-black text-[var(--bp-accent-text)]">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-sm font-black text-[var(--bp-accent-text)]">
               B
             </span>
             <span className="text-sm font-black uppercase tracking-[0.2em] text-[var(--bp-muted)]">
@@ -159,6 +179,7 @@ export default function FocusSessionScreen({
                 ) : (
                   <SecondaryButton onClick={focus.pause}>Pause</SecondaryButton>
                 )}
+                <OutlineButton onClick={() => setShowAddTime(true)}>Add Time</OutlineButton>
                 <PrimaryButton onClick={focus.requestFinish}>Finish</PrimaryButton>
                 <DangerButton onClick={() => void focus.cancel()}>Cancel</DangerButton>
               </div>
@@ -185,7 +206,15 @@ export default function FocusSessionScreen({
           isSubtask={Boolean(active.subtaskId)}
           alreadyDone={completionAlreadyDone}
           onOutcome={(outcome) => void focus.finishWithOutcome(outcome)}
-          onAddTime={() => focus.extendSession(10)}
+          onAddTime={() => setShowAddTime(true)}
+        />
+      ) : null}
+
+      {showAddTime && active ? (
+        <AddTimeModal
+          busy={extending}
+          onCancel={() => setShowAddTime(false)}
+          onConfirm={(minutes) => void handleAddTime(minutes)}
         />
       ) : null}
 
@@ -222,6 +251,71 @@ export default function FocusSessionScreen({
       ) : null}
     </div>
   )
+}
+
+const COMPLETION_AUDIO_LIMIT_MS = 10_000
+
+function useFocusCompletionBell(sessionId: string | undefined, completionReason: 'automatic' | 'manual' | undefined, sessionComplete: boolean, remainingMs: number) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const stopTimeoutRef = useRef<number | null>(null)
+  const playedSessionIdRef = useRef<string | null>(null)
+  const previousRemainingRef = useRef<number | null>(null)
+
+  const clearCompletionTimeout = useCallback(() => {
+    if (stopTimeoutRef.current !== null) {
+      window.clearTimeout(stopTimeoutRef.current)
+      stopTimeoutRef.current = null
+    }
+  }, [])
+
+  const stopCompletionAudio = useCallback(() => {
+    clearCompletionTimeout()
+    const audio = audioRef.current
+    if (!audio) return
+    audio.pause()
+    audio.currentTime = 0
+  }, [clearCompletionTimeout])
+
+  useEffect(() => {
+    const audio = new Audio('/focus-complete.mp3')
+    audio.preload = 'auto'
+    audioRef.current = audio
+    audio.ontimeupdate = () => { if (audio.currentTime >= 10) stopCompletionAudio() }
+    return () => { stopCompletionAudio(); audio.ontimeupdate = null; audio.src = ''; audioRef.current = null }
+  }, [stopCompletionAudio])
+
+  useEffect(() => {
+    previousRemainingRef.current = null
+    stopCompletionAudio()
+  }, [sessionId, stopCompletionAudio])
+
+  useEffect(() => {
+    if (!sessionComplete) stopCompletionAudio()
+  }, [sessionComplete, stopCompletionAudio])
+
+  useEffect(() => {
+    const remaining = sessionId ? (sessionComplete ? 0 : Math.ceil(remainingMs / 1000)) : 0
+    const previous = previousRemainingRef.current
+    const prefs = JSON.parse(localStorage.getItem('beeplan_settings_preferences') ?? '{}') as { focusCompletionSound?: boolean }
+    const shouldPlay = shouldPlayCompletionBell({
+      previousRemaining: previous,
+      remaining,
+      completionKey: completionReason === 'automatic' ? sessionId ?? null : null,
+      playedKey: playedSessionIdRef.current,
+      enabled: prefs.focusCompletionSound !== false,
+    })
+    if (shouldPlay) {
+      playedSessionIdRef.current = sessionId ?? null
+      const audio = audioRef.current
+      if (audio) {
+        stopCompletionAudio()
+        audio.loop = false
+        audio.currentTime = 0
+        void audio.play().then(() => { stopTimeoutRef.current = window.setTimeout(stopCompletionAudio, COMPLETION_AUDIO_LIMIT_MS) }).catch(() => undefined)
+      }
+    }
+    previousRemainingRef.current = remaining
+  }, [completionReason, remainingMs, sessionComplete, sessionId, stopCompletionAudio])
 }
 
 // --- Calm animated background ---------------------------------------------
@@ -264,7 +358,7 @@ function ActiveTimer({
 
   return (
     <div className="flex flex-col items-center">
-      <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--bp-accent)]">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--bp-accent-ink)]">
         {labelForType(active.sessionType)} • {active.plannedMinutes} min
       </p>
       <h1 className="mt-2 max-w-xl truncate text-center text-2xl font-black text-[var(--bp-text)]">
@@ -463,6 +557,115 @@ function CompletionModal({
   )
 }
 
+// --- Add-time modal --------------------------------------------------------
+
+function AddTimeModal({
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (minutes: number) => void
+}) {
+  const [selected, setSelected] = useState<number | 'custom'>(10)
+  const [customValue, setCustomValue] = useState('')
+
+  const rawMinutes = selected === 'custom' ? customValue : selected
+  const validation = validateExtensionMinutes(rawMinutes)
+  const canSubmit = validation.error === null && !busy
+  // Only surface the message once the user has typed a custom value; a selected
+  // quick option is always valid, so no message shows for those.
+  const showError = Boolean(
+    validation.error && selected === 'custom' && customValue.trim() !== '',
+  )
+
+  const handleConfirm = () => {
+    if (validation.error !== null || busy) return
+    onConfirm(validation.minutes)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 px-4 backdrop-blur-sm md:items-center">
+      <div className="w-full max-w-md rounded-t-[28px] border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] p-6 md:rounded-3xl">
+        <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--bp-border)] md:hidden" />
+        <h2 className="text-xl font-black text-[var(--bp-text)]">Add more time</h2>
+        <p className="mt-1 text-sm text-[var(--bp-muted)]">Extend your focus session.</p>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {QUICK_EXTENSION_OPTIONS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setSelected(option)}
+              className={`rounded-2xl border px-3 py-3 text-sm font-black transition active:scale-[0.98] ${
+                selected === option
+                  ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-text)]'
+                  : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-muted)] hover:border-[var(--bp-accent)]/50'
+              }`}
+            >
+              +{option}m
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setSelected('custom')}
+            className={`rounded-2xl border px-3 py-3 text-sm font-black transition active:scale-[0.98] ${
+              selected === 'custom'
+                ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-text)]'
+                : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-muted)] hover:border-[var(--bp-accent)]/50'
+            }`}
+          >
+            Custom
+          </button>
+        </div>
+
+        {selected === 'custom' ? (
+          <label className="mt-4 block">
+            <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">
+              Minutes ({FOCUS_EXTENSION_MIN_MINUTES}–{FOCUS_EXTENSION_MAX_MINUTES})
+            </span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={FOCUS_EXTENSION_MIN_MINUTES}
+              max={FOCUS_EXTENSION_MAX_MINUTES}
+              step={1}
+              autoFocus
+              value={customValue}
+              placeholder="e.g. 20"
+              onChange={(event) => setCustomValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') handleConfirm()
+              }}
+              className="mt-2 w-full rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-3 text-sm font-semibold text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
+            />
+          </label>
+        ) : null}
+
+        {showError ? (
+          <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
+            {validation.error}
+          </p>
+        ) : null}
+
+        <footer className="mt-5 grid grid-cols-2 gap-3">
+          <SecondaryButton onClick={onCancel} disabled={busy}>
+            Cancel
+          </SecondaryButton>
+          <PrimaryButton onClick={handleConfirm} disabled={!canSubmit}>
+            {busy
+              ? 'Adding…'
+              : validation.error === null
+                ? `Add ${validation.minutes} min`
+                : 'Add Time'}
+          </PrimaryButton>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
 function ExitConfirmModal({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
@@ -642,7 +845,7 @@ function FocusSoundsPanel({
       <section className="max-h-[86vh] w-full max-w-2xl overflow-hidden rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-[var(--bp-border)] px-5 py-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--bp-accent)]">Focus sounds</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--bp-accent-ink)]">Focus sounds</p>
             <h2 className="mt-1 text-xl font-black text-[var(--bp-text)]">White Noise</h2>
           </div>
           <button
@@ -680,7 +883,7 @@ function FocusSoundsPanel({
                             <p className="truncate text-sm font-black text-[var(--bp-text)]">{sound.name}</p>
                           </div>
                           {active ? (
-                            <span className="mt-2 inline-flex rounded-full bg-[var(--bp-accent)] px-2 py-0.5 text-[10px] font-black text-[var(--bp-accent-text)]">
+                            <span className="mt-2 inline-flex rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-2 py-0.5 text-[10px] font-black text-[var(--bp-accent-text)]">
                               Currently Playing
                             </span>
                           ) : null}
@@ -688,7 +891,7 @@ function FocusSoundsPanel({
                         <button
                           type="button"
                           onClick={() => (playing ? onPause() : onPlay(sound))}
-                          className="shrink-0 rounded-xl bg-[var(--bp-bg)] px-3 py-2 text-xs font-black text-[var(--bp-text)] transition hover:text-[var(--bp-accent)]"
+                          className="shrink-0 rounded-xl bg-[var(--bp-bg)] px-3 py-2 text-xs font-black text-[var(--bp-text)] transition hover:text-[var(--bp-accent-ink)]"
                         >
                           {playing ? '⏸ Pause' : '▶ Play'}
                         </button>
@@ -794,7 +997,7 @@ function UtilityButton({
       type="button"
       onClick={onClick}
       className={`rounded-xl px-3 py-2 text-xs font-bold transition hover:bg-[var(--bp-bg)] ${
-        accent ? 'text-[var(--bp-accent)]' : 'text-[var(--bp-muted)]'
+        accent ? 'text-[var(--bp-accent-ink)]' : 'text-[var(--bp-muted)]'
       }`}
     >
       {children}
@@ -830,7 +1033,7 @@ function SidePanel({
         value={task ? formatFocusMinutes(estimatedRemaining) : '—'}
       />
       <div className="mt-2 rounded-2xl border border-[var(--bp-accent)]/30 bg-[var(--bp-accent-soft)] p-3">
-        <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent)]">AI Tip</p>
+        <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">AI Tip</p>
         <p className="mt-1 text-xs leading-5 text-[var(--bp-text)]">{buildTip(active, recommendation)}</p>
       </div>
     </aside>
@@ -857,7 +1060,7 @@ function Badge({ label, type }: { label: string; type: string }) {
         ? 'bg-orange-500/20 text-orange-300'
         : normalized === 'low'
           ? 'bg-green-500/20 text-green-300'
-          : 'bg-slate-500/20 text-slate-300'
+          : 'bg-slate-500/20 text-[var(--bp-subtle)]'
   return <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${color}`}>{label}</span>
 }
 

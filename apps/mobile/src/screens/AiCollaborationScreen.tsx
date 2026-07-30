@@ -1,46 +1,60 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { AppScreen, FilterTabs, PageHeader, SectionCard, StatsCard } from '../components/layout';
+import { AppScreen, FilterTabs, PageHeader, SectionCard } from '../components/layout';
 import { useTheme } from '../theme/useTheme';
 import type { ApiTask } from '../lib/tasksApi';
-import { CapacityOverview } from '../features/collaboration/components/ai/CapacityOverview';
-import { DistributionPanel } from '../features/collaboration/components/ai/DistributionPanel';
 import { HistoryFeed } from '../features/collaboration/components/ai/HistoryFeed';
-import { SuggestionsFeed } from '../features/collaboration/components/ai/SuggestionsFeed';
-import { TeamProgressComb } from '../features/collaboration/components/ai/TeamProgressComb';
-import { TimelineView } from '../features/collaboration/components/ai/TimelineView';
-import { TodayTeamPlan } from '../features/collaboration/components/ai/TodayTeamPlan';
-import { useProgressQuery, useSuggestionsQuery, useTodayQuery } from '../features/collaboration/api/ai-collaboration.api';
+import { OverviewPanel } from '../features/collaboration/components/ai/OverviewPanel';
+import { PlanView } from '../features/collaboration/components/ai/PlanView';
+import { ProjectHealthPanel } from '../features/collaboration/components/ai/ProjectHealthPanel';
+import { TeamMemberList } from '../features/collaboration/components/ai/TeamMemberList';
+import type { PlanFocus } from '../features/collaboration/api/ai-collaboration.api';
+
+export type StartCollaborationFocusInput = {
+  taskId: string;
+  subtaskId: string | null;
+  estimatedMinutes: number | null;
+};
 
 type Props = {
   task: ApiTask | null;
   accessToken?: string;
   onBack: () => void;
+  onStartFocus?: (input: StartCollaborationFocusInput) => void;
 };
 
-type TabKey = 'overview' | 'today' | 'progress' | 'distribution' | 'suggestions' | 'timeline' | 'history';
+type TabKey = 'overview' | 'plan' | 'team' | 'health' | 'activity';
 
 const TABS: { value: TabKey; label: string }[] = [
   { value: 'overview', label: 'Overview' },
-  { value: 'today', label: 'Today' },
-  { value: 'progress', label: 'Progress' },
-  { value: 'distribution', label: 'Distribution' },
-  { value: 'suggestions', label: 'Suggestions' },
-  { value: 'timeline', label: 'Timeline' },
-  { value: 'history', label: 'History' },
+  { value: 'plan', label: 'Plan' },
+  { value: 'team', label: 'Team' },
+  { value: 'health', label: 'Health' },
+  { value: 'activity', label: 'Activity' },
 ];
 
 /**
- * Persistent, tabbed "AI Collaboration" home for a shared task. Replaces the
- * old one-shot AiCollaborationPlannerModal — the AI keeps proposing ideas
- * here for the life of the task, but it never changes anything on its own;
- * the owner always approves via the Suggestions tab or the Distribution
- * Accept action.
+ * Persistent, tabbed "AI Collaboration" home for a shared task. Five tabs —
+ * Overview / Plan / Team / Health / Activity — so related data lives together
+ * without duplication.
+ *
+ * Overview is the command centre and hosts the AI decision loop (see
+ * SuggestionsFeed): every recommendation is explained, previewed against the
+ * real forecast, and applied only on an explicit editor/owner approval. Findings
+ * deep-link into Plan or Team carrying backend-provided filters.
  */
-export default function AiCollaborationScreen({ task, accessToken = '', onBack }: Props) {
+export default function AiCollaborationScreen({ task, accessToken = '', onBack, onStartFocus }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
   const [tab, setTab] = useState<TabKey>('overview');
+  // Deep-link focus from an Overview recommendation or alert. Cleared when the
+  // user switches tabs themselves, so it never silently re-filters a later visit.
+  const [focus, setFocus] = useState<PlanFocus | undefined>();
+
+  const navigateToTab = (next: TabKey, nextFocus?: PlanFocus) => {
+    setFocus(nextFocus);
+    setTab(next);
+  };
 
   if (!task) {
     return (
@@ -57,53 +71,26 @@ export default function AiCollaborationScreen({ task, accessToken = '', onBack }
     <AppScreen>
       <PageHeader title="AI Collaboration" subtitle={task.title} onBack={onBack} />
 
-      <FilterTabs tabs={TABS} active={tab} onChange={setTab} />
+      <FilterTabs tabs={TABS} active={tab} onChange={(next) => navigateToTab(next)} />
 
       {tab === 'overview' ? (
-        <OverviewTab taskId={task.id} />
-      ) : tab === 'today' ? (
-        <TodayTeamPlan taskId={task.id} />
-      ) : tab === 'progress' ? (
-        <TeamProgressComb taskId={task.id} />
-      ) : tab === 'distribution' ? (
-        <DistributionPanel task={task} />
-      ) : tab === 'suggestions' ? (
-        <SuggestionsFeed taskId={task.id} />
-      ) : tab === 'timeline' ? (
-        <TimelineView taskId={task.id} />
+        <OverviewPanel
+          taskId={task.id}
+          onNavigate={navigateToTab}
+          onStartFocus={onStartFocus}
+          onViewDetails={onBack}
+        />
+      ) : tab === 'plan' ? (
+        <PlanView taskId={task.id} initialFocus={focus} />
+      ) : tab === 'team' ? (
+        <View>
+          <TeamMemberList taskId={task.id} initialFocus={focus} />
+        </View>
+      ) : tab === 'health' ? (
+        <ProjectHealthPanel taskId={task.id} onNavigate={navigateToTab} />
       ) : (
         <HistoryFeed taskId={task.id} accessToken={accessToken} />
       )}
     </AppScreen>
-  );
-}
-
-function OverviewTab({ taskId }: { taskId: string }) {
-  const { theme } = useTheme();
-  const { colors } = theme;
-  const todayQuery = useTodayQuery(taskId);
-  const progressQuery = useProgressQuery(taskId);
-  const suggestionsQuery = useSuggestionsQuery(taskId);
-
-  const pendingSuggestions = (suggestionsQuery.data?.items ?? []).filter((item) => item.status === 'pending').length;
-
-  return (
-    <View>
-      <SectionCard className="mb-3">
-        <Text className="mb-1 text-xs font-black uppercase tracking-wide" style={{ color: colors.secondaryText }}>
-          Today's Goal
-        </Text>
-        <Text className="text-sm leading-5" style={{ color: colors.text }}>
-          {todayQuery.data?.goal || 'No specific goal set for today — steady progress is the goal.'}
-        </Text>
-      </SectionCard>
-
-      <View className="mb-3 flex-row flex-wrap justify-between gap-y-3">
-        <StatsCard icon="📈" value={`${Math.round(progressQuery.data?.overallPercent ?? 0)}%`} title="Overall progress" />
-        <StatsCard icon="💡" value={String(pendingSuggestions)} title="Pending suggestions" />
-      </View>
-
-      <CapacityOverview taskId={taskId} />
-    </View>
   );
 }

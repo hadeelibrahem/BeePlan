@@ -81,7 +81,7 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
         title={t('taskUi.analytics.title')}
         subtitle={t('taskUi.analytics.subtitle')}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
@@ -99,7 +99,7 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
             type="button"
             onClick={() => void tasksQuery.refetch()}
             disabled={tasksQuery.isFetching}
-            className="text-xs font-bold text-[var(--bp-accent)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+            className="text-xs font-bold text-[var(--bp-accent-ink)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
           >
             {tasksQuery.isFetching ? 'Retrying…' : 'Retry'}
           </button>
@@ -116,15 +116,15 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
       <div className="grid gap-3 lg:grid-cols-2">
         <SectionCard>
           <h2 className="mb-1 text-sm font-bold">Completion trend</h2>
-          <p className="mb-3 text-xs text-slate-400">Tasks completed in the last 14 days</p>
+          <p className="mb-3 text-xs text-[var(--bp-muted)]">Tasks completed in the last 14 days</p>
           <CompletionTrend points={completionTrend} loading={tasksLoading} />
         </SectionCard>
 
         <SectionCard>
           <h2 className="mb-1 text-sm font-bold">Focus time</h2>
-          <p className="mb-3 text-xs text-slate-400">Based on completed focus sessions</p>
+          <p className="mb-3 text-xs text-[var(--bp-muted)]">Based on completed focus sessions</p>
           {focusStatsQuery.isLoading ? (
-            <p className="text-sm text-slate-400">Loading focus summary...</p>
+            <p className="text-sm text-[var(--bp-muted)]">Loading focus summary...</p>
           ) : focusStatsQuery.isError ? (
             <p role="status" className="text-sm text-red-300">Focus summary is unavailable right now.</p>
           ) : focusStats ? (
@@ -135,7 +135,7 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
               <FocusMetric label="Current streak" value={`${focusStats.currentStreak} day${focusStats.currentStreak === 1 ? '' : 's'}`} />
             </dl>
           ) : (
-            <p className="text-sm text-slate-400">No focus sessions yet.</p>
+            <p className="text-sm text-[var(--bp-muted)]">No focus sessions yet.</p>
           )}
         </SectionCard>
 
@@ -156,18 +156,18 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
 function FocusMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)]/50 px-3 py-2">
-      <dt className="text-xs text-slate-400">{label}</dt>
+      <dt className="text-xs text-[var(--bp-muted)]">{label}</dt>
       <dd className="mt-0.5 text-lg font-bold text-[var(--bp-text)]">{value}</dd>
     </div>
   )
 }
 
 function CompletionTrend({ points, loading }: { points: ReturnType<typeof computeCompletionTrend>; loading: boolean }) {
-  if (loading) return <p className="text-sm text-slate-400">Loading completion trend...</p>
+  if (loading) return <p className="text-sm text-[var(--bp-muted)]">Loading completion trend...</p>
 
   const maximum = Math.max(1, ...points.map((point) => point.completed))
   const total = points.reduce((sum, point) => sum + point.completed, 0)
-  if (total === 0) return <p className="text-sm text-slate-400">No completions recorded in the last 14 days.</p>
+  if (total === 0) return <p className="text-sm text-[var(--bp-muted)]">No completions recorded in the last 14 days.</p>
 
   return (
     <>
@@ -182,7 +182,7 @@ function CompletionTrend({ points, loading }: { points: ReturnType<typeof comput
             </div>
           ))}
         </div>
-        <div className="mt-2 flex justify-between text-xs text-slate-400">
+        <div className="mt-2 flex justify-between text-xs text-[var(--bp-muted)]">
           <span>{points[0]?.date}</span>
           <span>{points.at(-1)?.date}</span>
         </div>
@@ -210,11 +210,11 @@ function BreakdownList({
   labelize?: (value: string) => string
 }) {
   if (loading) {
-    return <p className="text-sm text-slate-400">Loading breakdown…</p>
+    return <p className="text-sm text-[var(--bp-muted)]">Loading breakdown…</p>
   }
 
   if (!entries.length) {
-    return <p className="text-sm text-slate-400">No tasks yet — create one to see a breakdown here.</p>
+    return <p className="text-sm text-[var(--bp-muted)]">No tasks yet — create one to see a breakdown here.</p>
   }
 
   return (
@@ -225,7 +225,7 @@ function BreakdownList({
           <div key={label}>
             <div className="mb-1 flex items-center justify-between text-sm">
               <span className="font-semibold text-[var(--bp-text)]">{labelize(label)}</span>
-              <span className="text-slate-400">{count} - {percent}%</span>
+              <span className="text-[var(--bp-muted)]">{count} - {percent}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-[var(--bp-bg)]">
               <div className="h-1.5 rounded-full bg-[var(--bp-accent)]" style={{ width: `${percent}%` }} />

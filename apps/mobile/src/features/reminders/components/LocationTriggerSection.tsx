@@ -176,7 +176,7 @@ export function LocationTriggerSection({ value, onChange }: Props) {
               {t('reminders.searchPlaceManualHint')}
             </Text>
             {!value.specificLocation && !!value.pendingPlaceName && (
-              <Text className="mt-1 text-xs font-semibold" style={{ color: colors.accent }}>
+              <Text className="mt-1 text-xs font-semibold" style={{ color: colors.accentInk }}>
                 {t('reminders.pendingPlaceHelp')}
               </Text>
             )}

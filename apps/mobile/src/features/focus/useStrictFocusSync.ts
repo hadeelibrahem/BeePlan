@@ -52,6 +52,10 @@ export function useStrictFocusSync({ active, remainingMs, prefs, blocker }: Para
   const clearError = useCallback(() => setError(null), []);
 
   const activeSessionId = active?.sessionId ?? null;
+  const activeEndsAtMs = active?.endsAtMs ?? null;
+  // Last native end we pushed, so we only refresh when the JS deadline actually
+  // moves (an "Add More Time" extension), not on every render.
+  const syncedEndRef = useRef<number | null>(null);
   // The JS session is the source of truth for paused; native mirrors it.
   const jsPaused = active?.pausedSinceMs != null;
 
@@ -135,6 +139,38 @@ export function useStrictFocusSync({ active, remainingMs, prefs, blocker }: Para
     prefs.blockedPackages,
     blocker.available,
     blocker.usageAccess,
+    blocker.status.isActive,
+    blocker.status.isPaused,
+    blocker.status.sessionId,
+  ]);
+
+  // Keep the native gate's end time in step with JS extensions. When the JS
+  // deadline moves forward while the native service is already running our
+  // session (and not paused), push the new end so app-blocking does not release
+  // at the pre-extension time. Only forward moves are propagated (extensions and
+  // pause-shifts), never a shortening; native errors are swallowed as elsewhere.
+  useEffect(() => {
+    const running =
+      blocker.available &&
+      blocker.status.isActive &&
+      !blocker.status.isPaused &&
+      activeSessionId !== null &&
+      blocker.status.sessionId === activeSessionId;
+
+    if (!running || activeEndsAtMs === null) {
+      syncedEndRef.current = activeEndsAtMs;
+      return;
+    }
+
+    const previous = syncedEndRef.current;
+    if (previous !== null && activeEndsAtMs - previous > 1000) {
+      void resumeStrictMode(activeEndsAtMs).catch(() => undefined);
+    }
+    syncedEndRef.current = activeEndsAtMs;
+  }, [
+    activeEndsAtMs,
+    activeSessionId,
+    blocker.available,
     blocker.status.isActive,
     blocker.status.isPaused,
     blocker.status.sessionId,

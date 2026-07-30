@@ -387,7 +387,7 @@ export default function AllTasksScreen({
         title={t('taskUi.allTasks.title')}
         subtitle={t('taskUi.allTasks.subtitle')}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search tasks..."
@@ -399,7 +399,7 @@ export default function AllTasksScreen({
             onSignOut={onSignOut}
           />
         }
-        pageActions={<div className="flex items-center gap-2"><label htmlFor="task-sort" className="text-xs font-bold text-slate-400">Sort</label><select id="task-sort" value={sort.field} onChange={(event) => updateSort(event.target.value as SortField)} className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-2 py-1.5 text-sm text-[var(--bp-text)]"><option value="due">Due date</option><option value="priority">Priority</option><option value="created">Created date</option><option value="title">Title</option></select><SecondaryButton onClick={() => updateSort(sort.field)}>{sort.direction === 'asc' ? 'Ascending' : 'Descending'}</SecondaryButton></div>}
+        pageActions={<div className="flex items-center gap-2"><label htmlFor="task-sort" className="text-xs font-bold text-[var(--bp-muted)]">Sort</label><select id="task-sort" value={sort.field} onChange={(event) => updateSort(event.target.value as SortField)} className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-2 py-1.5 text-sm text-[var(--bp-text)]"><option value="due">Due date</option><option value="priority">Priority</option><option value="created">Created date</option><option value="title">Title</option></select><SecondaryButton onClick={() => updateSort(sort.field)}>{sort.direction === 'asc' ? 'Ascending' : 'Descending'}</SecondaryButton></div>}
       />
 
       {recurrenceSuggestions.length ? (
@@ -437,7 +437,7 @@ export default function AllTasksScreen({
               key={chip.key}
               type="button"
               onClick={chip.onRemove}
-              className="flex items-center gap-1.5 rounded-full bg-[var(--bp-accent)]/15 px-3 py-1 text-xs font-semibold text-[var(--bp-accent)] transition hover:bg-[var(--bp-accent)]/25"
+              className="flex items-center gap-1.5 rounded-full bg-[var(--bp-accent)]/15 px-3 py-1 text-xs font-semibold text-[var(--bp-accent-ink)] transition hover:bg-[var(--bp-accent)]/25"
             >
               {chip.label}
               <span aria-hidden>&times;</span>
@@ -446,7 +446,7 @@ export default function AllTasksScreen({
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-full border border-[var(--bp-border)] px-3 py-1 text-xs font-semibold text-slate-400 transition hover:border-[var(--bp-accent)]/40 hover:text-[var(--bp-text)]"
+            className="rounded-full border border-[var(--bp-border)] px-3 py-1 text-xs font-semibold text-[var(--bp-muted)] transition hover:border-[var(--bp-accent)]/40 hover:text-[var(--bp-text)]"
           >
             Clear Filters
           </button>
@@ -530,7 +530,7 @@ export default function AllTasksScreen({
 
           <Panel title="Categories">
             {categories.length === 0 ? (
-              <p className="text-xs text-slate-400">No categories yet.</p>
+              <p className="text-xs text-[var(--bp-muted)]">No categories yet.</p>
             ) : (
               categories.map((category, index) => (
                 <FilterRow
@@ -578,7 +578,7 @@ function TaskGroup({
   return (
     <div>
       <h3 className="mb-2 text-sm font-bold">
-        {title} <span className="text-xs text-slate-400">- {count}</span>
+        {title} <span className="text-xs text-[var(--bp-muted)]">- {count}</span>
       </h3>
 
       <div className="overflow-hidden rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)]">
@@ -653,11 +653,11 @@ function TaskRow({
         className="flex w-full cursor-pointer flex-col gap-2 text-start sm:grid sm:grid-cols-[minmax(0,1fr)_110px_110px_140px_20px] sm:items-center sm:gap-3"
       >
         <div className="min-w-0">
-          <p className={`flex items-center gap-1.5 text-sm font-semibold text-[var(--bp-text)] ${task.done ? 'text-slate-500 line-through' : ''}`}>
+          <p className={`flex items-center gap-1.5 text-sm font-semibold text-[var(--bp-text)] ${task.done ? 'text-[var(--bp-muted)] line-through' : ''}`}>
             <span className="truncate">{task.title}</span>
             {isShared ? <SharedBadge /> : null}
           </p>
-          <p className="truncate text-xs text-slate-400">{task.category} - {task.due}</p>
+          <p className="truncate text-xs text-[var(--bp-muted)]">{task.category} - {task.due}</p>
           {completionError ? <p className="mt-1 text-xs font-semibold text-red-300">{completionError}</p> : null}
           {statusSuccess ? <p className="mt-1 text-xs font-semibold text-green-400">{statusSuccess}</p> : null}
         </div>
@@ -677,13 +677,13 @@ function TaskRow({
                 style={{ width: `${task.progress}%` }}
               />
             </div>
-            <p className="mt-1 text-end text-xs text-slate-400">{task.progress}%</p>
+            <p className="mt-1 text-end text-xs text-[var(--bp-muted)]">{task.progress}%</p>
           </div>
 
           <DirectionalChevron
             direction="forward"
             isRTL={isRTL}
-            className="hidden h-4 w-4 text-slate-400 sm:block"
+            className="hidden h-4 w-4 text-[var(--bp-muted)] sm:block"
           />
         </div>
       </button>
@@ -735,7 +735,7 @@ function Badge({ label, type }: { label: string; type: string }) {
           ? 'bg-green-500/20 text-green-300'
           : type === 'In Progress'
             ? 'bg-blue-500/20 text-blue-300'
-            : 'bg-slate-500/20 text-slate-300'
+            : 'bg-slate-500/20 text-[var(--bp-subtle)]'
 
   return <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-bold ${color}`}>{label}</span>
 }
@@ -767,7 +767,7 @@ function FilterRow({
       type="button"
       onClick={onClick}
       className={`mb-3 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition last:mb-0 ${
-        active ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-text)]' : 'text-slate-300 hover:bg-[var(--bp-bg)]'
+        active ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-text)]' : 'text-[var(--bp-subtle)] hover:bg-[var(--bp-bg)]'
       }`}
     >
       <div className="flex items-center gap-2">
@@ -776,7 +776,7 @@ function FilterRow({
       </div>
       <span
         className={`rounded-full px-2 py-0.5 text-xs ${
-          active ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]' : 'bg-[var(--bp-border)]'
+          active ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'bg-[var(--bp-border)]'
         }`}
       >
         {count}

@@ -45,7 +45,7 @@ export function SavedPlacesSection({ accessToken }: Props) {
           type="button"
           onClick={openCreate}
           aria-label="Add saved place"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--bp-accent)] text-lg font-black text-black hover:opacity-90"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-lg font-black text-black hover:opacity-90"
         >
           +
         </button>

@@ -372,7 +372,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
             </PrimaryButton>
           )}
           {recorderState.isRecording && (
-            <Text className="text-xs font-black" style={{ color: colors.accent }}>
+            <Text className="text-xs font-black" style={{ color: colors.accentInk }}>
               {t('reminders.aiAssistant.recording')}
             </Text>
           )}
@@ -433,7 +433,7 @@ export function AiAssistantSection({ onApplyDraft, onApplyPersonDraft, accessTok
               <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
                 {t('reminders.person.confidence')}
               </Text>
-              <Text className="text-xs font-black" style={{ color: colors.accent }}>{Math.round(personResult.confidence * 100)}%</Text>
+              <Text className="text-xs font-black" style={{ color: colors.accentInk }}>{Math.round(personResult.confidence * 100)}%</Text>
             </View>
             <View className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: colors.border }}>
               <View className="h-full rounded-full" style={{ width: `${Math.round(personResult.confidence * 100)}%`, backgroundColor: colors.accent }} />

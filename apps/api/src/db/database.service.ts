@@ -134,8 +134,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         alter column user_id drop not null,
         drop column if exists description,
         drop column if exists reminder_type,
-        drop column if exists remind_at,
-        drop column if exists task_id
+        drop column if exists remind_at
     `);
 
     // Keep the orphaned flag in sync with reality on every boot. This never
@@ -635,6 +634,20 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists subtask_id uuid references subtasks(id) on delete set null
     `);
 
+    // Authoritative scheduled end time, extended by "Add More Time". Added for
+    // rows created before the column existed, then backfilled from
+    // started_at + planned_minutes so every existing/active session gets a
+    // concrete deadline (idempotent: the WHERE guard matches nothing once set).
+    await this.getPool().query(`
+      alter table focus_sessions
+        add column if not exists ends_at timestamp
+    `);
+    await this.getPool().query(`
+      update focus_sessions
+      set ends_at = started_at + (planned_minutes * interval '1 minute')
+      where ends_at is null
+    `);
+
     await this.getPool().query(`
       create index if not exists idx_focus_sessions_user_id
         on focus_sessions (user_id)
@@ -788,7 +801,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     // Task reminders + shared/personal audience.
     await this.getPool().query(`
       alter table reminders
-        add column if not exists task_id uuid references tasks(id) on delete cascade,
+        add column if not exists task_id uuid references tasks(id) on delete set null,
         add column if not exists audience varchar(20) not null default 'personal'
     `);
 
@@ -902,6 +915,13 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         resolved_at timestamp,
         resolved_by_user_id uuid references users(id) on delete set null
       )
+    `);
+    // Why a recommendation left "pending". Set by the validation pipeline when it
+    // auto-resolves a card (completed / already_applied / no_impact / …), so the
+    // state transition is durable and explainable rather than a silent drop.
+    await this.getPool().query(`
+      alter table ai_recommendations
+        add column if not exists resolution_reason varchar(40)
     `);
     await this.getPool().query(`
       create unique index if not exists idx_ai_reco_dedupe

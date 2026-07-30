@@ -5,6 +5,11 @@
     "cancel": "إلغاء",
     "somethingWentWrong": "حدث خطأ ما. حاول مرة أخرى."
   },
+  "notesMotivation": {
+    "label": "تقدمك اليوم",
+    "basedOnActivity": "بناءً على نشاطك اليوم",
+    "loading": "جارٍ تحميل رسالة تقدمك"
+  },
   "topBar": {
     "searchPlaceholder": "بحث...",
     "closeSearch": "إغلاق البحث",

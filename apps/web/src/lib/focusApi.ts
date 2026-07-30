@@ -12,6 +12,9 @@ export type FocusSession = {
   subtaskTitle?: string | null
   startedAt: string
   endedAt: string | null
+  // Authoritative scheduled end of the session; the countdown is derived from
+  // this so "Add More Time" is reflected the instant the server responds.
+  endsAt: string
   plannedMinutes: number
   actualMinutes: number | null
   status: FocusSessionStatus
@@ -70,6 +73,10 @@ export type CancelFocusSessionPayload = {
   notes?: string
 }
 
+export type ExtendFocusSessionPayload = {
+  additionalMinutes: number
+}
+
 async function request<T>(accessToken: string, path: string, init?: RequestInit): Promise<T> {
   const url = `${apiUrl}${path}`
   let response: Response
@@ -122,6 +129,17 @@ export function cancelFocusSession(
   payload: CancelFocusSessionPayload = {},
 ) {
   return request<FocusSession>(accessToken, `/focus/sessions/${sessionId}/cancel`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function extendFocusSession(
+  accessToken: string,
+  sessionId: string,
+  payload: ExtendFocusSessionPayload,
+) {
+  return request<FocusSession>(accessToken, `/focus/sessions/${sessionId}/extend`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   })

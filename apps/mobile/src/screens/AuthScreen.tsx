@@ -182,7 +182,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   <Text className="text-xs font-semibold uppercase tracking-wider" style={{ color: colors.secondaryText }}>Password</Text>
                   {!isSignUp && (
                     <Pressable onPress={onForgotPassword} accessibilityRole="button" accessibilityLabel="Forgot password">
-                      <Text className="text-xs font-semibold" style={{ color: colors.accent }}>Forgot Password?</Text>
+                      <Text className="text-xs font-semibold" style={{ color: colors.accentInk }}>Forgot Password?</Text>
                     </Pressable>
                   )}
                 </View>
@@ -291,7 +291,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
               {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
             </Text>
             <Pressable onPress={toggleMode} accessibilityRole="button" accessibilityLabel="Toggle sign in or sign up">
-              <Text className="text-sm font-bold underline" style={{ color: colors.accent }}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
+              <Text className="text-sm font-bold underline" style={{ color: colors.accentInk }}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
             </Pressable>
           </View>
         </View>

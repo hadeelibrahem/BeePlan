@@ -350,7 +350,7 @@ export default function TaskDetailsScreen({
         {...nav}
         onNavigateTasks={onBack}
       >
-        <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+        <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
           <button type="button" onClick={onBack} className="font-semibold hover:text-[var(--bp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]">
             Tasks
           </button>
@@ -362,7 +362,7 @@ export default function TaskDetailsScreen({
           title={t('taskUi.details.title')}
           subtitle={t('taskUi.details.subtitle')}
           toolbar={
-            <TopActionBar
+            <TopActionBar pageOnly
               searchValue={search}
               onSearchChange={setSearch}
               searchPlaceholder="Search tasks..."
@@ -391,7 +391,7 @@ export default function TaskDetailsScreen({
                 ) : null}
               </div>
               <h2 className="mb-1.5 text-lg font-black">{task?.title ?? 'No task selected'}</h2>
-              <p className="max-w-3xl text-sm leading-6 text-slate-400">
+              <p className="max-w-3xl text-sm leading-6 text-[var(--bp-muted)]">
                 {task?.description || 'No description provided.'}
               </p>
             </div>
@@ -413,7 +413,7 @@ export default function TaskDetailsScreen({
           </div>
 
           {isViewer ? null : (
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[var(--bp-border)]/70 pt-3">
               <InlineStatusControl
                 status={status}
                 blocked={isBlocked}
@@ -425,7 +425,7 @@ export default function TaskDetailsScreen({
             </div>
           )}
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid gap-2 border-t border-[var(--bp-border)]/70 pt-3 sm:grid-cols-3">
             <InfoBox title="Created" value={formatDate(task?.createdAt) || 'Not available'} />
             <InfoBox title="Updated" value={formatDate(task?.updatedAt) || 'Not available'} />
             <InfoBox
@@ -442,15 +442,15 @@ export default function TaskDetailsScreen({
               <button
                 type="button"
                 onClick={onOpenAiCollaboration}
-                className="flex w-full items-center justify-between rounded-2xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/10 px-4 py-3 text-start transition hover:bg-[var(--bp-accent)]/15"
+                className="flex w-full items-center justify-between rounded-2xl border border-[var(--bp-accent)]/55 bg-gradient-to-r from-[var(--bp-accent)]/[0.16] via-[var(--bp-surface)] to-[var(--bp-surface)] px-4 py-3 text-start shadow-[0_8px_22px_rgba(253,239,75,0.08)] transition hover:shadow-[0_10px_26px_rgba(253,239,75,0.14)]"
               >
                 <span>
                   <span className="block text-sm font-black text-[var(--bp-text)]">AI Collaboration</span>
-                  <span className="block text-xs text-slate-400">
+                  <span className="block text-xs text-[var(--bp-muted)]">
                     See today's plan, progress, and fair-split suggestions for the team.
                   </span>
                 </span>
-                <span className="text-[var(--bp-accent)]">&rarr;</span>
+                <span className="text-[var(--bp-accent-ink)]">&rarr;</span>
               </button>
             ) : null}
             <CollaborationPanel
@@ -475,37 +475,44 @@ export default function TaskDetailsScreen({
           </div>
         ) : null}
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_240px]">
-          <section className="space-y-4">
+        <div className="mt-4 grid gap-3 xl:grid-cols-[1fr_240px]">
+          <section className="space-y-3">
             <SectionBlock title="Progress">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs text-slate-400">
+              <div className="mb-2.5 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-2xl font-black leading-none text-[var(--bp-text)]">{progress}%</p>
+                  <p className="mt-1 text-xs text-[var(--bp-muted)]">
                   {completedSubtasksCount} of {subtaskItems.length} subtasks completed
-                </p>
-                <span className="text-lg font-black text-[var(--bp-accent)]">{progress}%</span>
+                  </p>
+                </div>
+                <span className="rounded-full border border-[var(--bp-accent)]/45 bg-[var(--bp-accent-soft)] px-2.5 py-1 text-xs font-black text-[var(--bp-accent-ink)]">Completion</span>
               </div>
-              <div role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2 rounded-full bg-[var(--bp-border)]">
-                <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
+              <div role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2.5 rounded-full bg-[var(--bp-border)]">
+                <div className="h-2.5 rounded-full bg-[var(--bp-accent)] shadow-[0_0_10px_rgba(253,239,75,0.35)]" style={{ width: `${progress}%` }} />
               </div>
             </SectionBlock>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2">
               <SectionBlock
+                className="flex h-[640px] flex-col"
                 title="Subtasks"
                 subtitle={`${visibleCompletedCount} of ${visibleSubtasks.length} completed`}
               >
                 {subtaskItems.length ? (
-                  <>
-                    <SubtaskVisibilityFilter
-                      filter={subtaskFilter}
-                      onFilterChange={setSubtaskFilter}
-                      isOwner={isOwner}
-                      memberOptions={memberOptions}
-                      memberId={subtaskMemberId}
-                      onMemberChange={setSubtaskMemberId}
-                    />
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="sticky top-0 z-10 -mx-1 mb-2 bg-[var(--bp-surface)] px-1 pb-1">
+                      <SubtaskVisibilityFilter
+                        filter={subtaskFilter}
+                        onFilterChange={setSubtaskFilter}
+                        isOwner={isOwner}
+                        memberOptions={memberOptions}
+                        memberId={subtaskMemberId}
+                        onMemberChange={setSubtaskMemberId}
+                      />
+                    </div>
                     {visibleSubtasks.length ? (
-                      <div className="space-y-2">
+                      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+                        <div className="divide-y divide-[var(--bp-border)]/60 overflow-hidden rounded-xl border border-[var(--bp-border)]/70 bg-[var(--bp-bg)]">
                         {visibleSubtasks.map((item) => (
                           <Subtask
                             key={item.id}
@@ -515,68 +522,69 @@ export default function TaskDetailsScreen({
                             onOpen={() => setDetailSubtaskId(item.id)}
                           />
                         ))}
+                        </div>
                       </div>
                     ) : (
-                      <EmptyBlock
+                      <EmptyBlock className="flex flex-1 items-center justify-center"
                         title="No subtasks in this view"
                         description="Try a different filter to see more subtasks."
                       />
                     )}
-                  </>
+                  </div>
                 ) : (
-                  <EmptyBlock title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
+                  <EmptyBlock className="flex flex-1 items-center justify-center" title="No subtasks yet" description="Steps will appear here once added from Edit Task." />
                 )}
               </SectionBlock>
 
-              <SectionBlock title="Dependencies">
+              <SectionBlock className="flex h-[640px] flex-col" title="Dependencies">
                 {dependencies.length ? (
                   <>
                     <div
                       className={`mb-3 rounded-xl border px-3 py-2 text-xs font-semibold ${
                         dependenciesComplete
                           ? 'border-green-500/30 bg-green-500/10 text-green-300'
-                          : 'border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
+                          : 'border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]'
                       }`}
                     >
                       {dependenciesComplete
                         ? 'All dependencies are completed. This task is ready to start.'
                         : 'This task cannot start until all dependencies are completed.'}
                     </div>
-                    <div className="space-y-2">
+                    <div className="divide-y divide-[var(--bp-border)]/70 overflow-hidden rounded-xl border border-[var(--bp-border)]/70 bg-[var(--bp-bg)]">
                       {dependencies.map((dependency) => (
                         <Dependency key={dependency.id} task={dependency} />
                       ))}
                     </div>
                   </>
                 ) : (
-                  <EmptyBlock title="No dependencies" description="Tasks that must finish first will appear here." />
+                  <EmptyBlock className="flex flex-1 items-center justify-center" title="No dependencies" description="Tasks that must finish first will appear here." />
                 )}
               </SectionBlock>
             </div>
 
-            <SectionBlock title="Recurring">
-              <RecurrenceDetails
-                recurrence={recurrence}
-                nextOccurrenceDate={task?.recurrence?.nextOccurrenceDate}
-                dueTime={task?.dueTime}
-              />
-            </SectionBlock>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SectionBlock title="Automation">
+            <div className="space-y-3 rounded-2xl border border-[var(--bp-border)]/60 bg-[var(--bp-surface)]/45 p-2">
+            <div className="grid gap-2 lg:grid-cols-2">
+              <SectionBlock tone="grouped" title="Recurring">
+                <RecurrenceDetails
+                  recurrence={recurrence}
+                  nextOccurrenceDate={task?.recurrence?.nextOccurrenceDate}
+                  dueTime={task?.dueTime}
+                />
+              </SectionBlock>
+              <SectionBlock tone="grouped" title="Automation">
                 <div className="divide-y divide-[var(--bp-border)]">
                   <AutomationRow label="Reminder" value={reminderText} />
                   <AutomationRow label="Focus" value={focusText} />
                 </div>
               </SectionBlock>
 
-              <SectionBlock title="Notes">
-                <p className="text-sm leading-6 text-slate-400">{task?.notes || 'No notes yet.'}</p>
+              <SectionBlock tone="grouped" title="Notes">
+                <p className="text-sm leading-6 text-[var(--bp-muted)]">{task?.notes || 'No notes yet.'}</p>
               </SectionBlock>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SectionBlock title="Time Tracking">
+            <div className="grid gap-2 lg:grid-cols-2">
+              <SectionBlock tone="grouped" title="Time Tracking">
                 <div className="divide-y divide-[var(--bp-border)]">
                   <AutomationRow label="Estimated" value={`${task?.estimatedHours ?? 0}h`} />
                   <AutomationRow label="Spent" value={`${task?.spentHours ?? 0}h`} />
@@ -584,7 +592,7 @@ export default function TaskDetailsScreen({
                 </div>
               </SectionBlock>
 
-              <SectionBlock title="Attachments" subtitle={`${attachmentItems.length} files`}>
+              <SectionBlock tone="grouped" title="Attachments" subtitle={`${attachmentItems.length} files`}>
                 {attachmentItems.length ? (
                   <div className="space-y-2">
                     {attachmentItems.map((file, index) => (
@@ -595,6 +603,7 @@ export default function TaskDetailsScreen({
                   <EmptyBlock title="No attachments" description="Files added from Edit Task will appear here." />
                 )}
               </SectionBlock>
+            </div>
             </div>
           </section>
 
@@ -698,7 +707,7 @@ function Badge({ children, color }: { children: React.ReactNode; color: string }
   const colors: Record<string, string> = {
     blue: 'bg-blue-500/20 text-blue-400',
     red: 'bg-red-500/20 text-red-400',
-    yellow: 'bg-yellow-500/20 text-[var(--bp-accent)]',
+    yellow: 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]',
     green: 'bg-green-500/20 text-green-400',
     purple: 'bg-purple-500/20 text-purple-400',
   }
@@ -708,8 +717,8 @@ function Badge({ children, color }: { children: React.ReactNode; color: string }
 
 function InfoBox({ title, value }: { title: string; value: string }) {
   return (
-    <div className="rounded-xl bg-[var(--bp-bg)] p-3">
-      <p className="text-[10px] font-black uppercase text-slate-500">{title}</p>
+    <div className="rounded-lg bg-[var(--bp-bg)] px-3 py-2.5">
+      <p className="text-[10px] font-black uppercase text-[var(--bp-muted)]">{title}</p>
       <p className="mt-1 text-sm font-bold text-[var(--bp-text)]">{value}</p>
     </div>
   )
@@ -719,27 +728,33 @@ function SectionBlock({
   title,
   subtitle,
   children,
+  tone = 'default',
+  className = '',
 }: {
   title: string
   subtitle?: string
   children: React.ReactNode
+  tone?: 'default' | 'grouped'
+  className?: string
 }) {
   return (
-    <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
-      <div className="mb-3">
+    <section className={`${tone === 'grouped' ? 'rounded-xl px-3 py-3 transition-colors duration-200 hover:bg-[var(--bp-surface)]/70' : 'rounded-2xl border border-[var(--bp-border)]/65 bg-[var(--bp-surface)]/90 p-4 shadow-sm transition-shadow duration-200 hover:shadow-md'} ${className}`}>
+      <div className="mb-2.5">
         <h3 className="text-sm font-black">{title}</h3>
-        {subtitle ? <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{subtitle}</p> : null}
       </div>
       {children}
     </section>
   )
 }
 
-function EmptyBlock({ title, description }: { title: string; description: string }) {
+function EmptyBlock({ title, description, className = '' }: { title: string; description: string; className?: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] p-4 text-center">
-      <p className="text-sm font-black text-[var(--bp-text)]">{title}</p>
-      <p className="mt-1 text-xs text-slate-500">{description}</p>
+    <div className={`rounded-xl border border-dashed border-[var(--bp-border)]/75 bg-[var(--bp-bg)]/70 px-4 py-3 text-center ${className}`}>
+      <div>
+        <p className="text-sm font-black text-[var(--bp-text)]">{title}</p>
+        <p className="mt-1 text-xs text-[var(--bp-muted)]">{description}</p>
+      </div>
     </div>
   )
 }
@@ -814,7 +829,7 @@ function AutomationRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
       <span className="text-sm font-bold text-[var(--bp-text)]">{label}</span>
-      <span className="text-end text-xs text-slate-400">{value}</span>
+      <span className="text-end text-xs text-[var(--bp-muted)]">{value}</span>
     </div>
   )
 }
@@ -837,7 +852,7 @@ const Subtask = memo(function Subtask({
   const due = formatSubtaskDue(subtask.dueDate)
 
   return (
-    <div className="group flex items-start gap-3 rounded-xl bg-[var(--bp-bg)] px-3 py-2.5">
+    <div className="group flex items-start gap-2.5 px-3 py-2 transition hover:bg-[var(--bp-border)]/20">
       <button
         type="button"
         disabled={!canEdit}
@@ -854,7 +869,7 @@ const Subtask = memo(function Subtask({
         <div className="flex items-center gap-2">
           <span className={`h-2 w-2 shrink-0 rounded-full ${meta.dot}`} aria-hidden title={meta.label} />
           <span
-            className={`truncate text-sm font-semibold ${done ? 'text-slate-500 line-through' : 'text-[var(--bp-text)]'}`}
+            className={`truncate text-sm font-semibold ${done ? 'text-[var(--bp-muted)] line-through' : 'text-[var(--bp-text)]'}`}
           >
             {displaySubtaskTitle(subtask)}
           </span>
@@ -862,13 +877,13 @@ const Subtask = memo(function Subtask({
         </div>
 
         {subtask.assigneeUserId && subtask.assignee ? (
-          <p className="mt-1 text-xs text-slate-400">Assigned to {subtask.assignee}</p>
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">Assigned to {subtask.assignee}</p>
         ) : !subtask.assigneeUserId && !subtask.isShared ? (
-          <p className="mt-1 text-xs text-slate-500">Unassigned</p>
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">Unassigned</p>
         ) : null}
 
         {(due || estimate) && !done ? (
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">
             {due}
             {due && estimate ? ' • ' : ''}
             {estimate ? `Est. ${estimate}` : ''}
@@ -879,12 +894,12 @@ const Subtask = memo(function Subtask({
           <TaskPriorityBadge priority={subtask.priority} />
           <TaskStatusBadge status={subtask.status} />
           {subtask.isFocusTask ? (
-            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent)]">
+            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent-ink)]">
               🎯 Focus
             </span>
           ) : null}
           {subtask.estimatedDurationSource === 'ai' && subtask.estimatedDurationMinutes ? (
-            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent)]">
+            <span className="rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent-ink)]">
               AI Estimate
             </span>
           ) : null}
@@ -895,7 +910,7 @@ const Subtask = memo(function Subtask({
         type="button"
         onClick={onOpen}
         aria-label={`Open subtask: ${subtask.title}`}
-        className="shrink-0 self-center rounded-lg border border-[var(--bp-border)] px-2.5 py-1 text-xs font-bold text-slate-400 transition hover:text-[var(--bp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
+        className="shrink-0 self-center rounded-lg border border-[var(--bp-border)] px-2 py-0.5 text-xs font-bold text-[var(--bp-muted)] transition hover:text-[var(--bp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]"
       >
         Open
       </button>
@@ -919,12 +934,12 @@ function formatSubtaskDue(value?: string) {
 
 const Dependency = memo(function Dependency({ task }: { task: DependencyTask }) {
   return (
-    <div className="grid w-full gap-3 rounded-xl bg-[var(--bp-bg)] px-3 py-2.5 md:grid-cols-[1fr_auto]">
+    <div className="grid w-full gap-2 rounded-xl bg-[var(--bp-bg)] px-3 py-2 md:grid-cols-[1fr_auto]">
       <div className="flex min-w-0 items-start gap-3">
         <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dependencyDotColor(task.status)}`} />
         <div className="min-w-0">
           <p className="text-sm font-bold text-[var(--bp-text)]">{task.title}</p>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-[var(--bp-muted)]">
             {task.category} - Due {task.dueDate}
           </p>
         </div>
@@ -968,7 +983,7 @@ const Attachment = memo(function Attachment({
       </span>
       <span className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-[var(--bp-text)]">{file.fileName ?? file.name}</p>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[var(--bp-muted)]">
           {formatFileSize(file.fileSize ?? file.size) || (file.fileType ?? file.type) || 'Attached file'}
         </p>
       </span>
@@ -1015,13 +1030,15 @@ function MetaRow({
   color?: 'red' | 'blue' | 'yellow' | 'green'
 }) {
   const valueColor =
-    color === 'red' ? 'text-red-400' : color === 'blue' ? 'text-blue-400' : color === 'yellow' ? 'text-[var(--bp-accent)]' : color === 'green' ? 'text-[var(--bp-success)]' : 'text-[var(--bp-text)]'
+    color === 'red' ? 'text-red-400' : color === 'blue' ? 'text-blue-400' : color === 'yellow' ? 'text-[var(--bp-accent-ink)]' : color === 'green' ? 'text-[var(--bp-success)]' : 'text-[var(--bp-text)]'
 
   return (
-    <div className="py-2.5 first:pt-0 last:pb-0">
-      <p className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-1 text-sm font-bold ${valueColor}`}>{value}</p>
-      {secondaryValue ? <p className="mt-0.5 text-xs text-slate-500">{secondaryValue}</p> : null}
+    <div className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+      <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{label}</p>
+      <div className="min-w-0 text-end">
+        <span className={`inline-flex rounded-full bg-[var(--bp-bg)] px-2 py-0.5 text-xs font-bold ${valueColor}`}>{value}</span>
+        {secondaryValue ? <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{secondaryValue}</p> : null}
+      </div>
     </div>
   )
 }

@@ -25,6 +25,8 @@ export type ThemeColors = {
   primary: string;
   accent: string;
   accentSoft: string;
+  /** Accessible ink for accent labels and text on soft accent surfaces. */
+  accentInk: string;
   accentText: string;
 
   disabled: string;
@@ -51,7 +53,7 @@ export type AppTheme = {
   statusBarStyle: 'light' | 'dark';
 };
 
-export const BRAND_YELLOW = '#F9E547';
+export const BRAND_YELLOW = '#FDEF4B';
 export const BRAND_DARK = '#2b323f';
 
 export const palette = {
@@ -86,9 +88,9 @@ export const palette = {
   darkPlaceholder: '#9AA5B5',
 
   lightText: BRAND_DARK,
-  lightTextMuted: '#6b7280',
-  lightTextSubtle: '#6b7280',
-  lightPlaceholder: '#9CA3AF',
+  lightTextMuted: 'rgba(43, 50, 63, 0.78)',
+  lightTextSubtle: 'rgba(43, 50, 63, 0.58)',
+  lightPlaceholder: 'rgba(43, 50, 63, 0.58)',
 
   // Status
   darkSuccess: '#86efac',

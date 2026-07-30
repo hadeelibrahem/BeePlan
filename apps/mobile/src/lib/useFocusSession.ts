@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { cancelScheduledNotification, scheduleFocusCompletionNotification } from './notifications';
+import { loadFocusCompletionSoundEnabled, subscribeFocusCompletionSound } from './focusCompletionPreferences';
 import {
   cancelFocusSession,
+  extendFocusSession,
   finishFocusSession,
   startFocusSession,
   getActiveFocusSession,
@@ -26,9 +29,15 @@ export type ActiveFocus = {
   sessionType: FocusSessionType;
   plannedMinutes: number;
   startedAtMs: number;
+  // Authoritative deadline (server endsAt + any locally accumulated paused
+  // time). The countdown is derived from this, never from a ticking counter,
+  // so extensions and refetches always agree with the server.
+  endsAtMs: number;
   pausedTotalMs: number;
   pausedSinceMs: number | null;
   forceComplete: boolean;
+  completionReason?: 'automatic' | 'manual';
+  completionNotificationId?: string | null;
 };
 
 export type BreakState = { endsAtMs: number; minutes: number; label: string };
@@ -56,22 +65,39 @@ export function useFocusSession(options: {
   const [breakFinished, setBreakFinished] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
+  const [extending, setExtending] = useState(false);
   const [error, setError] = useState('');
   const [hydrated, setHydrated] = useState(false);
+  const [completionSoundEnabled, setCompletionSoundEnabled] = useState(true);
+
+  useEffect(() => {
+    void loadFocusCompletionSoundEnabled().then(setCompletionSoundEnabled);
+    return subscribeFocusCompletionSound(setCompletionSoundEnabled);
+  }, []);
 
   const syncFromServer = useCallback(async (): Promise<boolean> => {
     if (!accessToken) return false;
     try {
       const session = await getActiveFocusSession(accessToken);
       if (!session) { setActive(null); return true; }
-      setActive((current) => ({
-        sessionId: session.id, taskId: session.taskId, taskTitle: session.taskTitle,
-        subtaskId: session.subtaskId ?? null, subtaskTitle: session.subtaskTitle ?? null,
-        priority: current?.priority ?? null, category: current?.category ?? null,
-        sessionType: session.sessionType, plannedMinutes: session.plannedMinutes,
-        startedAtMs: new Date(session.startedAt).getTime(), pausedTotalMs: current?.sessionId === session.id ? current.pausedTotalMs : 0,
-        pausedSinceMs: null, forceComplete: false,
-      }));
+      setActive((current) => {
+        // Carry over locally-accumulated paused time for the same session so the
+        // deadline stays consistent; a different/new session starts fresh.
+        const pausedTotalMs = current?.sessionId === session.id ? current.pausedTotalMs : 0;
+        return {
+          sessionId: session.id, taskId: session.taskId, taskTitle: session.taskTitle,
+          subtaskId: session.subtaskId ?? null, subtaskTitle: session.subtaskTitle ?? null,
+          priority: current?.priority ?? null, category: current?.category ?? null,
+          sessionType: session.sessionType, plannedMinutes: session.plannedMinutes,
+          startedAtMs: new Date(session.startedAt).getTime(),
+          // Adopt the server's authoritative end time (offset by our paused time)
+          // so an extension persisted on the server survives every refetch.
+          endsAtMs: new Date(session.endsAt).getTime() + pausedTotalMs,
+          pausedTotalMs,
+          pausedSinceMs: null, forceComplete: false,
+          completionNotificationId: current?.sessionId === session.id ? current.completionNotificationId ?? null : null,
+        };
+      });
       return true;
     } catch { return false; }
   }, [accessToken]);
@@ -119,17 +145,44 @@ export function useFocusSession(options: {
   }, [breakState, hydrated]);
 
   const elapsedMs = active ? computeElapsed(active, nowMs) : 0;
-  const remainingMs = active ? Math.max(0, active.plannedMinutes * 60_000 - elapsedMs) : 0;
+  // Remaining is derived from the server-backed end timestamp, frozen at the
+  // pause instant while paused. Never a locally decremented counter.
+  const timerNowMs = active && active.pausedSinceMs !== null ? active.pausedSinceMs : nowMs;
+  const remainingMs = active ? Math.max(0, active.endsAtMs - timerNowMs) : 0;
   const sessionComplete = Boolean(active?.forceComplete);
 
+  // Native DATE notifications survive backgrounding. Replacing this whenever
+  // the authoritative endsAt changes prevents an old deadline from firing.
   useEffect(() => {
-    if (!active || active.forceComplete) return;
-    if (active.pausedSinceMs === null && remainingMs <= 0) {
+    if (!active || active.forceComplete || active.pausedSinceMs !== null) return;
+    let disposed = false;
+    const oldId = active.completionNotificationId;
+    void (async () => {
+      if (oldId) await cancelScheduledNotification(oldId);
+      const id = await scheduleFocusCompletionNotification({ endsAtMs: active.endsAtMs, soundEnabled: completionSoundEnabled });
+      if (!disposed && id) setActive((current) => current?.sessionId === active.sessionId && current.endsAtMs === active.endsAtMs ? { ...current, completionNotificationId: id } : current);
+    })().catch(() => undefined);
+    return () => { disposed = true; };
+  }, [active?.sessionId, active?.endsAtMs, active?.pausedSinceMs, active?.forceComplete, completionSoundEnabled]);
+
+  // Auto-complete when the deadline is reached. A single completion timeout is
+  // armed off `endsAtMs`; changing the end time (an extension) or pausing tears
+  // down the old timeout and arms a fresh one, so a stale timeout can never
+  // finish an extended session at the old end.
+  useEffect(() => {
+    if (!active || active.forceComplete || active.pausedSinceMs !== null) return;
+    const fireComplete = () =>
       setActive((current) =>
-        current ? { ...current, forceComplete: true, pausedSinceMs: current.pausedSinceMs ?? Date.now() } : current,
+        current && !current.forceComplete
+          ? { ...current, completionReason: 'automatic', forceComplete: true, pausedSinceMs: current.pausedSinceMs ?? Date.now() }
+          : current,
       );
-    }
-  }, [active, remainingMs]);
+    const msLeft = active.endsAtMs - Date.now();
+    if (msLeft <= 0) { fireComplete(); return; }
+    const timeout = setTimeout(fireComplete, msLeft);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.sessionId, active?.endsAtMs, active?.pausedSinceMs, active?.forceComplete]);
 
   const breakRemainingMs = breakState ? Math.max(0, breakState.endsAtMs - nowMs) : 0;
   useEffect(() => {
@@ -162,6 +215,7 @@ export function useFocusSession(options: {
           sessionType: session.sessionType,
           plannedMinutes: session.plannedMinutes,
           startedAtMs: new Date(session.startedAt).getTime(),
+          endsAtMs: new Date(session.endsAt).getTime(),
           pausedTotalMs: 0,
           pausedSinceMs: null,
           forceComplete: false,
@@ -182,49 +236,83 @@ export function useFocusSession(options: {
   );
 
   const pause = useCallback(() => {
-    setActive((current) => (current ? { ...current, pausedSinceMs: Date.now() } : current));
+    setActive((current) => {
+      if (current?.completionNotificationId) void cancelScheduledNotification(current.completionNotificationId);
+      return current ? { ...current, pausedSinceMs: Date.now(), completionNotificationId: null } : current;
+    });
   }, []);
 
   const resume = useCallback(() => {
     setActive((current) => {
       if (!current || current.pausedSinceMs === null) return current;
+      // Push the deadline out by the paused gap so paused time is never counted
+      // against the session, keeping endsAtMs the single source of truth.
+      const pausedGap = Date.now() - current.pausedSinceMs;
       return {
         ...current,
-        pausedTotalMs: current.pausedTotalMs + (Date.now() - current.pausedSinceMs),
+        pausedTotalMs: current.pausedTotalMs + pausedGap,
+        endsAtMs: current.endsAtMs + pausedGap,
         pausedSinceMs: null,
       };
     });
   }, []);
 
   const requestFinish = useCallback(() => {
-    setActive((current) =>
-      current ? { ...current, forceComplete: true, pausedSinceMs: current.pausedSinceMs ?? Date.now() } : current,
-    );
-  }, []);
-
-  // "Add More Time": extend the planned duration and resume, folding any paused
-  // interval (e.g. from auto-complete) into pausedTotalMs so elapsed time stays
-  // accurate. Clears forceComplete so the completion prompt closes.
-  const extendSession = useCallback((minutes: number) => {
     setActive((current) => {
-      if (!current) return current;
-      const pausedTotalMs =
-        current.pausedSinceMs !== null
-          ? current.pausedTotalMs + (Date.now() - current.pausedSinceMs)
-          : current.pausedTotalMs;
-      return {
-        ...current,
-        plannedMinutes: current.plannedMinutes + minutes,
-        pausedTotalMs,
-        pausedSinceMs: null,
-        forceComplete: false,
-      };
+      if (current?.completionNotificationId) void cancelScheduledNotification(current.completionNotificationId);
+      return current ? { ...current, completionNotificationId: null, completionReason: 'manual', forceComplete: true, pausedSinceMs: current.pausedSinceMs ?? Date.now() } : current;
     });
   }, []);
+
+  // "Add More Time": persist the extension on the server, then adopt the
+  // authoritative end time it returns. The `extending` guard makes duplicate
+  // taps no-ops (single in-flight request per confirmation). Any in-progress
+  // pause is folded into pausedTotalMs so elapsed stays accurate, and
+  // forceComplete is cleared so the completion prompt closes.
+  const extendSession = useCallback(
+    async (minutes: number): Promise<boolean> => {
+      if (!accessToken || extending) return false;
+      const current = active;
+      if (!current) return false;
+      setExtending(true);
+      setError('');
+      try {
+        const session = await extendFocusSession(accessToken, current.sessionId, {
+          additionalMinutes: minutes,
+        });
+        setActive((prev) => {
+          if (!prev || prev.sessionId !== session.id) return prev;
+          const pausedTotalMs =
+            prev.pausedSinceMs !== null
+              ? prev.pausedTotalMs + (Date.now() - prev.pausedSinceMs)
+              : prev.pausedTotalMs;
+          return {
+            ...prev,
+            plannedMinutes: session.plannedMinutes,
+            // Server end time, offset by our accumulated paused time, becomes the
+            // new authoritative deadline — the completion timeout re-arms on it.
+            endsAtMs: new Date(session.endsAt).getTime() + pausedTotalMs,
+            pausedTotalMs,
+            pausedSinceMs: null,
+            completionReason: undefined,
+            forceComplete: false,
+          };
+        });
+        return true;
+      } catch (extendError) {
+        setError(extendError instanceof Error ? extendError.message : 'Unable to add more time.');
+        return false;
+      } finally {
+        setExtending(false);
+      }
+    },
+    [accessToken, extending, active],
+  );
 
   const cancel = useCallback(async () => {
     if (!active || !accessToken) return;
     const current = active;
+    if (current.completionNotificationId) void cancelScheduledNotification(current.completionNotificationId);
     setActive(null);
     try {
       await cancelFocusSession(accessToken, current.sessionId, {
@@ -248,6 +336,7 @@ export function useFocusSession(options: {
           actualMinutes,
           taskOutcome: outcome,
         });
+        if (current.completionNotificationId) void cancelScheduledNotification(current.completionNotificationId);
         setActive(null);
         onSessionFinished?.(current.taskId, outcome === 'done' && taskUpdated);
         setPendingBreak(true);
@@ -293,6 +382,7 @@ export function useFocusSession(options: {
     breakRemainingMs,
     completedMinutes,
     busy,
+    extending,
     error,
     start,
     pause,

@@ -25,8 +25,8 @@ export function PrimaryButton({ children, className = '', loading, disabled, siz
     <button
       type="button"
       disabled={disabled || loading}
-      className={`rounded-lg bg-[var(--bp-accent)] font-black text-[var(--bp-accent-text)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${SIZE_CLASSES[size]} ${
-        loading ? 'opacity-70' : 'hover:brightness-95'
+      className={`rounded-lg border border-[#fff47a] bg-gradient-to-br from-[#fff47a] via-[var(--bp-accent)] to-[#f6dc32] font-black text-[var(--bp-brand-dark)] shadow-[0_9px_22px_rgba(253,239,75,0.23)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${SIZE_CLASSES[size]} ${
+        loading ? 'opacity-70' : 'hover:-translate-y-0.5 hover:brightness-105 hover:shadow-[0_13px_30px_rgba(253,239,75,0.34)]'
       } ${className}`}
       {...rest}
     >
@@ -66,7 +66,7 @@ export function GhostButton({ children, className = '', disabled, loading, size 
     <button
       type="button"
       disabled={disabled || loading}
-      className={`rounded-lg bg-transparent font-semibold text-slate-300 transition hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${SIZE_CLASSES[size]} ${className}`}
+      className={`rounded-lg bg-transparent font-semibold text-[var(--bp-subtle)] transition hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${SIZE_CLASSES[size]} ${className}`}
       {...rest}
     >
       <ButtonContent loading={loading}>{children}</ButtonContent>

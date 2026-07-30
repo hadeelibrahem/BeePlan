@@ -106,12 +106,12 @@ export default function TaskAttachmentPicker({
         disabled={disabled}
       />
       <div className="text-center">
-        <div className="text-sm font-black text-[var(--bp-accent)]">UPLOAD</div>
-        <p className="mt-2 text-sm text-slate-300">Drag & drop files here, or browse from your device</p>
-        <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="mt-3 rounded-lg border border-[var(--bp-accent)]/60 px-3 py-1.5 text-sm font-bold text-[var(--bp-accent)] hover:bg-[var(--bp-accent)]/10 disabled:cursor-not-allowed disabled:opacity-60">
+        <div className="text-sm font-black text-[var(--bp-accent-ink)]">UPLOAD</div>
+        <p className="mt-2 text-sm text-[var(--bp-subtle)]">Drag & drop files here, or browse from your device</p>
+        <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="mt-3 rounded-lg border border-[var(--bp-accent)]/60 px-3 py-1.5 text-sm font-bold text-[var(--bp-accent-ink)] hover:bg-[var(--bp-accent)]/10 disabled:cursor-not-allowed disabled:opacity-60">
           Browse files
         </button>
-        <p className="mt-1 text-xs text-slate-500">Supports images, PDF, Word, Excel, PowerPoint, and text files</p>
+        <p className="mt-1 text-xs text-[var(--bp-muted)]">Supports images, PDF, Word, Excel, PowerPoint, and text files</p>
       </div>
 
       {files.length ? (
@@ -137,7 +137,7 @@ function AttachmentDraftRow({ file, onRemove }: { file: File; onRemove: () => vo
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-[var(--bp-text)]">{file.name}</p>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[var(--bp-muted)]">
           {formatFileSize(file.size)}{file.type ? ` • ${file.type}` : ''}
         </p>
       </div>

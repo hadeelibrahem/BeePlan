@@ -1,4 +1,4 @@
-﻿import type React from 'react'
+import type React from 'react'
 import { BeePlanLogo } from './BeePlanLogo'
 
 export function BrandHeader({ tagline = 'SMART PRODUCTIVITY' }: { tagline?: string }) {
@@ -94,7 +94,7 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={loading || disabled}
-      className="flex h-12 w-full items-center justify-center rounded-xl bg-[var(--bp-accent)] text-xs font-bold uppercase tracking-wider text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/10 transition-all hover:bg-[var(--bp-accent)] active:scale-95 disabled:bg-[var(--bp-border)] disabled:text-[var(--bp-disabled-text)]"
+      className="flex h-12 w-full items-center justify-center rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-xs font-bold uppercase tracking-wider text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/10 transition-all hover:bg-[var(--bp-accent)] active:scale-95 disabled:bg-[var(--bp-border)] disabled:text-[var(--bp-disabled-text)]"
     >
       {loading ? (
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--bp-accent-text)]/30 border-t-[var(--bp-accent-text)]" />
@@ -120,7 +120,7 @@ export function AuthFooterLink({
       <button
         type="button"
         onClick={onClick}
-        className="ps-1.5 font-bold text-[var(--bp-accent)] underline transition-colors hover:text-[var(--bp-text)] focus:outline-none"
+        className="ps-1.5 font-bold text-[var(--bp-accent-ink)] underline transition-colors hover:text-[var(--bp-text)] focus:outline-none"
       >
         {label}
       </button>

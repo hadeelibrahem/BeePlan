@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { AppLayout, PageHeader, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import TaskAttachmentPicker from '../components/TaskAttachmentPicker'
 import {
@@ -226,7 +226,7 @@ export default function CreateTaskScreen({
         panelCaption="You're doing great today."
         panelPercent={0}
       >
-          <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+          <div className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
             <button type="button" onClick={onCancel} className="hover:text-[var(--bp-text)]">
               Back
             </button>
@@ -239,7 +239,7 @@ export default function CreateTaskScreen({
             title={t('taskUi.create.title')}
             subtitle={t('taskUi.create.subtitle')}
             toolbar={
-              <TopActionBar
+              <TopActionBar pageOnly
                 searchValue={search}
                 onSearchChange={setSearch}
                 searchPlaceholder="Search tasks..."
@@ -278,15 +278,15 @@ export default function CreateTaskScreen({
                 className="mb-1.5 min-h-28 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                 placeholder="Describe your task..."
               />
-              <p className="mb-4 text-end text-xs text-slate-500">{description.length}/500</p>
+              <p className="mb-4 text-end text-xs text-[var(--bp-muted)]">{description.length}/500</p>
 
               <div className="mb-4 border-t border-[var(--bp-border)] pt-4">
                 <FieldLabel label="Subtasks" />
-                <p className="mb-3 text-sm text-slate-400">Break down your task into smaller steps</p>
+                <p className="mb-3 text-sm text-[var(--bp-muted)]">Break down your task into smaller steps</p>
                 <button
                   type="button"
                   onClick={() => setIsSubtaskModalOpen(true)}
-                  className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60"
+                  className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)]/60"
                 >
                   + Add Subtask
                 </button>
@@ -344,7 +344,7 @@ export default function CreateTaskScreen({
                 <FieldLabel label="Task Status" />
                 <div className="mb-4 grid grid-cols-4 gap-2">
                   {['To Do', 'In Progress', 'Done', 'Missed'].map((item) => (
-                    <Segment key={item} active={status === item} label={item} color={item === 'Done' ? 'text-green-400' : item === 'Missed' ? 'text-red-400' : item === 'In Progress' ? 'text-blue-400' : 'text-[var(--bp-accent)]'} onClick={() => setStatus(item)} />
+                    <Segment key={item} active={status === item} label={item} color={item === 'Done' ? 'text-green-400' : item === 'Missed' ? 'text-red-400' : item === 'In Progress' ? 'text-blue-400' : 'text-[var(--bp-accent-ink)]'} onClick={() => setStatus(item)} />
                   ))}
                 </div>
 
@@ -401,11 +401,11 @@ export default function CreateTaskScreen({
 
                 <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                   <FieldLabel label="Dependencies" />
-                  <p className="mb-3 text-sm text-slate-400">Task depends on another task</p>
+                  <p className="mb-3 text-sm text-[var(--bp-muted)]">Task depends on another task</p>
                   <button
                     type="button"
                     onClick={() => setDependencyModalOpen(true)}
-                    className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]/60 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)]/60 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={!availableDependencies.length}
                   >
                     + Add Dependency
@@ -415,14 +415,14 @@ export default function CreateTaskScreen({
                       {dependencies.map((dependency) => (
                         <div key={dependency.id} className="rounded-xl bg-[var(--bp-bg)] px-4 py-3">
                           <p className="font-bold text-[var(--bp-text)]">{dependency.title}</p>
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1 text-xs text-[var(--bp-muted)]">
                             {dependency.category} - {dependency.status}
                           </p>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-3 text-xs text-slate-500">
+                    <p className="mt-3 text-xs text-[var(--bp-muted)]">
                       {availableDependencies.length ? 'No dependencies selected yet.' : 'Create another task first to add dependencies.'}
                     </p>
                   )}
@@ -432,10 +432,10 @@ export default function CreateTaskScreen({
               <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <label htmlFor="create-task-reminder-toggle" className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
+                    <label htmlFor="create-task-reminder-toggle" className="mb-2 block text-xs font-black uppercase tracking-wide text-[var(--bp-subtle)]">
                       Reminder
                     </label>
-                    <p className="text-sm text-slate-400">BeePlan will remind you before the due date.</p>
+                    <p className="text-sm text-[var(--bp-muted)]">BeePlan will remind you before the due date.</p>
                   </div>
                   <button
                     id="create-task-reminder-toggle"
@@ -469,7 +469,7 @@ export default function CreateTaskScreen({
 
               <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                 <FieldLabel label="Quick Tip" />
-                <p className="text-sm leading-6 text-slate-400">
+                <p className="text-sm leading-6 text-[var(--bp-muted)]">
                   Break large tasks into subtasks to make them easier to manage.
                 </p>
               </div>
@@ -490,7 +490,7 @@ export default function CreateTaskScreen({
               type="button"
               onClick={() => void handleSave()}
               disabled={saving || uploadingAttachments}
-              className="rounded-xl bg-[var(--bp-accent)] px-6 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
+              className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-6 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
             >
               {saving || uploadingAttachments ? 'Saving...' : 'Save Task'}
             </button>
@@ -554,7 +554,7 @@ export default function CreateTaskScreen({
 function SectionTitle({ icon, title }: { icon: string; title: string }) {
   return (
     <h3 className="mb-4 flex items-center gap-2 text-base font-black">
-      <span className="text-[var(--bp-accent)]">{icon}</span>
+      <span className="text-[var(--bp-accent-ink)]">{icon}</span>
       {title}
     </h3>
   )
@@ -562,7 +562,7 @@ function SectionTitle({ icon, title }: { icon: string; title: string }) {
 
 function FieldLabel({ label, required, htmlFor }: { label: string; required?: boolean; htmlFor?: string }) {
   return (
-    <label htmlFor={htmlFor} className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-300">
+    <label htmlFor={htmlFor} className="mb-2 block text-xs font-black uppercase tracking-wide text-[var(--bp-subtle)]">
       {label} {required ? <span className="text-red-400">*</span> : null}
     </label>
   )
@@ -585,7 +585,7 @@ function Segment({
       onClick={onClick}
       className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
         active
-          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
+          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]'
           : `border-[var(--bp-border)] bg-[var(--bp-surface)] ${color}`
       }`}
     >

@@ -126,7 +126,7 @@ export default function SubtaskDetailModal({
             <button
               type="button"
               onClick={onClose}
-              className="mb-3 flex items-center gap-2 text-sm text-slate-400 hover:text-[var(--bp-text)]"
+              className="mb-3 flex items-center gap-2 text-sm text-[var(--bp-muted)] hover:text-[var(--bp-text)]"
             >
               <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
               Back
@@ -135,7 +135,7 @@ export default function SubtaskDetailModal({
               <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
               <h2 className="truncate text-2xl font-black">{subtask.title}</h2>
               {subtask.isFocusTask ? (
-                <span className="shrink-0 rounded-full bg-[var(--bp-accent)]/15 px-2 py-0.5 text-xs font-black text-[var(--bp-accent)]">
+                <span className="shrink-0 rounded-full bg-[var(--bp-accent)]/15 px-2 py-0.5 text-xs font-black text-[var(--bp-accent-ink)]">
                   🎯 Focus
                 </span>
               ) : null}
@@ -180,7 +180,7 @@ export default function SubtaskDetailModal({
               className={`rounded-full px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
                 subtask.status === status
                   ? SUBTASK_STATUS_CLASS[status]
-                  : 'bg-[var(--bp-bg)] text-slate-400 hover:text-[var(--bp-text)]'
+                  : 'bg-[var(--bp-bg)] text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
               }`}
             >
               {SUBTASK_STATUS_LABEL[status]}
@@ -211,7 +211,7 @@ export default function SubtaskDetailModal({
             <Value>
               {formatDuration(subtask.estimatedDurationMinutes) || '—'}
               {subtask.estimatedDurationSource === 'ai' && subtask.estimatedDurationMinutes ? (
-                <span className="ms-2 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent)]">
+                <span className="ms-2 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-xs font-bold text-[var(--bp-accent-ink)]">
                   AI Estimate
                 </span>
               ) : null}
@@ -250,7 +250,7 @@ export default function SubtaskDetailModal({
           <Field label="Tags">
             <div className="flex flex-wrap gap-1.5">
               {subtask.tags.map((tag) => (
-                <span key={tag} className="rounded-md bg-[var(--bp-accent)]/10 px-2 py-0.5 text-xs text-[var(--bp-accent)]">
+                <span key={tag} className="rounded-md bg-[var(--bp-accent)]/10 px-2 py-0.5 text-xs text-[var(--bp-accent-ink)]">
                   #{tag}
                 </span>
               ))}
@@ -273,7 +273,7 @@ export default function SubtaskDetailModal({
                 <button
                   type="button"
                   onClick={() => void downloadSubtaskAttachment(accessToken, task.id, subtask.id, a)}
-                  className="text-xs font-bold text-[var(--bp-accent)] hover:underline"
+                  className="text-xs font-bold text-[var(--bp-accent-ink)] hover:underline"
                 >
                   Download
                 </button>
@@ -293,7 +293,7 @@ export default function SubtaskDetailModal({
                 type="button"
                 disabled={busy}
                 onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border border-dashed border-[var(--bp-border)] px-4 py-2.5 text-sm font-bold text-slate-400 hover:text-[var(--bp-text)] disabled:opacity-50"
+                className="rounded-xl border border-dashed border-[var(--bp-border)] px-4 py-2.5 text-sm font-bold text-[var(--bp-muted)] hover:text-[var(--bp-text)] disabled:opacity-50"
               >
                 + Add Attachment
               </button>
@@ -313,7 +313,7 @@ export default function SubtaskDetailModal({
 
         {/* Activity timeline */}
         <Field label="Activity Timeline">
-          <ul className="space-y-1 text-xs text-slate-400">
+          <ul className="space-y-1 text-xs text-[var(--bp-muted)]">
             <li>Created: {formatDateTime(subtask.createdAt)}</li>
             <li>Last Updated: {formatDateTime(subtask.updatedAt)}</li>
             {subtask.completedAt ? <li>Completed: {formatDateTime(subtask.completedAt)}</li> : null}
@@ -328,7 +328,7 @@ export default function SubtaskDetailModal({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mt-4">
-      <p className="mb-1.5 text-xs font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mb-1.5 text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{label}</p>
       {children}
     </div>
   )

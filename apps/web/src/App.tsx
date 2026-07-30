@@ -58,6 +58,7 @@ import {
   type RecurrenceSettings,
 } from './components/TaskRecurrenceModal'
 import { RouteFallback } from './components/RouteFallback'
+import { AppLayout, type SidebarNavHandlers } from './components/layout'
 import { useToast } from './components/feedback/ToastProvider'
 import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
 import { queryKeys } from './lib/queryKeys'
@@ -576,15 +577,15 @@ function ThemedApp() {
   }
 
   if (screen === 'focusSession') {
-    // Rendered OUTSIDE AppLayout: no sidebar, header, or navigation — a
-    // dedicated distraction-free execution surface.
     return (
-      <FocusSessionScreen
-        accessToken={accessToken ?? ''}
-        focus={focus}
-        tasks={tasks}
-        onExit={() => setScreen('focus')}
-      />
+      <AppLayout active="focus" {...sidebarNav}>
+        <FocusSessionScreen
+          accessToken={accessToken ?? ''}
+          focus={focus}
+          tasks={tasks}
+          onExit={() => setScreen('focus')}
+        />
+      </AppLayout>
     )
   }
 
@@ -775,6 +776,14 @@ function ThemedApp() {
         currentUserId={user.id}
         onBack={() => setScreen('taskDetails')}
         onSignOut={() => void handleSignOut()}
+        onStartFocus={async (input) => {
+          const started = await focus.start(
+            { id: input.taskId, title: input.taskTitle, subtaskId: input.subtaskId, subtaskTitle: input.subtaskTitle },
+            'pomodoro',
+            input.estimatedMinutes ?? 25,
+          )
+          if (started) setScreen('focusSession')
+        }}
         onNavigateDashboard={sidebarNav.onNavigateDashboard}
         onNavigateFocus={sidebarNav.onNavigateFocus}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
@@ -840,6 +849,7 @@ function ThemedApp() {
           refreshPlanner()
         }}
       />,
+      sidebarNav,
     )
   }
 
@@ -850,6 +860,7 @@ function ThemedApp() {
         onBack={() => setScreen('list')}
         onEdit={() => setScreen('edit')}
       />,
+      sidebarNav,
     )
   }
 
@@ -867,6 +878,7 @@ function ThemedApp() {
           refreshPlanner()
         }}
       />,
+      sidebarNav,
     )
   }
 
@@ -893,21 +905,21 @@ function ThemedApp() {
       onNavigateFocus={sidebarNav.onNavigateFocus}
       onNavigatePlanner={sidebarNav.onNavigatePlanner}
       onNavigatePeople={sidebarNav.onNavigatePeople}
+      onNavigateNotifications={sidebarNav.onNavigateNotifications}
       onNavigateCalendar={sidebarNav.onNavigateCalendar}
       onNavigateNotes={sidebarNav.onNavigateNotes}
       onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
+      onNavigateSettings={sidebarNav.onNavigateSettings}
     />
   )
 }
 
-function renderShell(content: ReactNode, overlay?: ReactNode) {
+function renderShell(content: ReactNode, nav: SidebarNavHandlers, overlay?: ReactNode) {
   return (
-    <div className="min-h-screen bg-[var(--bp-bg)] text-[var(--bp-text)] transition-colors duration-200">
+    <AppLayout active="reminders" {...nav}>
       {overlay}
-      <div className="mx-auto w-full max-w-7xl animate-[beeplanRise_420ms_ease-out] px-5 py-6 sm:px-8 lg:px-10">
-        {content}
-      </div>
-    </div>
+      <div className="animate-[beeplanRise_420ms_ease-out]">{content}</div>
+    </AppLayout>
   )
 }
 

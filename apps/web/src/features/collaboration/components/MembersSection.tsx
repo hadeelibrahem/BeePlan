@@ -40,9 +40,9 @@ export function MembersSection({
       className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4"
       aria-label="Members"
     >
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2.5 flex items-center justify-between">
         <h3 className="text-sm font-black">
-          Members <span className="text-slate-400">({accepted.filter((m) => m.status === 'accepted').length})</span>
+          Members <span className="text-[var(--bp-muted)]">({accepted.filter((m) => m.status === 'accepted').length})</span>
         </h3>
         {canManage ? (
           <PrimaryButton size="sm" onClick={onInviteClick}>
@@ -58,13 +58,13 @@ export function MembersSection({
           ))}
         </div>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="divide-y divide-[var(--bp-border)]/60 overflow-hidden rounded-xl border border-[var(--bp-border)]/70 bg-[var(--bp-bg)]">
           {accepted.map((member) => {
             const canActOnThis = canManage && !member.isOwner && member.userId !== currentUserId
             return (
               <li
                 key={member.userId}
-                className="relative flex items-center gap-3 rounded-xl border border-[var(--bp-border)] px-3 py-2"
+                className="relative flex items-center gap-2.5 px-3 py-2"
               >
                 <FriendAvatar
                   fullName={member.user.fullName}
@@ -76,7 +76,7 @@ export function MembersSection({
                     <span className="truncate text-sm font-bold text-[var(--bp-text)]">
                       {member.user.fullName}
                       {member.userId === currentUserId ? (
-                        <span className="text-slate-400"> (you)</span>
+                        <span className="text-[var(--bp-muted)]"> (you)</span>
                       ) : null}
                     </span>
                     {member.status === 'pending' ? (
@@ -85,7 +85,7 @@ export function MembersSection({
                       </span>
                     ) : null}
                   </div>
-                  <span className="block truncate text-xs text-slate-400">{member.user.email}</span>
+                  <span className="block truncate text-xs text-[var(--bp-muted)]">{member.user.email}</span>
                 </div>
                 <RoleBadge role={member.role} />
 
@@ -97,7 +97,7 @@ export function MembersSection({
                       aria-haspopup="menu"
                       aria-expanded={menuFor === member.userId}
                       onClick={() => setMenuFor((cur) => (cur === member.userId ? null : member.userId))}
-                      className="rounded-lg px-2 py-1 text-slate-400 hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)]"
+                      className="rounded-lg px-2 py-1 text-[var(--bp-muted)] hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)]"
                     >
                       ⋯
                     </button>
@@ -224,7 +224,7 @@ function ConfirmDialog({
         <h2 className="text-lg font-black">
           {isRemove ? 'Remove member?' : 'Transfer ownership?'}
         </h2>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
+        <p className="mt-2 text-sm leading-6 text-[var(--bp-muted)]">
           {isRemove
             ? `${name} will lose access to this task.`
             : `${name} will become the owner. You will remain as an editor and can no longer manage members.`}
@@ -237,7 +237,7 @@ function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             className={`flex-1 rounded-lg px-4 py-3 text-sm font-black text-white ${
-              isRemove ? 'bg-red-500 hover:bg-red-600' : 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)] hover:brightness-95'
+              isRemove ? 'bg-red-500 hover:bg-red-600' : 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)] hover:brightness-95'
             }`}
           >
             {isRemove ? 'Remove' : 'Transfer'}

@@ -66,7 +66,7 @@ data class BlockScreenModel(
 )
 
 // BeePlan brand accent (matches theme/colors.ts BRAND_YELLOW / BRAND_DARK).
-private val BrandYellow = Color(0xFFF9E547)
+private val BrandYellow = Color(0xFFFDEF4B)
 private val BrandDark = Color(0xFF2B323F)
 
 /** Duration granted when the user confirms "I really need this app". */

@@ -29,7 +29,7 @@ export function HistoryFeed({ taskId, accessToken }: Props) {
     return (
       <SectionCard>
         <Text className="text-sm" style={{ color: colors.error }}>
-          Could not load history. Please try again.
+          Could not load activity. Please try again.
         </Text>
       </SectionCard>
     );
@@ -40,7 +40,7 @@ export function HistoryFeed({ taskId, accessToken }: Props) {
   );
 
   if (!activities.length) {
-    return <EmptyState icon="🕘" title="No history yet" description="Actions on this task — including AI suggestions you approve or dismiss — will show up here." />;
+    return <EmptyState icon="🕘" title="No activity yet" description="Actions on this task — including AI suggestions you approve or dismiss — will show up here." />;
   }
 
   return (

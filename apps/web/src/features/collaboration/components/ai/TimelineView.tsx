@@ -23,7 +23,7 @@ export function TimelineView({ taskId, accessToken }: Props) {
   if (timelineQuery.isLoading) {
     return (
       <SectionCard>
-        <p className="text-sm text-slate-400">Loading timeline…</p>
+        <p className="text-sm text-[var(--bp-muted)]">Loading timeline…</p>
       </SectionCard>
     )
   }
@@ -42,11 +42,11 @@ export function TimelineView({ taskId, accessToken }: Props) {
       <SectionCard>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Today</p>
+            <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Today</p>
             <p className="text-sm font-bold text-[var(--bp-text)]">{formatDate(data.today)}</p>
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Deadline</p>
+            <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Deadline</p>
             <p className="text-sm font-bold text-[var(--bp-text)]">
               {data.deadline ? formatDate(data.deadline) : 'No deadline set'}
             </p>
@@ -55,27 +55,27 @@ export function TimelineView({ taskId, accessToken }: Props) {
       </SectionCard>
 
       <SectionCard>
-        <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-400">Milestones</h3>
+        <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Milestones</h3>
         {data.milestones.length ? (
           <ol className="space-y-3 border-s border-[var(--bp-border)] ps-4">
             {data.milestones.map((milestone) => (
               <li key={milestone.id} className="relative">
                 <span className="absolute -start-[21px] top-1 h-2.5 w-2.5 rounded-full bg-[var(--bp-accent)]" />
                 <p className="text-sm font-bold text-[var(--bp-text)]">{milestone.title}</p>
-                <p className="text-xs text-slate-400">{formatDate(milestone.date)}</p>
+                <p className="text-xs text-[var(--bp-muted)]">{formatDate(milestone.date)}</p>
               </li>
             ))}
           </ol>
         ) : (
-          <p className="text-xs text-slate-400">No milestones proposed yet.</p>
+          <p className="text-xs text-[var(--bp-muted)]">No milestones proposed yet.</p>
         )}
       </SectionCard>
 
       {data.bufferDay ? (
         <SectionCard>
-          <h3 className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Buffer day</h3>
+          <h3 className="mb-1 text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Buffer day</h3>
           <p className="text-sm font-bold text-[var(--bp-text)]">{formatDate(data.bufferDay)}</p>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">
             A buffer day is kept free of new work so the team has slack to catch up before the deadline if
             something runs long.
           </p>

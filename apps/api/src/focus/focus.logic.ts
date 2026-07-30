@@ -21,6 +21,31 @@ export const FOCUS_SESSION_TYPES = [
 ] as const;
 export type FocusSessionType = (typeof FOCUS_SESSION_TYPES)[number];
 
+/**
+ * Bounds for a single "Add More Time" extension (minutes). Shared by the DTO
+ * validator and the web/mobile clients so all three enforce the same rule.
+ */
+export const FOCUS_EXTENSION_MIN_MINUTES = 1;
+export const FOCUS_EXTENSION_MAX_MINUTES = 480;
+
+/**
+ * Authoritative new end time for a session extension. Anchors on whichever is
+ * later — the session's current end time or now — so:
+ *   - extending a session whose deadline already passed still adds the full
+ *     duration measured from the present moment (never from a stale past end);
+ *   - extending early pushes the existing deadline further out.
+ * Pure and side-effect free so it can be unit-tested and reused verbatim on the
+ * clients.
+ */
+export function computeExtendedEndTime(
+  currentEndTime: Date | string | number,
+  additionalMinutes: number,
+  now: Date = new Date(),
+): Date {
+  const baseTime = Math.max(new Date(currentEndTime).getTime(), now.getTime());
+  return new Date(baseTime + additionalMinutes * 60_000);
+}
+
 export type FocusSessionForStats = {
   taskId: string | null;
   startedAt: Date;

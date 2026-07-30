@@ -4,38 +4,37 @@ import {
   PageHeader,
   TopActionBar,
   FilterTabs,
-  StatsCard,
   SectionCard,
   type SidebarNavHandlers,
 } from '../components/layout'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import type { ApiTask } from '../lib/tasksApi'
-import {
-  useCapacityQuery,
-  useProgressQuery,
-  useSuggestionsQuery,
-  useTodayQuery,
-} from '../features/collaboration/api/ai-collaboration.api'
-import { CapacityOverview } from '../features/collaboration/components/ai/CapacityOverview'
-import { TodayTeamPlan } from '../features/collaboration/components/ai/TodayTeamPlan'
-import { TeamProgressComb } from '../features/collaboration/components/ai/TeamProgressComb'
-import { DistributionPanel } from '../features/collaboration/components/ai/DistributionPanel'
-import { SuggestionsFeed } from '../features/collaboration/components/ai/SuggestionsFeed'
-import { TimelineView } from '../features/collaboration/components/ai/TimelineView'
+import { TeamMemberList } from '../features/collaboration/components/ai/TeamMemberList'
+import { ProjectHealthPanel } from '../features/collaboration/components/ai/ProjectHealthPanel'
+import { PlanView } from '../features/collaboration/components/ai/PlanView'
+import { OverviewPanel } from '../features/collaboration/components/ai/OverviewPanel'
 import { HistoryFeed } from '../features/collaboration/components/ai/HistoryFeed'
+import type { PlanFocus } from '../features/collaboration/api/ai-collaboration.api'
 
-type Tab = 'overview' | 'today' | 'progress' | 'distribution' | 'suggestions' | 'timeline' | 'history'
+type Tab = 'overview' | 'plan' | 'team' | 'health' | 'activity'
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'overview', label: 'Overview' },
-  { value: 'today', label: 'Today' },
-  { value: 'progress', label: 'Progress' },
-  { value: 'distribution', label: 'Distribution' },
-  { value: 'suggestions', label: 'Suggestions' },
-  { value: 'timeline', label: 'Timeline' },
-  { value: 'history', label: 'History' },
+  { value: 'plan', label: 'Plan' },
+  { value: 'team', label: 'Team' },
+  { value: 'health', label: 'Health' },
+  { value: 'activity', label: 'Activity' },
 ]
+
+/** Start a focus session on the recommended unit (wired by the app shell). */
+export type StartFocusInput = {
+  taskId: string
+  taskTitle: string
+  subtaskId: string | null
+  subtaskTitle: string | null
+  estimatedMinutes: number | null
+}
 
 type TaskCollaborationScreenProps = SidebarNavHandlers & {
   task?: ApiTask | null
@@ -43,13 +42,19 @@ type TaskCollaborationScreenProps = SidebarNavHandlers & {
   currentUserId?: string
   onBack?: () => void
   onSignOut?: () => void
+  onStartFocus?: (input: StartFocusInput) => void
 }
 
 /**
- * Persistent, tabbed AI Collaboration surface for a shared task. Replaces the
- * old one-shot AiCollaborationPlannerModal — the AI stays available across
- * Overview / Today / Progress / Distribution / Suggestions / Timeline /
- * History, and every change still requires the owner's explicit approval.
+ * Persistent, tabbed AI Collaboration surface for a shared task. Five tabs —
+ * Overview / Plan / Team / Health / Activity — so related data lives together
+ * without duplication.
+ *
+ * Overview is the command centre and hosts the AI decision loop (see
+ * SuggestionsFeed): every recommendation is explained, previewed against the
+ * real forecast, and applied only on an explicit editor/owner approval. Findings
+ * deep-link into Plan or Team carrying backend-provided filters, so "3 blocked
+ * items" opens the Plan already filtered to those items.
  */
 export default function TaskCollaborationScreen({
   task,
@@ -57,14 +62,23 @@ export default function TaskCollaborationScreen({
   currentUserId = '',
   onBack,
   onSignOut,
+  onStartFocus,
   ...nav
 }: TaskCollaborationScreenProps) {
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<Tab>('overview')
+  // Deep-link focus from an Overview recommendation or alert. Cleared when the
+  // user changes tabs themselves, so it never silently re-filters a later visit.
+  const [focus, setFocus] = useState<PlanFocus | undefined>()
 
   const taskId = task?.id ?? ''
+
+  const navigateToTab = (next: Tab, nextFocus?: PlanFocus) => {
+    setFocus(nextFocus)
+    setTab(next)
+  }
 
   return (
     <AppLayout
@@ -72,7 +86,7 @@ export default function TaskCollaborationScreen({
       {...nav}
       onNavigateTasks={onBack}
     >
-      <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+      <div className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
         <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">
           Back
         </button>
@@ -85,7 +99,7 @@ export default function TaskCollaborationScreen({
         title="AI Collaboration"
         subtitle={task?.title ?? 'No task selected'}
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search..."
@@ -101,75 +115,41 @@ export default function TaskCollaborationScreen({
 
       {!task || !accessToken || !currentUserId ? (
         <SectionCard>
-          <p className="text-sm text-slate-400">No task selected.</p>
+          <p className="text-sm text-[var(--bp-muted)]">No task selected.</p>
         </SectionCard>
       ) : (
         <>
           <div className="mb-4">
-            <FilterTabs tabs={TABS} active={tab} onChange={setTab} />
+            <FilterTabs tabs={TABS} active={tab} onChange={(next) => navigateToTab(next)} />
           </div>
 
-          {tab === 'overview' ? <OverviewTab taskId={taskId} accessToken={accessToken} /> : null}
-          {tab === 'today' ? <TodayTeamPlan taskId={taskId} accessToken={accessToken} /> : null}
-          {tab === 'progress' ? <TeamProgressComb taskId={taskId} accessToken={accessToken} /> : null}
-          {tab === 'distribution' ? <DistributionPanel task={task} accessToken={accessToken} /> : null}
-          {tab === 'suggestions' ? <SuggestionsFeed taskId={taskId} accessToken={accessToken} /> : null}
-          {tab === 'timeline' ? <TimelineView taskId={taskId} accessToken={accessToken} /> : null}
-          {tab === 'history' ? <HistoryFeed taskId={taskId} accessToken={accessToken} /> : null}
+          {tab === 'overview' ? (
+            <OverviewPanel
+              taskId={taskId}
+              accessToken={accessToken}
+              onNavigate={navigateToTab}
+              onStartFocus={onStartFocus}
+              onViewDetails={onBack}
+            />
+          ) : null}
+          {tab === 'plan' ? (
+            <PlanView taskId={taskId} accessToken={accessToken} initialFocus={focus} />
+          ) : null}
+          {tab === 'team' ? (
+            <div className="space-y-4">
+              <TeamMemberList taskId={taskId} accessToken={accessToken} initialFocus={focus} />
+            </div>
+          ) : null}
+          {tab === 'health' ? (
+            <ProjectHealthPanel
+              taskId={taskId}
+              accessToken={accessToken}
+              onNavigate={navigateToTab}
+            />
+          ) : null}
+          {tab === 'activity' ? <HistoryFeed taskId={taskId} accessToken={accessToken} /> : null}
         </>
       )}
     </AppLayout>
-  )
-}
-
-function OverviewTab({ taskId, accessToken }: { taskId: string; accessToken: string }) {
-  const todayQuery = useTodayQuery(taskId, accessToken)
-  const capacityQuery = useCapacityQuery(taskId, accessToken)
-  const progressQuery = useProgressQuery(taskId, accessToken)
-  const suggestionsQuery = useSuggestionsQuery(taskId, accessToken)
-
-  const pendingSuggestions = (suggestionsQuery.data?.items ?? []).filter((s) => s.status === 'pending').length
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatsCard
-          icon={<span>🎯</span>}
-          value={progressQuery.data ? `${progressQuery.data.overallPercent}%` : '—'}
-          title="Overall progress"
-          desc={
-            progressQuery.data
-              ? `${progressQuery.data.completedCount} of ${progressQuery.data.totalCount} done`
-              : 'Loading…'
-          }
-        />
-        <StatsCard
-          icon={<span>💡</span>}
-          value={String(pendingSuggestions)}
-          title="Pending suggestions"
-          desc={pendingSuggestions ? 'Waiting on your review' : "You're all caught up"}
-        />
-        <StatsCard
-          icon={<span>👥</span>}
-          value={String(capacityQuery.data?.members.length ?? 0)}
-          title="Team members"
-          desc="Tracked for this task"
-        />
-      </div>
-
-      <SectionCard>
-        <h3 className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Today&apos;s goal</h3>
-        <p className="text-sm font-bold text-[var(--bp-text)]">{todayQuery.data?.goal ?? 'Loading…'}</p>
-      </SectionCard>
-
-      <SectionCard>
-        <h3 className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-400">Capacity snapshot</h3>
-        {capacityQuery.isLoading ? (
-          <p className="text-xs text-slate-400">Loading capacity…</p>
-        ) : (
-          <CapacityOverview members={capacityQuery.data?.members ?? []} compact />
-        )}
-      </SectionCard>
-    </div>
   )
 }

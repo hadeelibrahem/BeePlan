@@ -48,7 +48,7 @@ export default function SettingsScreen({ accessToken, onSignOut, ...nav }: Setti
         title="Settings"
         subtitle="Your profile, permanent context, and preferences"
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             onOpenNotifications={nav.onNavigateNotifications}
             onSignOut={onSignOut}
           />
@@ -61,7 +61,7 @@ export default function SettingsScreen({ accessToken, onSignOut, ...nav }: Setti
         <SectionCard>
           <h3 className="mb-3 text-sm font-black text-[var(--bp-text)]">Account</h3>
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--bp-accent)]/20 text-lg font-black text-[var(--bp-accent)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--bp-accent)]/20 text-lg font-black text-[var(--bp-accent-ink)]">
               {(user?.fullName ?? '?').slice(0, 1).toUpperCase()}
             </div>
             <div className="min-w-0">

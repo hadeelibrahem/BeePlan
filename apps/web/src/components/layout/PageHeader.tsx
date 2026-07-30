@@ -16,7 +16,7 @@ export function PageHeader({ title, subtitle, toolbar, pageActions }: PageHeader
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-black text-[var(--bp-text)]">{title}</h2>
-          <p className="text-xs text-slate-400">{subtitle}</p>
+          <p className="text-xs text-[var(--bp-muted)]">{subtitle}</p>
         </div>
         {toolbar && <div className="flex flex-wrap items-center gap-3">{toolbar}</div>}
       </div>

@@ -14,7 +14,7 @@ export function FilterTabs<T extends string>({ tabs, active, onChange }: FilterT
             type="button"
             onClick={() => onChange(tab.value)}
             className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-150 ${
-              active === tab.value ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]' : 'text-slate-400 hover:bg-[var(--bp-border)] hover:text-[var(--bp-text)]'
+              active === tab.value ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'text-[var(--bp-muted)] hover:bg-[var(--bp-border)] hover:text-[var(--bp-text)]'
             }`}
           >
             {tab.label}

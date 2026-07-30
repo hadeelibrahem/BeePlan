@@ -22,8 +22,9 @@ export const darkTheme: AppTheme = {
 
     primary: palette.yellow,
     accent: palette.yellow,
-    accentSoft: 'rgba(249, 229, 71, 0.16)',
-    accentText: palette.dark,
+    accentSoft: 'rgba(253, 239, 75, 0.15)',
+    accentInk: palette.yellow,
+    accentText: palette.yellow,
 
     disabled: palette.darkDisabled,
     disabledText: palette.darkDisabledText,
@@ -35,7 +36,7 @@ export const darkTheme: AppTheme = {
     danger: palette.darkError,
   },
   categoryAvatars: {
-    time: { backgroundColor: 'rgba(249, 229, 71, 0.16)', color: palette.yellow },
+    time: { backgroundColor: 'rgba(253, 239, 75, 0.15)', color: palette.yellow },
     location: { backgroundColor: 'rgba(134, 239, 172, 0.14)', color: '#86efac' },
     context: { backgroundColor: 'rgba(196, 181, 253, 0.14)', color: '#c4b5fd' },
     checklist: { backgroundColor: 'rgba(253, 164, 175, 0.14)', color: '#fda4af' },

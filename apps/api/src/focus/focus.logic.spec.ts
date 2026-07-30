@@ -1,4 +1,5 @@
 import {
+  computeExtendedEndTime,
   computeFocusStats,
   rankFocusTasks,
   recommendFocusTask,
@@ -7,6 +8,51 @@ import {
 } from './focus.logic';
 
 const NOW = new Date('2026-07-08T12:00:00.000Z'); // Wednesday
+
+describe('computeExtendedEndTime', () => {
+  const now = new Date('2026-07-08T12:00:00.000Z');
+
+  it('adds the duration to a future end time (extending early)', () => {
+    const currentEnd = new Date('2026-07-08T12:20:00.000Z'); // 20 min left
+    const result = computeExtendedEndTime(currentEnd, 10, now);
+    // Anchored on the current end, not now: 12:20 + 10 = 12:30.
+    expect(result.toISOString()).toBe('2026-07-08T12:30:00.000Z');
+  });
+
+  it('anchors on now when the end time already passed', () => {
+    const currentEnd = new Date('2026-07-08T11:59:00.000Z'); // 1 min ago
+    const result = computeExtendedEndTime(currentEnd, 25, now);
+    // Elapsed end must not shrink the addition: now + 25 = 12:25.
+    expect(result.toISOString()).toBe('2026-07-08T12:25:00.000Z');
+  });
+
+  it('gives ~26 minutes when 1 minute remains and 25 are added', () => {
+    const currentEnd = new Date(now.getTime() + 60_000); // 1 min left
+    const result = computeExtendedEndTime(currentEnd, 25, now);
+    const remainingMinutes = Math.round(
+      (result.getTime() - now.getTime()) / 60_000,
+    );
+    expect(remainingMinutes).toBe(26);
+  });
+
+  it('compounds across repeated extensions', () => {
+    const start = new Date('2026-07-08T12:20:00.000Z');
+    const once = computeExtendedEndTime(start, 15, now);
+    const twice = computeExtendedEndTime(once, 30, now);
+    expect(twice.toISOString()).toBe('2026-07-08T13:05:00.000Z'); // 12:20 +15 +30
+  });
+
+  it('accepts an ISO string or epoch millis for the current end', () => {
+    const iso = computeExtendedEndTime('2026-07-08T12:20:00.000Z', 5, now);
+    const millis = computeExtendedEndTime(
+      new Date('2026-07-08T12:20:00.000Z').getTime(),
+      5,
+      now,
+    );
+    expect(iso.toISOString()).toBe('2026-07-08T12:25:00.000Z');
+    expect(millis.toISOString()).toBe('2026-07-08T12:25:00.000Z');
+  });
+});
 
 function session(
   overrides: Partial<FocusSessionForStats>,

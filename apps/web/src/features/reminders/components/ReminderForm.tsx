@@ -356,7 +356,7 @@ export function ReminderForm({
             <button
               type="button"
               onClick={() => applySmartLocation(manualSmartCategory ?? smartSuggestion.category!)}
-              className="rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent)] px-4 py-2 text-xs font-black text-[var(--bp-accent-text)]"
+              className="rounded-full border border-[var(--bp-accent)] border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-xs font-black text-[var(--bp-accent-text)]"
             >
               ✅ Accept
             </button>
@@ -555,7 +555,7 @@ export function ReminderForm({
       <button
         type="submit"
         disabled={!isValid || isSubmitting}
-        className="sticky bottom-4 rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent)] py-3 text-sm font-black text-[var(--bp-accent-text)] shadow-[0_16px_40px_var(--bp-shadow)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--bp-border)] disabled:bg-[var(--bp-disabled)] disabled:text-[var(--bp-disabled-text)]"
+        className="sticky bottom-4 rounded-xl border border-[var(--bp-accent)] border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] py-3 text-sm font-black text-[var(--bp-accent-text)] shadow-[0_16px_40px_var(--bp-shadow)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--bp-border)] disabled:bg-[var(--bp-disabled)] disabled:text-[var(--bp-disabled-text)]"
       >
         {isSubmitting ? t('reminders.saving') : submitLabel}
       </button>

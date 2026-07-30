@@ -1,4 +1,4 @@
-﻿import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import {
   AuthCard,
   AuthFooterLink,
@@ -102,7 +102,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
     <AuthShell
       headline={
         <>
-          Organize reminders, tasks, and <span className="text-[var(--bp-accent)] text-glow">smart plans</span>.
+          Organize reminders, tasks, and <span className="text-[var(--bp-accent-ink)] text-glow">smart plans</span>.
         </>
       }
       sub="Experience intelligent scheduling and seamless task mapping in a clean, minimal workspace crafted for premium productivity."
@@ -188,7 +188,7 @@ export default function AuthScreen({ onForgot }: { onForgot: () => void }) {
                       <button
                         type="button"
                         onClick={onForgot}
-                        className="text-[9px] font-bold text-[var(--bp-accent)] hover:underline whitespace-nowrap"
+                        className="text-[9px] font-bold text-[var(--bp-accent-ink)] hover:underline whitespace-nowrap"
                       >
                         Forgot?
                       </button>

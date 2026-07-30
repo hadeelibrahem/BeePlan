@@ -159,7 +159,7 @@ export default function SubtaskDetailSheet({
               </Text>
               {subtask.isFocusTask ? (
                 <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${colors.accent}22` }}>
-                  <Text className="text-[11px] font-black" style={{ color: colors.accent }}>🎯 Focus</Text>
+                  <Text className="text-[11px] font-black" style={{ color: colors.accentInk }}>🎯 Focus</Text>
                 </View>
               ) : null}
             </View>
@@ -182,7 +182,7 @@ export default function SubtaskDetailSheet({
             ) : null}
 
             {warnings.map((w) => (
-              <Text key={w} className="mb-2 rounded-xl px-3 py-2 text-xs font-bold" style={{ backgroundColor: `${colors.accent}18`, color: colors.accent }}>
+              <Text key={w} className="mb-2 rounded-xl px-3 py-2 text-xs font-bold" style={{ backgroundColor: `${colors.accent}18`, color: colors.accentInk }}>
                 ⚠ {w}
               </Text>
             ))}

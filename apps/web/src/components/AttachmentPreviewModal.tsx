@@ -137,13 +137,13 @@ export default function AttachmentPreviewModal({
         <header className="flex items-center justify-between gap-3 border-b border-[var(--bp-border)] px-4 py-3">
           <div className="min-w-0">
             <h2 className="truncate text-base font-black text-[var(--bp-text)]">{fileName}</h2>
-            <p className="mt-0.5 text-xs text-slate-500">{attachment.fileType ?? attachment.type ?? 'Attached file'}</p>
+            <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{attachment.fileType ?? attachment.type ?? 'Attached file'}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => void handleDownload()}
-              className="rounded-lg bg-[var(--bp-accent)] px-3 py-2 text-xs font-black text-[var(--bp-accent-text)]"
+              className="rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-3 py-2 text-xs font-black text-[var(--bp-accent-text)]"
             >
               Download
             </button>
@@ -160,7 +160,7 @@ export default function AttachmentPreviewModal({
 
         <div className="min-h-[360px] flex-1 overflow-auto bg-[var(--bp-bg)] p-4">
           {loading ? (
-            <div className="flex h-[52vh] items-center justify-center text-sm font-bold text-slate-400">
+            <div className="flex h-[52vh] items-center justify-center text-sm font-bold text-[var(--bp-muted)]">
               Loading preview...
             </div>
           ) : error ? (
@@ -249,7 +249,7 @@ function SpreadsheetPreviewTable({
 }) {
   if (!preview) {
     return (
-      <div className="flex h-[52vh] items-center justify-center text-sm font-bold text-slate-400">
+      <div className="flex h-[52vh] items-center justify-center text-sm font-bold text-[var(--bp-muted)]">
         Loading spreadsheet...
       </div>
     )
@@ -257,7 +257,7 @@ function SpreadsheetPreviewTable({
 
   if (!preview.rows.length) {
     return (
-      <div className="flex h-[52vh] items-center justify-center rounded-lg border border-dashed border-[var(--bp-border)] text-sm font-semibold text-slate-400">
+      <div className="flex h-[52vh] items-center justify-center rounded-lg border border-dashed border-[var(--bp-border)] text-sm font-semibold text-[var(--bp-muted)]">
         This sheet is empty.
       </div>
     )
@@ -270,7 +270,7 @@ function SpreadsheetPreviewTable({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase text-slate-500">Sheet</p>
+          <p className="text-xs font-black uppercase text-[var(--bp-muted)]">Sheet</p>
           <p className="truncate text-sm font-bold text-[var(--bp-text)]">{preview.activeSheet}</p>
         </div>
         {preview.sheetNames.length > 1 ? (
@@ -282,8 +282,8 @@ function SpreadsheetPreviewTable({
                 onClick={() => onSelectSheet(sheetName)}
                 className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-bold ${
                   sheetName === preview.activeSheet
-                    ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
-                    : 'text-slate-400 hover:bg-[var(--bp-border)]/40 hover:text-[var(--bp-text)]'
+                    ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
+                    : 'text-[var(--bp-muted)] hover:bg-[var(--bp-border)]/40 hover:text-[var(--bp-text)]'
                 }`}
               >
                 {sheetName}
@@ -294,7 +294,7 @@ function SpreadsheetPreviewTable({
       </div>
 
       {preview.truncated ? (
-        <p className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2 text-xs font-semibold text-slate-400">
+        <p className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2 text-xs font-semibold text-[var(--bp-muted)]">
           Showing the first {MAX_SPREADSHEET_ROWS} rows and {MAX_SPREADSHEET_COLUMNS} columns of {preview.totalRows} rows and {preview.totalColumns} columns.
         </p>
       ) : null}
@@ -303,9 +303,9 @@ function SpreadsheetPreviewTable({
         <table className="min-w-full border-collapse text-left text-xs text-[var(--bp-text)]">
           <thead className="sticky top-0 z-10 bg-[var(--bp-bg)]">
             <tr>
-              <th className="border-b border-r border-[var(--bp-border)] px-2 py-2 text-slate-500">#</th>
+              <th className="border-b border-r border-[var(--bp-border)] px-2 py-2 text-[var(--bp-muted)]">#</th>
               {headers.map((header, index) => (
-                <th key={`${index}:${header}`} className="min-w-28 border-b border-r border-[var(--bp-border)] px-2 py-2 font-black text-slate-300">
+                <th key={`${index}:${header}`} className="min-w-28 border-b border-r border-[var(--bp-border)] px-2 py-2 font-black text-[var(--bp-subtle)]">
                   {header || columnLabel(index)}
                 </th>
               ))}
@@ -314,7 +314,7 @@ function SpreadsheetPreviewTable({
           <tbody>
             {bodyRows.map((row, rowIndex) => (
               <tr key={rowIndex} className="odd:bg-[var(--bp-bg)]/40">
-                <td className="border-r border-[var(--bp-border)] px-2 py-1.5 font-bold text-slate-500">{rowIndex + 1}</td>
+                <td className="border-r border-[var(--bp-border)] px-2 py-1.5 font-bold text-[var(--bp-muted)]">{rowIndex + 1}</td>
                 {headers.map((_, columnIndex) => (
                   <td key={columnIndex} className="max-w-80 whitespace-pre-wrap break-words border-r border-[var(--bp-border)] px-2 py-1.5">
                     {row[columnIndex] ?? ''}
@@ -338,11 +338,11 @@ function PreviewFallback({
 }) {
   return (
     <div className="flex min-h-[52vh] flex-col items-center justify-center rounded-lg border border-dashed border-[var(--bp-border)] px-4 text-center">
-      <p className="max-w-md text-sm font-semibold text-slate-300">{message}</p>
+      <p className="max-w-md text-sm font-semibold text-[var(--bp-subtle)]">{message}</p>
       <button
         type="button"
         onClick={() => void onDownload()}
-        className="mt-4 rounded-lg bg-[var(--bp-accent)] px-4 py-2 text-sm font-black text-[var(--bp-accent-text)]"
+        className="mt-4 rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-sm font-black text-[var(--bp-accent-text)]"
       >
         Download
       </button>

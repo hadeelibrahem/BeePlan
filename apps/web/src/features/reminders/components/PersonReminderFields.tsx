@@ -46,7 +46,7 @@ export function PersonReminderFields({ value, onChange, friends, onAddFriend }: 
             <span className="text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
               {t('reminders.person.confidence')}
             </span>
-            <span className="text-xs font-black text-[var(--bp-accent)]">
+            <span className="text-xs font-black text-[var(--bp-accent-ink)]">
               {Math.round((value.confidence ?? 0) * 100)}%
             </span>
           </div>
@@ -71,7 +71,7 @@ export function PersonReminderFields({ value, onChange, friends, onAddFriend }: 
               <button
                 type="button"
                 onClick={onAddFriend}
-                className="mt-2 rounded-lg bg-[var(--bp-accent)] px-3 py-1.5 text-xs font-black text-[var(--bp-accent-text)]"
+                className="mt-2 rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-3 py-1.5 text-xs font-black text-[var(--bp-accent-text)]"
               >
                 {t('reminders.person.addFriend')}
               </button>
@@ -116,7 +116,7 @@ export function PersonReminderFields({ value, onChange, friends, onAddFriend }: 
               <button
                 type="button"
                 onClick={onAddFriend}
-                className="rounded-full bg-[var(--bp-accent)] px-3 py-1.5 text-xs font-black text-[var(--bp-accent-text)]"
+                className="rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-3 py-1.5 text-xs font-black text-[var(--bp-accent-text)]"
               >
                 {t('reminders.person.addFriend')}
               </button>

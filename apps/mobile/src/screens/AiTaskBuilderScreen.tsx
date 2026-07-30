@@ -310,7 +310,7 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
                     </Text>
                     {retryConversation ? (
                       <Pressable onPress={retry} accessibilityRole="button" accessibilityLabel="Retry" className="mt-2 self-start">
-                        <Text className="text-sm font-bold" style={{ color: colors.accent }}>
+                        <Text className="text-sm font-bold" style={{ color: colors.accentInk }}>
                           Retry
                         </Text>
                       </Pressable>
@@ -403,7 +403,7 @@ function ChatBubble({
           }}
         >
           {isAdvice ? (
-            <Text className="mb-1 text-xs font-black uppercase tracking-wide" style={{ color: colors.accent }}>
+            <Text className="mb-1 text-xs font-black uppercase tracking-wide" style={{ color: colors.accentInk }}>
               Suggestion
             </Text>
           ) : null}
@@ -427,7 +427,7 @@ function ChatBubble({
               className="rounded-full border px-3 py-1.5 active:opacity-80"
               style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}
             >
-              <Text className="text-xs font-bold" style={{ color: colors.accent }}>
+              <Text className="text-xs font-bold" style={{ color: colors.accentInk }}>
                 {reply}
               </Text>
             </Pressable>
@@ -497,7 +497,7 @@ function ReviewSummaryCard({
   return (
     <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(200)}>
       <SectionCard className="mb-3" style={{ borderColor: `${colors.accent}4D`, backgroundColor: `${colors.accent}0D` }}>
-        <Text className="mb-2 text-xs font-black uppercase tracking-wide" style={{ color: colors.accent }}>
+        <Text className="mb-2 text-xs font-black uppercase tracking-wide" style={{ color: colors.accentInk }}>
           What I Understood
         </Text>
 
@@ -681,7 +681,7 @@ function PlanPreviewCard({ plan, totalMinutes, onChange, onSave, onRegenerate, o
           className="flex-row items-center justify-between"
         >
           <View className="flex-1 pr-3">
-            <Text className="text-xs font-black uppercase tracking-wide" style={{ color: colors.accent }}>
+            <Text className="text-xs font-black uppercase tracking-wide" style={{ color: colors.accentInk }}>
               Generated Plan
             </Text>
             <Text className="mt-0.5 text-base font-black" numberOfLines={1} style={{ color: colors.text }}>
@@ -936,7 +936,7 @@ function SubtaskRow({
     <View className="mb-2 rounded-xl px-3 py-2.5" style={{ backgroundColor: colors.background }}>
       {editing ? (
         <View className="flex-row items-center gap-2">
-          <Text className="text-xs font-black" style={{ color: colors.accent }}>
+          <Text className="text-xs font-black" style={{ color: colors.accentInk }}>
             {subtask.order}.
           </Text>
           <TextInput
@@ -962,7 +962,7 @@ function SubtaskRow({
         <View className="flex-row items-start justify-between gap-3">
           <View className="flex-1">
             <Text className="text-sm font-semibold" style={{ color: colors.text }}>
-              <Text style={{ color: colors.accent }}>{subtask.order}. </Text>
+              <Text style={{ color: colors.accentInk }}>{subtask.order}. </Text>
               {subtask.title}
             </Text>
             {subtask.description ? (
@@ -972,7 +972,7 @@ function SubtaskRow({
             ) : null}
           </View>
           <View className="shrink-0 rounded-full px-2 py-1" style={{ backgroundColor: colors.accentSoft }}>
-            <Text className="text-[11px] font-bold" style={{ color: colors.accent }}>
+            <Text className="text-[11px] font-bold" style={{ color: colors.accentInk }}>
               {formatMinutes(subtask.estimatedMinutes)}
             </Text>
           </View>

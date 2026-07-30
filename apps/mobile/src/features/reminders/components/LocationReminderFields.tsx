@@ -129,7 +129,7 @@ export function LocationReminderFields({ value, onChange }: Props) {
               onPlaceSelected={handlePlaceSelected}
             />
             {!value.specificPlace && !!value.pendingPlaceName && (
-              <Text className="mt-1 text-xs font-semibold" style={{ color: colors.accent }}>
+              <Text className="mt-1 text-xs font-semibold" style={{ color: colors.accentInk }}>
                 {t('reminders.pendingPlaceHelp')}
               </Text>
             )}

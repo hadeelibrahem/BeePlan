@@ -9,10 +9,10 @@ function Badge({ meta }: { meta: BadgeMeta }) {
     meta.tone === 'success' ? colors.success :
     meta.tone === 'warning' ? colors.warning :
     meta.tone === 'danger' ? colors.error :
-    meta.tone === 'info' ? colors.primary : colors.secondaryText;
+    meta.tone === 'info' ? colors.accentInk : colors.secondaryText;
 
   return (
-    <View className="rounded-md px-2 py-0.5" style={{ backgroundColor: `${color}26` }}>
+    <View className="rounded-md px-2 py-0.5" style={{ backgroundColor: meta.tone === 'info' ? colors.accentSoft : `${color}26` }}>
       <Text className="text-xs font-bold" style={{ color }}>{meta.label}</Text>
     </View>
   );

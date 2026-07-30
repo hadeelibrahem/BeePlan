@@ -169,13 +169,13 @@ export default function SubtaskFormModal({
             <button
               type="button"
               onClick={onBack ?? onCancel}
-              className="mb-4 flex items-center gap-2 text-sm text-slate-400 hover:text-[var(--bp-text)]"
+              className="mb-4 flex items-center gap-2 text-sm text-[var(--bp-muted)] hover:text-[var(--bp-text)]"
             >
               <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
               Back
             </button>
             <h2 className="text-2xl font-black">{isEdit ? 'Edit Subtask' : 'Add Subtask'}</h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-[var(--bp-muted)]">
               {isEdit ? 'Update the details for this subtask' : 'Create a new subtask'}
             </p>
           </div>
@@ -295,7 +295,7 @@ export default function SubtaskFormModal({
               />
               <span>
                 <span className="block text-sm font-bold text-[var(--bp-text)]">🎯 Focus task</span>
-                <span className="block text-xs text-slate-400">
+                <span className="block text-xs text-[var(--bp-muted)]">
                   Eligible for deep-work Focus sessions and “Do This Now”.
                 </span>
               </span>
@@ -348,8 +348,8 @@ export default function SubtaskFormModal({
                     onClick={() => toggleDependency(sib.id)}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
                       values.dependencyIds.includes(sib.id)
-                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
-                        : 'border-[var(--bp-border)] text-slate-400 hover:text-[var(--bp-text)]'
+                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]'
+                        : 'border-[var(--bp-border)] text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
                     }`}
                   >
                     {sib.title}
@@ -382,7 +382,7 @@ export default function SubtaskFormModal({
             type="button"
             disabled={submitting || !values.title.trim()}
             onClick={() => void handleSubmit()}
-            className="rounded-xl bg-[var(--bp-accent)] px-10 py-4 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-50"
+            className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-10 py-4 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-50"
           >
             {isEdit ? 'Save Changes' : 'Add Subtask'}
           </button>
@@ -410,8 +410,8 @@ function Segment({ label, active, onClick }: { label: string; active?: boolean; 
       onClick={onClick}
       className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition ${
         active
-          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
-          : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-slate-400'
+          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]'
+          : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-muted)]'
       }`}
     >
       {label}

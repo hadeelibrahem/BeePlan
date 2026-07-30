@@ -22,8 +22,9 @@ export const lightTheme: AppTheme = {
 
     primary: palette.yellow,
     accent: palette.yellow,
-    accentSoft: 'rgba(249, 229, 71, 0.28)',
-    accentText: palette.dark,
+    accentSoft: 'rgba(253, 239, 75, 0.19)',
+    accentInk: '#6b5900',
+    accentText: '#6b5900',
 
     disabled: palette.lightDisabled,
     disabledText: palette.lightDisabledText,

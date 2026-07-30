@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import {
   CancelFocusSessionDto,
+  ExtendFocusSessionDto,
   FinishFocusSessionDto,
   StartFocusSessionDto,
 } from './dto/focus.dto';
@@ -50,6 +51,15 @@ export class FocusController {
     @Body() dto: CancelFocusSessionDto,
   ) {
     return this.focusService.cancel(request.user.id, id, dto);
+  }
+
+  @Patch('sessions/:id/extend')
+  extend(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ExtendFocusSessionDto,
+  ) {
+    return this.focusService.extend(request.user.id, id, dto);
   }
 
   @Get('sessions/today')

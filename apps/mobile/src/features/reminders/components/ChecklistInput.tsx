@@ -37,14 +37,14 @@ export function ChecklistInput({ value, onChange }: Props) {
           className="rounded-full border px-4 py-2 active:opacity-80"
           style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}
         >
-          <Text className="text-xs font-black" style={{ color: colors.accent }}>{t('reminders.addItem')}</Text>
+          <Text className="text-xs font-black" style={{ color: colors.accentInk }}>{t('reminders.addItem')}</Text>
         </Pressable>
       </View>
       <View className="gap-3">
         {value.map((item, index) => (
           <View key={item.id} className="flex-row items-center gap-2">
             <View className="h-9 w-9 items-center justify-center rounded-full border" style={{ borderColor: colors.border, backgroundColor: colors.input }}>
-              <Text className="text-xs font-black" style={{ color: colors.accent }}>{formatNumber(index + 1)}</Text>
+              <Text className="text-xs font-black" style={{ color: colors.accentInk }}>{formatNumber(index + 1)}</Text>
             </View>
             <TextInput
               placeholder={t('reminders.checklistItem')}

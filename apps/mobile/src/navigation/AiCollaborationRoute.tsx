@@ -3,13 +3,14 @@ import { ActivityIndicator, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import AiCollaborationScreen from '../screens/AiCollaborationScreen'
 import { getTask, type ApiTask } from '../lib/tasksApi'
+import { startFocusSession } from '../lib/focusApi'
 import { useTheme } from '../theme/useTheme'
 import type { RootStackParamList } from './types'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AiCollaboration'> & { accessToken: string; tasks: ApiTask[]; onBack: () => void }
 
 /** Cache-first task resolver; AI planning and apply lifecycle remain in AiCollaborationScreen. */
-export function AiCollaborationRoute({ route, accessToken, tasks, onBack }: Props) {
+export function AiCollaborationRoute({ route, navigation, accessToken, tasks, onBack }: Props) {
   const { theme } = useTheme(); const taskId = route.params.taskId
   const [task, setTask] = useState<ApiTask | null>(() => tasks.find((item) => item.id === taskId) ?? null)
   const [loading, setLoading] = useState(!task); const [error, setError] = useState('')
@@ -22,5 +23,27 @@ export function AiCollaborationRoute({ route, accessToken, tasks, onBack }: Prop
   }, [accessToken, taskId, tasks])
   if (loading) return <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}><ActivityIndicator color={theme.colors.accent} /></View>
   if (!task || error) return <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center', padding: 24 }}><Text style={{ color: theme.colors.error }}>{error || 'Task not found.'}</Text></View>
-  return <AiCollaborationScreen task={task} accessToken={accessToken} onBack={onBack} />
+  return (
+    <AiCollaborationScreen
+      task={task}
+      accessToken={accessToken}
+      onBack={onBack}
+      onStartFocus={async (input) => {
+        // Start the session on the recommended unit, then hand off to the
+        // distraction-free FocusSession screen (which reads the active session).
+        try {
+          await startFocusSession(accessToken, {
+            taskId: input.taskId,
+            subtaskId: input.subtaskId ?? undefined,
+            plannedMinutes: input.estimatedMinutes ?? 25,
+            sessionType: 'pomodoro',
+          })
+          navigation.navigate('FocusSession')
+        } catch {
+          // Surfaced by the FocusSession screen / existing error handling; the
+          // Overview intentionally stays put if the session can't be started.
+        }
+      }}
+    />
+  )
 }

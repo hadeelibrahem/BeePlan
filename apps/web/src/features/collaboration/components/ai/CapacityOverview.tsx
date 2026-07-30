@@ -32,7 +32,7 @@ const BAND_META: Record<CapacityBand, { label: string; barClass: string; badgeCl
  */
 export function CapacityOverview({ members, compact = false }: Props) {
   if (!members.length) {
-    return <p className="text-xs text-slate-400">No team capacity data yet.</p>
+    return <p className="text-xs text-[var(--bp-muted)]">No team capacity data yet.</p>
   }
 
   const lightest = [...members].sort((a, b) => a.loadPercent - b.loadPercent)[0]
@@ -63,7 +63,7 @@ export function CapacityOverview({ members, compact = false }: Props) {
         })}
       </div>
       {!compact && lightest ? (
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-[var(--bp-muted)]">
           {lightest.displayName} has the lightest load right now, so more of the split leans their way.
         </p>
       ) : null}

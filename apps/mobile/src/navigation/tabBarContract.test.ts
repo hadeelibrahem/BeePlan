@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { pressTab, TAB_ROUTES } from './tabBarContract.ts'
 
-test('tab bar declares exactly the five main routes including People', () => {
-  assert.deepEqual(TAB_ROUTES, ['Dashboard', 'Tasks', 'Focus', 'Reminders', 'People'])
+test('tab bar declares the three high-frequency routes', () => {
+  assert.deepEqual(TAB_ROUTES, ['Dashboard', 'Tasks', 'Focus'])
 })
 
 test('pressing an inactive tab calls navigator with its route', () => {

@@ -69,8 +69,8 @@ export function FocusAudienceSection({
               aria-pressed={tab === option}
               className={`px-3 py-1 text-[11px] font-bold capitalize transition disabled:cursor-not-allowed disabled:opacity-40 ${
                 tab === option
-                  ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]'
-                  : 'text-slate-400 hover:text-[var(--bp-text)]'
+                  ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
+                  : 'text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
               }`}
             >
               {option}
@@ -81,10 +81,10 @@ export function FocusAudienceSection({
 
       {tab === 'shared' ? (
         <>
-          <p className="mb-2 text-[11px] leading-5 text-slate-400">
+          <p className="mb-2 text-[11px] leading-5 text-[var(--bp-muted)]">
             A shared focus task appears in the Focus Queue for every member of this task.
           </p>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-[var(--bp-subtle)]">
             <input
               type="checkbox"
               checked={focusEnabled}
@@ -95,10 +95,10 @@ export function FocusAudienceSection({
         </>
       ) : (
         <>
-          <p className="mb-2 text-[11px] leading-5 text-slate-400">
+          <p className="mb-2 text-[11px] leading-5 text-[var(--bp-muted)]">
             A personal focus task appears only in your own Focus Queue.
           </p>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-[var(--bp-subtle)]">
             <input
               type="checkbox"
               disabled={!loaded}

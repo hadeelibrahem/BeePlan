@@ -15,10 +15,16 @@ export const queryKeys = {
     commitments: ['context', 'commitments'] as const,
   },
   aiCollaboration: {
+    overview: (taskId: string) => ['aiCollaboration', 'overview', taskId] as const,
+    projectPlan: (taskId: string) => ['aiCollaboration', 'projectPlan', taskId] as const,
     capacity: (taskId: string) => ['aiCollaboration', 'capacity', taskId] as const,
+    team: (taskId: string) => ['aiCollaboration', 'team', taskId] as const,
+    health: (taskId: string) => ['aiCollaboration', 'health', taskId] as const,
     today: (taskId: string) => ['aiCollaboration', 'today', taskId] as const,
     progress: (taskId: string) => ['aiCollaboration', 'progress', taskId] as const,
     timeline: (taskId: string) => ['aiCollaboration', 'timeline', taskId] as const,
     suggestions: (taskId: string) => ['aiCollaboration', 'suggestions', taskId] as const,
+    suggestionPreview: (taskId: string, recommendationId: string) =>
+      ['aiCollaboration', 'suggestionPreview', taskId, recommendationId] as const,
   },
 } as const

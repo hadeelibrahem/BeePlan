@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View, type GestureResponderEvent } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View, type GestureResponderEvent } from 'react-native';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { createGuardedSoundPlayer, type GuardedSoundPlayer } from '../lib/focusSoundPlayer';
 import { DangerButton, OutlineButton, PrimaryButton, SecondaryButton } from '../components/layout';
 import { BREAK_PRESETS, formatFocusClock, labelForFocusType, type FocusTaskOutcome } from '../lib/focusApi';
 import { FOCUS_SOUND_CATEGORIES, FOCUS_SOUNDS, type FocusSound } from '../lib/focusSounds';
 import type { UseFocusSession } from '../lib/useFocusSession';
+import {
+  FOCUS_EXTENSION_MAX_MINUTES,
+  FOCUS_EXTENSION_MIN_MINUTES,
+  QUICK_EXTENSION_OPTIONS,
+  validateExtensionMinutes,
+} from '../lib/focusExtension';
 import type { ApiTask } from '../lib/tasksApi';
 import type { AppTheme } from '../theme/colors';
 import { useTheme } from '../theme/useTheme';
@@ -13,6 +19,9 @@ import { focusParentLabel, focusPrimaryTitle } from '../lib/focusDisplay';
 import { MobileIcon } from '../components/layout';
 import { useStrictFocus } from '../features/focus/StrictFocusContext';
 import { StrictStatsSheet } from '../features/focus/StrictStatsSheet';
+import { loadFocusCompletionSoundEnabled, subscribeFocusCompletionSound } from '../lib/focusCompletionPreferences';
+
+const FOCUS_COMPLETION_ASSET = require('../../assets/focus-complete.mp3') as number;
 
 const FOCUS_SOUND_ASSETS: Record<string, number> = {
   ambient: require('../../assets/focus-sounds/ambient.mp3') as number,
@@ -55,12 +64,15 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
     sessionComplete,
     completedMinutes,
     busy,
+    extending,
   } = focus;
 
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showAddTime, setShowAddTime] = useState(false);
   const [soundsOpen, setSoundsOpen] = useState(false);
   const soundPlayer = useFocusSoundPlayer();
   const stopSound = soundPlayer.stop;
+  useFocusCompletionBell(active?.sessionId, active?.completionReason, sessionComplete, remainingMs);
 
   // --- Strict Mode -----------------------------------------------------------
   const strict = useStrictFocus();
@@ -111,6 +123,16 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
     if (active && !sessionComplete) setShowExitConfirm(true);
     else onExit();
   };
+
+  // Persist the extension, then close the sheet only if it succeeded (leaving it
+  // open on error so the message stays visible).
+  const handleAddTime = useCallback(
+    async (minutes: number) => {
+      const ok = await focus.extendSession(minutes);
+      if (ok) setShowAddTime(false);
+    },
+    [focus],
+  );
 
   const totalMs = active ? active.plannedMinutes * 60_000 : 0;
   const fraction = active ? (sessionComplete ? 1 : Math.min(1, elapsedMs / totalMs)) : 0;
@@ -189,6 +211,9 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
                   </DangerButton>
                 </View>
               </View>
+              <OutlineButton fullWidth onPress={() => setShowAddTime(true)}>
+                Add Time
+              </OutlineButton>
             </View>
           ) : null}
 
@@ -228,7 +253,16 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
           isSubtask={Boolean(active?.subtaskId)}
           alreadyDone={completionAlreadyDone}
           onOutcome={(outcome) => void focus.finishWithOutcome(outcome)}
-          onAddTime={() => focus.extendSession(10)}
+          onAddTime={() => setShowAddTime(true)}
+        />
+      </Modal>
+
+      <Modal visible={Boolean(active && showAddTime)} transparent animationType="slide" onRequestClose={() => setShowAddTime(false)}>
+        <AddTimeSheet
+          theme={theme}
+          busy={extending}
+          onCancel={() => setShowAddTime(false)}
+          onConfirm={(minutes) => void handleAddTime(minutes)}
         />
       </Modal>
 
@@ -268,6 +302,57 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
       />
     </View>
   );
+}
+
+const COMPLETION_AUDIO_LIMIT_MS = 10_000;
+
+function useFocusCompletionBell(sessionId: string | undefined, completionReason: 'automatic' | 'manual' | undefined, sessionComplete: boolean, remainingMs: number) {
+  const player = useAudioPlayer(FOCUS_COMPLETION_ASSET, { keepAudioSessionActive: true });
+  const playedSessionIdRef = useRef<string | null>(null);
+  const previousRemainingRef = useRef<number | null>(null);
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [enabled, setEnabled] = useState(true);
+
+  const stopCompletionAudio = useCallback(() => {
+    if (completionTimeoutRef.current !== null) {
+      clearTimeout(completionTimeoutRef.current);
+      completionTimeoutRef.current = null;
+    }
+    try { player.pause(); void player.seekTo(0); } catch { /* released player */ }
+  }, [player]);
+
+  useEffect(() => {
+    void loadFocusCompletionSoundEnabled().then(setEnabled);
+    return subscribeFocusCompletionSound(setEnabled);
+  }, []);
+  useEffect(() => {
+    void setAudioModeAsync({ playsInSilentMode: true });
+    player.loop = false;
+    stopCompletionAudio();
+    return stopCompletionAudio;
+  }, [player, stopCompletionAudio]);
+  useEffect(() => {
+    previousRemainingRef.current = null;
+    stopCompletionAudio();
+  }, [sessionId, stopCompletionAudio]);
+  useEffect(() => {
+    if (!sessionComplete) stopCompletionAudio();
+  }, [sessionComplete, stopCompletionAudio]);
+  useEffect(() => {
+    const remaining = sessionId ? (sessionComplete ? 0 : Math.ceil(remainingMs / 1000)) : 0;
+    const previous = previousRemainingRef.current;
+    if (enabled && sessionId && completionReason === 'automatic' && previous !== null && previous > 0 && remaining === 0 && playedSessionIdRef.current !== sessionId) {
+      playedSessionIdRef.current = sessionId;
+      stopCompletionAudio();
+      try {
+        player.loop = false;
+        void player.seekTo(0);
+        player.play();
+        completionTimeoutRef.current = setTimeout(stopCompletionAudio, COMPLETION_AUDIO_LIMIT_MS);
+      } catch { /* audio must not interrupt completion */ }
+    }
+    previousRemainingRef.current = remaining;
+  }, [completionReason, enabled, remainingMs, sessionComplete, sessionId, stopCompletionAudio]);
 }
 
 // --- Focus sounds ----------------------------------------------------------
@@ -435,7 +520,7 @@ function FocusSoundsSheet({
         <View className="max-h-[88%] rounded-t-3xl border p-5" style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}>
           <View className="mb-4 flex-row items-start justify-between gap-3">
             <View>
-              <Text className="text-[10px] font-black uppercase" style={{ color: colors.accent, letterSpacing: 2 }}>
+              <Text className="text-[10px] font-black uppercase" style={{ color: colors.accentInk, letterSpacing: 2 }}>
                 Focus sounds
               </Text>
               <Text className="mt-1 text-xl font-black" style={{ color: colors.text }}>
@@ -588,7 +673,7 @@ function ActiveTimer({
   const { colors } = theme;
   return (
     <View className="w-full items-center">
-      <Text className="text-xs font-black uppercase" style={{ color: colors.accent, letterSpacing: 2 }}>
+      <Text className="text-xs font-black uppercase" style={{ color: colors.accentInk, letterSpacing: 2 }}>
         {typeLabel}
       </Text>
       <Text numberOfLines={1} className="mt-2 text-center text-xl font-black" style={{ color: colors.text }}>
@@ -808,6 +893,130 @@ function ExitConfirm({ theme, onStay, onLeave }: { theme: AppTheme; onStay: () =
             <DangerButton fullWidth onPress={onLeave}>
               Leave
             </DangerButton>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// --- Add-time sheet --------------------------------------------------------
+
+function AddTimeSheet({
+  theme,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  theme: AppTheme;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (minutes: number) => void;
+}) {
+  const { colors } = theme;
+  const [selected, setSelected] = useState<number | 'custom'>(10);
+  const [customValue, setCustomValue] = useState('');
+
+  const rawMinutes = selected === 'custom' ? customValue : selected;
+  const validation = validateExtensionMinutes(rawMinutes);
+  const canSubmit = validation.error === null && !busy;
+  // Only surface the message once the user has typed a custom value; a selected
+  // quick option is always valid.
+  const showError = Boolean(
+    validation.error && selected === 'custom' && customValue.trim() !== '',
+  );
+
+  const handleConfirm = () => {
+    if (validation.error !== null || busy) return;
+    onConfirm(validation.minutes);
+  };
+
+  return (
+    <View className="flex-1 justify-end" style={{ backgroundColor: '#00000099' }}>
+      <View
+        className="rounded-t-3xl border p-5"
+        style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}
+      >
+        <Text className="text-xl font-black" style={{ color: colors.text }}>
+          Add more time
+        </Text>
+        <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
+          Extend your focus session.
+        </Text>
+
+        <View className="mt-4 flex-row flex-wrap gap-2">
+          {QUICK_EXTENSION_OPTIONS.map((option) => {
+            const activeOption = selected === option;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => setSelected(option)}
+                accessibilityRole="button"
+                className="rounded-2xl border px-4 py-3 active:opacity-80"
+                style={{
+                  backgroundColor: activeOption ? colors.accentSoft : colors.card,
+                  borderColor: activeOption ? colors.accent : colors.border,
+                }}
+              >
+                <Text className="text-sm font-black" style={{ color: colors.text }}>
+                  +{option}m
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Pressable
+            onPress={() => setSelected('custom')}
+            accessibilityRole="button"
+            className="rounded-2xl border px-4 py-3 active:opacity-80"
+            style={{
+              backgroundColor: selected === 'custom' ? colors.accentSoft : colors.card,
+              borderColor: selected === 'custom' ? colors.accent : colors.border,
+            }}
+          >
+            <Text className="text-sm font-black" style={{ color: colors.text }}>
+              Custom
+            </Text>
+          </Pressable>
+        </View>
+
+        {selected === 'custom' ? (
+          <View className="mt-4">
+            <Text className="text-xs font-black uppercase" style={{ color: colors.secondaryText }}>
+              Minutes ({FOCUS_EXTENSION_MIN_MINUTES}–{FOCUS_EXTENSION_MAX_MINUTES})
+            </Text>
+            <TextInput
+              value={customValue}
+              onChangeText={setCustomValue}
+              keyboardType="number-pad"
+              placeholder="e.g. 20"
+              placeholderTextColor={colors.secondaryText}
+              autoFocus
+              className="mt-2 rounded-2xl border px-4 py-3 text-sm font-semibold"
+              style={{ backgroundColor: colors.card, borderColor: colors.border, color: colors.text }}
+            />
+          </View>
+        ) : null}
+
+        {showError ? (
+          <Text className="mt-3 text-xs font-semibold" style={{ color: colors.error }}>
+            {validation.error}
+          </Text>
+        ) : null}
+
+        <View className="mt-5 flex-row gap-2">
+          <View className="flex-1">
+            <SecondaryButton fullWidth disabled={busy} onPress={onCancel}>
+              Cancel
+            </SecondaryButton>
+          </View>
+          <View className="flex-1">
+            <PrimaryButton fullWidth disabled={!canSubmit} onPress={handleConfirm}>
+              {busy
+                ? 'Adding…'
+                : validation.error === null
+                  ? `Add ${validation.minutes} min`
+                  : 'Add Time'}
+            </PrimaryButton>
           </View>
         </View>
       </View>

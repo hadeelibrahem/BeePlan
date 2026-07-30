@@ -229,7 +229,7 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
             </Text>
             {unread ? (
               <Pressable onPress={() => void markAll()}>
-                <Text style={{ color: colors.accent }} className="text-xs font-bold">
+                <Text style={{ color: colors.accentInk }} className="text-xs font-bold">
                   Mark all read
                 </Text>
               </Pressable>
@@ -249,7 +249,7 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
               />
               {search ? (
                 <Pressable onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear notification search" className="px-2 py-2">
-                  <Text className="text-xs font-bold" style={{ color: colors.accent }}>Clear</Text>
+                  <Text className="text-xs font-bold" style={{ color: colors.accentInk }}>Clear</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -275,7 +275,7 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
               <Text style={{ color: colors.secondaryText }} className="text-center text-sm">
                 No notifications match your search.
               </Text>
-              {search ? <Pressable onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear notification search" className="mt-2 self-center"><Text className="text-xs font-bold" style={{ color: colors.accent }}>Clear search</Text></Pressable> : null}
+              {search ? <Pressable onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear notification search" className="mt-2 self-center"><Text className="text-xs font-bold" style={{ color: colors.accentInk }}>Clear search</Text></Pressable> : null}
             </View>
           ) : (
             <View className="gap-1.5">

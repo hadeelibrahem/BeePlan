@@ -211,7 +211,7 @@ export default function AiTaskBuilderScreen({
       panelCaption="Let AI break your big goal into steps."
       panelPercent={0}
     >
-      <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
+      <div className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
         <button type="button" onClick={onCancel} className="hover:text-[var(--bp-text)]">
           Back
         </button>
@@ -224,7 +224,7 @@ export default function AiTaskBuilderScreen({
         title="AI Plan Task"
         subtitle="Describe your goal and let AI build a full task plan for you."
         toolbar={
-          <TopActionBar
+          <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search tasks..."
@@ -241,7 +241,7 @@ export default function AiTaskBuilderScreen({
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <section className="flex min-h-[420px] flex-col rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 shadow-2xl">
           <h3 className="mb-4 flex items-center gap-2 text-base font-black">
-            <span className="text-[var(--bp-accent)]">AI</span>
+            <span className="text-[var(--bp-accent-ink)]">AI</span>
             Planning Chat
           </h3>
 
@@ -253,14 +253,14 @@ export default function AiTaskBuilderScreen({
                   <div
                     className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-6 ${
                       message.role === 'user'
-                        ? 'rounded-br-md bg-[var(--bp-accent)] font-semibold text-[var(--bp-accent-text)]'
+                        ? 'rounded-br-md border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] font-semibold text-[var(--bp-accent-text)]'
                         : isAdvice
                           ? 'rounded-bl-md border border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/10 text-[var(--bp-text)]'
                           : 'rounded-bl-md border border-[var(--bp-border)] bg-[var(--bp-bg)] text-[var(--bp-text)]'
                     }`}
                   >
                     {isAdvice ? (
-                      <p className="mb-1 text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">
+                      <p className="mb-1 text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">
                         Suggestion
                       </p>
                     ) : null}
@@ -289,7 +289,7 @@ export default function AiTaskBuilderScreen({
                   key={reply}
                   type="button"
                   onClick={() => void send(reply)}
-                  className="rounded-full border border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--bp-accent)] transition hover:bg-[var(--bp-accent)]/25"
+                  className="rounded-full border border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--bp-accent-ink)] transition hover:bg-[var(--bp-accent)]/25"
                 >
                   {reply}
                 </button>
@@ -299,19 +299,19 @@ export default function AiTaskBuilderScreen({
 
           {showReviewActions ? (
             <div className="mb-3 rounded-2xl border border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/5 p-4">
-              <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">
+              <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">
                 What I Understood
               </p>
               {lastMessage?.understoodSummary ? (
                 <UnderstoodSummaryList summary={lastMessage.understoodSummary} />
               ) : (
-                <p className="text-sm text-slate-400">No summary captured yet — feel free to add more details.</p>
+                <p className="text-sm text-[var(--bp-muted)]">No summary captured yet — feel free to add more details.</p>
               )}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => void send('Yes, please generate the final task plan.')}
-                  className="rounded-xl bg-[var(--bp-accent)] px-4 py-2 text-xs font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 transition disabled:opacity-50"
+                  className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-xs font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 transition disabled:opacity-50"
                   disabled={loading}
                 >
                   Generate Final Plan
@@ -355,7 +355,7 @@ export default function AiTaskBuilderScreen({
               type="button"
               onClick={() => void send(input)}
               disabled={loading || saving || !input.trim()}
-              className="rounded-xl bg-[var(--bp-accent)] px-5 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 transition disabled:opacity-50"
+              className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-5 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 transition disabled:opacity-50"
             >
               Send
             </button>
@@ -376,7 +376,7 @@ export default function AiTaskBuilderScreen({
             <div className="rounded-2xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-surface)]/30 p-8 text-center">
               <p className="text-3xl">🐝</p>
               <h3 className="mt-2 text-base font-black text-[var(--bp-text)]">Your plan will appear here</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
+              <p className="mt-2 text-sm leading-6 text-[var(--bp-muted)]">
                 Chat with the AI on the left. Once it has enough details, it will generate a full plan with subtasks,
                 focus sessions, and reminders for you to review.
               </p>
@@ -407,7 +407,7 @@ export default function AiTaskBuilderScreen({
                 disabled={saving}
                 className={`rounded-xl border px-5 py-2.5 font-bold transition disabled:opacity-60 ${
                   editing
-                    ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
+                    ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]'
                     : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-text)] hover:bg-[var(--bp-border)]'
                 }`}
               >
@@ -417,7 +417,7 @@ export default function AiTaskBuilderScreen({
                 type="button"
                 onClick={() => void savePlan()}
                 disabled={saving || loading}
-                className="rounded-xl bg-[var(--bp-accent)] px-6 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
+                className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-6 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
               >
                 {saving ? 'Saving...' : 'Save Plan'}
               </button>
@@ -477,7 +477,7 @@ function PlanPreview({
   return (
     <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 shadow-2xl">
       <h3 className="mb-4 flex items-center gap-2 text-base font-black">
-        <span className="text-[var(--bp-accent)]">PLAN</span>
+        <span className="text-[var(--bp-accent-ink)]">PLAN</span>
         Generated Plan
       </h3>
 
@@ -525,8 +525,8 @@ function PlanPreview({
                     onClick={() => updateMainTask({ priority: item })}
                     className={`rounded-xl border px-2 py-2 text-xs font-bold capitalize transition ${
                       plan.mainTask.priority === item
-                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent)]'
-                        : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-slate-300'
+                        ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]'
+                        : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-subtle)]'
                     }`}
                   >
                     {item}
@@ -540,7 +540,7 @@ function PlanPreview({
         <div className="mb-4">
           <p className="text-lg font-black text-[var(--bp-text)]">{plan.mainTask.title}</p>
           {plan.mainTask.description ? (
-            <p className="mt-1 text-sm leading-6 text-slate-400">{plan.mainTask.description}</p>
+            <p className="mt-1 text-sm leading-6 text-[var(--bp-muted)]">{plan.mainTask.description}</p>
           ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             <MetaChip label={`Due: ${formatDate(plan.mainTask.dueDate)}`} />
@@ -557,7 +557,7 @@ function PlanPreview({
               <div key={`${subtask.order}-${index}`} className="rounded-xl bg-[var(--bp-bg)] px-4 py-3">
                 {editing ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-[var(--bp-accent)]">{subtask.order}.</span>
+                    <span className="text-xs font-black text-[var(--bp-accent-ink)]">{subtask.order}.</span>
                     <input
                       value={subtask.title}
                       onChange={(event) => updateSubtask(index, { title: event.target.value })}
@@ -572,7 +572,7 @@ function PlanPreview({
                       }
                       className={`${inputClass} w-20 text-center`}
                     />
-                    <span className="text-xs text-slate-500">min</span>
+                    <span className="text-xs text-[var(--bp-muted)]">min</span>
                     <button
                       type="button"
                       onClick={() => removeSubtask(index)}
@@ -585,14 +585,14 @@ function PlanPreview({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-[var(--bp-text)]">
-                        <span className="me-1.5 text-[var(--bp-accent)]">{subtask.order}.</span>
+                        <span className="me-1.5 text-[var(--bp-accent-ink)]">{subtask.order}.</span>
                         {subtask.title}
                       </p>
                       {subtask.description ? (
-                        <p className="mt-0.5 text-xs leading-5 text-slate-400">{subtask.description}</p>
+                        <p className="mt-0.5 text-xs leading-5 text-[var(--bp-muted)]">{subtask.description}</p>
                       ) : null}
                     </div>
-                    <span className="shrink-0 rounded-full bg-[var(--bp-accent)]/15 px-2 py-1 text-[11px] font-bold text-[var(--bp-accent)]">
+                    <span className="shrink-0 rounded-full bg-[var(--bp-accent)]/15 px-2 py-1 text-[11px] font-bold text-[var(--bp-accent-ink)]">
                       {formatMinutes(subtask.estimatedMinutes)}
                     </span>
                   </div>
@@ -601,7 +601,7 @@ function PlanPreview({
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">No subtasks suggested.</p>
+          <p className="text-xs text-[var(--bp-muted)]">No subtasks suggested.</p>
         )}
       </PreviewSection>
 
@@ -615,7 +615,7 @@ function PlanPreview({
               >
                 <div>
                   <p className="text-sm font-semibold text-[var(--bp-text)]">{session.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-400">
+                  <p className="mt-0.5 text-xs text-[var(--bp-muted)]">
                     {formatDateTime(session.startTime)} – {formatTime(session.endTime)}
                     {session.relatedSubtaskTitle ? ` · ${session.relatedSubtaskTitle}` : ''}
                   </p>
@@ -633,7 +633,7 @@ function PlanPreview({
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">No focus sessions suggested.</p>
+          <p className="text-xs text-[var(--bp-muted)]">No focus sessions suggested.</p>
         )}
       </PreviewSection>
 
@@ -647,7 +647,7 @@ function PlanPreview({
               >
                 <div>
                   <p className="text-sm font-semibold text-[var(--bp-text)]">{reminder.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(reminder.remindAt)}</p>
+                  <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{formatDateTime(reminder.remindAt)}</p>
                 </div>
                 {editing ? (
                   <button
@@ -662,7 +662,7 @@ function PlanPreview({
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-500">No reminders suggested.</p>
+          <p className="text-xs text-[var(--bp-muted)]">No reminders suggested.</p>
         )}
       </PreviewSection>
     </div>
@@ -672,14 +672,14 @@ function PlanPreview({
 function PreviewSection({ title, children, last }: { title: string; children: React.ReactNode; last?: boolean }) {
   return (
     <div className={`border-t border-[var(--bp-border)] pt-3 ${last ? '' : 'mb-4'}`}>
-      <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-300">{title}</p>
+      <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--bp-subtle)]">{title}</p>
       {children}
     </div>
   )
 }
 
 function PreviewLabel({ label }: { label: string }) {
-  return <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-300">{label}</label>
+  return <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-[var(--bp-subtle)]">{label}</label>
 }
 
 function MetaChip({ label, tone }: { label: string; tone?: TaskPlanPriority }) {
@@ -690,7 +690,7 @@ function MetaChip({ label, tone }: { label: string; tone?: TaskPlanPriority }) {
         ? 'bg-green-500/20 text-green-300'
         : tone === 'medium'
           ? 'bg-orange-500/20 text-orange-300'
-          : 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent)]'
+          : 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]'
 
   return <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${color}`}>{label}</span>
 }
@@ -713,7 +713,7 @@ function UnderstoodSummaryList({ summary }: { summary: UnderstoodSummary }) {
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <p className="text-[var(--bp-text)]">
-      <span className="font-bold text-slate-400">{label}: </span>
+      <span className="font-bold text-[var(--bp-muted)]">{label}: </span>
       {value}
     </p>
   )
@@ -724,7 +724,7 @@ function SummaryBullets({ label, items }: { label: string; items: string[] }) {
 
   return (
     <div>
-      <span className="text-xs font-bold text-slate-400">{label}:</span>
+      <span className="text-xs font-bold text-[var(--bp-muted)]">{label}:</span>
       <ul className="ms-4 list-disc text-[var(--bp-text)]">
         {items.map((item, index) => (
           <li key={index}>{item}</li>

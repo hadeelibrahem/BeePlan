@@ -66,7 +66,7 @@ export function PersonReminderFields({ value, onChange, friends, onAddFriend }: 
             <Text className="text-xs font-black uppercase tracking-widest" style={{ color: colors.secondaryText }}>
               {t('reminders.person.confidence')}
             </Text>
-            <Text className="text-xs font-black" style={{ color: colors.accent }}>
+            <Text className="text-xs font-black" style={{ color: colors.accentInk }}>
               {Math.round((value.confidence ?? 0) * 100)}%
             </Text>
           </View>

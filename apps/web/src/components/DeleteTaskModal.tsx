@@ -30,11 +30,11 @@ export default function DeleteTaskModal({
         <h2 id="delete-task-title" className="text-2xl font-black">
           Delete Task?
         </h2>
-        <p className="mt-3 text-sm leading-6 text-slate-400">
+        <p className="mt-3 text-sm leading-6 text-[var(--bp-muted)]">
           This action cannot be undone. Are you sure you want to permanently delete
-          {taskTitle ? <span className="font-bold text-slate-300"> "{taskTitle}"</span> : ' this task'}?
+          {taskTitle ? <span className="font-bold text-[var(--bp-subtle)]"> "{taskTitle}"</span> : ' this task'}?
         </p>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
+        <p className="mt-2 text-sm leading-6 text-[var(--bp-muted)]">
           Subtasks, attachments, and collaboration data may also be removed.
         </p>
 

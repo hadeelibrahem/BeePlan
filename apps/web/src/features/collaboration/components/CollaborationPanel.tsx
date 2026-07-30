@@ -54,7 +54,7 @@ export function CollaborationPanel({
   const noop = () => {}
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <MembersSection
         members={members}
         loading={loadingMembers}

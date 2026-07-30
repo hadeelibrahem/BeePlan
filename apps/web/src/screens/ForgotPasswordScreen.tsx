@@ -66,7 +66,7 @@ export default function ForgotPasswordScreen({
     <AuthShell
       headline={
         <>
-          Reset access, continue <span className="text-[var(--bp-accent)] text-glow">planning smarter</span>.
+          Reset access, continue <span className="text-[var(--bp-accent-ink)] text-glow">planning smarter</span>.
         </>
       }
       sub="Secure your BeePlan workspace and get back to your reminders, tasks, and smart plans."
@@ -75,7 +75,7 @@ export default function ForgotPasswordScreen({
         {sent ? (
           <div className="text-center py-2 animate-scale-up">
             <div className="w-16 h-16 rounded-full bg-[var(--bp-accent)]/10 border border-[var(--bp-accent)]/30 flex items-center justify-center mx-auto mb-5">
-              <svg className="w-8 h-8 text-[var(--bp-accent)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <svg className="w-8 h-8 text-[var(--bp-accent-ink)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path
                   d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                   strokeLinecap="round"
@@ -92,7 +92,7 @@ export default function ForgotPasswordScreen({
               <button
                 type="button"
                 onClick={goToResetCode}
-                className="w-full h-12 rounded-xl bg-[var(--bp-accent)] text-[var(--bp-accent-text)] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
+                className="w-full h-12 rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
               >
                 Enter Reset Code
               </button>
@@ -117,7 +117,7 @@ export default function ForgotPasswordScreen({
 
             <div className="flex justify-center mb-5">
               <div className="w-12 h-12 rounded-2xl bg-[var(--bp-accent)]/10 border border-[var(--bp-accent)]/25 flex items-center justify-center">
-                <svg className="w-6 h-6 text-[var(--bp-accent)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[var(--bp-accent-ink)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0110 0v4" strokeLinecap="round" />
                 </svg>

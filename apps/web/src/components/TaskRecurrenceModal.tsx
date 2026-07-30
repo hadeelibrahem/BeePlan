@@ -234,7 +234,7 @@ export function TaskRecurrenceModal({
                 <p className="mt-1 text-xs text-[var(--bp-muted)]">Describe how this task should repeat.</p>
               </div>
               {aiLoading ? (
-                <span className="shrink-0 text-xs font-black uppercase tracking-wide text-[var(--bp-accent)]">Thinking</span>
+                <span className="shrink-0 text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">Thinking</span>
               ) : null}
             </div>
 
@@ -255,7 +255,7 @@ export function TaskRecurrenceModal({
                 type="button"
                 onClick={() => void handleAskAi()}
                 disabled={aiLoading || !aiInput.trim()}
-                className="rounded-2xl bg-[var(--bp-accent)] px-4 py-3 text-sm font-black text-[var(--bp-accent-text)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-2xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-3 text-sm font-black text-[var(--bp-accent-text)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {aiLoading ? 'Asking...' : 'Ask AI'}
               </button>
@@ -268,7 +268,7 @@ export function TaskRecurrenceModal({
                   <button
                     type="button"
                     onClick={handleApplyAiResult}
-                    className="mt-3 rounded-xl border border-[var(--bp-accent)]/50 bg-[var(--bp-accent-soft)] px-3 py-2 text-xs font-black text-[var(--bp-accent)] transition hover:border-[var(--bp-accent)]"
+                    className="mt-3 rounded-xl border border-[var(--bp-accent)]/50 bg-[var(--bp-accent-soft)] px-3 py-2 text-xs font-black text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)]"
                   >
                     Apply to Recurrence
                   </button>
@@ -550,7 +550,7 @@ function OptionButton({ selected, label, onClick }: { selected: boolean; label: 
       onClick={onClick}
       className={`rounded-2xl border px-4 py-3 text-sm font-black transition active:scale-[0.98] ${
         selected
-          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent)]'
+          ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]'
           : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-text)] hover:border-[var(--bp-accent)]/50'
       }`}
     >
@@ -565,7 +565,7 @@ function Chip({ selected, label, onClick }: { selected: boolean; label: string; 
       type="button"
       onClick={onClick}
       className={`rounded-full px-4 py-3 text-xs font-black transition active:scale-[0.98] ${
-        selected ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]' : 'bg-[var(--bp-surface)] text-[var(--bp-text)]'
+        selected ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'bg-[var(--bp-surface)] text-[var(--bp-text)]'
       }`}
     >
       {label}

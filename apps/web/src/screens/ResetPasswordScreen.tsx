@@ -38,7 +38,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     if (!password) return null
     if (password.length < 6) return { label: 'Weak', color: 'bg-red-500', w: 'w-1/3' }
     if (password.length < 10 || !/[A-Z]/.test(password) || !/\d/.test(password)) {
-      return { label: 'Fair', color: 'bg-yellow-400', w: 'w-2/3' }
+      return { label: 'Fair', color: 'bg-[var(--bp-accent)]', w: 'w-2/3' }
     }
     return { label: 'Strong', color: 'bg-emerald-400', w: 'w-full' }
   })()
@@ -119,7 +119,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     <AuthShell
       headline={
         <>
-          Secure your <span className="text-[var(--bp-accent)] text-glow">BeePlan workspace</span>.
+          Secure your <span className="text-[var(--bp-accent-ink)] text-glow">BeePlan workspace</span>.
         </>
       }
       sub="Set a strong new password to protect your reminders, tasks, and smart plans from unauthorised access."
@@ -140,7 +140,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
             <button
               type="button"
               onClick={onBack}
-              className="mt-8 w-full h-12 rounded-xl bg-[var(--bp-accent)] text-[var(--bp-accent-text)] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
+              className="mt-8 w-full h-12 rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
             >
               Open BeePlan
             </button>
@@ -151,7 +151,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
 
             <div className="flex justify-center mb-5">
               <div className="w-12 h-12 rounded-2xl bg-[var(--bp-accent)]/10 border border-[var(--bp-accent)]/25 flex items-center justify-center">
-                <svg className="w-6 h-6 text-[var(--bp-accent)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[var(--bp-accent-ink)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path
                     d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
                     strokeLinecap="round"
@@ -247,7 +247,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                   error={errors.code}
                 />
                 {devResetCode && (
-                  <p className="text-[var(--bp-accent)] text-xs ps-1">
+                  <p className="text-[var(--bp-accent-ink)] text-xs ps-1">
                     Development code: <span className="font-bold tracking-widest">{devResetCode}</span>
                   </p>
                 )}

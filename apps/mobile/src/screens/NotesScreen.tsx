@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Pressable, Text, View } from 'react-native'
 import { AppScreen, EmptyState, InputField, LoadingState, PageHeader, PrimaryButton, SearchInput, SectionCard, SecondaryButton } from '../components/layout'
-import { createNote, deleteNote, getNotes, updateNote, type ApiNote } from '../lib/notesApi'
+import { createNote, deleteNote, getDailyMotivation, getNotes, updateNote, type ApiNote, type DailyMotivation } from '../lib/notesApi'
 import { useTheme } from '../theme/useTheme'
 import { filterNotes, validateNoteTitle } from './notes'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export default function NotesScreen({ accessToken, onBack }: { accessToken: string; onBack: () => void }) {
   const { theme } = useTheme()
+  const { language, t } = useLanguage()
   const { colors } = theme
   const [notes, setNotes] = useState<ApiNote[]>([])
   const [loading, setLoading] = useState(true)
@@ -19,6 +21,8 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [motivation, setMotivation] = useState<DailyMotivation | null>(null)
+  const [motivationLoading, setMotivationLoading] = useState(true)
 
   const load = async () => {
     setLoading(true)
@@ -29,6 +33,16 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
   }
 
   useEffect(() => { void load() }, [accessToken])
+
+  useEffect(() => {
+    let active = true
+    setMotivationLoading(true)
+    getDailyMotivation(accessToken, language)
+      .then((result) => active && setMotivation(result))
+      .catch(() => active && setMotivation(null))
+      .finally(() => active && setMotivationLoading(false))
+    return () => { active = false }
+  }, [accessToken, language])
 
   const visibleNotes = useMemo(() => filterNotes(notes, search), [notes, search])
   const beginEdit = (note: ApiNote) => { setEditingId(note.id); setEditTitle(note.title); setEditContent(note.content); setError('') }
@@ -73,6 +87,15 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
 
   return <AppScreen>
     <PageHeader title="Notes" subtitle="Jot down ideas and quick thoughts" onBack={onBack} />
+    <SectionCard className="mb-3" style={{ borderColor: `${colors.accent}66` }}>
+      <View className="flex-row items-start gap-3">
+        <View accessible accessibilityLabel={t('notesMotivation.iconLabel')} className="h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${colors.accent}20` }}><Text style={{ color: colors.accentInk }}>✦</Text></View>
+        <View className="flex-1"><Text className="text-sm font-black" style={{ color: colors.text }}>{t('notesMotivation.label')}</Text>
+          {motivationLoading ? <View accessibilityLabel={t('notesMotivation.loading')} className="mt-2 h-4 rounded" style={{ backgroundColor: colors.cardBorder }} /> : motivation ? <Text className="mt-1 text-sm leading-5" style={{ color: colors.text }}>{motivation.message}</Text> : null}
+          <Text className="mt-2 text-xs" style={{ color: colors.secondaryText }}>{t('notesMotivation.basedOnActivity')}</Text>
+        </View>
+      </View>
+    </SectionCard>
     <SectionCard className="mb-3">
       <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>New note</Text>
       <InputField label="Title" value={draftTitle} onChangeText={setDraftTitle} placeholder="Title" />
@@ -80,7 +103,7 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
       <PrimaryButton onPress={() => void create()} disabled={!draftTitle.trim()} loading={creating} size="sm">Add note</PrimaryButton>
     </SectionCard>
     <SearchInput value={search} onChangeText={setSearch} placeholder="Search notes" />
-    {error ? <View className="mb-3 rounded-xl p-3" style={{ backgroundColor: `${colors.error}18` }}><Text style={{ color: colors.error }}>{error}</Text><Pressable onPress={() => void load()} accessibilityRole="button" accessibilityLabel="Retry loading notes" className="mt-2"><Text className="font-bold" style={{ color: colors.accent }}>Retry</Text></Pressable></View> : null}
+    {error ? <View className="mb-3 rounded-xl p-3" style={{ backgroundColor: `${colors.error}18` }}><Text style={{ color: colors.error }}>{error}</Text><Pressable onPress={() => void load()} accessibilityRole="button" accessibilityLabel="Retry loading notes" className="mt-2"><Text className="font-bold" style={{ color: colors.accentInk }}>Retry</Text></Pressable></View> : null}
     {loading ? <LoadingState /> : visibleNotes.length === 0 ? <EmptyState icon="N" title={search ? 'No matching notes' : 'No notes yet'} description={search ? 'Try a different search term.' : 'Create your first note above.'} /> : visibleNotes.map((note) => <SectionCard key={note.id} className="mb-3">
       {editingId === note.id ? <View>
         <InputField label="Title" value={editTitle} onChangeText={setEditTitle} />
