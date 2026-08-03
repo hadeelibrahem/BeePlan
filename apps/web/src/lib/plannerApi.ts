@@ -194,7 +194,7 @@ export async function resolveScheduleConflict(accessToken: string, payload: {
 
 export type EnergyLevel = 'high' | 'medium' | 'low'
 
-export type TimeWindow = { start: string; end: string }
+export type TimeWindow = { start: string; end: string; label?: string }
 
 export type PlannerPreferences = {
   focusStartTime: string

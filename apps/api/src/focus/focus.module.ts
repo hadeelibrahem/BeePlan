@@ -7,6 +7,8 @@ import { DatabaseModule } from '../db/database.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { FocusController } from './focus.controller';
 import { FocusService } from './focus.service';
+import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { FocusService } from './focus.service';
     // and so session-start authorization matches the task write-permission model.
     // CollaborationModule does not import FocusModule, so there is no cycle.
     CollaborationModule,
+    GoogleCalendarModule,
+    NotificationsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

@@ -8,6 +8,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -27,7 +28,7 @@ export class FriendsController {
     @Req() request: AuthenticatedRequest,
     @Body() dto: SendFriendRequestDto,
   ) {
-    return this.friendsService.sendRequest(request.user.id, dto.email);
+    return this.friendsService.sendRequest(request.user.id, dto.username);
   }
 
   @Post('requests/:id/accept')
@@ -70,6 +71,14 @@ export class FriendsController {
   @Get()
   listFriends(@Req() request: AuthenticatedRequest) {
     return this.friendsService.listFriends(request.user.id);
+  }
+
+  @Get('search')
+  searchUser(
+    @Req() request: AuthenticatedRequest,
+    @Query('username') username: string,
+  ) {
+    return this.friendsService.searchUser(request.user.id, username);
   }
 
   @Get('requests')

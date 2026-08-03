@@ -52,7 +52,7 @@ export function InviteMemberModal({
         (f) =>
           !q ||
           f.fullName.toLowerCase().includes(q) ||
-          f.email.toLowerCase().includes(q),
+           f.username.toLowerCase().includes(q),
       )
   }, [friends, search, existing])
 
@@ -138,7 +138,7 @@ export function InviteMemberModal({
                         <span className="block truncate text-sm font-bold text-[var(--bp-text)]">
                           {friend.fullName}
                         </span>
-                        <span className="block truncate text-xs text-[var(--bp-muted)]">{friend.email}</span>
+                        <span className="block truncate text-xs text-[var(--bp-muted)]">@{friend.username}</span>
                       </span>
                       <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-bold text-green-300">
                         Friend

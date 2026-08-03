@@ -19,6 +19,7 @@ import {
   type AuthUser,
 } from '../lib/api';
 import { setAuthToken } from '../lib/authToken';
+import { disableCurrentDevice } from '../lib/pushDevicesApi';
 import {
   getGoogleApprovalStatus,
   parseApprovalToken,
@@ -48,6 +49,7 @@ type AuthContextValue = {
   sendPasswordReset: (email: string, redirectTo?: string) => Promise<string | undefined>;
   verifyRecoveryCode: (email: string, code: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
+  updateUser: (user: AuthUser) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -251,8 +253,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [saveSession, verifiedReset],
   );
 
+  const updateUser = useCallback(async (user: AuthUser) => {
+    if (!session) return;
+    await saveSession({ ...session, user });
+  }, [saveSession, session]);
+
   const signOut = useCallback(async () => {
     if (session?.accessToken) {
+      await disableCurrentDevice(session.accessToken).catch(() => undefined);
       try {
         await logoutRequest(session.accessToken);
       } catch (error) {
@@ -290,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sendPasswordReset,
       verifyRecoveryCode,
       updatePassword,
+      updateUser,
       signOut,
     }),
     [
@@ -304,6 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       signUp,
       updatePassword,
+      updateUser,
       verifyRecoveryCode,
     ],
   );

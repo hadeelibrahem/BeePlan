@@ -1,24 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { SectionCard } from '../../../components/layout';
 import { useTheme } from '../../../theme/useTheme';
 import { Avatar } from './Avatar';
 import { createComment, deleteComment, getComments, updateComment } from '../api/collaboration.api';
 import { friendlyError } from '../errorMessages';
 import type { TaskComment, TaskMember } from '../types';
+import { commentTargetDecision } from './commentTarget';
 
 type Props = {
   taskId: string;
   members: TaskMember[];
   currentUserId: string;
   onError: (message: string) => void;
+  initialCommentId?: string;
 };
 
-export function CommentsSection({ taskId, members, currentUserId, onError }: Props) {
+export function CommentsSection({ taskId, members, currentUserId, onError, initialCommentId }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [failed, setFailed] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -26,11 +29,14 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
   const [draft, setDraft] = useState('');
   const [editDraft, setEditDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const commentsListRef = useRef<FlatList<TaskComment>>(null);
+  const handledTargetRef = useRef<string | null>(null);
+  const [targetNotice, setTargetNotice] = useState('');
 
   const load = useCallback(
     async (target: number) => {
       setFailed(false);
-      if (target === 1) setLoading(true);
+      if (target === 1) setLoading(true); else setLoadingMore(true);
       try {
         const res = await getComments(taskId, target, 20);
         setComments((prev) => (target === 1 ? res.items : [...prev, ...res.items]));
@@ -40,6 +46,7 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
         setFailed(true);
       } finally {
         setLoading(false);
+        setLoadingMore(false);
       }
     },
     [taskId],
@@ -49,9 +56,36 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
     void load(1);
   }, [load]);
 
+  useEffect(() => {
+    handledTargetRef.current = null;
+    setTargetNotice('');
+  }, [initialCommentId]);
+
+  useEffect(() => {
+    const decision = commentTargetDecision({ targetId: initialCommentId, comments, loading, loadingMore, hasMore, handledTarget: handledTargetRef.current });
+    if (decision.type === 'scroll') {
+      handledTargetRef.current = initialCommentId ?? null;
+      requestAnimationFrame(() => commentsListRef.current?.scrollToIndex({ index: decision.index, animated: true, viewPosition: 0.35 }));
+      return;
+    }
+    if (decision.type === 'load-more') {
+      void load(page + 1);
+      return;
+    }
+    if (decision.type === 'missing') { handledTargetRef.current = initialCommentId ?? null; setTargetNotice('This comment is no longer available.'); }
+  }, [comments, hasMore, initialCommentId, load, loading, loadingMore, page]);
+
+  const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number; highestMeasuredFrameIndex: number }) => {
+    const list = commentsListRef.current;
+    if (!list || info.averageItemLength <= 0) return;
+    const measuredOffset = Math.max(0, info.averageItemLength * Math.min(info.index, info.highestMeasuredFrameIndex + 1));
+    list.scrollToOffset({ offset: measuredOffset, animated: false });
+    requestAnimationFrame(() => list.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.35 }));
+  }, []);
+
   const resolveMentions = useCallback(
     (message: string) =>
-      members.filter((m) => message.includes(`@${m.user.fullName}`)).map((m) => m.userId),
+      members.filter((m) => m.status === 'accepted' && message.includes(`@${m.user.fullName}`)).map((m) => m.userId),
     [members],
   );
 
@@ -184,17 +218,22 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
           </Text>
         </Pressable>
       ) : comments.length === 0 ? (
-        <Text style={{ color: colors.secondaryText }} className="mt-4 text-center text-sm">
-          No comments yet. Start the conversation.
+        <Text accessibilityRole={targetNotice ? 'alert' : undefined} style={{ color: targetNotice ? colors.error : colors.secondaryText }} className="mt-4 text-center text-sm">
+          {targetNotice || 'No comments yet. Start the conversation.'}
         </Text>
       ) : (
-        <View className="mt-4 gap-3">
-          {comments.map((comment) => {
+        <View className="mt-4">
+          {targetNotice ? <Text accessibilityRole="alert" style={{ color: colors.error }} className="mb-2 text-xs font-bold">{targetNotice}</Text> : null}
+          <FlatList
+            ref={commentsListRef}
+            data={comments}
+            keyExtractor={(comment) => comment.id}
+            renderItem={({ item: comment }) => {
             const isOwn = comment.author?.id === currentUserId;
             const isPending = comment.id.startsWith('temp-');
             const isEditing = editingId === comment.id;
             return (
-              <View key={comment.id} className="flex-row gap-3" style={{ opacity: isPending ? 0.6 : 1 }}>
+              <View key={comment.id} className="flex-row gap-3 rounded-xl p-1" style={{ opacity: isPending ? 0.6 : 1, backgroundColor: comment.id === initialCommentId ? `${colors.accent}18` : 'transparent' }}>
                 <Avatar fullName={comment.author?.fullName ?? '?'} avatarUrl={comment.author?.avatarUrl} size={32} />
                 <View className="flex-1">
                   <View className="flex-row items-center gap-2">
@@ -229,8 +268,8 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
                       </View>
                     </View>
                   ) : (
-                    <Text style={{ color: colors.secondaryText }} className="mt-0.5 text-sm leading-5">
-                      {comment.message}
+                    <Text style={{ color: colors.secondaryText }} className="mt-0.5 text-sm leading-5" accessibilityLabel={comment.message}>
+                      {renderMentions(comment.message, members, colors.accentInk)}
                     </Text>
                   )}
                   {isOwn && !isEditing && !isPending ? (
@@ -255,18 +294,33 @@ export function CommentsSection({ taskId, members, currentUserId, onError }: Pro
                 </View>
               </View>
             );
-          })}
-          {hasMore ? (
+          }}
+            ItemSeparatorComponent={() => <View className="h-3" />}
+            scrollEnabled
+            nestedScrollEnabled
+            style={{ maxHeight: 420 }}
+            onScrollToIndexFailed={handleScrollToIndexFailed}
+            ListFooterComponent={hasMore ? (
             <Pressable onPress={() => void load(page + 1)} className="items-center py-2">
               <Text style={{ color: colors.secondaryText }} className="text-xs font-semibold">
-                Load older comments
+                {loadingMore ? 'Loading older comments…' : 'Load older comments'}
               </Text>
             </Pressable>
-          ) : null}
+            ) : null}
+          />
         </View>
       )}
     </SectionCard>
   );
+}
+
+function renderMentions(message: string, members: TaskMember[], mentionColor: string) {
+  const names = new Set(members.filter((member) => member.status === 'accepted').map((member) => member.user.fullName));
+  return message.split(/(@[^\s@]+(?:\s[^\s@]+)?)/g).map((part, index) => {
+    const candidate = part.startsWith('@') ? part.slice(1) : '';
+    const isMention = candidate && [...names].some((name) => candidate === name || candidate.startsWith(`${name} `));
+    return isMention ? <Text key={`${part}-${index}`} style={{ color: mentionColor, fontWeight: '800' }}>{part}</Text> : part;
+  });
 }
 
 function formatTime(iso: string): string {

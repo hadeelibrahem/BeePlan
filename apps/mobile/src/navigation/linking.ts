@@ -17,6 +17,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       AiDailyPlanner: 'planner',
       Notes: 'notes',
       Analytics: 'analytics',
+      Settings: 'settings',
       ResetPassword: 'reset-password',
     },
   },

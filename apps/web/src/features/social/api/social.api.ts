@@ -38,11 +38,15 @@ export function getFriendRequests(accessToken: string): Promise<FriendRequest[]>
   return apiRequest('/friends/requests', accessToken) as Promise<FriendRequest[]>
 }
 
-export function sendFriendRequest(email: string, accessToken: string) {
+export function sendFriendRequest(username: string, accessToken: string) {
   return apiRequest('/friends/requests', accessToken, {
     method: 'POST',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ username }),
   })
+}
+
+export function searchFriendByUsername(username: string, accessToken: string): Promise<FriendSummary | null> {
+  return apiRequest(`/friends/search?username=${encodeURIComponent(username)}`, accessToken) as Promise<FriendSummary | null>
 }
 
 export function acceptFriendRequest(id: string, accessToken: string) {

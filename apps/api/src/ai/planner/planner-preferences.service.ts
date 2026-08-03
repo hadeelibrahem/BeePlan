@@ -171,7 +171,8 @@ function normalizeWindows(value: unknown): TimeWindow[] {
     const end = row.end;
     if (!isTime(start as string) || !isTime(end as string)) continue;
     if (toMinutes(end as string) <= toMinutes(start as string)) continue; // no midnight-crossing here
-    windows.push({ start: start as string, end: end as string });
+    const label = typeof row.label === 'string' ? row.label.slice(0, 80).trim() : undefined;
+    windows.push({ start: start as string, end: end as string, ...(label ? { label } : {}) });
   }
   return windows;
 }

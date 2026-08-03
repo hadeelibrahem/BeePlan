@@ -13,12 +13,14 @@ function initials(fullName: string): string {
 
 /** Round avatar: shows the photo when present, else colored initials. */
 export function FriendAvatar({ fullName, avatarUrl, size = 40 }: Props) {
+  const [imageFailed, setImageFailed] = useState(false)
   const dimension = { width: size, height: size }
-  if (avatarUrl) {
+  if (avatarUrl && !imageFailed) {
     return (
       <img
         src={avatarUrl}
         alt={fullName}
+        onError={() => setImageFailed(true)}
         style={dimension}
         className="shrink-0 rounded-full object-cover"
       />
@@ -34,3 +36,4 @@ export function FriendAvatar({ fullName, avatarUrl, size = 40 }: Props) {
     </div>
   )
 }
+import { useState } from 'react'

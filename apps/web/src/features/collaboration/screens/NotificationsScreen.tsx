@@ -1,309 +1,56 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Bell, CalendarDays, Check, CheckCheck, ChevronDown, Clock3, Ellipsis, Filter, MessageCircle, Search, Sparkles, Target, TriangleAlert, UserPlus } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  AppLayout,
-  PageHeader,
-  TopActionBar,
-  type SidebarNavHandlers,
-} from '../../../components/layout'
-import { GhostButton, OutlineButton, PrimaryButton } from '../../../components/layout/Buttons'
+import { AppLayout, GhostButton, OutlineButton, PageHeader, PrimaryButton, TopActionBar, type SidebarNavHandlers } from '../../../components/layout'
 import { FriendAvatar } from '../../social/components/FriendAvatar'
 import { useLanguage } from '../../../i18n/LanguageContext'
 import { useTheme } from '../../../theme/ThemeContext'
 import { queryKeys } from '../../../lib/queryKeys'
-import {
-  acceptInvite,
-  declineInvite,
-  getMyInvitations,
-  getNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
-} from '../api/collaboration.api'
+import { acceptInvite, declineInvite, getMyInvitations, getNotifications, markAllNotificationsRead, markNotificationRead } from '../api/collaboration.api'
 import { friendlyError } from '../errorMessages'
-import { NOTIFICATION_ICON } from '../notificationMeta'
 import { notificationTarget } from '../notificationRoutes'
 import { Toast } from '../components/Toast'
 import type { AppNotification, TaskInvitation } from '../types'
 
-type Props = SidebarNavHandlers & {
-  accessToken: string
-  onOpenNotification: (notification: AppNotification, target: string) => void
-  onSignOut: () => void
-}
+type Props = SidebarNavHandlers & { accessToken: string; onOpenNotification: (notification: AppNotification, target: string) => void; onSignOut: () => void }
+type Filter = 'all' | 'unread' | 'ai' | 'collaboration' | 'reminders' | 'calendar' | 'focus' | 'system'
+const FILTERS: { value: Filter; label: string }[] = [{ value: 'all', label: 'All' }, { value: 'unread', label: 'Unread' }, { value: 'ai', label: 'AI Planner' }, { value: 'collaboration', label: 'Collaboration' }, { value: 'reminders', label: 'Reminders' }, { value: 'calendar', label: 'Calendar' }, { value: 'focus', label: 'Focus' }, { value: 'system', label: 'System' }]
+const AI_TYPES = new Set(['ai_plan_applied', 'ai_recommendation_ready', 'deadline_risk', 'workload_warning', 'planner_suggestion'])
+const COLLAB_TYPES = new Set(['task_invite', 'invite_accepted', 'invite_declined', 'member_joined', 'member_removed', 'member_role_changed', 'ownership_transferred', 'comment_added', 'mention'])
+const CALENDAR_TYPES = new Set(['due_date_changed', 'calendar_event_created', 'calendar_event_updated', 'calendar_event_cancelled', 'calendar_conflict', 'schedule_changed', 'deadline_changed'])
+const FOCUS_TYPES = new Set(['focus_session_scheduled', 'focus_session_completed', 'focus_session_cancelled', 'focus_reminder', 'focus_session_missed'])
+const SYSTEM_TYPES = new Set(['weather_travel', 'attachment_added'])
 
 export function NotificationsScreen({ accessToken, onOpenNotification, onSignOut, ...nav }: Props) {
-  const { t, toggleLanguage } = useLanguage()
-  const { mode, toggleTheme } = useTheme()
-  const queryClient = useQueryClient()
-
-  const [invitations, setInvitations] = useState<TaskInvitation[] | null>(null)
-  const [notifications, setNotifications] = useState<AppNotification[] | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [page, setPage] = useState(1)
-  const [busyInvite, setBusyInvite] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [notice, setNotice] = useState('')
-  const [error, setError] = useState('')
-  const [loadError, setLoadError] = useState(false)
-
-  const load = useCallback(async () => {
-    setLoadError(false)
-    try {
-      const [invites, notifs] = await Promise.all([
-        getMyInvitations(accessToken),
-        getNotifications(accessToken, 1, 20),
-      ])
-      setInvitations(invites)
-      setNotifications(notifs.items)
-      setHasMore(notifs.hasMore)
-      setPage(1)
-    } catch {
-      setLoadError(true)
-    }
-  }, [accessToken])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  async function respond(invite: TaskInvitation, action: 'accept' | 'decline') {
-    setBusyInvite(invite.id)
-    setError('')
-    // Optimistic removal from the list.
-    const snapshot = invitations ?? []
-    setInvitations((prev) => (prev ?? []).filter((i) => i.id !== invite.id))
-    try {
-      if (action === 'accept') {
-        await acceptInvite(invite.taskId, accessToken)
-        setNotice(`You joined "${invite.taskTitle}".`)
-        // The task is now visible to this user everywhere — refresh the cached
-        // task lists and the shared-id set so it appears immediately.
-        void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all })
-      } else {
-        await declineInvite(invite.taskId, accessToken)
-        setNotice('Invitation declined.')
-      }
-    } catch (err) {
-      setInvitations(snapshot) // rollback
-      setError(friendlyError(err, 'Could not respond to the invitation.'))
-    } finally {
-      setBusyInvite(null)
-    }
-  }
-
-  async function openNotification(notification: AppNotification) {
-    if (!notification.isRead) {
-      setNotifications((prev) =>
-        (prev ?? []).map((n) => (n.id === notification.id ? { ...n, isRead: true } : n)),
-      )
-      void markNotificationRead(notification.id, accessToken).catch(() => undefined)
-    }
-    const target = notificationTarget(notification)
-    if (target) onOpenNotification(notification, target)
-  }
-
-  async function loadMore() {
-    try {
-      const next = await getNotifications(accessToken, page + 1, 20)
-      setNotifications((prev) => [...(prev ?? []), ...next.items])
-      setHasMore(next.hasMore)
-      setPage((p) => p + 1)
-    } catch (err) {
-      setError(friendlyError(err))
-    }
-  }
-
-  async function markAll() {
-    setNotifications((prev) => (prev ?? []).map((n) => ({ ...n, isRead: true })))
-    try {
-      await markAllNotificationsRead(accessToken)
-    } catch (err) {
-      setError(friendlyError(err))
-    }
-  }
-
+  const { t, toggleLanguage } = useLanguage(); const { mode, toggleTheme } = useTheme(); const queryClient = useQueryClient()
+  const [invitations, setInvitations] = useState<TaskInvitation[] | null>(null); const [notifications, setNotifications] = useState<AppNotification[] | null>(null); const [hasMore, setHasMore] = useState(false); const [page, setPage] = useState(1); const [busyInvite, setBusyInvite] = useState<string | null>(null)
+  const [search, setSearch] = useState(''); const [filter, setFilter] = useState<Filter>(() => (localStorage.getItem('beeplan:notification-filter') as Filter) || 'all'); const [menuId, setMenuId] = useState<string | null>(null); const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set()); const [notice, setNotice] = useState(''); const [error, setError] = useState(''); const [loadError, setLoadError] = useState(false)
+  useEffect(() => { localStorage.setItem('beeplan:notification-filter', filter) }, [filter])
+  const load = useCallback(async () => { setLoadError(false); try { const [invites, notifs] = await Promise.all([getMyInvitations(accessToken), getNotifications(accessToken, 1, 20)]); setInvitations(invites); setNotifications(notifs.items); setHasMore(notifs.hasMore); setPage(1) } catch { setLoadError(true) } }, [accessToken])
+  useEffect(() => { void load() }, [load])
+  async function respond(invite: TaskInvitation, action: 'accept' | 'decline') { setBusyInvite(invite.id); setError(''); const snapshot = invitations ?? []; setInvitations((prev) => (prev ?? []).filter((i) => i.id !== invite.id)); try { if (action === 'accept') { await acceptInvite(invite.taskId, accessToken); setNotice(`You joined "${invite.taskTitle}".`); void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }) } else { await declineInvite(invite.taskId, accessToken); setNotice('Invitation declined.') } } catch (err) { setInvitations(snapshot); setError(friendlyError(err, 'Could not respond to the invitation.')) } finally { setBusyInvite(null) } }
+  async function openNotification(notification: AppNotification) { if (!notification.isRead) { setNotifications((prev) => (prev ?? []).map((n) => n.id === notification.id ? { ...n, isRead: true } : n)); void markNotificationRead(notification.id, accessToken).catch(() => undefined) } const target = notificationTarget(notification); if (target) onOpenNotification(notification, target) }
+  async function loadMore() { try { const next = await getNotifications(accessToken, page + 1, 20); setNotifications((prev) => [...(prev ?? []), ...next.items]); setHasMore(next.hasMore); setPage((p) => p + 1) } catch (err) { setError(friendlyError(err)) } }
+  async function markAll() { setNotifications((prev) => (prev ?? []).map((n) => ({ ...n, isRead: true }))); try { await markAllNotificationsRead(accessToken) } catch (err) { setError(friendlyError(err)) } }
+  function markUnread(id: string) { setNotifications((prev) => (prev ?? []).map((n) => n.id === id ? { ...n, isRead: false } : n)); setMenuId(null) }
   const unread = (notifications ?? []).filter((n) => !n.isRead).length
-  const visibleNotifications = (notifications ?? []).filter((n) => {
-    const q = search.trim().toLowerCase()
-    return !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q)
-  })
-
-  return (
-    <AppLayout
-      active="notifications"
-      panelTitle="Notifications"
-      panelCaption={unread ? `${unread} unread` : 'All caught up'}
-      panelPercent={unread ? 100 : 0}
-      {...nav}
-    >
-      <PageHeader
-        title="Notifications"
-        subtitle="Invitations, mentions, comments and task updates."
-        toolbar={
-          <TopActionBar pageOnly
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search notifications"
-            themeMode={mode}
-            onToggleTheme={toggleTheme}
-            languageLabel={t('common.languageToggle')}
-            onToggleLanguage={toggleLanguage}
-            onOpenNotifications={nav.onNavigateNotifications}
-            onSignOut={onSignOut}
-          />
-        }
-      />
-
-      {loadError ? (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-4 text-center">
-          <p className="text-sm font-semibold text-red-300">Couldn’t load notifications.</p>
-          <GhostButton size="sm" className="mt-2" onClick={() => void load()}>
-            Retry
-          </GhostButton>
-        </div>
-      ) : (
-        <div className="mx-auto max-w-2xl space-y-6">
-          {/* Invitations */}
-          <section aria-label="Pending invitations">
-            <h2 className="mb-2 text-sm font-black">Invitations</h2>
-            {invitations === null ? (
-              <SkeletonList rows={1} />
-            ) : invitations.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[var(--bp-border)] px-4 py-6 text-center text-sm text-[var(--bp-muted)]">
-                No pending invitations.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {invitations.map((invite) => (
-                  <li
-                    key={invite.id}
-                    className="flex flex-col gap-3 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 sm:flex-row sm:items-center"
-                    style={{ animation: 'bpToastIn 220ms ease-out' }}
-                  >
-                    <FriendAvatar
-                      fullName={invite.invitedBy?.fullName ?? 'Someone'}
-                      avatarUrl={invite.invitedBy?.avatarUrl}
-                      size={42}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-[var(--bp-text)]">
-                        <span className="font-black">{invite.invitedBy?.fullName ?? 'Someone'}</span>{' '}
-                        invited you to collaborate on{' '}
-                        <span className="font-black">"{invite.taskTitle}"</span>
-                      </p>
-                      <p className="text-xs text-[var(--bp-muted)]">
-                        as {invite.role} · {formatTime(invite.invitedAt)}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <PrimaryButton
-                        size="sm"
-                        loading={busyInvite === invite.id}
-                        onClick={() => void respond(invite, 'accept')}
-                      >
-                        Accept
-                      </PrimaryButton>
-                      <OutlineButton
-                        size="sm"
-                        disabled={busyInvite === invite.id}
-                        onClick={() => void respond(invite, 'decline')}
-                      >
-                        Decline
-                      </OutlineButton>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Notifications */}
-          <section aria-label="Notifications">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-black">
-                Recent{unread ? <span className="text-[var(--bp-accent-ink)]"> · {unread} new</span> : null}
-              </h2>
-              {unread ? (
-                <GhostButton size="sm" onClick={() => void markAll()}>
-                  Mark all read
-                </GhostButton>
-              ) : null}
-            </div>
-
-            {notifications === null ? (
-              <SkeletonList rows={4} />
-            ) : visibleNotifications.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[var(--bp-border)] px-4 py-8 text-center text-sm text-[var(--bp-muted)]">
-                {notifications.length === 0 ? 'Nothing here yet.' : 'No matching notifications.'}
-              </p>
-            ) : (
-              <ul className="space-y-1.5">
-                {visibleNotifications.map((notification) => (
-                  <li key={notification.id}>
-                    <button
-                      type="button"
-                      onClick={() => void openNotification(notification)}
-                      className={`flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition hover:border-[var(--bp-accent)]/40 ${
-                        notification.isRead
-                          ? 'border-[var(--bp-border)] bg-[var(--bp-surface)]'
-                          : 'border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/5'
-                      }`}
-                    >
-                      <span className="mt-0.5 text-lg" aria-hidden>
-                        {NOTIFICATION_ICON[notification.type] ?? '🔔'}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-bold text-[var(--bp-text)]">
-                          {notification.title}
-                        </span>
-                        <span className="block truncate text-xs text-[var(--bp-muted)]">{notification.body}</span>
-                        <span className="block text-[10px] text-[var(--bp-muted)]">
-                          {formatTime(notification.sentAt)}
-                        </span>
-                      </span>
-                      {!notification.isRead ? (
-                        <span
-                          className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--bp-accent)]"
-                          aria-label="Unread"
-                        />
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-                {hasMore ? (
-                  <GhostButton size="sm" className="w-full" onClick={() => void loadMore()}>
-                    Load more
-                  </GhostButton>
-                ) : null}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
-
-      <Toast message={notice} tone="success" onDone={() => setNotice('')} />
-      <Toast message={error} tone="error" onDone={() => setError('')} />
-    </AppLayout>
-  )
+  const visible = useMemo(() => (notifications ?? []).filter((n) => { const q = search.trim().toLowerCase(); const textMatch = !q || `${n.title} ${n.body}`.toLowerCase().includes(q); const category = filter === 'all' || (filter === 'unread' && !n.isRead) || (filter === 'ai' && AI_TYPES.has(n.type)) || (filter === 'collaboration' && COLLAB_TYPES.has(n.type)) || (filter === 'reminders' && (n.type === 'reminder' || n.type === 'task_overdue')) || (filter === 'calendar' && CALENDAR_TYPES.has(n.type)) || (filter === 'focus' && FOCUS_TYPES.has(n.type)) || (filter === 'system' && SYSTEM_TYPES.has(n.type)); return !dismissedIds.has(n.id) && textMatch && category }), [dismissedIds, filter, notifications, search])
+  const groups = useMemo(() => groupByDate(visible), [visible])
+  return <AppLayout active="notifications" panelTitle="Notifications" panelCaption={unread ? `${unread} unread` : 'All caught up'} panelPercent={unread ? 100 : 0} {...nav}>
+    <PageHeader title="Notifications" subtitle="One place for reminders, collaboration, AI suggestions, and updates." toolbar={<TopActionBar pageOnly themeMode={mode} onToggleTheme={toggleTheme} languageLabel={t('common.languageToggle')} onToggleLanguage={toggleLanguage} onOpenNotifications={nav.onNavigateNotifications} onSignOut={onSignOut} />} pageActions={<div className="flex w-full flex-wrap items-center gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-2 shadow-sm"><label className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--bp-muted)]" size={16} aria-hidden /><span className="sr-only">Search notifications</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search notifications" className="w-full rounded-xl border border-transparent bg-[var(--bp-input)] py-2 pl-9 pr-3 text-sm text-[var(--bp-text)] placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]" /></label><label className="relative"><Filter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--bp-muted)]" size={15} aria-hidden /><span className="sr-only">Filter notifications</span><select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="appearance-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] py-2 pl-9 pr-9 text-sm text-[var(--bp-text)]">{FILTERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--bp-muted)]" size={15} aria-hidden /></label><GhostButton size="sm" disabled={!unread} onClick={() => void markAll()}><CheckCheck size={15} aria-hidden /> Mark all as read</GhostButton></div>} />
+    {loadError ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-4 text-center"><p className="text-sm font-semibold text-red-300">Couldn't load notifications.</p><GhostButton size="sm" className="mt-2" onClick={() => void load()}>Retry</GhostButton></div> : <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_260px]"><div className="min-w-0"><Invitations invitations={invitations} busyInvite={busyInvite} onRespond={respond} /><section aria-label="Notifications"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-base font-black">Activity</h2><p className="text-xs text-[var(--bp-muted)]">{visible.length} notification{visible.length === 1 ? '' : 's'}</p></div></div>{notifications === null ? <SkeletonList rows={4} /> : visible.length === 0 ? <EmptyNotifications filtered={Boolean(search || filter !== 'all')} /> : <div className="space-y-7">{groups.map((group) => <section key={group.label} aria-labelledby={`notifications-${group.label}`}><h3 id={`notifications-${group.label}`} className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--bp-muted)]"><span>{group.label}</span><span className="h-px flex-1 bg-[var(--bp-border)]" /></h3><div className="space-y-2">{group.items.map((notification) => <NotificationCard key={notification.id} notification={notification} menuOpen={menuId === notification.id} onMenu={() => setMenuId(menuId === notification.id ? null : notification.id)} onOpen={() => void openNotification(notification)} onMarkUnread={() => markUnread(notification.id)} onDismiss={(kind) => { setDismissedIds((prev) => new Set(prev).add(notification.id)); setMenuId(null); setNotice(kind === 'archive' ? 'Notification archived.' : 'Notification deleted.') }} />)}</div></section>)}</div>}{hasMore && <GhostButton size="sm" className="mt-4 w-full" onClick={() => void loadMore()}>Load more notifications</GhostButton>}</section></div><aside className="hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 lg:block"><p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--bp-muted)]">Inbox overview</p><p className="mt-4 text-3xl font-black">{unread}</p><p className="text-sm text-[var(--bp-muted)]">unread notification{unread === 1 ? '' : 's'}</p><div className="mt-5 space-y-3 border-t border-[var(--bp-border)] pt-4 text-xs text-[var(--bp-muted)]"><p className="flex items-center gap-2"><Check size={14} className="text-[var(--bp-success)]" /> Read items stay out of the way</p><p className="flex items-center gap-2"><Sparkles size={14} className="text-[var(--bp-accent-ink)]" /> AI suggestions are highlighted</p></div></aside></div>}
+    <Toast message={notice} tone="success" onDone={() => setNotice('')} /><Toast message={error} tone="error" onDone={() => setError('')} />
+  </AppLayout>
 }
 
-function SkeletonList({ rows }: { rows: number }) {
-  return (
-    <div className="space-y-2" aria-hidden>
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-16 animate-pulse rounded-xl bg-[var(--bp-border)]/40" />
-      ))}
-    </div>
-  )
-}
+function Invitations({ invitations, busyInvite, onRespond }: { invitations: TaskInvitation[] | null; busyInvite: string | null; onRespond: (invite: TaskInvitation, action: 'accept' | 'decline') => void }) { return <section aria-label="Pending invitations" className="mb-7"><h2 className="mb-2 text-base font-black">Invitations</h2>{invitations === null ? <SkeletonList rows={1} /> : invitations.length === 0 ? <div className="flex items-center gap-2 rounded-xl border border-dashed border-[var(--bp-border)] px-3 py-2.5 text-sm text-[var(--bp-muted)]"><Check size={15} className="text-[var(--bp-success)]" aria-hidden /> No pending invitations.</div> : <ul className="space-y-2">{invitations.map((invite) => <li key={invite.id} className="flex flex-col gap-3 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 sm:flex-row sm:items-center"><FriendAvatar fullName={invite.invitedBy?.fullName ?? 'Someone'} avatarUrl={invite.invitedBy?.avatarUrl} size={40} /><div className="min-w-0 flex-1"><p className="text-sm"><span className="font-black">{invite.invitedBy?.fullName ?? 'Someone'}</span> invited you to collaborate on <span className="font-black">"{invite.taskTitle}"</span></p><p className="text-xs text-[var(--bp-muted)]">as {invite.role} · {formatRelativeTime(invite.invitedAt)}</p></div><div className="flex gap-2"><PrimaryButton size="sm" loading={busyInvite === invite.id} onClick={() => onRespond(invite, 'accept')}>Accept</PrimaryButton><OutlineButton size="sm" disabled={busyInvite === invite.id} onClick={() => onRespond(invite, 'decline')}>Decline</OutlineButton></div></li>)}</ul>}</section> }
 
-function formatTime(iso: string): string {
-  const date = new Date(iso)
-  const diff = Date.now() - date.getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
+function NotificationCard({ notification, menuOpen, onMenu, onOpen, onMarkUnread, onDismiss }: { notification: AppNotification; menuOpen: boolean; onMenu: () => void; onOpen: () => void; onMarkUnread: () => void; onDismiss: (kind: 'archive' | 'delete') => void }) { const ai = AI_TYPES.has(notification.type); const Icon = iconFor(notification.type); const action = actionFor(notification.type); return <article className={`group relative rounded-2xl border px-4 py-3 transition-colors hover:border-[var(--bp-accent)]/35 ${notification.isRead ? 'border-[var(--bp-border)] bg-[var(--bp-surface)]' : 'border-[var(--bp-accent)]/35 bg-[var(--bp-accent-soft)]'}`}><div className="flex items-start gap-3"><button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 text-left"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--bp-surface-elevated)] text-[var(--bp-accent-ink)]" aria-hidden><Icon size={17} /></span><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className={`text-sm ${notification.isRead ? 'font-semibold' : 'font-black'}`}>{notification.title}</span>{ai && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bp-accent-soft)] px-2 py-0.5 text-[10px] font-black text-[var(--bp-accent-ink)]"><Sparkles size={10} aria-hidden /> AI</span>}</span><span className="mt-1 block text-xs leading-5 text-[var(--bp-muted)]">{notification.body}</span><span className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--bp-muted)]"><Clock3 size={12} aria-hidden /> {formatRelativeTime(notification.sentAt)}</span></span></button><div className="flex shrink-0 items-start gap-2"><StatusBadge notification={notification} /><button type="button" aria-label={`More actions for ${notification.title}`} aria-expanded={menuOpen} onClick={onMenu} className="rounded-lg p-1.5 text-[var(--bp-muted)] opacity-60 transition hover:bg-[var(--bp-border)] hover:text-[var(--bp-text)] sm:opacity-0 sm:group-hover:opacity-100"><Ellipsis size={17} /></button></div></div>{action && <div className="mt-3 flex gap-2 pl-12"><button type="button" onClick={onOpen} className="rounded-lg border border-[var(--bp-border)] px-2.5 py-1 text-xs font-bold text-[var(--bp-text)] hover:border-[var(--bp-accent)]/60">{action}</button>{ai && <button type="button" onClick={onOpen} className="rounded-lg bg-[var(--bp-accent)] px-2.5 py-1 text-xs font-black text-[var(--bp-brand-dark)]">Apply</button>}</div>}{menuOpen && <div role="menu" className="absolute right-3 top-11 z-10 w-44 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] p-1 shadow-xl"><button role="menuitem" type="button" onClick={onMarkUnread} className="menu-item">Mark as unread</button><button role="menuitem" type="button" onClick={() => onDismiss('archive')} className="menu-item">Archive</button><button role="menuitem" type="button" onClick={() => onDismiss('delete')} className="menu-item">Delete</button><button role="menuitem" type="button" onClick={onOpen} className="menu-item">View details</button></div>}</article> }
+function StatusBadge({ notification }: { notification: AppNotification }) { const label = !notification.isRead ? 'Unread' : notification.type === 'task_completed' ? 'Completed' : notification.type === 'priority_changed' ? 'Warning' : 'Read'; return <span className={`rounded-full px-2 py-1 text-[10px] font-black ${!notification.isRead ? 'bg-[var(--bp-accent)] text-[var(--bp-brand-dark)]' : label === 'Warning' ? 'bg-orange-400/15 text-orange-300' : label === 'Completed' ? 'bg-green-400/15 text-green-300' : 'bg-[var(--bp-border)] text-[var(--bp-muted)]'}`}>{label}</span> }
+function EmptyNotifications({ filtered }: { filtered: boolean }) { return <div className="rounded-2xl border border-dashed border-[var(--bp-border)] px-5 py-12 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]"><Bell size={25} aria-hidden /></div><h3 className="mt-4 text-lg font-black">{filtered ? 'No matching notifications.' : "You're all caught up."}</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--bp-muted)]">{filtered ? 'Try another search or filter.' : 'BeePlan will notify you about reminders, collaboration, AI suggestions, and important updates.'}</p></div> }
+function SkeletonList({ rows }: { rows: number }) { return <div className="space-y-2" aria-hidden>{Array.from({ length: rows }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-[var(--bp-border)]/40" />)}</div> }
+function iconFor(type: string) { if (type === 'reminder') return Clock3; if (type === 'task_invite' || type.startsWith('member_')) return UserPlus; if (type === 'comment_added' || type === 'mention') return MessageCircle; if (type === 'due_date_changed') return CalendarDays; if (type === 'priority_changed') return TriangleAlert; if (AI_TYPES.has(type)) return Sparkles; return Target }
+function actionFor(type: string) { if (AI_TYPES.has(type)) return 'View'; if (type === 'reminder') return 'Open'; if (type === 'task_updated' || type === 'task_completed') return 'View task'; return null }
+function groupByDate(items: AppNotification[]) { const groups: { label: string; items: AppNotification[] }[] = []; for (const item of items) { const label = dateGroup(item.sentAt); const existing = groups.find((g) => g.label === label); if (existing) existing.items.push(item); else groups.push({ label, items: [item] }) } return groups }
+function dateGroup(iso: string) { const date = new Date(iso); const now = new Date(); const day = 86400000; const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); const diff = start - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(); if (diff <= 0) return 'Today'; if (diff <= day) return 'Yesterday'; if (diff < day * 7) return 'This Week'; return 'Earlier' }
+function formatRelativeTime(iso: string) { const diff = Math.max(0, Date.now() - new Date(iso).getTime()); const mins = Math.floor(diff / 60000); if (mins < 1) return 'Just now'; if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`; const hours = Math.floor(mins / 60); if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`; const days = Math.floor(hours / 24); if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`; return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }

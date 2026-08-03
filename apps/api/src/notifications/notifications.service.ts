@@ -1,9 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
-import { notifications, users } from '../db/schema';
+import { notificationDeliveries, notifications, personalTaskPreferences, userNotificationPreferences, users } from '../db/schema';
 import type { NotificationQueryDto } from './dto/notification-query.dto';
 import type { NotificationType } from './notification-types';
+import { getNotificationCategory, isPreferenceBypass } from './notification-category';
+import type { NotificationPreferences } from './notification-preferences.types';
+import { PushNotificationsService } from './push-notifications.service';
+import type { PushPriority } from './push-eligibility';
 
 type NotificationRow = typeof notifications.$inferSelect;
 
@@ -14,14 +18,27 @@ export type CreateNotificationInput = {
   body: string;
   taskId?: string | null;
   actorId?: string | null;
+  priority?: PushPriority;
   data?: Record<string, unknown> | null;
+};
+
+export type NotificationCreateResult = { inserted: number; skipped: number };
+
+export type NotificationDeliveryIdentity = {
+  entityType: string;
+  entityId: string;
+  triggerAt: Date;
+  key?: string;
 };
 
 const DEFAULT_PAGE_SIZE = 20;
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(private readonly databaseService: DatabaseService, @Optional() private readonly pushNotifications?: PushNotificationsService) {}
+
+  private readonly preferenceCache = new Map<string, { value: NotificationPreferences; expiresAt: number }>();
+  private readonly muteCache = new Map<string, { value: boolean; expiresAt: number }>();
 
   private get db() {
     return this.databaseService.db;
@@ -36,7 +53,7 @@ export class NotificationsService {
   async createMany(
     inputs: CreateNotificationInput[],
     excludeUserId?: string,
-  ): Promise<void> {
+  ): Promise<NotificationCreateResult> {
     const seen = new Set<string>();
     const rows = inputs
       .filter((input) => {
@@ -55,15 +72,93 @@ export class NotificationsService {
         body: input.body,
         taskId: input.taskId ?? null,
         actorId: input.actorId ?? null,
-        data: input.data ?? null,
+        data: input.priority ? { ...(input.data ?? {}), priority: input.priority } : input.data ?? null,
       }));
 
-    if (!rows.length) return;
-    await this.db.insert(notifications).values(rows);
+    if (!rows.length) return { inserted: 0, skipped: 0 };
+    const allowed = [] as typeof rows;
+    let skipped = 0;
+    for (const row of rows) {
+      const type = row.notificationType as NotificationType;
+      if (!(await this.isAllowed(row.userId, type, row.taskId))) { skipped += 1; continue; }
+      allowed.push(row);
+    }
+    if (!allowed.length) return { inserted: 0, skipped };
+    const inserted = await this.db.insert(notifications).values(allowed).returning({ id: notifications.id });
+    for (let index = 0; index < inserted.length; index += 1) {
+      const input = allowed[index];
+      if (input) void this.pushNotifications?.enqueueForNotification(inserted[index].id, {
+        userId: input.userId,
+        type: input.notificationType as NotificationType,
+        title: input.title,
+        body: input.body,
+        taskId: input.taskId,
+        actorId: input.actorId,
+        data: input.data as Record<string, unknown> | null,
+      }).catch(() => undefined);
+    }
+    return { inserted: inserted.length, skipped };
   }
 
-  async create(input: CreateNotificationInput): Promise<void> {
-    await this.createMany([input]);
+  async create(input: CreateNotificationInput): Promise<NotificationCreateResult> {
+    return this.createMany([input]);
+  }
+
+  /**
+   * Insert a notification once for a durable domain event. The delivery row is
+   * claimed with a unique constraint, so retries and multiple worker instances
+   * converge on one inbox notification.
+   */
+  async createOnce(
+    input: CreateNotificationInput,
+    identity: NotificationDeliveryIdentity,
+  ): Promise<NotificationCreateResult> {
+    if (!(await this.isAllowed(input.userId, input.type, input.taskId))) {
+      return { inserted: 0, skipped: 1 };
+    }
+    const deliveryKey = identity.key ?? [input.userId, input.type, identity.entityType, identity.entityId, identity.triggerAt.toISOString()].join(':');
+    const [claimed] = await this.db.insert(notificationDeliveries).values({
+      userId: input.userId,
+      notificationType: input.type,
+      entityType: identity.entityType,
+      entityId: identity.entityId,
+      triggerAt: identity.triggerAt,
+      deliveryKey,
+    }).onConflictDoNothing({ target: notificationDeliveries.deliveryKey }).returning({ id: notificationDeliveries.id });
+    if (!claimed) return { inserted: 0, skipped: 1 };
+    return this.create(input);
+  }
+
+  private async isAllowed(userId: string, type: NotificationType, taskId?: string | null) {
+    if (isPreferenceBypass(type)) return true;
+    const preferences = await this.getOrCreatePreferences(userId);
+    const category = getNotificationCategory(type);
+    const enabled = category === 'task' ? preferences.taskNotifications : category === 'calendar' ? preferences.calendarNotifications : category === 'focus' ? preferences.focusNotifications : category === 'collaboration' ? preferences.collaborationNotifications : preferences.aiNotifications;
+    return enabled && !(category === 'collaboration' && taskId && await this.isTaskMuted(userId, taskId));
+  }
+
+  async getOrCreatePreferences(userId: string): Promise<NotificationPreferences> {
+    const cached = this.preferenceCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    let [row] = await this.db.select().from(userNotificationPreferences).where(eq(userNotificationPreferences.userId, userId)).limit(1);
+    if (!row) [row] = await this.db.insert(userNotificationPreferences).values({ userId }).onConflictDoNothing({ target: userNotificationPreferences.userId }).returning();
+    if (!row) [row] = await this.db.select().from(userNotificationPreferences).where(eq(userNotificationPreferences.userId, userId)).limit(1);
+    if (!row) throw new Error('Unable to initialize notification preferences.');
+    this.preferenceCache.set(userId, { value: row, expiresAt: Date.now() + 30_000 });
+    return row;
+  }
+
+  async updatePreferences(userId: string, patch: Partial<Pick<NotificationPreferences, 'taskNotifications' | 'calendarNotifications' | 'focusNotifications' | 'collaborationNotifications' | 'aiNotifications' | 'emailNotifications' | 'pushNotifications'>>) {
+    await this.getOrCreatePreferences(userId);
+    const [row] = await this.db.update(userNotificationPreferences).set({ ...patch, updatedAt: new Date() }).where(eq(userNotificationPreferences.userId, userId)).returning();
+    this.preferenceCache.delete(userId);
+    return row;
+  }
+
+  private async isTaskMuted(userId: string, taskId: string) {
+    const key = `${userId}:${taskId}`; const cached = this.muteCache.get(key); if (cached && cached.expiresAt > Date.now()) return cached.value;
+    const [row] = await this.db.select({ muted: personalTaskPreferences.notificationsMuted }).from(personalTaskPreferences).where(and(eq(personalTaskPreferences.userId, userId), eq(personalTaskPreferences.taskId, taskId))).limit(1);
+    const value = row?.muted ?? false; this.muteCache.set(key, { value, expiresAt: Date.now() + 30_000 }); return value;
   }
 
   async list(userId: string, query?: NotificationQueryDto) {

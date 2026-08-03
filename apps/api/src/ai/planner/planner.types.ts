@@ -38,7 +38,7 @@ export interface DurationEstimate {
 }
 
 /** A simple HH:mm..HH:mm window used for sleep/lunch/unavailable time. */
-export type TimeWindow = { start: string; end: string };
+export type TimeWindow = { start: string; end: string; label?: string };
 
 /**
  * Top-level bucket for a task that did not make it onto today's timeline.

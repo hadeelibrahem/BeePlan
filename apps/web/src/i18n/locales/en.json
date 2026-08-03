@@ -351,7 +351,7 @@
   },
   "people": {
     "title": "People",
-    "subtitle": "Friends and location-sharing permissions.",
+      "subtitle": "Manage your friends and location-sharing permissions.",
     "searchPlaceholder": "Search friends",
     "panelTitle": "Stay in touch",
     "panelCaption": "{{count}} friends connected.",

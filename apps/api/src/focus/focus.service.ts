@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { and, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { TaskAccessService } from '../collaboration/task-access.service';
@@ -16,6 +17,8 @@ import {
   tasks,
 } from '../db/schema';
 import { TasksService } from '../tasks/tasks.service';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { isSubtaskOwnedByUser } from '../tasks/subtask-ownership';
 import {
   selectFocusSubtask,
@@ -92,6 +95,8 @@ export class FocusService {
     private readonly databaseService: DatabaseService,
     private readonly tasksService: TasksService,
     private readonly taskAccess: TaskAccessService,
+    @Optional() private readonly googleCalendar?: GoogleCalendarService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   private get db() {
@@ -163,6 +168,7 @@ export class FocusService {
       })
       .returning();
 
+    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', row.id);
     return this.toEntity(row, taskTitle, subtaskTitle);
   }
 
@@ -236,6 +242,8 @@ export class FocusService {
       await this.tasksService.recomputeTaskSpentTime(session.taskId);
     }
 
+    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', updated.id);
+    await this.notifications?.createOnce({ userId, type: 'focus_session_completed', taskId: updated.taskId, title: 'Focus session completed', body: 'You completed a focus session.', data: { entityType: 'focus_session', entityId: updated.id, route: '/focus', event: 'completed' } }, { entityType: 'focus_session_completed', entityId: updated.id, triggerAt: updated.endedAt ?? new Date(), key: `focus_completed:${userId}:${updated.id}` });
     return {
       session: this.toEntity(updated, taskTitle, subtaskTitle),
       taskUpdated,
@@ -286,6 +294,9 @@ export class FocusService {
       await this.tasksService.recomputeTaskSpentTime(session.taskId);
     }
 
+    await this.notifications?.createOnce({ userId, type: 'focus_session_cancelled', taskId: updated.taskId, title: 'Focus session interrupted', body: 'Your focus session was interrupted.', data: { entityType: 'focus_session', entityId: updated.id, route: '/focus', event: 'cancelled' } }, { entityType: 'focus_session_cancelled', entityId: updated.id, triggerAt: updated.endedAt ?? new Date(), key: `focus_cancelled:${userId}:${updated.id}` });
+    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', updated.id);
+    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', updated.id);
     return this.toEntity(updated, taskTitle, subtaskTitle);
   }
 

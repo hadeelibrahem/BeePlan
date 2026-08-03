@@ -24,3 +24,12 @@ test('read and mark-all state updates the shared unread badge', () => {
   assert.match(notificationsSource, /onUnreadCountChange\?\.\(unread\)/)
   assert.match(appSource, /onUnreadCountChange=\{setUnreadNotificationCount\}/)
 })
+
+test('notification cold-start handler keeps route and fallback branches', () => {
+  assert.match(appSource, /getLastNotificationResponseAsync/)
+  assert.match(appSource, /navigate\('Notifications'\)/)
+  assert.match(appSource, /navigate\('Calendar'\)/)
+  assert.match(appSource, /navigate\('MainTabs', \{ screen: 'Focus' \}\)/)
+  assert.match(appSource, /handledPushKeys/)
+  assert.match(appSource, /commentId/)
+})

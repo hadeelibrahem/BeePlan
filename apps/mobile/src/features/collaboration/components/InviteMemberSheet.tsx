@@ -46,7 +46,7 @@ export function InviteMemberSheet({ visible, taskId, existingMemberIds, onClose,
     const q = search.trim().toLowerCase();
     return friends
       .filter((f) => !existing.has(f.userId))
-      .filter((f) => !q || f.fullName.toLowerCase().includes(q) || f.email.toLowerCase().includes(q));
+       .filter((f) => !q || f.fullName.toLowerCase().includes(q) || f.username.toLowerCase().includes(q));
   }, [friends, search, existing]);
 
   async function submit() {
@@ -120,7 +120,7 @@ export function InviteMemberSheet({ visible, taskId, existingMemberIds, onClose,
                           {friend.fullName}
                         </Text>
                         <Text style={{ color: colors.secondaryText }} className="text-xs" numberOfLines={1}>
-                          {friend.email}
+                          @{friend.username}
                         </Text>
                       </View>
                     </Pressable>

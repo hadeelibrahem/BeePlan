@@ -3,12 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gte, lte } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import {
   recurringCommitments,
   savedLocations,
   skippedCommitmentOccurrences,
+  googleCalendarEvents,
 } from '../db/schema';
 import type {
   CreateRecurringCommitmentDto,
@@ -190,7 +191,12 @@ export class RecurringCommitmentsService {
         ),
     ]);
     const skippedIds = new Set(skipped.map((row) => row.commitmentId));
-    return commitmentsToBusyWindows(excludeSkippedCommitments(commitments, skippedIds), date);
+    const commitmentWindows = commitmentsToBusyWindows(excludeSkippedCommitments(commitments, skippedIds), date);
+    const start = new Date(`${date}T00:00:00`);
+    const end = new Date(`${date}T23:59:59`);
+    const googleEvents = await this.db.select().from(googleCalendarEvents).where(and(eq(googleCalendarEvents.userId, userId), gte(googleCalendarEvents.startAt, start), lte(googleCalendarEvents.startAt, end)));
+    const calendarWindows: CommitmentBusyWindow[] = googleEvents.filter((event) => event.startAt && event.endAt).map((event) => ({ commitmentId: `google:${event.id}`, title: event.title, start: event.allDay ? '00:00' : event.startAt!.toISOString().slice(11, 16), end: event.allDay ? '23:59' : event.endAt!.toISOString().slice(11, 16), placeName: event.location ?? null }));
+    return [...commitmentWindows, ...calendarWindows];
   }
 
   /** Dated, unmerged occurrences for conflict UI and one-occurrence resolution. */

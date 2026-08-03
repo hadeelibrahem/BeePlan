@@ -1,5 +1,4 @@
 import {
-  IsEmail,
   IsIn,
   IsInt,
   IsNumber,
@@ -16,8 +15,8 @@ export const LOCATION_SHARING_MODES = ['proximity', 'live_location'] as const;
 export type LocationSharingMode = (typeof LOCATION_SHARING_MODES)[number];
 
 export class SendFriendRequestDto {
-  @IsEmail()
-  email!: string;
+  @IsString()
+  username!: string;
 }
 
 export class RequestLocationSharingDto {

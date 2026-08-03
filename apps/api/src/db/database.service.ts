@@ -31,9 +31,13 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureFocusSessionsTable();
     await this.ensureSocialTables();
     await this.ensureNotificationsTable();
+    await this.ensureNotificationDeliveriesTable();
+    await this.ensurePushNotificationTables();
+    await this.ensureUserNotificationPreferencesTable();
     await this.ensureCollaborationTables();
     await this.ensureAiRecommendationsTable();
     await this.ensurePersonalContextTables();
+    await this.ensureGoogleCalendarTables();
   }
 
   async healthCheck() {
@@ -982,13 +986,192 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     `);
   }
 
+  private async ensureGoogleCalendarTables() {
+    await this.getPool().query(`
+      create table if not exists google_calendar_connections (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null unique references users(id) on delete cascade,
+        account_email varchar(255) not null,
+        access_token text not null,
+        refresh_token text,
+        token_expires_at timestamp,
+        sync_direction varchar(20) not null default 'two_way',
+        default_reminder_minutes integer not null default 10,
+        sync_tasks boolean not null default true, sync_focus_sessions boolean not null default true, sync_reminders boolean not null default false, sync_calendar_blocks boolean not null default true,
+        last_synced_at timestamp,
+        sync_cursor text,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      );
+      create table if not exists google_calendars (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade, connection_id uuid references google_calendar_connections(id) on delete cascade,
+        external_id varchar(255) not null,
+        summary varchar(255) not null,
+        description text,
+        timezone varchar(100), color varchar(32),
+        selected boolean not null default false,
+        next_sync_token text, last_successful_sync_at timestamp, last_full_sync_at timestamp, sync_status varchar(20) not null default 'idle', last_sync_error text, sync_lease_until timestamp,
+        updated_at timestamp default now() not null,
+        unique(user_id, external_id)
+      );
+      create table if not exists google_calendar_events (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade, connection_id uuid references google_calendar_connections(id) on delete cascade,
+        calendar_id uuid not null references google_calendars(id) on delete cascade,
+        external_id varchar(512) not null, google_calendar_external_id varchar(255), google_event_id varchar(512),
+        recurring_event_id varchar(512), etag varchar(255),
+        status varchar(20) not null default 'synced', ownership varchar(24) not null default 'google_imported',
+        beeplan_entity_type varchar(24), beeplan_entity_id varchar(255), last_google_updated_at timestamp,
+        title varchar(500) not null, description text, location text,
+        start_at timestamp, end_at timestamp, all_day boolean not null default false,
+        timezone varchar(100), payload jsonb not null default '{}',
+        updated_at timestamp not null,
+        unique(user_id, external_id)
+      );
+      alter table google_calendar_connections add column if not exists sync_tasks boolean not null default true, add column if not exists sync_focus_sessions boolean not null default true, add column if not exists sync_reminders boolean not null default false, add column if not exists sync_calendar_blocks boolean not null default true;
+      alter table google_calendars add column if not exists next_sync_token text, add column if not exists last_successful_sync_at timestamp, add column if not exists last_full_sync_at timestamp, add column if not exists sync_status varchar(20) not null default 'idle', add column if not exists last_sync_error text, add column if not exists sync_lease_until timestamp;
+      update google_calendars set sync_lease_until = to_timestamp(0) where sync_lease_until is null;
+      alter table google_calendar_events add column if not exists connection_id uuid references google_calendar_connections(id) on delete cascade, add column if not exists google_calendar_external_id varchar(255), add column if not exists google_event_id varchar(512), add column if not exists ownership varchar(24) not null default 'google_imported', add column if not exists beeplan_entity_type varchar(24), add column if not exists beeplan_entity_id varchar(255), add column if not exists last_google_updated_at timestamp;
+      create unique index if not exists uq_google_events_user_entity on google_calendar_events(user_id, beeplan_entity_type, beeplan_entity_id);
+      create table if not exists google_calendar_sync_jobs (
+        id uuid primary key default gen_random_uuid() not null, user_id uuid not null references users(id) on delete cascade, connection_id uuid not null references google_calendar_connections(id) on delete cascade,
+        operation varchar(16) not null, entity_type varchar(24) not null, entity_id varchar(255) not null, attempt_count integer not null default 0, next_retry_at timestamp default now() not null, last_error text, status varchar(16) not null default 'pending', created_at timestamp default now() not null, updated_at timestamp default now() not null
+      );
+      create index if not exists idx_google_calendar_sync_jobs_due on google_calendar_sync_jobs(status, next_retry_at);
+      create index if not exists idx_google_events_user_start on google_calendar_events(user_id, start_at);
+    `);
+  }
+
+  private async ensureNotificationDeliveriesTable() {
+    await this.getPool().query(`
+      create table if not exists notification_deliveries (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        notification_type varchar(50) not null,
+        entity_type varchar(50) not null,
+        entity_id varchar(255) not null,
+        trigger_at timestamp not null,
+        delivery_key varchar(500) not null unique,
+        created_at timestamp default now() not null
+      )
+    `);
+    await this.getPool().query(`
+      create index if not exists idx_notification_deliveries_entity
+        on notification_deliveries (entity_type, entity_id)
+    `);
+  }
+
+  private async ensurePushNotificationTables() {
+    await this.getPool().query(`
+      alter table user_notification_preferences
+        add column if not exists push_notifications boolean default true not null
+    `);
+    await this.getPool().query(`
+      create table if not exists user_push_devices (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        expo_push_token varchar(255) not null unique,
+        platform varchar(20) not null,
+        installation_id varchar(255) not null,
+        device_name varchar(255),
+        app_version varchar(40),
+        enabled boolean not null default true,
+        last_seen_at timestamp default now() not null,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null,
+        unique(user_id, installation_id)
+      );
+      create index if not exists idx_user_push_devices_user_enabled
+        on user_push_devices(user_id, enabled);
+    `);
+    await this.getPool().query(`
+      create table if not exists push_notification_jobs (
+        id uuid primary key default gen_random_uuid() not null,
+        notification_id uuid not null references notifications(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        device_id uuid not null references user_push_devices(id) on delete cascade,
+        expo_push_token varchar(255) not null,
+        title varchar(255) not null,
+        body text not null,
+        payload jsonb not null default '{}',
+        priority varchar(12) not null default 'normal',
+        status varchar(20) not null default 'pending',
+        attempt_count integer not null default 0,
+        next_retry_at timestamp default now() not null,
+        ticket_id varchar(255),
+        last_error text,
+        sent_at timestamp,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null,
+        unique(notification_id, device_id)
+      );
+      create index if not exists idx_push_jobs_due
+        on push_notification_jobs(status, next_retry_at);
+    `);
+  }
+
+  private async ensureUserNotificationPreferencesTable() {
+    await this.getPool().query(`
+      create table if not exists user_notification_preferences (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null unique references users(id) on delete cascade,
+        task_notifications boolean not null default true,
+        calendar_notifications boolean not null default true,
+        focus_notifications boolean not null default true,
+        collaboration_notifications boolean not null default true,
+        ai_notifications boolean not null default true,
+        email_notifications boolean not null default false,
+        created_at timestamp default now() not null,
+        updated_at timestamp default now() not null
+      )
+    `);
+  }
+
   private async ensureUsersAuthColumns() {
     await this.getPool().query(`
       alter table users
+        add column if not exists username varchar(20),
+        add column if not exists username_normalized varchar(20),
         add column if not exists auth_provider varchar(40) default 'password' not null,
         add column if not exists google_id varchar(255),
         add column if not exists email_verified boolean default false not null,
         add column if not exists token_version integer default 0 not null
+    `);
+
+    await this.getPool().query(`
+      do $$
+      declare
+        user_row record;
+        base_name text;
+        candidate text;
+        suffix integer;
+      begin
+        for user_row in select id, full_name from users where username_normalized is null loop
+          base_name := lower(regexp_replace(coalesce(user_row.full_name, 'user'), '[^a-zA-Z0-9_]', '', 'g'));
+          base_name := trim(both '_' from base_name);
+          if length(base_name) < 3 then base_name := 'user'; end if;
+          base_name := left(base_name, 20);
+          candidate := base_name;
+          suffix := 0;
+          while exists (select 1 from users where username_normalized = candidate) or candidate in ('admin','administrator','support','beeplan','help','root','system','security','official','moderator','moderation','api','www','null') loop
+            suffix := suffix + 1;
+            candidate := left(base_name, 20 - length(suffix::text)) || suffix::text;
+          end loop;
+          update users set username = candidate, username_normalized = candidate where id = user_row.id;
+        end loop;
+      end $$;
+    `);
+
+    await this.getPool().query(`
+      alter table users
+        alter column username set not null,
+        alter column username_normalized set not null
+    `);
+
+    await this.getPool().query(`
+      create unique index if not exists users_username_normalized_unique
+        on users (username_normalized)
     `);
 
     await this.getPool().query(`

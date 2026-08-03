@@ -23,6 +23,8 @@ const updatedAt = () => timestamp('updated_at').defaultNow().notNull();
 export const users = pgTable('users', {
   id: id(),
   fullName: varchar('full_name', { length: 255 }).notNull(),
+  username: varchar('username', { length: 20 }).notNull(),
+  usernameNormalized: varchar('username_normalized', { length: 20 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   avatarUrl: text('avatar_url'),
@@ -38,7 +40,9 @@ export const users = pgTable('users', {
   tokenVersion: integer('token_version').notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+}, (table) => ({
+  usernameNormalizedUnique: uniqueIndex('users_username_normalized_unique').on(table.usernameNormalized),
+}));
 
 export const passwordResetCodes = pgTable('password_reset_codes', {
   id: id(),
@@ -1216,3 +1220,149 @@ export const personalTaskPreferences = pgTable(
     index('idx_personal_task_prefs_user').on(table.userId),
   ],
 );
+
+// Durable producer idempotency. A worker may run on several API instances and
+// may safely retry the same event without creating duplicate inbox rows.
+export const notificationDeliveries = pgTable(
+  'notification_deliveries',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    notificationType: varchar('notification_type', { length: 50 }).notNull(),
+    entityType: varchar('entity_type', { length: 50 }).notNull(),
+    entityId: varchar('entity_id', { length: 255 }).notNull(),
+    triggerAt: timestamp('trigger_at').notNull(),
+    deliveryKey: varchar('delivery_key', { length: 500 }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_notification_deliveries_key').on(table.deliveryKey),
+    index('idx_notification_deliveries_entity').on(table.entityType, table.entityId),
+  ],
+);
+
+export const userPushDevices = pgTable('user_push_devices', {
+  id: id(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expoPushToken: varchar('expo_push_token', { length: 255 }).notNull().unique(),
+  platform: varchar('platform', { length: 20 }).notNull(),
+  installationId: varchar('installation_id', { length: 255 }).notNull(),
+  deviceName: varchar('device_name', { length: 255 }),
+  appVersion: varchar('app_version', { length: 40 }),
+  enabled: boolean('enabled').notNull().default(true),
+  lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  uniqueIndex('uq_user_push_devices_user_installation').on(table.userId, table.installationId),
+  index('idx_user_push_devices_user_enabled').on(table.userId, table.enabled),
+]);
+
+export const pushNotificationJobs = pgTable('push_notification_jobs', {
+  id: id(),
+  notificationId: uuid('notification_id').notNull().references(() => notifications.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  deviceId: uuid('device_id').notNull().references(() => userPushDevices.id, { onDelete: 'cascade' }),
+  expoPushToken: varchar('expo_push_token', { length: 255 }).notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  body: text('body').notNull(),
+  payload: jsonb('payload').notNull().default({}),
+  priority: varchar('priority', { length: 12 }).notNull().default('normal'),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  nextRetryAt: timestamp('next_retry_at').defaultNow().notNull(),
+  ticketId: varchar('ticket_id', { length: 255 }),
+  lastError: text('last_error'),
+  sentAt: timestamp('sent_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  uniqueIndex('uq_push_jobs_notification_device').on(table.notificationId, table.deviceId),
+  index('idx_push_jobs_due').on(table.status, table.nextRetryAt),
+]);
+
+// Google Calendar is deliberately modeled separately from tasks and reminders.
+// External ids/etags are the idempotency boundary for two-way sync; the raw
+// payload keeps recurrence, attendees, timezone, and provider-specific fields.
+export const googleCalendarConnections = pgTable('google_calendar_connections', {
+  id: id(),
+  userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  accountEmail: varchar('account_email', { length: 255 }).notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  tokenExpiresAt: timestamp('token_expires_at'),
+  syncDirection: varchar('sync_direction', { length: 20 }).notNull().default('two_way'),
+  defaultReminderMinutes: integer('default_reminder_minutes').notNull().default(10),
+  syncTasks: boolean('sync_tasks').notNull().default(true), syncFocusSessions: boolean('sync_focus_sessions').notNull().default(true), syncReminders: boolean('sync_reminders').notNull().default(false), syncCalendarBlocks: boolean('sync_calendar_blocks').notNull().default(true),
+  lastSyncedAt: timestamp('last_synced_at'),
+  syncCursor: text('sync_cursor'),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+});
+
+export const userNotificationPreferences = pgTable(
+  'user_notification_preferences',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+    taskNotifications: boolean('task_notifications').notNull().default(true),
+    calendarNotifications: boolean('calendar_notifications').notNull().default(true),
+    focusNotifications: boolean('focus_notifications').notNull().default(true),
+    collaborationNotifications: boolean('collaboration_notifications').notNull().default(true),
+    aiNotifications: boolean('ai_notifications').notNull().default(true),
+    emailNotifications: boolean('email_notifications').notNull().default(false),
+    pushNotifications: boolean('push_notifications').notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+);
+
+export const googleCalendars = pgTable('google_calendars', {
+  id: id(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  connectionId: uuid('connection_id').references(() => googleCalendarConnections.id, { onDelete: 'cascade' }),
+  externalId: varchar('external_id', { length: 255 }).notNull(),
+  summary: varchar('summary', { length: 255 }).notNull(),
+  description: text('description'),
+  timezone: varchar('timezone', { length: 100 }),
+  color: varchar('color', { length: 32 }),
+  selected: boolean('selected').notNull().default(false),
+  nextSyncToken: text('next_sync_token'),
+  lastSuccessfulSyncAt: timestamp('last_successful_sync_at'),
+  lastFullSyncAt: timestamp('last_full_sync_at'),
+  syncStatus: varchar('sync_status', { length: 20 }).notNull().default('idle'),
+  lastSyncError: text('last_sync_error'),
+  syncLeaseUntil: timestamp('sync_lease_until'),
+  updatedAt: updatedAt(),
+}, (table) => [uniqueIndex('uq_google_calendars_user_external').on(table.userId, table.externalId)]);
+
+export const googleCalendarEvents = pgTable('google_calendar_events', {
+  id: id(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  connectionId: uuid('connection_id').references(() => googleCalendarConnections.id, { onDelete: 'cascade' }),
+  calendarId: uuid('calendar_id').notNull().references(() => googleCalendars.id, { onDelete: 'cascade' }),
+  externalId: varchar('external_id', { length: 512 }).notNull(),
+  googleCalendarExternalId: varchar('google_calendar_external_id', { length: 255 }),
+  googleEventId: varchar('google_event_id', { length: 512 }),
+  recurringEventId: varchar('recurring_event_id', { length: 512 }),
+  etag: varchar('etag', { length: 255 }),
+  status: varchar('status', { length: 20 }).notNull().default('synced'),
+  ownership: varchar('ownership', { length: 24 }).notNull().default('google_imported'),
+  beeplanEntityType: varchar('beeplan_entity_type', { length: 24 }),
+  beeplanEntityId: varchar('beeplan_entity_id', { length: 255 }),
+  lastGoogleUpdatedAt: timestamp('last_google_updated_at'),
+  title: varchar('title', { length: 500 }).notNull(),
+  description: text('description'),
+  location: text('location'),
+  startAt: timestamp('start_at'), endAt: timestamp('end_at'),
+  allDay: boolean('all_day').notNull().default(false),
+  timezone: varchar('timezone', { length: 100 }),
+  payload: jsonb('payload').notNull().default({}),
+  updatedAt: timestamp('updated_at').notNull(),
+}, (table) => [uniqueIndex('uq_google_events_user_external').on(table.userId, table.externalId), uniqueIndex('uq_google_events_user_entity').on(table.userId, table.beeplanEntityType, table.beeplanEntityId), index('idx_google_events_user_start').on(table.userId, table.startAt)]);
+
+export const googleCalendarSyncJobs = pgTable('google_calendar_sync_jobs', {
+  id: id(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  connectionId: uuid('connection_id').notNull().references(() => googleCalendarConnections.id, { onDelete: 'cascade' }),
+  operation: varchar('operation', { length: 16 }).notNull(), entityType: varchar('entity_type', { length: 24 }).notNull(), entityId: varchar('entity_id', { length: 255 }).notNull(),
+  attemptCount: integer('attempt_count').notNull().default(0), nextRetryAt: timestamp('next_retry_at').defaultNow().notNull(), lastError: text('last_error'), status: varchar('status', { length: 16 }).notNull().default('pending'), createdAt: createdAt(), updatedAt: updatedAt(),
+}, (table) => [uniqueIndex('uq_google_sync_jobs_pending_entity').on(table.userId, table.entityType, table.entityId, table.operation, table.status), index('idx_google_sync_jobs_due').on(table.status, table.nextRetryAt)]);

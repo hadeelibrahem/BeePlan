@@ -80,6 +80,7 @@ export type TaskReminder = {
 
 export type NotificationType =
   | 'reminder'
+  | 'task_overdue'
   | 'task_invite'
   | 'invite_accepted'
   | 'invite_declined'
@@ -96,6 +97,27 @@ export type NotificationType =
   | 'attachment_added'
   | 'comment_added'
   | 'mention'
+  | 'ai_plan_applied'
+  | 'ai_recommendation_ready'
+  | 'weather_travel'
+  | 'task_created'
+  | 'task_reopened'
+  | 'task_assigned'
+  | 'task_status_changed'
+  | 'calendar_event_created'
+  | 'calendar_event_updated'
+  | 'calendar_event_cancelled'
+  | 'calendar_conflict'
+  | 'schedule_changed'
+  | 'deadline_changed'
+  | 'focus_session_scheduled'
+  | 'focus_session_completed'
+  | 'focus_session_cancelled'
+  | 'focus_reminder'
+  | 'focus_session_missed'
+  | 'deadline_risk'
+  | 'workload_warning'
+  | 'planner_suggestion'
 
 export type AppNotification = {
   id: string

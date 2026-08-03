@@ -17,7 +17,6 @@ import {
   type CapacitySummary,
   type DailyPlan,
   type DailyPlanItem,
-  type EnergyLevel,
   type PlanAcceptance,
   type PlannerPreferences,
   type ScheduleConflict,
@@ -730,71 +729,83 @@ function PlanningPreferencesCard({
   const [draft, setDraft] = useState<PlannerPreferences>(preferences)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  type AvailabilityWindow = PlannerPreferences['unavailableHours'][number] & { label?: string }
+  const [availability, setAvailability] = useState<AvailabilityWindow[]>([
+    { ...preferences.lunch, label: 'Lunch' },
+    ...preferences.unavailableHours,
+  ])
+  const [focusStyle, setFocusStyle] = useState(() => preferences.workBlockMinutes === 25 && preferences.breakMinutes === 5 ? 'Pomodoro' : preferences.workBlockMinutes === 90 && preferences.breakMinutes === 15 ? 'Deep Work' : preferences.workBlockMinutes === 50 && preferences.breakMinutes === 10 ? 'Standard' : 'Custom')
 
   function update<K extends keyof PlannerPreferences>(key: K, value: PlannerPreferences[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
     setMessage(null)
   }
 
-  function updateEnergy(part: keyof PlannerPreferences['energy'], value: EnergyLevel) {
-    setDraft((current) => ({ ...current, energy: { ...current.energy, [part]: value } }))
-    setMessage(null)
-  }
-
-  function updateWindow(key: 'sleep' | 'lunch', field: 'start' | 'end', value: string) {
+  function updateWindow(key: 'sleep', field: 'start' | 'end', value: string) {
     setDraft((current) => ({ ...current, [key]: { ...current[key], [field]: value } }))
     setMessage(null)
   }
 
   function addUnavailable() {
-    setDraft((current) => ({ ...current, unavailableHours: [...current.unavailableHours, { start: '18:00', end: '19:00' }] }))
+    setAvailability((current) => [...current, { start: '18:00', end: '19:00', label: '' }])
     setMessage(null)
   }
 
-  function updateUnavailable(index: number, field: 'start' | 'end', value: string) {
-    setDraft((current) => ({
-      ...current,
-      unavailableHours: current.unavailableHours.map((window, i) => (i === index ? { ...window, [field]: value } : window)),
-    }))
+  function updateUnavailable(index: number, field: 'start' | 'end' | 'label', value: string) {
+    setAvailability((current) => current.map((window, i) => (i === index ? { ...window, [field]: value } : window)))
     setMessage(null)
   }
 
   function removeUnavailable(index: number) {
-    setDraft((current) => ({ ...current, unavailableHours: current.unavailableHours.filter((_, i) => i !== index) }))
+    setAvailability((current) => current.filter((_, i) => i !== index))
     setMessage(null)
   }
 
   const start = toMinutes(draft.focusStartTime)
   const end = toMinutes(draft.focusEndTime)
   const invalidFocus = start != null && end != null && start >= end
-  const lunchStart = toMinutes(draft.lunch.start)
-  const lunchEnd = toMinutes(draft.lunch.end)
-  const invalidLunch = lunchStart != null && lunchEnd != null && lunchStart >= lunchEnd
+  const invalidAvailability = availability.some((window) => {
+    const windowStart = toMinutes(window.start)
+    const windowEnd = toMinutes(window.end)
+    return windowStart != null && windowEnd != null && windowStart >= windowEnd
+  })
+
+  function chooseFocusStyle(value: string) {
+    setFocusStyle(value)
+    const preset = value === 'Pomodoro' ? [25, 5] : value === 'Standard' ? [50, 10] : value === 'Deep Work' ? [90, 15] : null
+    if (preset) setDraft((current) => ({ ...current, workBlockMinutes: preset[0], breakMinutes: preset[1] }))
+  }
 
   async function handleSave() {
     if (invalidFocus) {
       setMessage({ ok: false, text: 'Focus start time must be before focus end time.' })
       return
     }
-    if (invalidLunch) {
-      setMessage({ ok: false, text: 'Lunch start time must be before lunch end time.' })
+    if (invalidAvailability) {
+      setMessage({ ok: false, text: 'Each unavailable block must start before it ends.' })
       return
     }
     setSaving(true)
-    const result = await onSave(draft)
+    const [lunchWindow, ...otherWindows] = availability
+    const result = await onSave({
+      ...draft,
+      lunch: lunchWindow ? { start: lunchWindow.start, end: lunchWindow.end } : draft.lunch,
+      unavailableHours: otherWindows.map(({ label, ...window }) => window),
+    })
     setSaving(false)
     setMessage({ ok: result.ok, text: result.message })
   }
 
   return (
-    <CollapsibleSection title="AI Planning Preferences" emoji="⚙️" defaultOpen={false}>
+    <CollapsibleSection title="AI Planning Preferences" emoji="⚙️" defaultOpen={true}>
       <p className="mb-3 text-xs text-[var(--bp-muted)]">
         Teach BeePlan how you like your day planned. Saved preferences apply the next time you generate a plan — they never
         override deadlines, reminders, dependencies, or locked tasks.
       </p>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <PrefGroup title="Focus hours" hint="When you do your best deep work.">
+        <PrefGroup title="Focus Hours" hint="When you prefer to do your best work.">
           <div className="flex items-end gap-2">
             <PrefTime label="From" value={draft.focusStartTime} onChange={(value) => update('focusStartTime', value)} />
             <PrefTime label="To" value={draft.focusEndTime} onChange={(value) => update('focusEndTime', value)} />
@@ -802,43 +813,16 @@ function PlanningPreferencesCard({
           {invalidFocus ? <p className="mt-1 text-[11px] font-bold text-red-300">Start must be before end.</p> : null}
         </PrefGroup>
 
-        <PrefGroup title="Break style" hint="How long you work before a break.">
-          <div className="flex items-end gap-2">
-            <PrefNumber label="Work block (min)" value={draft.workBlockMinutes} min={15} max={120} onChange={(value) => update('workBlockMinutes', value)} />
-            <PrefNumber label="Break (min)" value={draft.breakMinutes} min={5} max={30} onChange={(value) => update('breakMinutes', value)} />
-          </div>
+        <PrefGroup title="Focus Style" hint="Choose a rhythm that feels natural.">
+          <PrefChoice value={focusStyle} onChange={chooseFocusStyle} options={['Pomodoro', 'Standard', 'Deep Work', 'Custom']} descriptions={['25 / 5', '50 / 10', '90 / 15', 'Set your own']} />
+          {focusStyle === 'Custom' ? <div className="mt-3 flex items-end gap-2"><PrefNumber label="Work block (min)" value={draft.workBlockMinutes} min={15} max={120} onChange={(value) => update('workBlockMinutes', value)} /><PrefNumber label="Break (min)" value={draft.breakMinutes} min={5} max={30} onChange={(value) => update('breakMinutes', value)} /></div> : null}
         </PrefGroup>
 
-        <PrefGroup title="Energy pattern" hint="Difficult work is placed in your high-energy periods." className="md:col-span-2">
-          <div className="grid gap-2 sm:grid-cols-4">
-            {(['morning', 'afternoon', 'evening', 'night'] as const).map((part) => (
-              <PrefEnergy key={part} label={capitalize(part)} value={draft.energy[part]} onChange={(value) => updateEnergy(part, value)} />
-            ))}
-          </div>
+        <PrefGroup title="Daily Work Capacity" hint="BeePlan automatically keeps a reasonable buffer for the unexpected.">
+          <div className="grid grid-cols-5 gap-1.5">{['2h', '4h', '6h', '8h', 'Custom'].map((value) => <button key={value} type="button" onClick={() => value === 'Custom' ? setAdvancedOpen(true) : update('maxDailyWorkMinutes', Number(value.replace('h', '')) * 60)} className={`rounded-lg border px-2 py-2 text-xs font-black transition ${value === `${draft.maxDailyWorkMinutes / 60}h` ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'border-[var(--bp-border)] text-[var(--bp-muted)] hover:border-[var(--bp-accent)]/50'}`}>{value}</button>)}</div>
         </PrefGroup>
 
-        <PrefGroup title="Planning rules" className="md:col-span-2">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <PrefToggle label="Schedule difficult tasks during focus hours" checked={draft.scheduleHardTasksInFocus} onChange={(value) => update('scheduleHardTasksInFocus', value)} />
-            <PrefToggle label="Finish started tasks first" checked={draft.finishStartedFirst} onChange={(value) => update('finishStartedFirst', value)} />
-            <PrefToggle label="Group similar tasks together" checked={draft.groupSimilarTasks} onChange={(value) => update('groupSimilarTasks', value)} />
-            <PrefToggle label="Leave buffer before reminders/meetings" checked={draft.bufferBeforeMeetings} onChange={(value) => update('bufferBeforeMeetings', value)} />
-          </div>
-          {draft.bufferBeforeMeetings ? (
-            <div className="mt-2 w-44">
-              <PrefNumber label="Buffer before meetings (min)" value={draft.bufferMinutes} min={0} max={60} onChange={(value) => update('bufferMinutes', value)} />
-            </div>
-          ) : null}
-        </PrefGroup>
-
-        <PrefGroup title="Daily capacity" hint="How much real work a day can hold, and the slack always left free.">
-          <div className="flex items-end gap-2">
-            <PrefNumber label="Max work / day (min)" value={draft.maxDailyWorkMinutes} min={60} max={960} onChange={(value) => update('maxDailyWorkMinutes', value)} />
-            <PrefNumber label="Emergency buffer (min)" value={draft.emergencyBufferMinutes} min={0} max={180} onChange={(value) => update('emergencyBufferMinutes', value)} />
-          </div>
-        </PrefGroup>
-
-        <PrefGroup title="Sleep & lunch" hint="Protected hours the planner never schedules work into.">
+        <PrefGroup title="Sleep Hours" hint="Protected rest time the planner always keeps clear.">
           <div className="space-y-2">
             <div>
               <p className="mb-1 text-[11px] font-bold text-[var(--bp-muted)]">Sleep (can cross midnight)</p>
@@ -847,24 +831,17 @@ function PlanningPreferencesCard({
                 <PrefTime label="To" value={draft.sleep.end} onChange={(value) => updateWindow('sleep', 'end', value)} />
               </div>
             </div>
-            <div>
-              <p className="mb-1 text-[11px] font-bold text-[var(--bp-muted)]">Lunch</p>
-              <div className="flex items-end gap-2">
-                <PrefTime label="From" value={draft.lunch.start} onChange={(value) => updateWindow('lunch', 'start', value)} />
-                <PrefTime label="To" value={draft.lunch.end} onChange={(value) => updateWindow('lunch', 'end', value)} />
-              </div>
-              {invalidLunch ? <p className="mt-1 text-[11px] font-bold text-red-300">Lunch start must be before end.</p> : null}
-            </div>
           </div>
         </PrefGroup>
 
-        <PrefGroup title="Unavailable hours" hint="Commute, gym, prayer, family — windows you're never available." className="md:col-span-2">
-          {draft.unavailableHours.length ? (
+        <PrefGroup title="Availability" hint="Add lunch, commute, gym, prayer, family, or any other protected time." className="md:col-span-2">
+          {availability.length ? (
             <div className="space-y-2">
-              {draft.unavailableHours.map((window, index) => (
-                <div key={index} className="flex items-end gap-2">
+              {availability.map((window, index) => (
+                <div key={index} className="flex flex-wrap items-end gap-2">
                   <PrefTime label="From" value={window.start} onChange={(value) => updateUnavailable(index, 'start', value)} />
                   <PrefTime label="To" value={window.end} onChange={(value) => updateUnavailable(index, 'end', value)} />
+                  <label className="min-w-[130px] flex-1"><span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">Label (optional)</span><input value={window.label ?? ''} placeholder="Lunch, Gym..." onChange={(event) => updateUnavailable(index, 'label', event.target.value)} className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1.5 text-xs font-bold text-[var(--bp-text)]" /></label>
                   <button
                     type="button"
                     onClick={() => removeUnavailable(index)}
@@ -876,18 +853,21 @@ function PlanningPreferencesCard({
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-[var(--bp-muted)]">No unavailable windows yet.</p>
+            <p className="text-[11px] text-[var(--bp-muted)]">No unavailable blocks yet.</p>
           )}
           <button
             type="button"
             onClick={addUnavailable}
             className="mt-2 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-2.5 py-1.5 text-xs font-black text-[var(--bp-text)] transition hover:border-[var(--bp-accent)]/40"
           >
-            + Add window
+            + Add time block
           </button>
         </PrefGroup>
 
-        <PrefGroup title="Personal note" hint="Anything else about how you like your day planned." className="md:col-span-2">
+        <div className="md:col-span-2 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/30">
+          <button type="button" onClick={() => setAdvancedOpen((value) => !value)} aria-expanded={advancedOpen} className="flex w-full items-center justify-between px-3 py-3 text-left"><span><span className="block text-sm font-black text-[var(--bp-text)]">Advanced Preferences</span><span className="text-xs text-[var(--bp-muted)]">Add personal context the AI cannot infer automatically.</span></span><ChevronGlyph className={`h-4 w-4 text-[var(--bp-muted)] transition-transform ${advancedOpen ? 'rotate-180' : ''}`} /></button>
+          {advancedOpen ? <div className="grid gap-3 border-t border-[var(--bp-border)] p-3">
+            <PrefGroup title="Personal Notes" hint="Tell the AI anything about your day that it cannot infer automatically.">
           <textarea
             value={draft.note}
             maxLength={1000}
@@ -897,11 +877,13 @@ function PlanningPreferencesCard({
             className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-sm text-[var(--bp-text)] placeholder:text-[var(--bp-muted)]"
           />
           <p className="mt-0.5 text-right text-[11px] text-[var(--bp-muted)]">{draft.note.length}/1000</p>
-        </PrefGroup>
+            </PrefGroup>
+          </div> : null}
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <PrimaryButton size="sm" onClick={handleSave} loading={saving} disabled={invalidFocus || invalidLunch}>
+        <PrimaryButton size="sm" onClick={handleSave} loading={saving} disabled={invalidFocus || invalidAvailability}>
           Save Preferences
         </PrimaryButton>
         {message ? (
@@ -1066,39 +1048,8 @@ function PrefNumber({
   )
 }
 
-function PrefEnergy({ label, value, onChange }: { label: string; value: EnergyLevel; onChange: (value: EnergyLevel) => void }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value as EnergyLevel)}
-        className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1.5 text-xs font-bold text-[var(--bp-text)]"
-      >
-        <option value="high">High</option>
-        <option value="medium">Medium</option>
-        <option value="low">Low</option>
-      </select>
-    </label>
-  )
-}
-
-function PrefToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-2 rounded-lg bg-[var(--bp-bg)] px-2.5 py-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 shrink-0 accent-[var(--bp-accent)]"
-      />
-      <span className="text-xs font-bold text-[var(--bp-text)]">{label}</span>
-    </label>
-  )
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1)
+function PrefChoice({ value, onChange, options, descriptions = [] }: { value: string; onChange: (value: string) => void; options: string[]; descriptions?: string[] }) {
+  return <div className="grid gap-2 sm:grid-cols-2">{options.map((option, index) => <label key={option} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition ${value === option ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)]' : 'border-[var(--bp-border)] hover:border-[var(--bp-accent)]/50'}`}><input type="radio" name="planner-choice" checked={value === option} onChange={() => onChange(option)} className="accent-[var(--bp-accent)]" /><span><span className="block text-xs font-black text-[var(--bp-text)]">{option}</span>{descriptions[index] ? <span className="text-[11px] text-[var(--bp-muted)]">{descriptions[index]}</span> : null}</span></label>)}</div>
 }
 
 function SummaryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {

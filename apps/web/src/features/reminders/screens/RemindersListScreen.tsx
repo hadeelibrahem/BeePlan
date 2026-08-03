@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowDownUp, Search, Sparkles } from 'lucide-react'
 import {
   AppLayout,
   EmptyState,
@@ -51,6 +52,8 @@ export function RemindersListScreen({
 }: Props) {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
+  const [sort, setSort] = useState<'date' | 'priority' | 'created' | 'alphabetical'>('date')
+  const [pageSize, setPageSize] = useState(40)
   const { t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const showSkeleton = useDelayedSkeleton(loading)
@@ -69,7 +72,8 @@ export function RemindersListScreen({
     const matchSearch =
       !search ||
       reminder.title.toLowerCase().includes(search.toLowerCase()) ||
-      reminder.description?.toLowerCase().includes(search.toLowerCase())
+      reminder.description?.toLowerCase().includes(search.toLowerCase()) ||
+      getTriggerSearchText(reminder).toLowerCase().includes(search.toLowerCase())
 
     const matchTab =
       activeTab === 'all'
@@ -79,7 +83,13 @@ export function RemindersListScreen({
           : reminder.type === activeTab && reminder.status !== 'done'
 
     return matchSearch && matchTab
+  }).sort((a, b) => {
+    if (sort === 'alphabetical') return a.title.localeCompare(b.title)
+    if (sort === 'created') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    if (sort === 'priority') return priorityRank(b.priority) - priorityRank(a.priority)
+    return (new Date(a.remindAt ?? a.updatedAt).getTime() || Infinity) - (new Date(b.remindAt ?? b.updatedAt).getTime() || Infinity)
   })
+  const visibleReminders = filtered.slice(0, pageSize)
 
   const totalCount = reminders.length
   const activeCount = reminders.filter((reminder) => reminder.status === 'active').length
@@ -151,8 +161,15 @@ export function RemindersListScreen({
         />
       </section>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <FilterTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
+        <label className="flex items-center gap-1.5 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-2.5 py-1.5 text-xs text-[var(--bp-muted)]">
+          <ArrowDownUp className="h-3.5 w-3.5" />
+          <span className="sr-only">Sort reminders</span>
+          <select value={sort} onChange={(event) => { setSort(event.target.value as typeof sort); setPageSize(40) }} className="bg-transparent text-xs font-semibold text-[var(--bp-text)] outline-none">
+            <option value="date">Date</option><option value="priority">Priority</option><option value="created">Recently created</option><option value="alphabetical">Alphabetical</option>
+          </select>
+        </label>
         {onCreatePerson && (
           <button
             type="button"
@@ -164,10 +181,12 @@ export function RemindersListScreen({
         )}
       </div>
 
+      {search && <div className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]"><Search className="h-3.5 w-3.5" /> Showing {filtered.length} matching reminder{filtered.length === 1 ? '' : 's'}</div>}
+
       {showSkeleton ? <CoreListSkeleton variant="reminders" rows={3} /> : filtered.length === 0 ? (
         activeTab === 'person' ? (
           <EmptyState
-            icon={<RemindersIcon className="h-5 w-5" />}
+            illustration={<Sparkles className="h-6 w-6" />}
             variant="first-run"
             title="No person reminders yet"
             description="Create one to be reminded when someone is nearby."
@@ -176,7 +195,7 @@ export function RemindersListScreen({
           />
         ) : (
           <EmptyState
-            icon={<RemindersIcon className="h-5 w-5" />}
+            illustration={<Sparkles className="h-6 w-6" />}
             variant={search ? 'filtered' : 'first-run'}
             title={search ? t('dashboard.noResults') : t('dashboard.noReminders')}
             description={search ? t('dashboard.tryDifferentSearch') : t('dashboard.createFirstReminder')}
@@ -185,8 +204,8 @@ export function RemindersListScreen({
           />
         )
       ) : (
-        <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((reminder) => (
+        <section className="flex flex-col gap-2">
+          {visibleReminders.map((reminder) => (
             <ReminderCard
               key={reminder.id}
               reminder={reminder}
@@ -196,6 +215,10 @@ export function RemindersListScreen({
           ))}
         </section>
       )}
+      {!showSkeleton && filtered.length > visibleReminders.length && <button type="button" onClick={() => setPageSize((size) => size + 40)} className="mx-auto mt-4 block rounded-lg border border-[var(--bp-border)] px-4 py-2 text-xs font-semibold text-[var(--bp-muted)] hover:border-[var(--bp-accent)] hover:text-[var(--bp-text)]">Load more reminders</button>}
     </AppLayout>
   )
 }
+
+function priorityRank(priority: Reminder['priority']) { return priority === 'urgent' ? 4 : priority === 'high' ? 3 : priority === 'medium' ? 2 : 1 }
+function getTriggerSearchText(reminder: Reminder) { return [reminder.remindAt, reminder.context?.condition, reminder.person?.targetName, reminder.person?.targetFriendName, reminder.location?.generalCategory?.customLabel, reminder.location?.specificPlace?.placeName].filter(Boolean).join(' ') }
