@@ -1,12 +1,4 @@
-import {
-  AppLayout,
-  DangerButton,
-  PageHeader,
-  SecondaryButton,
-  SectionCard,
-  TopActionBar,
-  type SidebarNavHandlers,
-} from '../components/layout'
+import { AppLayout, DangerButton, PageHeader, SectionCard, TopActionBar, type SidebarNavHandlers } from '../components/layout'
 import { SavedPlacesSection } from '../features/context/components/SavedPlacesSection'
 import { WeeklyCommitmentsSection } from '../features/context/components/WeeklyCommitmentsSection'
 import { useAuth } from '../hooks/useAuth'
@@ -14,122 +6,20 @@ import { useLanguage } from '../i18n/LanguageContext'
 import { useTheme } from '../theme/ThemeContext'
 import { AccountSettings, AiSettings, GeneralSettings } from '../features/settings/SettingsHubSections'
 import { WeatherTravelSettings } from '../features/settings/WeatherTravelSettings'
+import { GoogleCalendarSettings } from '../features/settings/GoogleCalendarSettings'
 
-type SettingsScreenProps = SidebarNavHandlers & {
-  accessToken?: string
-  onSignOut?: () => void
-}
+type SettingsScreenProps = SidebarNavHandlers & { accessToken?: string; onSignOut?: () => void }
+function Group({ id, title, description, children }: { id: string; title: string; description: string; children: React.ReactNode }) { return <section id={id} className="scroll-mt-6 space-y-3"><div className="px-1"><h2 className="text-base font-black tracking-tight">{title}</h2><p className="mt-1 text-sm text-[var(--bp-muted)]">{description}</p></div>{children}</section> }
+function SideNav() { return <nav aria-label="Settings sections" className="hidden w-40 shrink-0 lg:block"><div className="sticky top-6 space-y-1 text-sm">{['Account','Preferences','Notifications','AI Planner','Integrations','Privacy'].map((name) => <a key={name} href={`#${name.toLowerCase().replace(' ', '-')}`} className="block rounded-lg px-3 py-2 font-bold text-[var(--bp-muted)] hover:bg-[var(--bp-accent-soft)] hover:text-[var(--bp-text)]">{name}</a>)}</div></nav> }
 
-function SettingRow({ label, description, action }: { label: string; description: string; action: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-2.5">
-      <div className="min-w-0">
-        <p className="text-sm font-bold text-[var(--bp-text)]">{label}</p>
-        <p className="text-xs text-[var(--bp-muted)]">{description}</p>
-      </div>
-      <div className="shrink-0">{action}</div>
-    </div>
-  )
-}
-
-/**
- * Profile / Settings. The distinctive part is the "Personal Context" group
- * (Saved Places + Weekly Commitments) that teaches BeePlan permanent info the AI
- * uses everywhere. The remaining sections mirror the app's existing controls.
- */
 export default function SettingsScreen({ accessToken, onSignOut, ...nav }: SettingsScreenProps) {
-  const { user, updateUser } = useAuth()
-  const { toggleLanguage, language } = useLanguage()
-  const { mode, toggleTheme } = useTheme()
-
-  return (
-    <AppLayout active="settings" {...nav}>
-      <PageHeader
-        title="Settings"
-        subtitle="Your profile, permanent context, and preferences"
-        toolbar={
-          <TopActionBar pageOnly
-            onOpenNotifications={nav.onNavigateNotifications}
-            onSignOut={onSignOut}
-          />
-        }
-      />
-
-      <div className="mx-auto max-w-3xl space-y-6 pb-10">
-        {/* 1. Account */}
-        <div className="hidden">
-        <SectionCard>
-          <h3 className="mb-3 text-sm font-black text-[var(--bp-text)]">Account</h3>
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--bp-accent)]/20 text-lg font-black text-[var(--bp-accent-ink)]">
-              {(user?.fullName ?? '?').slice(0, 1).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-[var(--bp-text)]">{user?.fullName ?? '—'}</p>
-              <p className="truncate text-xs text-[var(--bp-muted)]">{user?.email ?? ''}</p>
-            </div>
-          </div>
-        </SectionCard>
-        </div>
-        <AccountSettings user={user} token={accessToken} onUpdated={updateUser} />
-
-        {/* 2. Personal Context — the distinctive section */}
-        <div className="space-y-2">
-          <div className="px-1">
-            <h2 className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Personal Context</h2>
-            <p className="text-xs text-[var(--bp-muted)]">
-              Permanent places and recurring commitments BeePlan AI uses everywhere — parsing reminders, planning days, and scheduling around your fixed time.
-            </p>
-          </div>
-          <SavedPlacesSection accessToken={accessToken} />
-          <WeeklyCommitmentsSection accessToken={accessToken} />
-          <WeatherTravelSettings token={accessToken} />
-        </div>
-
-        {/* 3. AI Preferences */}
-        <div className="hidden">
-        <SectionCard>
-          <h3 className="mb-1 text-sm font-black text-[var(--bp-text)]">AI Preferences</h3>
-          <SettingRow
-            label="Planner preferences"
-            description="Focus hours, energy, buffers, and unavailable windows."
-            action={<SecondaryButton onClick={nav.onNavigatePlanner}>Open AI Planner</SecondaryButton>}
-          />
-        </SectionCard>
-        </div>
-        <AiSettings token={accessToken} onOpen={nav.onNavigatePlanner} />
-
-        {/* 4. Notifications & 5. Calendar & Planning */}
-        <div className="hidden">
-        <SectionCard>
-          <h3 className="mb-1 text-sm font-black text-[var(--bp-text)]">Notifications</h3>
-          <SettingRow
-            label="Notification center"
-            description="Reminders, collaboration, and location alerts."
-            action={<SecondaryButton onClick={nav.onNavigateNotifications}>Open</SecondaryButton>}
-          />
-        </SectionCard>
-        </div>
-        <GeneralSettings mode={mode} language={language} timezone={user?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone} token={accessToken} onTheme={toggleTheme} onLanguage={toggleLanguage} onNotifications={nav.onNavigateNotifications} onDeleted={() => void onSignOut?.()} />
-
-        <SectionCard>
-          <h3 className="mb-1 text-sm font-black text-[var(--bp-text)]">Calendar &amp; Planning</h3>
-          <SettingRow
-            label="Calendar"
-            description="See tasks, reminders, and commitments on a timeline."
-            action={<SecondaryButton onClick={nav.onNavigateCalendar}>Open calendar</SecondaryButton>}
-          />
-        </SectionCard>
-
-        {/* 9. Logout */}
-        <SectionCard>
-          <SettingRow
-            label="Sign out"
-            description="End your session on this device."
-            action={<DangerButton onClick={onSignOut}>Log out</DangerButton>}
-          />
-        </SectionCard>
-      </div>
-    </AppLayout>
-  )
+  const { user, updateUser } = useAuth(); const { toggleLanguage, language } = useLanguage(); const { mode, toggleTheme } = useTheme(); const timezone = user?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  return <AppLayout active="settings" {...nav}><PageHeader title="Settings" subtitle="A calmer way to shape BeePlan around you" toolbar={<TopActionBar pageOnly onOpenNotifications={nav.onNavigateNotifications} onSignOut={onSignOut} />} /><div className="mx-auto flex max-w-5xl gap-8 pb-12"><SideNav /><main className="min-w-0 flex-1 space-y-8">
+    <Group id="account" title="Account" description="Your identity and sign-in details."><AccountSettings user={user} token={accessToken} onUpdated={updateUser} /><SectionCard><div className="flex items-center justify-between gap-4"><div><h3 className="text-sm font-black">Sign out</h3><p className="mt-1 text-xs text-[var(--bp-muted)]">End your session on this device.</p></div><DangerButton onClick={onSignOut}>Sign out</DangerButton></div></SectionCard></Group>
+    <Group id="preferences" title="Preferences" description="Choose how BeePlan looks and fits into your day."><GeneralSettings variant="preferences" mode={mode} language={language} timezone={timezone} onTheme={toggleTheme} onLanguage={toggleLanguage} /></Group>
+    <Group id="notifications" title="Notifications" description="Control the updates you want to hear about."><GeneralSettings variant="notifications" token={accessToken} onNotifications={nav.onNavigateNotifications} /></Group>
+    <Group id="ai-planner" title="AI Planner" description="The few choices that make planning feel like your own."><AiSettings token={accessToken} onOpen={nav.onNavigatePlanner} /><details className="group rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] shadow-xl"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 font-black"><span>Advanced Planner Settings</span><span className="text-xs font-bold text-[var(--bp-muted)] group-open:hidden">Show technical options</span><span className="hidden text-xs font-bold text-[var(--bp-muted)] group-open:inline">Hide technical options</span></summary><div className="space-y-4 border-t border-[var(--bp-border)] p-4"><p className="text-sm text-[var(--bp-muted)]">Less frequently changed planner controls and permanent planning knowledge.</p><SavedPlacesSection accessToken={accessToken} /><WeeklyCommitmentsSection accessToken={accessToken} /></div></details></Group>
+    <Group id="integrations" title="Integrations" description="Connect the services BeePlan uses to plan with better context."><GoogleCalendarSettings token={accessToken} /><WeatherTravelSettings token={accessToken} /><div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 shadow-xl"><div className="flex items-center justify-between gap-4"><div><h3 className="text-sm font-black">Future integrations</h3><p className="mt-1 text-xs text-[var(--bp-muted)]">More useful connections are on the way.</p></div><span className="text-xs font-bold text-[var(--bp-muted)]">Coming soon</span></div></div></Group>
+    <Group id="privacy" title="Privacy" description="Review permissions and connected access at a glance."><GeneralSettings variant="privacy" token={accessToken} onDeleted={() => void onSignOut?.()} /></Group>
+  </main></div></AppLayout>
 }

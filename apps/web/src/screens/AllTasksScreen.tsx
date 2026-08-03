@@ -648,6 +648,7 @@ function TaskRow({
       </button>
 
       <button
+        data-bee-target="true"
         type="button"
         onClick={() => onViewTaskDetails?.(task.id)}
         className="flex w-full cursor-pointer flex-col gap-2 text-start sm:grid sm:grid-cols-[minmax(0,1fr)_110px_110px_140px_20px] sm:items-center sm:gap-3"

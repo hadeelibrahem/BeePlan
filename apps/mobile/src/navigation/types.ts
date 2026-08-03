@@ -12,7 +12,7 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined
-  TaskDetails: { taskId: string }
+  TaskDetails: { taskId: string; commentId?: string; subtaskId?: string }
   CreateTask: { source?: 'dashboard' | 'tasks' | 'calendar'; initialDueDate?: string }
   EditTask: { taskId: string }
   AiTaskBuilder: { source?: 'dashboard' | 'tasks' }

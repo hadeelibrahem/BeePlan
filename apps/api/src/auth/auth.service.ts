@@ -20,6 +20,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service';
 import { googleLoginApprovals, passwordResetCodes, users } from '../db/schema';
+import { normalizeUsername, validateUsername, usernameSeed } from './username';
 import {
   getGoogleClientId,
   getGoogleClientSecret,
@@ -39,6 +40,7 @@ const passwordSchema = z
 
 const registerSchema = z.object({
   fullName: z.string().trim().min(1, 'Full name is required'),
+  username: z.string().trim().optional(),
   email: z.string().trim().email('Please enter a valid email address'),
   password: passwordSchema,
 });
@@ -53,6 +55,7 @@ const socialLoginSchema = z.object({
   providerUserId: z.string().trim().min(1, 'Social account id is required'),
   email: z.string().trim().email('Please enter a valid email address'),
   fullName: z.string().trim().optional(),
+  username: z.string().trim().optional(),
   avatarUrl: z.string().trim().nullable().optional(),
   emailVerified: z.boolean().optional(),
 });
@@ -75,6 +78,7 @@ const resetPasswordSchema = verifyResetCodeSchema.extend({
 
 const updateProfileSchema = z.object({
   fullName: z.string().trim().min(1, 'Full name is required').max(255),
+  username: z.string().trim().optional(),
   email: z.string().trim().email('Please enter a valid email address'),
   avatarUrl: z
     .string()
@@ -151,10 +155,13 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const username = await this.allocateUsername(parsed.data.username ?? usernameSeed(fullName), undefined, parsed.data.username == null);
     const [createdUser] = await this.databaseService.db
       .insert(users)
       .values({
         fullName,
+        username,
+        usernameNormalized: normalizeUsername(username),
         email,
         passwordHash,
         authProvider: 'password',
@@ -235,10 +242,16 @@ export class AuthService {
       throw new ConflictException('This email is already registered.');
     }
 
+    const username = parsed.data.username == null
+      ? user.username
+      : await this.allocateUsername(parsed.data.username, userId);
+
     const [updatedUser] = await this.databaseService.db
       .update(users)
       .set({
         fullName: parsed.data.fullName,
+        username,
+        usernameNormalized: normalizeUsername(username),
         email,
         avatarUrl: parsed.data.avatarUrl ?? null,
         timezone: parsed.data.timezone ?? user.timezone,
@@ -308,6 +321,7 @@ export class AuthService {
     const fullName =
       parsed.data.fullName?.trim() || email.split('@')[0] || 'BeePlan User';
     const avatarUrl = parsed.data.avatarUrl || null;
+    const username = await this.allocateUsername(parsed.data.username ?? usernameSeed(fullName), undefined, parsed.data.username == null);
     const emailVerified =
       parsed.data.emailVerified ?? parsed.data.provider === 'google';
     const providerUserId = parsed.data.providerUserId;
@@ -357,6 +371,8 @@ export class AuthService {
       .insert(users)
       .values({
         fullName,
+        username,
+        usernameNormalized: normalizeUsername(username),
         email,
         avatarUrl,
         authProvider: parsed.data.provider,
@@ -1014,6 +1030,7 @@ export class AuthService {
     return {
       id: user.id,
       fullName: user.fullName,
+      username: user.username,
       email: user.email,
       avatarUrl: user.avatarUrl,
       authProvider: user.authProvider,
@@ -1023,6 +1040,26 @@ export class AuthService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  private async allocateUsername(value: string, excludeUserId?: string, autoSuffix = false) {
+    let normalized = normalizeUsername(value);
+    const validationError = validateUsername(normalized);
+    if (validationError) {
+      if (!autoSuffix) throw new BadRequestException(validationError);
+      normalized = 'user';
+    }
+    let candidate = normalized;
+    let suffix = 0;
+    while (true) {
+      const owner = await this.databaseService.db.query.users.findFirst({
+        where: eq(users.usernameNormalized, candidate),
+      });
+      if (!owner || owner.id === excludeUserId) return candidate;
+      if (!autoSuffix) throw new ConflictException('That username is already taken.');
+      suffix += 1;
+      candidate = `${normalized.slice(0, 20 - String(suffix).length)}${suffix}`;
+    }
   }
 
   private base64UrlEncode(value: string) {

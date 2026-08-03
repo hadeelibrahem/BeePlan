@@ -406,17 +406,17 @@ function tokenSimilarity(query: string, token: string): number {
 
 /**
  * Scores how well an extracted `query` name matches a friend, considering the
- * full name, each name token, and the email local-part. Returns 0..1.
+ * full name, each name token, and the username. Returns 0..1.
  */
 function scoreFriend(query: string, friend: FriendSummary): number {
   const fullName = normalizeName(friend.fullName);
-  const emailLocal = normalizeName(friend.email.split('@')[0] ?? '');
+  const username = normalizeName(friend.username);
 
   if (fullName === query) return 1;
 
   const nameTokens = fullName.split(' ').filter(Boolean);
-  const emailTokens = emailLocal.split(/[.\-_]+/).filter(Boolean);
-  const candidates = [fullName, ...nameTokens, emailLocal, ...emailTokens];
+  const usernameTokens = username.split(/[.\-_]+/).filter(Boolean);
+  const candidates = [fullName, ...nameTokens, username, ...usernameTokens];
 
   let best = 0;
   for (const candidate of candidates) {

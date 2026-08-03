@@ -86,7 +86,10 @@ export type NotificationType =
   | 'subtask_completed'
   | 'attachment_added'
   | 'comment_added'
-  | 'mention';
+  | 'mention'
+  | 'task_overdue' | 'ai_plan_applied' | 'ai_recommendation_ready' | 'weather_travel' | 'task_created' | 'task_reopened' | 'task_assigned' | 'task_status_changed'
+  | 'calendar_event_created' | 'calendar_event_updated' | 'calendar_event_cancelled' | 'calendar_conflict' | 'schedule_changed' | 'deadline_changed'
+  | 'focus_session_scheduled' | 'focus_session_completed' | 'focus_session_cancelled' | 'focus_reminder' | 'focus_session_missed' | 'deadline_risk' | 'workload_warning' | 'planner_suggestion';
 
 export type AppNotification = {
   id: string;
@@ -113,7 +116,9 @@ export const ROLE_META: Record<TaskRole, { icon: string; label: string }> = {
   viewer: { icon: '👁', label: 'Viewer' },
 };
 
-export const NOTIFICATION_ICON: Record<NotificationType, string> = {
+/** @deprecated Use notificationMeta() so icon/category/priority stay aligned. */
+export const NOTIFICATION_ICON: Partial<Record<NotificationType, string>> = {};
+/*
   reminder: '⏰',
   task_invite: '✉️',
   invite_accepted: '🤝',
@@ -131,4 +136,4 @@ export const NOTIFICATION_ICON: Record<NotificationType, string> = {
   attachment_added: '📎',
   comment_added: '💬',
   mention: '📣',
-};
+};*/

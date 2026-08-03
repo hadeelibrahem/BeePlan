@@ -6,6 +6,8 @@
 }
 
 :root {
+  --bp-font-ui: Inter, "Plus Jakarta Sans", Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bp-logo-wordmark-bee: #fdef4b;
   /* BeePlan brand token: keep this value aligned with mobile BRAND_YELLOW. */
   --bp-brand-dark: #1A1F2C;
   --bp-accent: #FDEF4B;
@@ -41,6 +43,7 @@
 }
 
 :root[data-theme='light'] {
+  --bp-logo-wordmark-bee: #1e293b;
   /* Independent light palette: page, surface and card layers are intentional. */
   --bp-brand-dark: #1e293b;
   --bp-bg: #f6f8fc;
@@ -69,9 +72,151 @@ body {
   margin: 0;
   background: var(--bp-bg);
   color: var(--bp-text);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: var(--bp-font-ui);
+}
+
+.bp-sidebar,
+.bp-sidebar-drawer {
+  font-family: var(--bp-font-ui);
+}
+
+.bp-sidebar-brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.08em;
+}
+
+.bp-sidebar-brand-bee {
+  color: var(--bp-accent);
+}
+
+.bp-sidebar-brand-plan {
+  color: var(--bp-accent);
+}
+
+.bp-bee-flight-mascot,
+.bp-bee-flight-trail {
+  position: absolute;
+  display: block;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 20;
+  transform-origin: center;
+  visibility: visible;
+  will-change: transform, opacity;
+}
+
+.bp-bee-companion,
+.bp-bee-companion-trail {
+  position: fixed;
+  display: block;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  visibility: visible;
+  z-index: 100;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.bp-bee-companion {
+  width: 26px;
+  height: 26px;
+  opacity: 1;
+  filter: drop-shadow(0 2px 4px rgba(253, 239, 75, .22));
+}
+
+.bp-bee-companion-trail {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(253, 239, 75, .45);
+  filter: blur(1px);
+}
+
+.bp-bee-flight-mascot {
+  width: 26px;
+  height: 26px;
+  opacity: 1;
+  filter: drop-shadow(0 2px 4px rgba(253, 239, 75, .2));
+}
+
+.bp-bee-mascot-svg {
+  display: block;
+  overflow: visible;
+  transform-origin: center;
+  animation: bpBeeIdle 3.8s ease-in-out infinite;
+}
+
+.bp-bee-mascot-wings {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bpBeeWingIdle 2.8s ease-in-out infinite;
+}
+
+.bp-bee-mascot-wings-flying {
+  animation: bpBeeWingFly 120ms ease-in-out infinite alternate;
+}
+
+.bp-bee-mascot-landing {
+  animation: bpBeeLanding 360ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.bp-bee-mascot-body {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bpBeeBodyTilt 4.2s ease-in-out infinite;
+}
+
+/* Kept on the flight shell so its transform remains the only layout-free path motion. */
+.bp-bee-flight-wings {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+  animation: bpBeeWingFlap 120ms ease-in-out infinite alternate;
+}
+
+.bp-bee-flight-trail {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(253, 239, 75, .45);
+  filter: blur(1px);
+}
+
+@keyframes bpBeeWingFlap {
+  from { transform: rotate(-4deg); }
+  to { transform: rotate(4deg); }
+}
+
+@keyframes bpBeeIdle {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -2px, 0) scale(1.012); }
+}
+
+@keyframes bpBeeBodyTilt {
+  0%, 100% { transform: rotate(-1deg); }
+  50% { transform: rotate(1deg); }
+}
+
+@keyframes bpBeeWingIdle {
+  0%, 72%, 100% { transform: rotate(0deg); }
+  78% { transform: rotate(-5deg); }
+  84% { transform: rotate(4deg); }
+  90% { transform: rotate(-2deg); }
+}
+
+@keyframes bpBeeWingFly {
+  from { transform: rotate(-7deg) scaleY(.94); }
+  to { transform: rotate(7deg) scaleY(1.02); }
+}
+
+@keyframes bpBeeLanding {
+  0% { transform: translate3d(0, -3px, 0) scale(1.04); }
+  60% { transform: translate3d(0, 1px, 0) scale(.98); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
 }
 
 /* Keep keyboard focus visible across bespoke controls and native form inputs. */
@@ -97,7 +242,7 @@ body {
 :root[data-theme='light'] .bp-sidebar-progress { background: #f8fafc; border-color: var(--bp-border); box-shadow: none; }
 :root[data-theme='light'] .bp-sidebar-nav-item { color: var(--bp-muted); }
 :root[data-theme='light'] .bp-sidebar-nav-item:hover { background: #f8fafc; color: var(--bp-text); }
-:root[data-theme='light'] .bp-sidebar-nav-item[aria-current='page'] { background: var(--bp-accent-soft); color: #5f4e00; }
+:root[data-theme='light'] .bp-sidebar-nav-item[aria-current='page'] { background: rgba(250, 204, 21, 0.18); color: #713f12; box-shadow: 0 4px 14px rgba(180, 132, 0, .08); }
 :root[data-theme='light'] .bp-sidebar-nav-item .bp-sidebar-icon { color: var(--bp-subtle); }
 :root[data-theme='light'] .bp-sidebar-nav-item[aria-current='page'] .bp-sidebar-icon { color: #7a6500; }
 :root[data-theme='light'] .bp-card,
@@ -119,6 +264,13 @@ body {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+
+  .bp-bee-flight-wings,
+  .bp-bee-mascot-svg,
+  .bp-bee-mascot-wings,
+  .bp-bee-mascot-wings-flying,
+  .bp-bee-mascot-body,
+  .bp-bee-mascot-landing { animation: none !important; }
 }
 
 @keyframes statusSheetIn {

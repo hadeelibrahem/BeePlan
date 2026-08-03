@@ -6,11 +6,12 @@ import {
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import { friendships, users } from '../db/schema';
+import { normalizeUsername, validateUsername } from '../auth/username';
 
 export type FriendSummary = {
   userId: string;
   fullName: string;
-  email: string;
+  username: string;
   avatarUrl: string | null;
 };
 
@@ -30,15 +31,18 @@ export class FriendsService {
     return this.databaseService.db;
   }
 
-  /** Sends a friend request to the user with the given email. */
-  async sendRequest(requesterId: string, email: string) {
+  /** Sends a friend request to the user with the given normalized username. */
+  async sendRequest(requesterId: string, username: string) {
+    const normalized = normalizeUsername(username);
+    const validationError = validateUsername(normalized);
+    if (validationError) throw new BadRequestException(validationError);
     const [addressee] = await this.db
-      .select({ id: users.id })
+      .select({ id: users.id, fullName: users.fullName, username: users.username, avatarUrl: users.avatarUrl })
       .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()));
+      .where(eq(users.usernameNormalized, normalized));
 
     if (!addressee) {
-      throw new NotFoundException('No BeePlan user found with that email.');
+      throw new NotFoundException('No BeePlan user found with that username.');
     }
 
     if (addressee.id === requesterId) {
@@ -81,7 +85,16 @@ export class FriendsService {
         })
         .where(eq(friendships.id, current.id))
         .returning();
-      return { id: revived.id, status: revived.status };
+      return {
+        id: revived.id,
+        status: revived.status,
+        user: {
+          userId: addressee.id,
+          fullName: addressee.fullName,
+          username: addressee.username,
+          avatarUrl: addressee.avatarUrl,
+        },
+      };
     }
 
     const [row] = await this.db
@@ -89,7 +102,31 @@ export class FriendsService {
       .values({ requesterId, addresseeId: addressee.id, status: 'pending' })
       .returning();
 
-    return { id: row.id, status: row.status };
+    return {
+      id: row.id,
+      status: row.status,
+      user: {
+        userId: addressee.id,
+        fullName: addressee.fullName,
+        username: addressee.username,
+        avatarUrl: addressee.avatarUrl,
+      },
+    };
+  }
+
+  async searchUser(requesterId: string, username: string) {
+    const normalized = normalizeUsername(username);
+    const validationError = validateUsername(normalized);
+    if (validationError) throw new BadRequestException(validationError);
+    const [user] = await this.db
+      .select({ userId: users.id, fullName: users.fullName, username: users.username, avatarUrl: users.avatarUrl })
+      .from(users)
+      .where(eq(users.usernameNormalized, normalized));
+    if (!user) return null;
+    if (user.userId === requesterId) {
+      throw new BadRequestException('You cannot add yourself as a friend.');
+    }
+    return user;
   }
 
   /** Accepts an incoming request. Only the addressee may accept. */
@@ -276,7 +313,7 @@ export class FriendsService {
       .select({
         userId: users.id,
         fullName: users.fullName,
-        email: users.email,
+        username: users.username,
         avatarUrl: users.avatarUrl,
       })
       .from(users)

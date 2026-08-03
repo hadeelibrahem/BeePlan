@@ -7,14 +7,14 @@ type FilterTabsProps<T extends string> = {
 export function FilterTabs<T extends string>({ tabs, active, onChange }: FilterTabsProps<T>) {
   return (
     <div className="overflow-x-auto">
-      <div className="inline-flex min-w-max gap-1 rounded-full border border-[var(--bp-border)] bg-[var(--bp-bg)]/60 p-1">
+      <div className="inline-flex min-w-max gap-0.5 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/60 p-1">
         {tabs.map((tab) => (
           <button
             key={tab.value}
             type="button"
             onClick={() => onChange(tab.value)}
-            className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-150 ${
-              active === tab.value ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'text-[var(--bp-muted)] hover:bg-[var(--bp-border)] hover:text-[var(--bp-text)]'
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+              active === tab.value ? 'bg-[var(--bp-accent)] text-[var(--bp-brand-dark)] shadow-sm' : 'text-[var(--bp-muted)] hover:bg-[var(--bp-border)] hover:text-[var(--bp-text)]'
             }`}
           >
             {tab.label}

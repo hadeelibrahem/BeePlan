@@ -10,6 +10,8 @@ const COLLABORATION_NOTIFICATION_TYPES = new Set<AppNotification['type']>([
 ])
 
 export function notificationTarget(notification: AppNotification): string | null {
+  const payloadRoute = notification.data?.route
+  if (typeof payloadRoute === 'string' && payloadRoute.startsWith('/')) return payloadRoute
   if (!notification.taskId) return null
   const taskPath = `/tasks/${encodeURIComponent(notification.taskId)}`
   return COLLABORATION_NOTIFICATION_TYPES.has(notification.type)

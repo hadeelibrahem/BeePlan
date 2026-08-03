@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { DevSettings, I18nManager } from 'react-native';
 import ar from './locales/ar.json';
 import en from './locales/en.json';
@@ -23,6 +24,7 @@ type LanguageContextValue = {
 
 const dictionaries: Record<Language, TranslationTree> = { en, ar };
 const LanguageContext = createContext<LanguageContextValue | null>(null);
+const LANGUAGE_STORAGE_KEY = '@beeplan/language-preference';
 
 function getInitialLanguage(): Language {
   return I18nManager.isRTL ? 'ar' : 'en';
@@ -38,6 +40,19 @@ function resolveTranslation(dictionary: TranslationTree, key: string) {
 export function LanguageProvider({ children }: PropsWithChildren) {
   const [language, setLanguageState] = useState<Language>(getInitialLanguage);
 
+  useEffect(() => {
+    void AsyncStorage.getItem(LANGUAGE_STORAGE_KEY).then((saved) => {
+      if (saved !== 'en' && saved !== 'ar') return;
+      setLanguageState(saved);
+      const nextIsRTL = saved === 'ar';
+      if (I18nManager.isRTL !== nextIsRTL) {
+        I18nManager.allowRTL(nextIsRTL);
+        I18nManager.forceRTL(nextIsRTL);
+        setTimeout(() => DevSettings.reload(), 80);
+      }
+    }).catch(() => {});
+  }, []);
+
   const value = useMemo<LanguageContextValue>(() => {
     const isRTL = language === 'ar';
     const numberFormatter = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en-US');
@@ -45,6 +60,7 @@ export function LanguageProvider({ children }: PropsWithChildren) {
     const applyLanguage = (nextLanguage: Language) => {
       const nextIsRTL = nextLanguage === 'ar';
       setLanguageState(nextLanguage);
+      void AsyncStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage).catch(() => {});
 
       if (I18nManager.isRTL !== nextIsRTL) {
         I18nManager.allowRTL(nextIsRTL);

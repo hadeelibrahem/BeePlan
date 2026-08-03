@@ -21,6 +21,7 @@ import { SocialModule } from './social/social.module';
 import { SpeechModule } from './speech/speech.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WeatherTravelModule } from './weather-travel/weather-travel.module';
+import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { WeatherTravelModule } from './weather-travel/weather-travel.module';
     NotesModule,
     FocusModule,
     WeatherTravelModule,
+    GoogleCalendarModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

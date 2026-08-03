@@ -58,6 +58,7 @@ type Props = {
   onDelete?: () => Promise<void> | void;
   onMarkDone?: () => void;
   onOpenAiCollaboration?: () => void;
+  initialCommentId?: string;
 };
 
 export default function TaskDetailsScreen({
@@ -73,6 +74,7 @@ export default function TaskDetailsScreen({
   onEdit,
   onDelete,
   onOpenAiCollaboration,
+  initialCommentId,
 }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
@@ -287,6 +289,7 @@ export default function TaskDetailsScreen({
           currentUserId={currentUserId}
           onMembersLoaded={setSharedMemberCount}
           onError={setError}
+          initialCommentId={initialCommentId}
         />
       ) : null}
 

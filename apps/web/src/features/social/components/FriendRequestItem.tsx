@@ -29,7 +29,7 @@ export function FriendRequestItem(props: Props) {
         <FriendAvatar fullName={request.user.fullName} avatarUrl={request.user.avatarUrl} size={36} />
         <div className="min-w-0">
           <p className="truncate text-sm text-[var(--bp-text)]">{request.user.fullName}</p>
-          <p className="truncate text-[11px] text-[var(--bp-muted)]">{request.user.email}</p>
+          <p className="truncate text-[11px] text-[var(--bp-muted)]">@{request.user.username}</p>
         </div>
       </div>
 

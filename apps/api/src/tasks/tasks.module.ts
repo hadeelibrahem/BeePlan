@@ -12,6 +12,7 @@ import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ContextModule } from '../context/context.module';
 import { WeatherTravelModule } from '../weather-travel/weather-travel.module';
+import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { WeatherTravelModule } from '../weather-travel/weather-travel.module';
     NotificationsModule,
     ContextModule,
     WeatherTravelModule,
+    GoogleCalendarModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

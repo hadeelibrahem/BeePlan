@@ -449,11 +449,14 @@ export class AiRecommendationsService {
         await this.reassignSubtask(change.subtaskId, change.assigneeUserId!);
         await this.notifications.create({
           userId: change.assigneeUserId!,
+          // Preserve the established AI recommendation notification contract;
+          // the payload identifies this specific assignment action.
           type: 'ai_recommendation_ready',
           title: 'A task was reassigned to you',
           body: rec.title,
           taskId,
-          data: { kind: rec.kind, recommendationId },
+          priority: 'high',
+          data: { kind: rec.kind, recommendationId, entityType: 'subtask', entityId: change.subtaskId, route: `/tasks/${taskId}` },
         });
       } else {
         await this.shiftSubtaskDates(change.subtaskId, change.startDate!, change.dueDate);
@@ -626,11 +629,11 @@ export class AiRecommendationsService {
       if (inserted.length) {
         notifyInputs.push({
           userId: task.userId,
-          type: 'ai_recommendation_ready',
+          type: candidate.kind === 'deadline_risk' ? 'deadline_risk' : candidate.kind === 'workload_imbalance' ? 'workload_warning' : 'ai_recommendation_ready',
           title: candidate.title,
           body: candidate.message,
           taskId,
-          data: { kind: candidate.kind },
+          data: { kind: candidate.kind, recommendationId: inserted[0].id, entityType: 'ai_recommendation', entityId: inserted[0].id, route: `/ai-planner/recommendations/${inserted[0].id}` },
         });
       }
     }

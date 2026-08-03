@@ -1,6 +1,5 @@
 const YELLOW = '#fdef4b'
 const DARK = '#2b323f'
-const WHITE = '#FFFFFF'
 const MUTED = '#A1A7B3'
 
 type BeePlanLogoProps = {
@@ -119,7 +118,7 @@ export function BeePlanLogo({
       <BeeIcon size={size} />
       <span
         style={{
-          color: WHITE,
+          color: 'var(--bp-logo-wordmark-bee, #FFFFFF)',
           fontFamily: 'inherit',
           fontSize: wordmarkSize,
           fontWeight: 800,

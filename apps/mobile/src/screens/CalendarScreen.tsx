@@ -6,6 +6,7 @@ import type { ApiTask } from '../lib/tasksApi'
 import { useTheme } from '../theme/useTheme'
 import { createTaskParamsForCalendarDate } from './calendarCreateTask'
 import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict'
+import { GoogleCalendarEvents } from '../features/calendar/GoogleCalendarEvents'
 
 type ViewMode = 'month' | 'week' | 'day'
 
@@ -124,6 +125,7 @@ export default function CalendarScreen({ tasks, reminders, accessToken = '', onB
             <Text className="text-xs font-black" style={{ color: colors.accentText }}>+ Task</Text>
           </Pressable>
         </View>
+        <GoogleCalendarEvents accessToken={accessToken} date={selected} />
         <ScrollView>
           {selectedItems.tasks.map((task) => <Pressable key={task.id} onPress={() => onTask(task.id)} accessibilityRole="button" accessibilityLabel={`Open task ${task.title}`} className="mb-2 rounded-lg p-2" style={{ backgroundColor: colors.background }}><Text style={{ color: colors.text }}>Task: {task.title}</Text></Pressable>)}
           {selectedItems.reminders.map((reminder) => <Pressable key={reminder.id} onPress={() => onReminder(reminder.id)} accessibilityRole="button" accessibilityLabel={`Open reminder ${reminder.title}`} className="mb-2 rounded-lg p-2" style={{ backgroundColor: colors.background }}><Text style={{ color: colors.text }}>Reminder: {reminder.title}</Text></Pressable>)}

@@ -11,6 +11,7 @@ type Props = {
   currentUserId: string;
   onMembersLoaded?: (count: number) => void;
   onError?: (message: string) => void;
+  initialCommentId?: string;
 };
 
 /**
@@ -25,6 +26,7 @@ export function CollaborationPanel({
   currentUserId,
   onMembersLoaded,
   onError,
+  initialCommentId,
 }: Props) {
   const [members, setMembers] = useState<TaskMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +71,7 @@ export function CollaborationPanel({
         members={members}
         currentUserId={currentUserId}
         onError={error}
+        initialCommentId={initialCommentId}
       />
     </View>
   );

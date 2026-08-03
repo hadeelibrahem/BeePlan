@@ -59,6 +59,7 @@ import {
 } from './components/TaskRecurrenceModal'
 import { RouteFallback } from './components/RouteFallback'
 import { AppLayout, type SidebarNavHandlers } from './components/layout'
+import { BeeCompanion } from './components/BeeCompanion'
 import { useToast } from './components/feedback/ToastProvider'
 import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
 import { queryKeys } from './lib/queryKeys'
@@ -75,7 +76,10 @@ export default function App() {
   return (
     <LanguageProvider>
       <ThemeProvider>
-        <ThemedApp />
+        <>
+          <ThemedApp />
+          <BeeCompanion />
+        </>
       </ThemeProvider>
     </LanguageProvider>
   )

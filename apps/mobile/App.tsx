@@ -4,9 +4,11 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { createNavigationContainerRef, NavigationContainer, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import {
+  addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
   getLastNotificationResponseAsync,
 } from 'expo-notifications/build/NotificationsEmitter';
+import setBadgeCountAsync from 'expo-notifications/build/setBadgeCountAsync';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, BackHandler, Linking, Text, View } from 'react-native';
@@ -30,6 +32,7 @@ import { AddTaskSheet } from './src/components/AddTaskSheet';
 import { PeopleScreen } from './src/features/social';
 import { createPersonReminderParams } from './src/features/reminders/personReminderNavigation';
 import { NotificationsScreen } from './src/features/collaboration';
+import { notificationDestination } from './src/features/collaboration/notificationRouting';
 import { getUnreadCount } from './src/features/collaboration/api/collaboration.api';
 import { getLocationSharing } from './src/features/social/api/social.api';
 import { startProximityMonitor, stopProximityMonitor } from './src/services/proximityMonitor';
@@ -139,7 +142,7 @@ function ThemedApp() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
   const [addTaskSheetVisible, setAddTaskSheetVisible] = useState(false);
-  const { accessToken, loading, user, signOut } = useAuth();
+  const { accessToken, loading, user, signOut, updateUser } = useAuth();
   const { theme } = useTheme();
 
   const refreshUnreadNotificationCount = useCallback(async () => {
@@ -234,12 +237,40 @@ function ThemedApp() {
   // (cold start via getLastNotificationResponseAsync, or while running via the
   // listener). Routes through React Navigation's ReminderDetails screen.
   useEffect(() => {
+    const handledPushKeys = new Set<string>();
+    const reconcileBadge = () => { void refreshUnreadNotificationCount().then(() => getUnreadCount().then(({ count }) => setBadgeCountAsync(count)).catch(() => undefined)); };
+    const receivedSubscription = addNotificationReceivedListener(reconcileBadge);
     const openReminderFromResponse = (response: unknown) => {
       const data = (
         response as {
           notification?: { request?: { content?: { data?: Record<string, unknown> } } };
         }
       )?.notification?.request?.content?.data;
+      const responseKey = typeof data?.notificationId === 'string' ? data.notificationId : typeof data?.id === 'string' ? data.id : undefined;
+      if (responseKey && handledPushKeys.has(responseKey)) return;
+      if (responseKey) handledPushKeys.add(responseKey);
+
+      const taskId = typeof data?.taskId === 'string' ? data.taskId : typeof data?.entityId === 'string' && (data?.entityType === 'task' || data?.entityType === 'subtask') ? data.entityId : undefined;
+      const commentId = typeof data?.commentId === 'string' ? data.commentId : undefined;
+      const subtaskId = typeof data?.subtaskId === 'string' ? data.subtaskId : typeof data?.entityId === 'string' && data?.entityType === 'subtask' ? data.entityId : undefined;
+      const route = typeof data?.route === 'string' ? data.route : '';
+      const navigate = async () => {
+        if (taskId) {
+          if (!accessToken) { navigationRef.navigate('Notifications'); return; }
+          try { await getTask(accessToken, taskId); navigationRef.navigate('TaskDetails', { taskId, commentId, subtaskId }); } catch { navigationRef.navigate('Notifications'); Alert.alert('Notification unavailable', 'That BeePlan item is no longer available.'); }
+          return;
+        }
+        else if (route.startsWith('/focus')) navigationRef.navigate('MainTabs', { screen: 'Focus' });
+        else if (route.startsWith('/calendar')) navigationRef.navigate('Calendar');
+        else if (route.startsWith('/ai-planner')) navigationRef.navigate('AiDailyPlanner');
+        else navigationRef.navigate('Notifications');
+      };
+
+      if (data?.notificationId && !data?.reminderId && !data?.url) {
+        if (navigationRef.isReady()) void navigate(); else setTimeout(() => void navigate(), 500);
+        void refreshUnreadNotificationCount();
+        return;
+      }
 
       const reminderId = typeof data?.reminderId === 'string' ? data.reminderId : undefined;
       const url = typeof data?.url === 'string' ? data.url : undefined;
@@ -259,8 +290,8 @@ function ThemedApp() {
     });
 
     const subscription = addNotificationResponseReceivedListener(openReminderFromResponse);
-    return () => subscription.remove();
-  }, []);
+    return () => { subscription.remove(); receivedSubscription.remove(); };
+  }, [accessToken, refreshUnreadNotificationCount]);
 
   useEffect(() => {
     if (!user || !accessToken) return;
@@ -846,11 +877,14 @@ function ThemedApp() {
       onBack={() => props.navigation.goBack()}
       onSignOut={() => void handleSignOut()}
       onOpenNotification={(notification) => {
-        const data = notification.data ?? {};
-        const reminderId = typeof data.reminderId === 'string' ? data.reminderId : undefined;
-        if ((notification.type === 'reminder' || notification.type === 'reminder_updated') && reminderId) { props.navigation.navigate('ReminderDetails', { reminderId }); return; }
-        if (notification.taskId && (data.destination === 'ai_collaboration' || data.notificationTarget === 'ai_collaboration' || data.tab === 'ai_collaboration')) { props.navigation.navigate('AiCollaboration', { taskId: notification.taskId }); return; }
-        if (notification.taskId) void openTaskFromNotification(notification.taskId);
+        const destination = notificationDestination(notification);
+        if (!destination || destination.screen === 'Notifications') return;
+        if (destination.screen === 'ReminderDetails') { props.navigation.navigate('ReminderDetails', { reminderId: destination.reminderId }); return; }
+        if (destination.screen === 'TaskDetails') { props.navigation.navigate('TaskDetails', { taskId: destination.taskId, commentId: destination.commentId, subtaskId: destination.subtaskId }); return; }
+        if (destination.screen === 'AiCollaboration') { props.navigation.navigate('AiCollaboration', { taskId: destination.taskId }); return; }
+        if (destination.screen === 'Calendar') { props.navigation.navigate('Calendar'); return; }
+        if (destination.screen === 'Focus') { props.navigation.navigate('MainTabs', { screen: 'Focus' }); return; }
+        if (destination.screen === 'AiDailyPlanner') { props.navigation.navigate('AiDailyPlanner'); }
       }}
       onUnreadCountChange={setUnreadNotificationCount}
     />
@@ -880,6 +914,8 @@ function ThemedApp() {
   const SettingsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Settings'>) => (
     <SettingsScreen
       accessToken={accessToken ?? ''}
+      user={user!}
+      onUserUpdated={(updated) => void updateUser(updated)}
       onBack={() => props.navigation.goBack()}
       onSignOut={() => void handleSignOut()}
       onOpenPlanner={() => props.navigation.navigate('AiDailyPlanner')}

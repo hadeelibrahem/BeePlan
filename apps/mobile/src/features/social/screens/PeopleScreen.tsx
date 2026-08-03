@@ -26,6 +26,7 @@ import {
   removeFriend,
   revokeLocationSharing,
   sendFriendRequest,
+  searchFriendByUsername,
 } from '../api/social.api';
 import type {
   FriendRequest,
@@ -33,8 +34,6 @@ import type {
   LocationSharingPermission,
   PermissionStatus,
 } from '../types/social.types';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Props = {
   onBack: () => void;
@@ -51,7 +50,8 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
   const [permissions, setPermissions] = useState<LocationSharingPermission[]>([]);
   const revokingPermissionIdsRef = useRef(new Set<string>());
   const [search, setSearch] = useState('');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameMatch, setUsernameMatch] = useState<FriendSummary | null>(null);
   const [addingFriend, setAddingFriend] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -93,14 +93,22 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
 
   const handleAddFriend = async () => {
     setAddError('');
-    if (!EMAIL_RE.test(email.trim())) {
-      setAddError(t('people.addFriend.invalidEmail'));
+    const normalized = username.trim().replace(/^@+/, '').toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9_]{1,18}[a-z0-9])?$/.test(normalized)) {
+      setAddError('Enter a valid username (3–20 letters, numbers, or underscores).');
       return;
     }
     setAddingFriend(true);
     try {
-      await sendFriendRequest(email.trim().toLowerCase());
-      setEmail('');
+      if (!usernameMatch) {
+        const found = await searchFriendByUsername(normalized);
+        if (!found) { setAddError('No BeePlan user found with that username.'); return; }
+        setUsernameMatch(found);
+        return;
+      }
+      await sendFriendRequest(normalized);
+      setUsername('');
+      setUsernameMatch(null);
       Alert.alert(t('common.done'), t('people.addFriend.sent'));
       await refresh();
     } catch (error) {
@@ -195,7 +203,7 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
   const filteredFriends = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return friends;
-    return friends.filter((f) => f.fullName.toLowerCase().includes(q) || f.email.toLowerCase().includes(q));
+    return friends.filter((f) => f.fullName.toLowerCase().includes(q) || f.username.toLowerCase().includes(q));
   }, [friends, search]);
 
   const cardStyle = { borderColor: colors.border, backgroundColor: colors.surface };
@@ -240,7 +248,7 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
             <View key={friend.userId} className="flex-row items-center justify-between border-b py-2.5" style={{ borderColor: colors.border }}>
               <View className="min-w-0 flex-1 pr-2">
                 <Text className="text-sm font-semibold" style={{ color: colors.text }}>{friend.fullName}</Text>
-                <Text className="text-[11px]" style={{ color: colors.secondaryText }}>{friend.email}</Text>
+                <Text className="text-[11px]" style={{ color: colors.secondaryText }}>@{friend.username}</Text>
               </View>
               <DangerButton size="sm" onPress={() => handleRemoveFriend(friend)}>{t('people.friends.remove')}</DangerButton>
             </View>
@@ -250,21 +258,23 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
 
       {/* Add friend */}
       <View className="mb-4 rounded-2xl border p-4" style={cardStyle}>
-        <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>{t('people.addFriend.title')}</Text>
+        <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>Add Friend by Username</Text>
         <InputField
-          value={email}
+          value={username}
           onChangeText={(v) => {
-            setEmail(v);
+            setUsername(v);
+            setUsernameMatch(null);
             setAddError('');
           }}
-          placeholder={t('people.addFriend.placeholder')}
-          keyboardType="email-address"
+          placeholder="@username"
+          keyboardType="default"
           autoCapitalize="none"
         />
         {!!addError && <Text className="mb-1 text-xs" style={{ color: colors.error }}>{addError}</Text>}
-        <PrimaryButton onPress={() => void handleAddFriend()} disabled={!email.trim() || addingFriend} loading={addingFriend} size="sm">
-          {t('people.addFriend.send')}
+        <PrimaryButton onPress={() => void handleAddFriend()} disabled={!username.trim() || addingFriend} loading={addingFriend} size="sm">
+          {usernameMatch ? 'Send Request' : 'Search'}
         </PrimaryButton>
+        {usernameMatch ? <View className="mt-3 flex-row items-center"><View className="min-w-0 flex-1"><Text className="text-sm font-bold" style={{ color: colors.text }}>{usernameMatch.fullName}</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>@{usernameMatch.username}</Text></View><Pressable onPress={() => setUsernameMatch(null)}><Text className="text-xs font-bold" style={{ color: colors.secondaryText }}>Clear</Text></Pressable></View> : null}
       </View>
 
       {/* Friend requests */}

@@ -15,6 +15,7 @@ const healthSchema = z.object({
 const authUserSchema = z.object({
   id: z.string(),
   fullName: z.string(),
+  username: z.string(),
   email: z.string(),
   avatarUrl: z.string().nullable(),
   authProvider: z.string().optional(),
@@ -50,6 +51,7 @@ export type RegisterRequest = {
   fullName: string;
   email: string;
   password: string;
+  username?: string;
 };
 
 export type LoginRequest = {

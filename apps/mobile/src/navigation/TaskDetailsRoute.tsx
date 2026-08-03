@@ -42,5 +42,5 @@ export function TaskDetailsRoute({ route, navigation, accessToken, tasks, ...han
 
   if (loading) return <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}><ActivityIndicator color={theme.colors.accent} /></View>
   if (!task || error) return <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center', padding: 24 }}><Text style={{ color: theme.colors.error }}>{error || 'Task not found.'}</Text></View>
-  return <TaskDetailsScreen task={task} tasks={tasks} accessToken={accessToken} {...handlers} onOpenAiCollaboration={() => navigation.navigate('AiCollaboration', { taskId })} />
+  return <TaskDetailsScreen task={task} tasks={tasks} accessToken={accessToken} {...handlers} initialCommentId={route.params.commentId} onOpenAiCollaboration={() => navigation.navigate('AiCollaboration', { taskId })} />
 }

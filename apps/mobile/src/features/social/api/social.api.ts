@@ -33,11 +33,15 @@ export function getFriendRequests(): Promise<FriendRequest[]> {
   return apiRequest<FriendRequest[]>('/friends/requests');
 }
 
-export function sendFriendRequest(email: string) {
+export function sendFriendRequest(username: string) {
   return apiRequest('/friends/requests', {
     method: 'POST',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ username }),
   });
+}
+
+export function searchFriendByUsername(username: string): Promise<FriendSummary | null> {
+  return apiRequest<FriendSummary | null>(`/friends/search?username=${encodeURIComponent(username)}`);
 }
 
 export function acceptFriendRequest(id: string) {

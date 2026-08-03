@@ -1,14 +1,9 @@
 import { useState } from 'react'
+import { CalendarClock, MoreHorizontal } from 'lucide-react'
 import { SectionCard } from '../../../components/layout'
 import { ConfirmDestructiveModal } from '../../../components/ConfirmDestructiveModal'
 import { ScheduleConflictModal } from '../../../components/ScheduleConflictModal'
-import {
-  acceptDailyPlan,
-  generateDailyPlan,
-  getDailyPlanAcceptance,
-  skipCommitmentOccurrence,
-  type ScheduleConflict,
-} from '../../../lib/plannerApi'
+import { acceptDailyPlan, generateDailyPlan, getDailyPlanAcceptance, skipCommitmentOccurrence, type ScheduleConflict } from '../../../lib/plannerApi'
 import { formatDays, formatTimeRange } from '../dayOfWeek'
 import { useCommitmentMutations, useCommitments, useSavedPlaces } from '../hooks'
 import type { RecurringCommitment, RecurringCommitmentInput } from '../types'
@@ -16,213 +11,19 @@ import { CommitmentEditorModal } from './CommitmentEditorModal'
 
 type Props = { accessToken: string | undefined }
 
-/**
- * "Weekly Commitments" section. Each row shows the recurring block; an active
- * toggle disables it temporarily; the AI planner enforces active commitments as
- * hard busy time.
- */
 export function WeeklyCommitmentsSection({ accessToken }: Props) {
-  const { data: commitments = [], isLoading } = useCommitments(accessToken)
-  const { data: places = [] } = useSavedPlaces(accessToken)
-  const { create, update, remove } = useCommitmentMutations(accessToken)
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [editing, setEditing] = useState<RecurringCommitment | null>(null)
-  const [toDelete, setToDelete] = useState<RecurringCommitment | null>(null)
-  const [pendingConflict, setPendingConflict] = useState<{
-    conflict: ScheduleConflict
-    input: RecurringCommitmentInput
-  } | null>(null)
-  const [resolving, setResolving] = useState(false)
-
-  const openCreate = () => {
-    setEditing(null)
-    setEditorOpen(true)
-  }
-  const openEdit = (commitment: RecurringCommitment) => {
-    setEditing(commitment)
-    setEditorOpen(true)
-  }
-
-  const persist = (input: RecurringCommitmentInput) => {
-    const mutation = editing
-      ? update.mutateAsync({ id: editing.id, input })
-      : create.mutateAsync(input)
-    return mutation.then(() => setEditorOpen(false))
-  }
-
-  const handleSubmit = (input: RecurringCommitmentInput) => {
-    if (!editing || !accessToken) {
-      void persist(input)
-      return
-    }
-    const date = new Date().toISOString().slice(0, 10)
-    void getDailyPlanAcceptance(accessToken, date).then((acceptance) => {
-      const conflict = acceptance
-        ? conflictForCommitmentEdit(editing.id, input, acceptance.plan)
-        : null
-      if (conflict) setPendingConflict({ conflict, input })
-      else void persist(input)
-    })
-  }
-
-  const toggleActive = (commitment: RecurringCommitment) => {
-    void update.mutateAsync({ id: commitment.id, input: { isActive: !commitment.isActive } })
-  }
-
-  return (
-    <SectionCard>
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-black text-[var(--bp-text)]">Weekly Commitments</h3>
-          <p className="text-xs text-[var(--bp-muted)]">Fixed recurring time the planner keeps clear.</p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          aria-label="Add commitment"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-lg font-black text-black hover:opacity-90"
-        >
-          +
-        </button>
-      </div>
-
-      {isLoading ? (
-        <p className="py-4 text-sm text-[var(--bp-muted)]">Loading…</p>
-      ) : commitments.length === 0 ? (
-        <p className="py-4 text-sm text-[var(--bp-muted)]">
-          No commitments yet. Add classes, work shifts, or anything recurring.
-        </p>
-      ) : (
-        <ul className="divide-y divide-[var(--bp-border)]">
-          {commitments.map((commitment) => (
-            <li key={commitment.id} className="flex items-center gap-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className={`truncate text-sm font-bold ${commitment.isActive ? 'text-[var(--bp-text)]' : 'text-[var(--bp-muted)] line-through'}`}>
-                  {commitment.title}
-                </p>
-                <p className="truncate text-xs text-[var(--bp-muted)]">
-                  {formatDays(commitment.daysOfWeek)} · {formatTimeRange(commitment.startTime, commitment.endTime)}
-                  {commitment.savedLocationName ? ` · ${commitment.savedLocationName}` : ''}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => toggleActive(commitment)}
-                aria-label={commitment.isActive ? `Disable ${commitment.title}` : `Enable ${commitment.title}`}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                  commitment.isActive ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]' : 'bg-[var(--bp-bg)] text-[var(--bp-muted)]'
-                }`}
-              >
-                {commitment.isActive ? 'Active' : 'Paused'}
-              </button>
-              <button
-                type="button"
-                onClick={() => openEdit(commitment)}
-                className="rounded-lg px-2 py-1 text-xs font-semibold text-[var(--bp-muted)] hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setToDelete(commitment)}
-                className="rounded-lg px-2 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/10"
-              >
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {editorOpen ? (
-        <CommitmentEditorModal
-          open={editorOpen}
-          initial={editing}
-          places={places}
-          saving={create.isPending || update.isPending}
-          onClose={() => setEditorOpen(false)}
-          onSubmit={handleSubmit}
-        />
-      ) : null}
-
-      <ConfirmDestructiveModal
-        open={Boolean(toDelete)}
-        title="Delete commitment?"
-        message={toDelete ? `"${toDelete.title}" will no longer block time in your plans.` : ''}
-        confirmLabel="Delete"
-        onCancel={() => setToDelete(null)}
-        onConfirm={() => {
-          if (toDelete) void remove.mutateAsync(toDelete.id).finally(() => setToDelete(null))
-        }}
-      />
-      <ScheduleConflictModal
-        conflict={pendingConflict?.conflict ?? null}
-        busy={resolving}
-        onKeepCommitment={() => {
-          if (!pendingConflict || !accessToken) return
-          setResolving(true)
-          const date = new Date().toISOString().slice(0, 10)
-          void persist(pendingConflict.input)
-            .then(() => generateDailyPlan(accessToken, { date }))
-            .then((plan) => acceptDailyPlan(accessToken, plan))
-            .finally(() => {
-              setPendingConflict(null)
-              setResolving(false)
-            })
-        }}
-        onKeepTask={() => {
-          if (!pendingConflict || !accessToken || !editing) return
-          setResolving(true)
-          const date = new Date().toISOString().slice(0, 10)
-          void persist(pendingConflict.input)
-            .then(() => skipCommitmentOccurrence(accessToken, editing.id, date))
-            .finally(() => {
-              setPendingConflict(null)
-              setResolving(false)
-            })
-        }}
-        onManual={() => setPendingConflict(null)}
-        onCancel={() => setPendingConflict(null)}
-      />
-    </SectionCard>
-  )
+  const { data: commitments = [], isLoading } = useCommitments(accessToken); const { data: places = [] } = useSavedPlaces(accessToken); const { create, update, remove } = useCommitmentMutations(accessToken)
+  const [editorOpen, setEditorOpen] = useState(false); const [editing, setEditing] = useState<RecurringCommitment | null>(null); const [toDelete, setToDelete] = useState<RecurringCommitment | null>(null); const [openMenu, setOpenMenu] = useState<string | null>(null); const [pendingConflict, setPendingConflict] = useState<{ conflict: ScheduleConflict; input: RecurringCommitmentInput } | null>(null); const [resolving, setResolving] = useState(false)
+  const openCreate = () => { setEditing(null); setEditorOpen(true) }; const openEdit = (commitment: RecurringCommitment) => { setEditing(commitment); setEditorOpen(true) }
+  const persist = (input: RecurringCommitmentInput) => (editing ? update.mutateAsync({ id: editing.id, input }) : create.mutateAsync(input)).then(() => setEditorOpen(false))
+  const handleSubmit = (input: RecurringCommitmentInput) => { if (!editing || !accessToken) return void persist(input); const date = new Date().toISOString().slice(0, 10); void getDailyPlanAcceptance(accessToken, date).then((acceptance) => { const conflict = acceptance ? conflictForCommitmentEdit(editing.id, input, acceptance.plan) : null; if (conflict) setPendingConflict({ conflict, input }); else void persist(input) }) }
+  const toggleActive = (commitment: RecurringCommitment) => { void update.mutateAsync({ id: commitment.id, input: { isActive: !commitment.isActive } }) }
+  return <SectionCard><div className="flex items-center justify-between gap-4"><div><h3 className="text-sm font-black">Weekly Commitments</h3><p className="mt-1 text-xs text-[var(--bp-muted)]">Recurring time BeePlan should always keep clear.</p></div><button type="button" onClick={openCreate} className="rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-3 py-1.5 text-xs font-black text-[var(--bp-accent-ink)] hover:opacity-90">+ Add commitment</button></div>{isLoading ? <p className="py-4 text-sm text-[var(--bp-muted)]">Loading…</p> : commitments.length === 0 ? <div className="py-5"><p className="text-sm font-bold">No weekly commitments yet.</p><p className="mt-1 max-w-xl text-xs leading-relaxed text-[var(--bp-muted)]">Add classes, work shifts, gym sessions, prayer, family time, or anything BeePlan should always keep clear.</p></div> : <ul className="mt-3 max-h-96 divide-y divide-[var(--bp-border)] overflow-y-auto">{commitments.map((commitment) => <li key={commitment.id} className="flex items-center gap-3 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]"><CalendarClock size={17} /></span><div className="min-w-0 flex-1"><p className={`truncate text-sm font-bold ${commitment.isActive ? 'text-[var(--bp-text)]' : 'text-[var(--bp-muted)] line-through'}`}>{commitment.title}</p><p className="truncate text-xs text-[var(--bp-muted)]">{formatDays(commitment.daysOfWeek)} · {formatTimeRange(commitment.startTime, commitment.endTime)}{commitment.savedLocationName ? ` · ${commitment.savedLocationName}` : ''}</p></div><button type="button" onClick={() => toggleActive(commitment)} aria-label={commitment.isActive ? `Disable ${commitment.title}` : `Enable ${commitment.title}`} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${commitment.isActive ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]' : 'bg-[var(--bp-bg)] text-[var(--bp-muted)]'}`}>{commitment.isActive ? 'Active' : 'Paused'}</button><div className="relative"><button type="button" aria-label={`More options for ${commitment.title}`} onClick={() => setOpenMenu(openMenu === commitment.id ? null : commitment.id)} className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--bp-muted)] hover:bg-[var(--bp-bg)] hover:text-[var(--bp-text)]"><MoreHorizontal size={18} /></button>{openMenu === commitment.id ? <div className="absolute right-0 top-10 z-10 w-32 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] p-1 shadow-xl"><button type="button" onClick={() => { setOpenMenu(null); openEdit(commitment) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold hover:bg-[var(--bp-bg)]">Edit</button><button type="button" onClick={() => { setOpenMenu(null); setToDelete(commitment) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-red-400 hover:bg-red-500/10">Delete</button></div> : null}</div></li>)}</ul>}<CommitmentEditorModal open={editorOpen} initial={editing} places={places} saving={create.isPending || update.isPending} onClose={() => setEditorOpen(false)} onSubmit={handleSubmit} /><ConfirmDestructiveModal open={Boolean(toDelete)} title="Delete commitment?" message={toDelete ? `"${toDelete.title}" will no longer block time in your plans.` : ''} confirmLabel="Delete" onCancel={() => setToDelete(null)} onConfirm={() => { if (toDelete) void remove.mutateAsync(toDelete.id).finally(() => setToDelete(null)) }} /><ScheduleConflictModal conflict={pendingConflict?.conflict ?? null} busy={resolving} onKeepCommitment={() => { if (!pendingConflict || !accessToken) return; setResolving(true); const date = new Date().toISOString().slice(0, 10); void persist(pendingConflict.input).then(() => generateDailyPlan(accessToken, { date })).then((plan) => acceptDailyPlan(accessToken, plan)).finally(() => { setPendingConflict(null); setResolving(false) }) }} onKeepTask={() => { if (!pendingConflict || !accessToken || !editing) return; setResolving(true); const date = new Date().toISOString().slice(0, 10); void persist(pendingConflict.input).then(() => skipCommitmentOccurrence(accessToken, editing.id, date)).finally(() => { setPendingConflict(null); setResolving(false) }) }} onManual={() => setPendingConflict(null)} onCancel={() => setPendingConflict(null)} /></SectionCard>
 }
 
-export function conflictForCommitmentEdit(
-  commitmentId: string,
-  input: RecurringCommitmentInput,
-  plan: import('../../../lib/plannerApi').DailyPlan,
-): ScheduleConflict | null {
-  const start = minutes(input.startTime)
-  const end = minutes(input.endTime)
-  for (const task of Object.values(plan.sections).flat().filter((item) => item.type === 'task')) {
-    const overlap = Math.max(0, Math.min(end, minutes(task.endTime)) - Math.max(start, minutes(task.startTime)))
-    if (!overlap) continue
-    return {
-      id: `${task.id}:${commitmentId}`,
-      task: {
-        itemId: task.id,
-        taskId: task.taskId,
-        subtaskId: task.subtaskId,
-        title: task.title,
-        startTime: task.startTime,
-        endTime: task.endTime,
-        durationMinutes: task.durationMinutes,
-        isFocusTask: Boolean(task.isFocusTask),
-      },
-      commitment: {
-        id: commitmentId,
-        title: input.title,
-        startTime: input.startTime,
-        endTime: input.endTime,
-      },
-      conflictMinutes: overlap,
-    }
-  }
+export function conflictForCommitmentEdit(commitmentId: string, input: RecurringCommitmentInput, plan: import('../../../lib/plannerApi').DailyPlan): ScheduleConflict | null {
+  const start = minutes(input.startTime); const end = minutes(input.endTime)
+  for (const task of Object.values(plan.sections).flat().filter((item) => item.type === 'task')) { const overlap = Math.max(0, Math.min(end, minutes(task.endTime)) - Math.max(start, minutes(task.startTime))); if (!overlap) continue; return { id: `${task.id}:${commitmentId}`, task: { itemId: task.id, taskId: task.taskId, subtaskId: task.subtaskId, title: task.title, startTime: task.startTime, endTime: task.endTime, durationMinutes: task.durationMinutes, isFocusTask: Boolean(task.isFocusTask) }, commitment: { id: commitmentId, title: input.title, startTime: input.startTime, endTime: input.endTime }, conflictMinutes: overlap } }
   return null
 }
-
-function minutes(value: string): number {
-  const [hours, mins] = value.split(':').map(Number)
-  return hours * 60 + mins
-}
+function minutes(value: string): number { const [hours, mins] = value.split(':').map(Number); return hours * 60 + mins }

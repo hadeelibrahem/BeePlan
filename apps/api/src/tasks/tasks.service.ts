@@ -39,6 +39,8 @@ import {
   scheduleConflictResolutions,
   users,
 } from '../db/schema';
+import { Optional } from '@nestjs/common';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import type { NotificationType } from '../notifications/notification-types';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { CreateTaskDto } from './dto/create-task.dto';
@@ -118,6 +120,7 @@ export class TasksService {
     private readonly notifications: NotificationsService,
     private readonly commitmentsService: RecurringCommitmentsService,
     private readonly weatherTravel: WeatherTravelService,
+    @Optional() private readonly googleCalendar?: GoogleCalendarService,
   ) {}
 
   private get db() {
@@ -203,6 +206,7 @@ export class TasksService {
 
     await this.recalculateProgress(userId, task.id);
     await this.addActivity(userId, task.id, 'created', 'Task created');
+    void this.googleCalendar?.enqueueTaskSync(userId, task.id);
 
     return this.findOne(userId, task.id);
   }
@@ -688,6 +692,7 @@ export class TasksService {
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(userId, taskId, 'updated', 'Task updated');
     await this.notifyMembersOfChange(userId, existingTask, dto);
+    void this.googleCalendar?.enqueueTaskSync(userId, taskId);
 
     return this.findOne(userId, taskId);
   }
@@ -696,6 +701,7 @@ export class TasksService {
     // Deleting a task is owner-only (spec: editors cannot delete).
     await this.getTaskForUser(userId, taskId, 'owner');
     await this.db.delete(tasks).where(eq(tasks.id, taskId));
+    void this.googleCalendar?.enqueueTaskSync(userId, taskId, 'delete');
   }
 
   async changeStatus(userId: string, taskId: string, dto: TaskStatusDto) {
@@ -733,6 +739,7 @@ export class TasksService {
       },
     );
     await this.notifyMembersOfChange(userId, task, { status: dto.status });
+    void this.googleCalendar?.enqueueTaskSync(userId, taskId);
 
     return this.findOne(userId, taskId);
   }
@@ -2263,6 +2270,17 @@ export class TasksService {
       events.push({
         type: 'task_completed',
         body: `${name} completed "${task.title}".`,
+      });
+    }
+    if (dto.status && dto.status !== 'done' && task.status === 'done') {
+      events.push({
+        type: 'task_reopened',
+        body: `${name} reopened "${task.title}".`,
+      });
+    } else if (dto.status && dto.status !== task.status && dto.status !== 'done') {
+      events.push({
+        type: 'task_status_changed',
+        body: `${name} changed "${task.title}" to ${dto.status}.`,
       });
     }
     if (dto.dueDate !== undefined) {

@@ -32,7 +32,7 @@ const PRIORITY_NOTIFICATION_COLORS: Record<ReminderPriority, string> = {
 setNotificationHandler({
   handleNotification: async (notification) => ({
     shouldPlaySound: !(notification.request.content.data?.kind === 'focus-completion' && AppState.currentState === 'active'),
-    shouldSetBadge: false,
+    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
   }),

@@ -9,13 +9,13 @@ type StatsCardProps = {
 
 export function StatsCard({ icon, value, title, desc }: StatsCardProps) {
   return (
-    <div className="bp-card animate-[beeplanFadeIn_300ms_ease-out] rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 shadow-xl transition-colors duration-200">
-      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]">
+    <div className="bp-card animate-[beeplanFadeIn_300ms_ease-out] rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2.5 shadow-lg transition-colors duration-200">
+      <div className="mb-1.5 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--bp-accent)]/12 text-[var(--bp-accent-ink)]">
         {icon}
       </div>
-      <div className="text-2xl font-black text-[var(--bp-text)]">{value}</div>
-      <h3 className="mt-1.5 text-sm font-bold text-[var(--bp-text)]">{title}</h3>
-      <p className="mt-1 text-xs text-[var(--bp-muted)]">{desc}</p>
+      <div className="text-xl font-black text-[var(--bp-text)]">{value}</div>
+      <h3 className="mt-0.5 text-xs font-bold text-[var(--bp-text)]">{title}</h3>
+      <p className="mt-0.5 text-[11px] text-[var(--bp-muted)]">{desc}</p>
     </div>
   )
 }

@@ -178,14 +178,14 @@ export class PlannerRuleEngine {
         pushIfFree({
           id: `unavailable-${index}-${range.start}`,
           type: 'break',
-          title: 'Unavailable',
+          title: window.label || 'Unavailable',
           startMinutes: range.start,
           endMinutes: range.end,
           priority: 'medium',
           category: 'Unavailable',
           isFocusTask: false,
           locked: false,
-          rationale: 'You marked this time as unavailable.',
+          rationale: window.label ? `${window.label} — you marked this time as unavailable.` : 'You marked this time as unavailable.',
         });
       }
     });

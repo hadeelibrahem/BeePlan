@@ -16,6 +16,7 @@ import { friendlyError } from '../errorMessages';
 import { type AppNotification, type TaskInvitation } from '../types';
 import { queryKeys } from '../../../lib/queryKeys';
 import { notificationDestination } from '../notificationRouting';
+import { notificationMeta } from '../notificationMeta';
 import { filterNotifications, type NotificationReadFilter } from '../notificationSearch';
 
 type Props = {
@@ -289,7 +290,7 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
                     backgroundColor: n.isRead ? colors.card : `${colors.accent}0d`,
                   }}
                 >
-                  <MobileIcon name="notifications" color={colors.accent} size={20} accessibilityLabel={`${n.type} notification`} />
+                  <MobileIcon name={notificationMeta(n.type).icon} color={n.isRead ? colors.secondaryText : colors.accent} size={20} accessibilityLabel={`${notificationMeta(n.type).category} notification`} />
                   <View className="flex-1">
                     <Text style={{ color: colors.text }} className="text-sm font-bold">
                       {n.title}

@@ -139,12 +139,14 @@ function SidebarContent({
   onNavigate?: () => void
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col py-0">
+    <div className="relative flex h-full min-h-0 flex-col py-0">
       {/* Logo container section - aligns perfectly with the h-16 main header bar */}
-      <div className="bp-sidebar-logo px-4 h-16 flex items-center justify-between border-b border-white/5 shrink-0 bg-slate-900/10">
-        <div className="flex items-center gap-2.5">
-          <BeePlanLogo showTagline={false} size={28} />
-          <span className="text-base font-black tracking-tight text-[#FDEF4B]">BeePlan</span>
+      <div className="bp-sidebar-logo flex h-16 shrink-0 items-center justify-between border-b border-white/5 bg-slate-900/10 px-5">
+        <div className="flex items-center gap-3">
+          <BeePlanLogo showTagline={false} size={30} />
+          <span className="bp-sidebar-brand text-[17px] leading-none tracking-[-0.02em]">
+            <span className="bp-sidebar-brand-bee font-semibold">Bee</span><span className="bp-sidebar-brand-plan font-bold">Plan</span>
+          </span>
         </div>
         {onNavigate && (
           <button
@@ -159,16 +161,18 @@ function SidebarContent({
       </div>
 
       {/* Navigation list (hides vertical scrollbar using tailwind utilities) */}
-      <nav className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] space-y-4 text-sm px-4 mt-4 pr-3">
+      <nav className="flex-1 space-y-4 overflow-y-auto px-5 pr-4 text-sm [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] mt-4">
         {NAV_GROUPS.map((group) => (
           <div key={group.title} className="space-y-1">
-            <div className="bp-sidebar-group text-[10px] font-bold tracking-wider text-slate-500/60 uppercase px-3 py-1">
+            <div className="bp-sidebar-group px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500/60">
               {group.title}
             </div>
             <div className="space-y-1.5">
               {group.items.map(({ page, label, Icon, handler }) => (
                 <SidebarNavItem
                   key={page}
+                  page={page}
+                  beeTarget
                   active={active === page}
                   icon={<Icon />}
                   label={label}
@@ -224,11 +228,15 @@ function SidebarContent({
 }
 
 export function SidebarNavItem({
+  page,
+  beeTarget,
   icon,
   label,
   active,
   onClick,
 }: {
+  page?: SidebarPage
+  beeTarget?: boolean
   icon: ReactNode
   label: string
   active?: boolean
@@ -239,19 +247,21 @@ export function SidebarNavItem({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`bp-sidebar-nav-item group relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-all duration-150 min-h-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FDEF4B] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+      data-sidebar-page={page}
+      data-bee-target={beeTarget ? 'true' : undefined}
+      className={`bp-sidebar-nav-item group relative flex min-h-10 w-full cursor-pointer items-center gap-3 rounded-[14px] px-3 py-2.5 text-start transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FDEF4B] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
         active
-          ? 'bg-[#FDEF4B]/12 text-[#FDEF4B]'
+          ? 'bg-[#FDEF4B]/12 text-[#FDEF4B] shadow-[0_4px_14px_rgba(253,239,75,0.08)]'
           : 'text-slate-400 hover:bg-slate-800/40 hover:text-white'
       }`}
     >
       {active && (
         <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-[#FDEF4B] rounded-r shadow-[0_0_12px_rgba(253,239,75,0.65)]" />
       )}
-      <span className={`bp-sidebar-icon ${active ? 'text-[#FDEF4B]' : 'text-slate-500 group-hover:text-slate-300 transition-colors'}`}>
+      <span className={`bp-sidebar-icon flex shrink-0 items-center justify-center ${active ? 'text-[#FDEF4B]' : 'text-slate-500 group-hover:text-slate-300 transition-colors'}`}>
         {icon}
       </span>
-      <span className={`text-[13px] ${active ? 'font-bold' : 'font-medium'}`}>{label}</span>
+      <span className={`text-[13px] leading-5 ${active ? 'font-semibold' : 'font-medium'}`}>{label}</span>
     </button>
   )
 }
