@@ -1,0 +1,25 @@
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "proactive_assistance_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "dynamic_preparation_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "dynamic_packing_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "context_timeline_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "contextual_notifications_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "electronics_advice_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "medication_advice_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_preferences" ADD COLUMN IF NOT EXISTS "departure_reminders_enabled" boolean NOT NULL DEFAULT true;
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "quantity" varchar(80);
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "quantity_unit" varchar(40);
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "user_edited" boolean NOT NULL DEFAULT false;
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "category" varchar(40);
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "priority" varchar(16) NOT NULL DEFAULT 'medium';
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "suggested_stage_id" uuid;
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "notification_eligible" boolean NOT NULL DEFAULT false;
+ALTER TABLE "task_assistant_suggestions" ADD COLUMN IF NOT EXISTS "locked_by_user" boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS "task_assistant_evaluations" ("id" uuid PRIMARY KEY DEFAULT gen_random_uuid(), "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE, "task_id" uuid REFERENCES "tasks"("id") ON DELETE CASCADE, "subtask_id" uuid REFERENCES "subtasks"("id") ON DELETE CASCADE, "context_version" varchar(160) NOT NULL, "schedule_version" varchar(160) NOT NULL, "evidence_version" varchar(160) NOT NULL, "status" varchar(24) NOT NULL DEFAULT 'current', "confidence" varchar(20) NOT NULL, "generated_at" timestamp NOT NULL DEFAULT now(), "valid_until" timestamp NOT NULL, "invalidated_at" timestamp, "created_at" timestamp NOT NULL DEFAULT now(), "updated_at" timestamp NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS "idx_task_assistant_evaluation_task" ON "task_assistant_evaluations" ("user_id", "task_id", "status");
+CREATE TABLE IF NOT EXISTS "task_assistant_timeline_stages" ("id" uuid PRIMARY KEY DEFAULT gen_random_uuid(), "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE, "context_id" uuid NOT NULL REFERENCES "task_assistant_contexts"("id") ON DELETE CASCADE, "stage_type" varchar(40) NOT NULL, "title" varchar(255) NOT NULL, "description" text NOT NULL, "scheduled_at" timestamp, "due_at" timestamp, "priority" varchar(16) NOT NULL, "status" varchar(24) NOT NULL DEFAULT 'pending', "fingerprint" varchar(128) NOT NULL, "trigger_reason" text NOT NULL, "completed_at" timestamp, "dismissed_at" timestamp, "invalidated_at" timestamp, "created_at" timestamp NOT NULL DEFAULT now(), "updated_at" timestamp NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_task_assistant_timeline_fingerprint" ON "task_assistant_timeline_stages" ("fingerprint");
+CREATE INDEX IF NOT EXISTS "idx_task_assistant_timeline_context" ON "task_assistant_timeline_stages" ("context_id", "status");
+CREATE TABLE IF NOT EXISTS "task_assistant_notifications" ("id" uuid PRIMARY KEY DEFAULT gen_random_uuid(), "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE, "task_id" uuid NOT NULL REFERENCES "tasks"("id") ON DELETE CASCADE, "context_id" uuid NOT NULL REFERENCES "task_assistant_contexts"("id") ON DELETE CASCADE, "notification_type" varchar(40) NOT NULL, "title" varchar(255) NOT NULL, "body" text NOT NULL, "scheduled_at" timestamp NOT NULL, "priority" varchar(16) NOT NULL, "status" varchar(24) NOT NULL DEFAULT 'pending', "fingerprint" varchar(128) NOT NULL, "delivered_at" timestamp, "retry_count" integer NOT NULL DEFAULT 0, "last_error_code" varchar(80), "created_at" timestamp NOT NULL DEFAULT now(), "updated_at" timestamp NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_task_assistant_notification_fingerprint" ON "task_assistant_notifications" ("fingerprint");
+CREATE INDEX IF NOT EXISTS "idx_task_assistant_notifications_due" ON "task_assistant_notifications" ("status", "scheduled_at");

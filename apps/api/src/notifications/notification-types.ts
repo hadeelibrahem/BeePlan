@@ -23,6 +23,7 @@ export const NOTIFICATION_TYPES = [
   'ai_plan_applied',
   'ai_recommendation_ready',
   'weather_travel',
+  'task_assistant',
   'task_created',
   'task_reopened',
   'task_assigned',

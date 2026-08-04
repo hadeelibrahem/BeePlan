@@ -8,7 +8,7 @@ describe('Settings sidebar navigation', () => {
     const desktopSidebar = container.querySelector('aside')
     const content = desktopSidebar?.firstElementChild
 
-    expect(desktopSidebar).toHaveClass('top-16', 'h-[calc(100dvh-4rem)]', 'lg:flex')
+    expect(desktopSidebar).toHaveClass('top-0', 'h-screen', 'lg:flex')
     expect(content).toHaveClass('h-full', 'min-h-0')
   })
 

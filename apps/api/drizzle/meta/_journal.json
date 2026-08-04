@@ -22,6 +22,20 @@
       "when": 1785436352312,
       "tag": "0012_weather_travel_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785758400000,
+      "tag": "0019_task_context_assistant",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785758460000,
+      "tag": "0020_proactive_task_assistant",
+      "breakpoints": true
     }
   ]
 }
