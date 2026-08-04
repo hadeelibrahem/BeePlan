@@ -1,4 +1,7 @@
-import { getNotificationCategory, isPreferenceBypass } from './notification-category';
+import {
+  getNotificationCategory,
+  isPreferenceBypass,
+} from './notification-category';
 
 describe('notification categories', () => {
   it('maps every supported notification type to one category', () => {
@@ -9,7 +12,9 @@ describe('notification categories', () => {
     expect(getNotificationCategory('ai_recommendation_ready')).toBe('ai');
     expect(getNotificationCategory('weather_travel')).toBe('ai');
     expect(getNotificationCategory('task_overdue')).toBe('task');
-    expect(getNotificationCategory('calendar_event_cancelled')).toBe('calendar');
+    expect(getNotificationCategory('calendar_event_cancelled')).toBe(
+      'calendar',
+    );
     expect(getNotificationCategory('focus_session_missed')).toBe('focus');
   });
 

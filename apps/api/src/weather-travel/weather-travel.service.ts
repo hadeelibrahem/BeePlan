@@ -138,7 +138,12 @@ export class WeatherTravelService {
     });
   }
 
-  async previewTask(userId: string, taskId: string, subtaskId?: string) {
+  async previewTask(
+    userId: string,
+    taskId: string,
+    subtaskId?: string,
+    assistantContext = false,
+  ) {
     const [task] = await this.db
       .select()
       .from(tasks)
@@ -168,7 +173,7 @@ export class WeatherTravelService {
       if (children.length)
         return ineligible(task, 'scheduled_subtask_is_smallest_execution_unit');
     }
-    return this.buildPreview(userId, task, item, subtaskId);
+    return this.buildPreview(userId, task, item, subtaskId, assistantContext);
   }
 
   async schedule(userId: string, taskId: string, subtaskId?: string) {
@@ -308,10 +313,15 @@ export class WeatherTravelService {
     task: any,
     item: any,
     subtaskId?: string,
+    assistantContext = false,
   ) {
     const preferences = await this.getPreferences(userId);
     const destination = destinationFrom(item.destination);
-    const eligibilityReason = eligibility(item, preferences, destination);
+    const eligibilityReason = eligibility(
+      assistantContext ? { ...item, weatherTravelEnabled: true } : item,
+      assistantContext ? { ...preferences, enabled: true } : preferences,
+      destination,
+    );
     if (eligibilityReason) return ineligible(item, eligibilityReason);
     const scheduledStart = zonedDateTime(
       item.scheduledDate,

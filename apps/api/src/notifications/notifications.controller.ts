@@ -25,23 +25,53 @@ import { PushNotificationsService } from './push-notifications.service';
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService, private readonly pushNotifications: PushNotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly pushNotifications: PushNotificationsService,
+  ) {}
 
   @Get('push-devices')
-  listPushDevices(@Req() request: AuthenticatedRequest) { return this.pushNotifications.list(request.user.id); }
+  listPushDevices(@Req() request: AuthenticatedRequest) {
+    return this.pushNotifications.list(request.user.id);
+  }
 
   @Post('push-devices/register')
-  registerPushDevice(@Req() request: AuthenticatedRequest, @Body() dto: RegisterPushDeviceDto) { return this.pushNotifications.register(request.user.id, dto); }
+  registerPushDevice(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: RegisterPushDeviceDto,
+  ) {
+    return this.pushNotifications.register(request.user.id, dto);
+  }
 
   @Patch('push-devices/:installationId')
-  updatePushDevice(@Req() request: AuthenticatedRequest, @Param('installationId') installationId: string, @Body() dto: UpdatePushDeviceDto) { return this.pushNotifications.update(request.user.id, installationId, dto.enabled); }
+  updatePushDevice(
+    @Req() request: AuthenticatedRequest,
+    @Param('installationId') installationId: string,
+    @Body() dto: UpdatePushDeviceDto,
+  ) {
+    return this.pushNotifications.update(
+      request.user.id,
+      installationId,
+      dto.enabled,
+    );
+  }
 
   @HttpCode(HttpStatus.OK)
   @Post('push-devices/:installationId/disable')
-  disablePushDevice(@Req() request: AuthenticatedRequest, @Param('installationId') installationId: string) { return this.pushNotifications.remove(request.user.id, installationId); }
+  disablePushDevice(
+    @Req() request: AuthenticatedRequest,
+    @Param('installationId') installationId: string,
+  ) {
+    return this.pushNotifications.remove(request.user.id, installationId);
+  }
 
   @Delete('push-devices/:installationId')
-  deletePushDevice(@Req() request: AuthenticatedRequest, @Param('installationId') installationId: string) { return this.pushNotifications.remove(request.user.id, installationId); }
+  deletePushDevice(
+    @Req() request: AuthenticatedRequest,
+    @Param('installationId') installationId: string,
+  ) {
+    return this.pushNotifications.remove(request.user.id, installationId);
+  }
 
   @Get('preferences')
   getPreferences(@Req() request: AuthenticatedRequest) {
@@ -49,7 +79,10 @@ export class NotificationsController {
   }
 
   @Patch('preferences')
-  updatePreferences(@Req() request: AuthenticatedRequest, @Body() dto: UpdateNotificationPreferencesDto) {
+  updatePreferences(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpdateNotificationPreferencesDto,
+  ) {
     return this.notificationsService.updatePreferences(request.user.id, dto);
   }
 

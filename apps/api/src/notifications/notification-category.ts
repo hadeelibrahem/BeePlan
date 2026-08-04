@@ -1,6 +1,12 @@
 import type { NotificationType } from './notification-types';
 
-export type NotificationCategory = 'task' | 'calendar' | 'focus' | 'collaboration' | 'ai' | 'system';
+export type NotificationCategory =
+  | 'task'
+  | 'calendar'
+  | 'focus'
+  | 'collaboration'
+  | 'ai'
+  | 'system';
 
 const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   reminder: 'task',
@@ -24,6 +30,7 @@ const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   ai_plan_applied: 'ai',
   ai_recommendation_ready: 'ai',
   weather_travel: 'ai',
+  task_assistant: 'ai',
   task_created: 'task',
   task_reopened: 'task',
   task_assigned: 'task',
@@ -44,7 +51,9 @@ const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   planner_suggestion: 'ai',
 };
 
-export function getNotificationCategory(type: NotificationType): NotificationCategory {
+export function getNotificationCategory(
+  type: NotificationType,
+): NotificationCategory {
   return CATEGORY_BY_TYPE[type] ?? 'system';
 }
 

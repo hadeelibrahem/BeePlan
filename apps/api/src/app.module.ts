@@ -22,6 +22,7 @@ import { SpeechModule } from './speech/speech.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WeatherTravelModule } from './weather-travel/weather-travel.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
+import { TaskAssistantModule } from './task-assistant/task-assistant.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
     FocusModule,
     WeatherTravelModule,
     GoogleCalendarModule,
+    TaskAssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

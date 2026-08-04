@@ -101,7 +101,7 @@ describe('CalendarScreen actions', () => {
     const user = userEvent.setup()
     const handlers = renderCalendar()
 
-    await user.click(screen.getByRole('button', { name: 'Add task' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
 
     expect(handlers.onCreateTaskForDate).toHaveBeenCalledOnce()
     expect(handlers.onCreateTaskForDate).toHaveBeenCalledWith(todayKey())
@@ -114,7 +114,7 @@ describe('CalendarScreen actions', () => {
       reminders: [],
     })
 
-    expect(screen.getByText('+1')).toBeInTheDocument()
+    expect(screen.getByText('+1 more')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Next/ }))
     await user.click(screen.getByRole('button', { name: 'Today' }))
 
@@ -124,7 +124,7 @@ describe('CalendarScreen actions', () => {
   it('exposes today and selection state and supports arrow-key day navigation', async () => {
     const user = userEvent.setup()
     renderCalendar()
-    const today = screen.getByRole('gridcell', { name: /today, 2 scheduled items/ })
+    const today = screen.getByRole('gridcell', { name: /today, 2 scheduled items/i })
 
     expect(today).toHaveAttribute('aria-current', 'date')
     expect(today).toHaveAttribute('aria-selected', 'true')

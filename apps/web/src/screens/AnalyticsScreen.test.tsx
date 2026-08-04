@@ -115,7 +115,7 @@ function renderAnalytics() {
 // <main> so the "Reminders" card title doesn't collide with the sidebar nav item.
 function statValue(title: string) {
   const main = screen.getByRole('main')
-  const card = within(main).getByText(title).closest('.rounded-2xl')
+  const card = within(main).getByText(title).closest('.bp-card')
   if (!card) throw new Error(`Stat card "${title}" not found`)
   return within(card as HTMLElement).getByText(/\d/).textContent
 }

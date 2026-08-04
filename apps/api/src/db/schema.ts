@@ -20,29 +20,37 @@ const id = () => uuid('id').defaultRandom().primaryKey();
 const createdAt = () => timestamp('created_at').defaultNow().notNull();
 const updatedAt = () => timestamp('updated_at').defaultNow().notNull();
 
-export const users = pgTable('users', {
-  id: id(),
-  fullName: varchar('full_name', { length: 255 }).notNull(),
-  username: varchar('username', { length: 20 }).notNull(),
-  usernameNormalized: varchar('username_normalized', { length: 20 }).notNull(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
-  avatarUrl: text('avatar_url'),
-  authProvider: varchar('auth_provider', { length: 40 })
-    .notNull()
-    .default('password'),
-  googleId: varchar('google_id', { length: 255 }).unique(),
-  emailVerified: boolean('email_verified').notNull().default(false),
-  timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
-  // Bumped on logout and password reset so previously-issued JWTs (which
-  // carry the version they were signed with) stop being accepted —
-  // see JwtAuthGuard and AuthService.logout/resetPassword.
-  tokenVersion: integer('token_version').notNull().default(0),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (table) => ({
-  usernameNormalizedUnique: uniqueIndex('users_username_normalized_unique').on(table.usernameNormalized),
-}));
+export const users = pgTable(
+  'users',
+  {
+    id: id(),
+    fullName: varchar('full_name', { length: 255 }).notNull(),
+    username: varchar('username', { length: 20 }).notNull(),
+    usernameNormalized: varchar('username_normalized', {
+      length: 20,
+    }).notNull(),
+    email: varchar('email', { length: 255 }).notNull().unique(),
+    passwordHash: text('password_hash').notNull(),
+    avatarUrl: text('avatar_url'),
+    authProvider: varchar('auth_provider', { length: 40 })
+      .notNull()
+      .default('password'),
+    googleId: varchar('google_id', { length: 255 }).unique(),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
+    // Bumped on logout and password reset so previously-issued JWTs (which
+    // carry the version they were signed with) stop being accepted —
+    // see JwtAuthGuard and AuthService.logout/resetPassword.
+    tokenVersion: integer('token_version').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => ({
+    usernameNormalizedUnique: uniqueIndex(
+      'users_username_normalized_unique',
+    ).on(table.usernameNormalized),
+  }),
+);
 
 export const passwordResetCodes = pgTable('password_reset_codes', {
   id: id(),
@@ -156,7 +164,10 @@ export const plannerAcceptedPlans = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => ({
-    userDateUnique: uniqueIndex('planner_accepted_plans_user_date_idx').on(table.userId, table.date),
+    userDateUnique: uniqueIndex('planner_accepted_plans_user_date_idx').on(
+      table.userId,
+      table.date,
+    ),
   }),
 );
 
@@ -296,19 +307,30 @@ export const scheduleConflictResolutions = pgTable(
   'schedule_conflict_resolutions',
   {
     id: id(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     conflictKey: varchar('conflict_key', { length: 500 }).notNull(),
     date: varchar('date', { length: 10 }).notNull(),
     taskId: uuid('task_id'),
-    commitmentId: uuid('commitment_id').references(() => recurringCommitments.id, { onDelete: 'cascade' }),
+    commitmentId: uuid('commitment_id').references(
+      () => recurringCommitments.id,
+      { onDelete: 'cascade' },
+    ),
     resolution: varchar('resolution', { length: 40 }).notNull(),
     resolvedAt: timestamp('resolved_at').defaultNow().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex('schedule_conflict_resolutions_user_key').on(table.userId, table.conflictKey),
-    index('idx_schedule_conflict_resolutions_user_date').on(table.userId, table.date),
+    uniqueIndex('schedule_conflict_resolutions_user_key').on(
+      table.userId,
+      table.conflictKey,
+    ),
+    index('idx_schedule_conflict_resolutions_user_date').on(
+      table.userId,
+      table.date,
+    ),
   ],
 );
 
@@ -339,7 +361,9 @@ export const tasks = pgTable(
     scheduledStartTime: varchar('scheduled_start_time', { length: 5 }),
     scheduledEndTime: varchar('scheduled_end_time', { length: 5 }),
     destination: jsonb('destination'),
-    weatherTravelEnabled: boolean('weather_travel_enabled').notNull().default(false),
+    weatherTravelEnabled: boolean('weather_travel_enabled')
+      .notNull()
+      .default(false),
     travelMode: varchar('travel_mode', { length: 24 }),
     travelOriginPreference: jsonb('travel_origin_preference'),
     categoryId: uuid('category_id').references(() => categories.id, {
@@ -455,7 +479,9 @@ export const subtasks = pgTable(
     scheduledStartTime: varchar('scheduled_start_time', { length: 5 }),
     scheduledEndTime: varchar('scheduled_end_time', { length: 5 }),
     destination: jsonb('destination'),
-    weatherTravelEnabled: boolean('weather_travel_enabled').notNull().default(false),
+    weatherTravelEnabled: boolean('weather_travel_enabled')
+      .notNull()
+      .default(false),
     travelMode: varchar('travel_mode', { length: 24 }),
     travelOriginPreference: jsonb('travel_origin_preference'),
     estimatedDurationMinutes: integer('estimated_duration_minutes'),
@@ -897,46 +923,101 @@ export const notifications = pgTable(
   ],
 );
 
-export const weatherTravelPreferences = pgTable(
-  'weather_travel_preferences',
-  {
-    userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
-    enabled: boolean('enabled').notNull().default(false),
-    defaultTravelMode: varchar('default_travel_mode', { length: 24 }).notNull().default('driving'),
-    homeRadiusMeters: integer('home_radius_meters').notNull().default(100),
-    preparationBufferMinutes: integer('preparation_buffer_minutes').notNull().default(10),
-    parkingWalkingBufferMinutes: integer('parking_walking_buffer_minutes').notNull().default(0),
-    uncertaintyBufferMinutes: integer('uncertainty_buffer_minutes').notNull().default(5),
-    weatherLeadMinutes: integer('weather_lead_minutes').notNull().default(15),
-    currentLocationFreshnessMinutes: integer('current_location_freshness_minutes').notNull().default(30),
-    coldThresholdC: decimal('cold_threshold_c', { precision: 5, scale: 2 }).notNull().default('12'),
-    veryColdThresholdC: decimal('very_cold_threshold_c', { precision: 5, scale: 2 }).notNull().default('5'),
-    hotThresholdC: decimal('hot_threshold_c', { precision: 5, scale: 2 }).notNull().default('28'),
-    extremeHeatThresholdC: decimal('extreme_heat_threshold_c', { precision: 5, scale: 2 }).notNull().default('35'),
-    rainThresholdPercent: integer('rain_threshold_percent').notNull().default(50),
-    rainAmountThresholdMm: decimal('rain_amount_threshold_mm', { precision: 6, scale: 2 }).notNull().default('0.5'),
-    windThresholdKph: decimal('wind_threshold_kph', { precision: 6, scale: 2 }).notNull().default('35'),
-    uvThreshold: decimal('uv_threshold', { precision: 5, scale: 2 }).notNull().default('6'),
-    visibilityThresholdMeters: integer('visibility_threshold_meters').notNull().default(1000),
-    advice: jsonb('advice').notNull().default({ coat: true, lightClothing: true, umbrella: true, hydration: true, uv: true, wind: true, severeWeather: true }),
-    currentLocationFallbackEnabled: boolean('current_location_fallback_enabled').notNull().default(false),
-    approximateTravelFallbackEnabled: boolean('approximate_travel_fallback_enabled').notNull().default(true),
-    aiPolishingEnabled: boolean('ai_polishing_enabled').notNull().default(false),
-    language: varchar('language', { length: 8 }).notNull().default('en'),
-    timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
-    selectedOriginSavedPlaceId: uuid('selected_origin_saved_place_id').references(() => savedLocations.id, { onDelete: 'set null' }),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-);
+export const weatherTravelPreferences = pgTable('weather_travel_preferences', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull().default(false),
+  defaultTravelMode: varchar('default_travel_mode', { length: 24 })
+    .notNull()
+    .default('driving'),
+  homeRadiusMeters: integer('home_radius_meters').notNull().default(100),
+  preparationBufferMinutes: integer('preparation_buffer_minutes')
+    .notNull()
+    .default(10),
+  parkingWalkingBufferMinutes: integer('parking_walking_buffer_minutes')
+    .notNull()
+    .default(0),
+  uncertaintyBufferMinutes: integer('uncertainty_buffer_minutes')
+    .notNull()
+    .default(5),
+  weatherLeadMinutes: integer('weather_lead_minutes').notNull().default(15),
+  currentLocationFreshnessMinutes: integer('current_location_freshness_minutes')
+    .notNull()
+    .default(30),
+  coldThresholdC: decimal('cold_threshold_c', { precision: 5, scale: 2 })
+    .notNull()
+    .default('12'),
+  veryColdThresholdC: decimal('very_cold_threshold_c', {
+    precision: 5,
+    scale: 2,
+  })
+    .notNull()
+    .default('5'),
+  hotThresholdC: decimal('hot_threshold_c', { precision: 5, scale: 2 })
+    .notNull()
+    .default('28'),
+  extremeHeatThresholdC: decimal('extreme_heat_threshold_c', {
+    precision: 5,
+    scale: 2,
+  })
+    .notNull()
+    .default('35'),
+  rainThresholdPercent: integer('rain_threshold_percent').notNull().default(50),
+  rainAmountThresholdMm: decimal('rain_amount_threshold_mm', {
+    precision: 6,
+    scale: 2,
+  })
+    .notNull()
+    .default('0.5'),
+  windThresholdKph: decimal('wind_threshold_kph', { precision: 6, scale: 2 })
+    .notNull()
+    .default('35'),
+  uvThreshold: decimal('uv_threshold', { precision: 5, scale: 2 })
+    .notNull()
+    .default('6'),
+  visibilityThresholdMeters: integer('visibility_threshold_meters')
+    .notNull()
+    .default(1000),
+  advice: jsonb('advice').notNull().default({
+    coat: true,
+    lightClothing: true,
+    umbrella: true,
+    hydration: true,
+    uv: true,
+    wind: true,
+    severeWeather: true,
+  }),
+  currentLocationFallbackEnabled: boolean('current_location_fallback_enabled')
+    .notNull()
+    .default(false),
+  approximateTravelFallbackEnabled: boolean(
+    'approximate_travel_fallback_enabled',
+  )
+    .notNull()
+    .default(true),
+  aiPolishingEnabled: boolean('ai_polishing_enabled').notNull().default(false),
+  language: varchar('language', { length: 8 }).notNull().default('en'),
+  timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
+  selectedOriginSavedPlaceId: uuid('selected_origin_saved_place_id').references(
+    () => savedLocations.id,
+    { onDelete: 'set null' },
+  ),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
 
 export const taskWeatherNotifications = pgTable(
   'task_weather_notifications',
   {
     id: id(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
-    subtaskId: uuid('subtask_id').references(() => subtasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, {
+      onDelete: 'cascade',
+    }),
     fingerprint: varchar('fingerprint', { length: 128 }).notNull(),
     scheduleVersion: varchar('schedule_version', { length: 160 }).notNull(),
     originSource: varchar('origin_source', { length: 40 }).notNull(),
@@ -964,8 +1045,13 @@ export const taskWeatherNotifications = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex('uq_task_weather_notifications_fingerprint').on(table.fingerprint),
-    index('idx_task_weather_notifications_upcoming').on(table.status, table.notificationTime),
+    uniqueIndex('uq_task_weather_notifications_fingerprint').on(
+      table.fingerprint,
+    ),
+    index('idx_task_weather_notifications_upcoming').on(
+      table.status,
+      table.notificationTime,
+    ),
     index('idx_task_weather_notifications_user').on(table.userId),
     index('idx_task_weather_notifications_task').on(table.taskId),
     index('idx_task_weather_notifications_subtask').on(table.subtaskId),
@@ -1227,7 +1313,9 @@ export const notificationDeliveries = pgTable(
   'notification_deliveries',
   {
     id: id(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     notificationType: varchar('notification_type', { length: 50 }).notNull(),
     entityType: varchar('entity_type', { length: 50 }).notNull(),
     entityId: varchar('entity_id', { length: 255 }).notNull(),
@@ -1237,77 +1325,125 @@ export const notificationDeliveries = pgTable(
   },
   (table) => [
     uniqueIndex('uq_notification_deliveries_key').on(table.deliveryKey),
-    index('idx_notification_deliveries_entity').on(table.entityType, table.entityId),
+    index('idx_notification_deliveries_entity').on(
+      table.entityType,
+      table.entityId,
+    ),
   ],
 );
 
-export const userPushDevices = pgTable('user_push_devices', {
-  id: id(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  expoPushToken: varchar('expo_push_token', { length: 255 }).notNull().unique(),
-  platform: varchar('platform', { length: 20 }).notNull(),
-  installationId: varchar('installation_id', { length: 255 }).notNull(),
-  deviceName: varchar('device_name', { length: 255 }),
-  appVersion: varchar('app_version', { length: 40 }),
-  enabled: boolean('enabled').notNull().default(true),
-  lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (table) => [
-  uniqueIndex('uq_user_push_devices_user_installation').on(table.userId, table.installationId),
-  index('idx_user_push_devices_user_enabled').on(table.userId, table.enabled),
-]);
+export const userPushDevices = pgTable(
+  'user_push_devices',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expoPushToken: varchar('expo_push_token', { length: 255 })
+      .notNull()
+      .unique(),
+    platform: varchar('platform', { length: 20 }).notNull(),
+    installationId: varchar('installation_id', { length: 255 }).notNull(),
+    deviceName: varchar('device_name', { length: 255 }),
+    appVersion: varchar('app_version', { length: 40 }),
+    enabled: boolean('enabled').notNull().default(true),
+    lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_user_push_devices_user_installation').on(
+      table.userId,
+      table.installationId,
+    ),
+    index('idx_user_push_devices_user_enabled').on(table.userId, table.enabled),
+  ],
+);
 
-export const pushNotificationJobs = pgTable('push_notification_jobs', {
-  id: id(),
-  notificationId: uuid('notification_id').notNull().references(() => notifications.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  deviceId: uuid('device_id').notNull().references(() => userPushDevices.id, { onDelete: 'cascade' }),
-  expoPushToken: varchar('expo_push_token', { length: 255 }).notNull(),
-  title: varchar('title', { length: 255 }).notNull(),
-  body: text('body').notNull(),
-  payload: jsonb('payload').notNull().default({}),
-  priority: varchar('priority', { length: 12 }).notNull().default('normal'),
-  status: varchar('status', { length: 20 }).notNull().default('pending'),
-  attemptCount: integer('attempt_count').notNull().default(0),
-  nextRetryAt: timestamp('next_retry_at').defaultNow().notNull(),
-  ticketId: varchar('ticket_id', { length: 255 }),
-  lastError: text('last_error'),
-  sentAt: timestamp('sent_at'),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (table) => [
-  uniqueIndex('uq_push_jobs_notification_device').on(table.notificationId, table.deviceId),
-  index('idx_push_jobs_due').on(table.status, table.nextRetryAt),
-]);
+export const pushNotificationJobs = pgTable(
+  'push_notification_jobs',
+  {
+    id: id(),
+    notificationId: uuid('notification_id')
+      .notNull()
+      .references(() => notifications.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => userPushDevices.id, { onDelete: 'cascade' }),
+    expoPushToken: varchar('expo_push_token', { length: 255 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    body: text('body').notNull(),
+    payload: jsonb('payload').notNull().default({}),
+    priority: varchar('priority', { length: 12 }).notNull().default('normal'),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    nextRetryAt: timestamp('next_retry_at').defaultNow().notNull(),
+    ticketId: varchar('ticket_id', { length: 255 }),
+    lastError: text('last_error'),
+    sentAt: timestamp('sent_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_push_jobs_notification_device').on(
+      table.notificationId,
+      table.deviceId,
+    ),
+    index('idx_push_jobs_due').on(table.status, table.nextRetryAt),
+  ],
+);
 
 // Google Calendar is deliberately modeled separately from tasks and reminders.
 // External ids/etags are the idempotency boundary for two-way sync; the raw
 // payload keeps recurrence, attendees, timezone, and provider-specific fields.
-export const googleCalendarConnections = pgTable('google_calendar_connections', {
-  id: id(),
-  userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
-  accountEmail: varchar('account_email', { length: 255 }).notNull(),
-  accessToken: text('access_token').notNull(),
-  refreshToken: text('refresh_token'),
-  tokenExpiresAt: timestamp('token_expires_at'),
-  syncDirection: varchar('sync_direction', { length: 20 }).notNull().default('two_way'),
-  defaultReminderMinutes: integer('default_reminder_minutes').notNull().default(10),
-  syncTasks: boolean('sync_tasks').notNull().default(true), syncFocusSessions: boolean('sync_focus_sessions').notNull().default(true), syncReminders: boolean('sync_reminders').notNull().default(false), syncCalendarBlocks: boolean('sync_calendar_blocks').notNull().default(true),
-  lastSyncedAt: timestamp('last_synced_at'),
-  syncCursor: text('sync_cursor'),
-  createdAt: createdAt(), updatedAt: updatedAt(),
-});
+export const googleCalendarConnections = pgTable(
+  'google_calendar_connections',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    accountEmail: varchar('account_email', { length: 255 }).notNull(),
+    accessToken: text('access_token').notNull(),
+    refreshToken: text('refresh_token'),
+    tokenExpiresAt: timestamp('token_expires_at'),
+    syncDirection: varchar('sync_direction', { length: 20 })
+      .notNull()
+      .default('two_way'),
+    defaultReminderMinutes: integer('default_reminder_minutes')
+      .notNull()
+      .default(10),
+    syncTasks: boolean('sync_tasks').notNull().default(true),
+    syncFocusSessions: boolean('sync_focus_sessions').notNull().default(true),
+    syncReminders: boolean('sync_reminders').notNull().default(false),
+    syncCalendarBlocks: boolean('sync_calendar_blocks').notNull().default(true),
+    lastSyncedAt: timestamp('last_synced_at'),
+    syncCursor: text('sync_cursor'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+);
 
 export const userNotificationPreferences = pgTable(
   'user_notification_preferences',
   {
     id: id(),
-    userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
     taskNotifications: boolean('task_notifications').notNull().default(true),
-    calendarNotifications: boolean('calendar_notifications').notNull().default(true),
+    calendarNotifications: boolean('calendar_notifications')
+      .notNull()
+      .default(true),
     focusNotifications: boolean('focus_notifications').notNull().default(true),
-    collaborationNotifications: boolean('collaboration_notifications').notNull().default(true),
+    collaborationNotifications: boolean('collaboration_notifications')
+      .notNull()
+      .default(true),
     aiNotifications: boolean('ai_notifications').notNull().default(true),
     emailNotifications: boolean('email_notifications').notNull().default(false),
     pushNotifications: boolean('push_notifications').notNull().default(true),
@@ -1316,53 +1452,358 @@ export const userNotificationPreferences = pgTable(
   },
 );
 
-export const googleCalendars = pgTable('google_calendars', {
-  id: id(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  connectionId: uuid('connection_id').references(() => googleCalendarConnections.id, { onDelete: 'cascade' }),
-  externalId: varchar('external_id', { length: 255 }).notNull(),
-  summary: varchar('summary', { length: 255 }).notNull(),
-  description: text('description'),
-  timezone: varchar('timezone', { length: 100 }),
-  color: varchar('color', { length: 32 }),
-  selected: boolean('selected').notNull().default(false),
-  nextSyncToken: text('next_sync_token'),
-  lastSuccessfulSyncAt: timestamp('last_successful_sync_at'),
-  lastFullSyncAt: timestamp('last_full_sync_at'),
-  syncStatus: varchar('sync_status', { length: 20 }).notNull().default('idle'),
-  lastSyncError: text('last_sync_error'),
-  syncLeaseUntil: timestamp('sync_lease_until'),
+export const googleCalendars = pgTable(
+  'google_calendars',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').references(
+      () => googleCalendarConnections.id,
+      { onDelete: 'cascade' },
+    ),
+    externalId: varchar('external_id', { length: 255 }).notNull(),
+    summary: varchar('summary', { length: 255 }).notNull(),
+    description: text('description'),
+    timezone: varchar('timezone', { length: 100 }),
+    color: varchar('color', { length: 32 }),
+    selected: boolean('selected').notNull().default(false),
+    nextSyncToken: text('next_sync_token'),
+    lastSuccessfulSyncAt: timestamp('last_successful_sync_at'),
+    lastFullSyncAt: timestamp('last_full_sync_at'),
+    syncStatus: varchar('sync_status', { length: 20 })
+      .notNull()
+      .default('idle'),
+    lastSyncError: text('last_sync_error'),
+    syncLeaseUntil: timestamp('sync_lease_until'),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_google_calendars_user_external').on(
+      table.userId,
+      table.externalId,
+    ),
+  ],
+);
+
+export const googleCalendarEvents = pgTable(
+  'google_calendar_events',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').references(
+      () => googleCalendarConnections.id,
+      { onDelete: 'cascade' },
+    ),
+    calendarId: uuid('calendar_id')
+      .notNull()
+      .references(() => googleCalendars.id, { onDelete: 'cascade' }),
+    externalId: varchar('external_id', { length: 512 }).notNull(),
+    googleCalendarExternalId: varchar('google_calendar_external_id', {
+      length: 255,
+    }),
+    googleEventId: varchar('google_event_id', { length: 512 }),
+    recurringEventId: varchar('recurring_event_id', { length: 512 }),
+    etag: varchar('etag', { length: 255 }),
+    status: varchar('status', { length: 20 }).notNull().default('synced'),
+    ownership: varchar('ownership', { length: 24 })
+      .notNull()
+      .default('google_imported'),
+    beeplanEntityType: varchar('beeplan_entity_type', { length: 24 }),
+    beeplanEntityId: varchar('beeplan_entity_id', { length: 255 }),
+    lastGoogleUpdatedAt: timestamp('last_google_updated_at'),
+    title: varchar('title', { length: 500 }).notNull(),
+    description: text('description'),
+    location: text('location'),
+    startAt: timestamp('start_at'),
+    endAt: timestamp('end_at'),
+    allDay: boolean('all_day').notNull().default(false),
+    timezone: varchar('timezone', { length: 100 }),
+    payload: jsonb('payload').notNull().default({}),
+    updatedAt: timestamp('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uq_google_events_user_external').on(
+      table.userId,
+      table.externalId,
+    ),
+    uniqueIndex('uq_google_events_user_entity').on(
+      table.userId,
+      table.beeplanEntityType,
+      table.beeplanEntityId,
+    ),
+    index('idx_google_events_user_start').on(table.userId, table.startAt),
+  ],
+);
+
+export const googleCalendarSyncJobs = pgTable(
+  'google_calendar_sync_jobs',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => googleCalendarConnections.id, { onDelete: 'cascade' }),
+    operation: varchar('operation', { length: 16 }).notNull(),
+    entityType: varchar('entity_type', { length: 24 }).notNull(),
+    entityId: varchar('entity_id', { length: 255 }).notNull(),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    nextRetryAt: timestamp('next_retry_at').defaultNow().notNull(),
+    lastError: text('last_error'),
+    status: varchar('status', { length: 16 }).notNull().default('pending'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_google_sync_jobs_pending_entity').on(
+      table.userId,
+      table.entityType,
+      table.entityId,
+      table.operation,
+      table.status,
+    ),
+    index('idx_google_sync_jobs_due').on(table.status, table.nextRetryAt),
+  ],
+);
+
+// Task Context Assistant. Weather/route evidence remains in the existing
+// weather-travel tables; these rows persist user intent and checklist state.
+export const taskAssistantPreferences = pgTable('task_assistant_preferences', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull().default(true),
+  preparationChecklistsEnabled: boolean('preparation_checklists_enabled')
+    .notNull()
+    .default(true),
+  travelAdviceEnabled: boolean('travel_advice_enabled').notNull().default(true),
+  weatherAdviceEnabled: boolean('weather_advice_enabled')
+    .notNull()
+    .default(true),
+  documentAdviceEnabled: boolean('document_advice_enabled')
+    .notNull()
+    .default(true),
+  clothingAdviceEnabled: boolean('clothing_advice_enabled')
+    .notNull()
+    .default(true),
+  umbrellaAdviceEnabled: boolean('umbrella_advice_enabled')
+    .notNull()
+    .default(true),
+  hydrationAdviceEnabled: boolean('hydration_advice_enabled')
+    .notNull()
+    .default(true),
+  proactiveAssistanceEnabled: boolean('proactive_assistance_enabled')
+    .notNull()
+    .default(true),
+  dynamicPreparationEnabled: boolean('dynamic_preparation_enabled')
+    .notNull()
+    .default(true),
+  dynamicPackingEnabled: boolean('dynamic_packing_enabled')
+    .notNull()
+    .default(true),
+  contextTimelineEnabled: boolean('context_timeline_enabled')
+    .notNull()
+    .default(true),
+  contextualNotificationsEnabled: boolean('contextual_notifications_enabled')
+    .notNull()
+    .default(true),
+  electronicsAdviceEnabled: boolean('electronics_advice_enabled')
+    .notNull()
+    .default(true),
+  medicationAdviceEnabled: boolean('medication_advice_enabled')
+    .notNull()
+    .default(true),
+  departureRemindersEnabled: boolean('departure_reminders_enabled')
+    .notNull()
+    .default(true),
+  notificationMode: varchar('notification_mode', { length: 24 })
+    .notNull()
+    .default('smart'),
+  defaultTravelMode: varchar('default_travel_mode', { length: 24 })
+    .notNull()
+    .default('driving'),
+  language: varchar('language', { length: 8 }).notNull().default('en'),
+  createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (table) => [uniqueIndex('uq_google_calendars_user_external').on(table.userId, table.externalId)]);
+});
 
-export const googleCalendarEvents = pgTable('google_calendar_events', {
-  id: id(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  connectionId: uuid('connection_id').references(() => googleCalendarConnections.id, { onDelete: 'cascade' }),
-  calendarId: uuid('calendar_id').notNull().references(() => googleCalendars.id, { onDelete: 'cascade' }),
-  externalId: varchar('external_id', { length: 512 }).notNull(),
-  googleCalendarExternalId: varchar('google_calendar_external_id', { length: 255 }),
-  googleEventId: varchar('google_event_id', { length: 512 }),
-  recurringEventId: varchar('recurring_event_id', { length: 512 }),
-  etag: varchar('etag', { length: 255 }),
-  status: varchar('status', { length: 20 }).notNull().default('synced'),
-  ownership: varchar('ownership', { length: 24 }).notNull().default('google_imported'),
-  beeplanEntityType: varchar('beeplan_entity_type', { length: 24 }),
-  beeplanEntityId: varchar('beeplan_entity_id', { length: 255 }),
-  lastGoogleUpdatedAt: timestamp('last_google_updated_at'),
-  title: varchar('title', { length: 500 }).notNull(),
-  description: text('description'),
-  location: text('location'),
-  startAt: timestamp('start_at'), endAt: timestamp('end_at'),
-  allDay: boolean('all_day').notNull().default(false),
-  timezone: varchar('timezone', { length: 100 }),
-  payload: jsonb('payload').notNull().default({}),
-  updatedAt: timestamp('updated_at').notNull(),
-}, (table) => [uniqueIndex('uq_google_events_user_external').on(table.userId, table.externalId), uniqueIndex('uq_google_events_user_entity').on(table.userId, table.beeplanEntityType, table.beeplanEntityId), index('idx_google_events_user_start').on(table.userId, table.startAt)]);
+export const taskAssistantContexts = pgTable(
+  'task_assistant_contexts',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, {
+      onDelete: 'cascade',
+    }),
+    primaryContext: varchar('primary_context', { length: 40 }).notNull(),
+    secondaryContexts: jsonb('secondary_contexts').notNull().default([]),
+    confidence: varchar('confidence', { length: 20 }).notNull(),
+    confidenceReason: text('confidence_reason').notNull(),
+    assumptions: jsonb('assumptions').notNull().default([]),
+    correctedContext: varchar('corrected_context', { length: 40 }),
+    scheduleVersion: varchar('schedule_version', { length: 160 }).notNull(),
+    generatedAt: timestamp('generated_at').defaultNow().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_task_assistant_context_item').on(
+      table.userId,
+      table.taskId,
+    ),
+    index('idx_task_assistant_context_task').on(table.taskId),
+  ],
+);
 
-export const googleCalendarSyncJobs = pgTable('google_calendar_sync_jobs', {
-  id: id(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  connectionId: uuid('connection_id').notNull().references(() => googleCalendarConnections.id, { onDelete: 'cascade' }),
-  operation: varchar('operation', { length: 16 }).notNull(), entityType: varchar('entity_type', { length: 24 }).notNull(), entityId: varchar('entity_id', { length: 255 }).notNull(),
-  attemptCount: integer('attempt_count').notNull().default(0), nextRetryAt: timestamp('next_retry_at').defaultNow().notNull(), lastError: text('last_error'), status: varchar('status', { length: 16 }).notNull().default('pending'), createdAt: createdAt(), updatedAt: updatedAt(),
-}, (table) => [uniqueIndex('uq_google_sync_jobs_pending_entity').on(table.userId, table.entityType, table.entityId, table.operation, table.status), index('idx_google_sync_jobs_due').on(table.status, table.nextRetryAt)]);
+export const taskAssistantSuggestions = pgTable(
+  'task_assistant_suggestions',
+  {
+    id: id(),
+    contextId: uuid('context_id')
+      .notNull()
+      .references(() => taskAssistantContexts.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 60 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description').notNull(),
+    reason: text('reason').notNull(),
+    evidence: jsonb('evidence').notNull().default({}),
+    evidenceType: varchar('evidence_type', { length: 40 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('pending'),
+    fingerprint: varchar('fingerprint', { length: 128 }).notNull(),
+    dueAt: timestamp('due_at'),
+    notificationAt: timestamp('notification_at'),
+    quantity: varchar('quantity', { length: 80 }),
+    quantityUnit: varchar('quantity_unit', { length: 40 }),
+    userEdited: boolean('user_edited').notNull().default(false),
+    category: varchar('category', { length: 40 }),
+    priority: varchar('priority', { length: 16 }).notNull().default('medium'),
+    suggestedStageId: uuid('suggested_stage_id'),
+    notificationEligible: boolean('notification_eligible')
+      .notNull()
+      .default(false),
+    lockedByUser: boolean('locked_by_user').notNull().default(false),
+    completedAt: timestamp('completed_at'),
+    dismissedAt: timestamp('dismissed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_task_assistant_suggestion_fingerprint').on(
+      table.fingerprint,
+    ),
+    index('idx_task_assistant_suggestion_context').on(table.contextId),
+    index('idx_task_assistant_suggestion_status').on(table.status),
+  ],
+);
+
+export const taskAssistantEvaluations = pgTable(
+  'task_assistant_evaluations',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, {
+      onDelete: 'cascade',
+    }),
+    contextVersion: varchar('context_version', { length: 160 }).notNull(),
+    scheduleVersion: varchar('schedule_version', { length: 160 }).notNull(),
+    evidenceVersion: varchar('evidence_version', { length: 160 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('current'),
+    confidence: varchar('confidence', { length: 20 }).notNull(),
+    generatedAt: timestamp('generated_at').notNull().defaultNow(),
+    validUntil: timestamp('valid_until').notNull(),
+    invalidatedAt: timestamp('invalidated_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_task_assistant_evaluation_task').on(
+      table.userId,
+      table.taskId,
+      table.status,
+    ),
+  ],
+);
+
+export const taskAssistantTimelineStages = pgTable(
+  'task_assistant_timeline_stages',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    contextId: uuid('context_id')
+      .notNull()
+      .references(() => taskAssistantContexts.id, { onDelete: 'cascade' }),
+    stageType: varchar('stage_type', { length: 40 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description').notNull(),
+    scheduledAt: timestamp('scheduled_at'),
+    dueAt: timestamp('due_at'),
+    priority: varchar('priority', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('pending'),
+    fingerprint: varchar('fingerprint', { length: 128 }).notNull(),
+    triggerReason: text('trigger_reason').notNull(),
+    completedAt: timestamp('completed_at'),
+    dismissedAt: timestamp('dismissed_at'),
+    invalidatedAt: timestamp('invalidated_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_task_assistant_timeline_fingerprint').on(table.fingerprint),
+    index('idx_task_assistant_timeline_context').on(
+      table.contextId,
+      table.status,
+    ),
+  ],
+);
+
+export const taskAssistantNotifications = pgTable(
+  'task_assistant_notifications',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    contextId: uuid('context_id')
+      .notNull()
+      .references(() => taskAssistantContexts.id, { onDelete: 'cascade' }),
+    notificationType: varchar('notification_type', { length: 40 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    body: text('body').notNull(),
+    scheduledAt: timestamp('scheduled_at').notNull(),
+    priority: varchar('priority', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('pending'),
+    fingerprint: varchar('fingerprint', { length: 128 }).notNull(),
+    deliveredAt: timestamp('delivered_at'),
+    retryCount: integer('retry_count').notNull().default(0),
+    lastErrorCode: varchar('last_error_code', { length: 80 }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_task_assistant_notification_fingerprint').on(
+      table.fingerprint,
+    ),
+    index('idx_task_assistant_notifications_due').on(
+      table.status,
+      table.scheduledAt,
+    ),
+  ],
+);

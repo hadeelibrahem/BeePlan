@@ -1,282 +1,302 @@
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '')
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const apiUrl = (
+  import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3000"
+).replace(/\/+$/, "");
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 if (import.meta.env.DEV) {
-  console.log('[BeePlan Tasks API] Base URL:', apiUrl)
+  console.log("[BeePlan Tasks API] Base URL:", apiUrl);
 }
 
-export function isValidTaskId(taskId: string | null | undefined): taskId is string {
-  return Boolean(taskId && uuidPattern.test(taskId))
+export function isValidTaskId(
+  taskId: string | null | undefined,
+): taskId is string {
+  return Boolean(taskId && uuidPattern.test(taskId));
 }
 
-export type ApiTaskStatus = 'todo' | 'in_progress' | 'done' | 'missed'
-export type ApiTaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type ApiTaskStatus = "todo" | "in_progress" | "done" | "missed";
+export type ApiTaskPriority = "low" | "medium" | "high" | "urgent";
 
 export type ApiTaskLabel = {
-  id: string
-  name: string
-}
+  id: string;
+  name: string;
+};
 
-export type ApiSubtaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'missed'
-export type ApiSubtaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type ApiSubtaskStatus =
+  | "todo"
+  | "in_progress"
+  | "done"
+  | "blocked"
+  | "missed";
+export type ApiSubtaskPriority = "low" | "medium" | "high" | "urgent";
 
 export type ApiSubtask = {
-  id: string
-  taskId?: string
-  title: string
-  isDone: boolean
-  orderIndex: number
-  assignee?: string
-  assigneeUserId?: string
-  isShared?: boolean
-  description?: string
-  priority: ApiSubtaskPriority
-  status: ApiSubtaskStatus
-  isFocusTask?: boolean
-  startDate?: string
-  dueDate?: string
-  scheduledDate?: string
-  scheduledStartTime?: string
-  scheduledEndTime?: string
-  destination?: TaskDestination
-  weatherTravelEnabled?: boolean
-  travelMode?: 'driving' | 'walking' | 'cycling'
-  estimatedDurationMinutes?: number
-  actualDurationMinutes?: number
-  estimatedDurationSource: 'user' | 'ai'
-  reminderEnabled: boolean
-  reminderMinutesBeforeDue?: number
-  reminderTime?: string
-  reminderSentAt?: string
-  reminderStatus: 'none' | 'scheduled' | 'sent' | 'cancelled'
-  notes?: string
-  tags: string[]
-  dependencyIds: string[]
-  completedAt?: string
-  createdAt?: string
-  updatedAt?: string
-}
+  id: string;
+  taskId?: string;
+  title: string;
+  isDone: boolean;
+  orderIndex: number;
+  assignee?: string;
+  assigneeUserId?: string;
+  isShared?: boolean;
+  description?: string;
+  priority: ApiSubtaskPriority;
+  status: ApiSubtaskStatus;
+  isFocusTask?: boolean;
+  startDate?: string;
+  dueDate?: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  destination?: TaskDestination;
+  weatherTravelEnabled?: boolean;
+  travelMode?: "driving" | "walking" | "cycling";
+  estimatedDurationMinutes?: number;
+  actualDurationMinutes?: number;
+  estimatedDurationSource: "user" | "ai";
+  reminderEnabled: boolean;
+  reminderMinutesBeforeDue?: number;
+  reminderTime?: string;
+  reminderSentAt?: string;
+  reminderStatus: "none" | "scheduled" | "sent" | "cancelled";
+  notes?: string;
+  tags: string[];
+  dependencyIds: string[];
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 export type SubtaskPayload = Partial<
   Pick<
     ApiSubtask,
-    | 'title'
-    | 'isDone'
-    | 'orderIndex'
-    | 'assignee'
-    | 'description'
-    | 'priority'
-    | 'status'
-    | 'isFocusTask'
-    | 'startDate'
-    | 'dueDate'
-    | 'scheduledDate'
-    | 'scheduledStartTime'
-    | 'scheduledEndTime'
-    | 'destination'
-    | 'weatherTravelEnabled'
-    | 'travelMode'
-    | 'estimatedDurationMinutes'
-    | 'actualDurationMinutes'
-    | 'estimatedDurationSource'
-    | 'reminderEnabled'
-    | 'reminderMinutesBeforeDue'
-    | 'reminderTime'
-    | 'notes'
-    | 'tags'
+    | "title"
+    | "isDone"
+    | "orderIndex"
+    | "assignee"
+    | "description"
+    | "priority"
+    | "status"
+    | "isFocusTask"
+    | "startDate"
+    | "dueDate"
+    | "scheduledDate"
+    | "scheduledStartTime"
+    | "scheduledEndTime"
+    | "destination"
+    | "weatherTravelEnabled"
+    | "travelMode"
+    | "estimatedDurationMinutes"
+    | "actualDurationMinutes"
+    | "estimatedDurationSource"
+    | "reminderEnabled"
+    | "reminderMinutesBeforeDue"
+    | "reminderTime"
+    | "notes"
+    | "tags"
   >
-> & { dependencyIds?: string[] }
+> & { dependencyIds?: string[] };
 
 export type ApiDependency = {
-  id: string
-  title: string
-  category: string
-  status: ApiTaskStatus
-  dueDate?: string
-  priority: ApiTaskPriority
-  progress: number
-}
+  id: string;
+  title: string;
+  category: string;
+  status: ApiTaskStatus;
+  dueDate?: string;
+  priority: ApiTaskPriority;
+  progress: number;
+};
 
 export type ApiRecurrence = {
-  frequency: 'Never' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly' | 'Custom'
-  weekdays: string[]
-  monthlyMode: 'sameDay' | 'lastDay' | 'firstWeekday'
-  customInterval: number
-  customUnit: 'days' | 'weeks' | 'months'
-  endType: 'never' | 'date' | 'occurrences'
-  endDate?: string
-  occurrences: number
-  summary?: string
-  nextOccurrenceDate?: string | null
-}
+  frequency: "Never" | "Daily" | "Weekly" | "Monthly" | "Yearly" | "Custom";
+  weekdays: string[];
+  monthlyMode: "sameDay" | "lastDay" | "firstWeekday";
+  customInterval: number;
+  customUnit: "days" | "weeks" | "months";
+  endType: "never" | "date" | "occurrences";
+  endDate?: string;
+  occurrences: number;
+  summary?: string;
+  nextOccurrenceDate?: string | null;
+};
 
 export type ApiTaskAttachment = {
-  id?: string
-  taskId?: string
-  name?: string
-  size?: string
-  url?: string
-  type?: string
-  fileName?: string
-  fileUrl?: string
-  previewUrl?: string
-  downloadUrl?: string
-  storagePath?: string
-  fileType?: string
-  fileSize?: number | string
-  uploadedAt?: string
-}
+  id?: string;
+  taskId?: string;
+  name?: string;
+  size?: string;
+  url?: string;
+  type?: string;
+  fileName?: string;
+  fileUrl?: string;
+  previewUrl?: string;
+  downloadUrl?: string;
+  storagePath?: string;
+  fileType?: string;
+  fileSize?: number | string;
+  uploadedAt?: string;
+};
 
 export type ApiTaskActivity = {
-  id: string
-  action: string
-  description: string
-  metadata?: Record<string, unknown> | null
-  createdAt: string
-}
+  id: string;
+  action: string;
+  description: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+};
 
-export type UiRecurrence = Omit<ApiRecurrence, 'endType'> & {
-  endType: 'never' | 'onDate' | 'after'
-  endDate: string
-}
+export type UiRecurrence = Omit<ApiRecurrence, "endType"> & {
+  endType: "never" | "onDate" | "after";
+  endDate: string;
+};
 
 export type AiRecurrenceParseResponse = {
-  repeat: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'never'
-  interval: number
-  daysOfWeek: string[]
-  dayOfMonth: number | null
-  endCondition: 'never' | 'onDate' | 'afterOccurrences'
-  endDate: string | null
-  occurrences: number | null
-  time: string | null
-  preview: string
-  confidence: number
-  clarifyingQuestion: string | null
-}
+  repeat: "daily" | "weekly" | "monthly" | "yearly" | "custom" | "never";
+  interval: number;
+  daysOfWeek: string[];
+  dayOfMonth: number | null;
+  endCondition: "never" | "onDate" | "afterOccurrences";
+  endDate: string | null;
+  occurrences: number | null;
+  time: string | null;
+  preview: string;
+  confidence: number;
+  clarifyingQuestion: string | null;
+};
 
 export type RecurrenceSuggestion = {
-  id: string
-  sourceTaskId: string
-  taskTitle: string
-  reason: string
-  suggestedRepeat: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'never'
-  repeat: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'never'
-  interval: number
-  daysOfWeek: string[]
-  dayOfMonth: number | null
-  endCondition: 'never' | 'onDate' | 'afterOccurrences'
-  endDate: string | null
-  occurrences: number | null
-  suggestedTime: string | null
-  preview: string
-  confidence: number
-}
+  id: string;
+  sourceTaskId: string;
+  taskTitle: string;
+  reason: string;
+  suggestedRepeat:
+    | "daily"
+    | "weekly"
+    | "monthly"
+    | "yearly"
+    | "custom"
+    | "never";
+  repeat: "daily" | "weekly" | "monthly" | "yearly" | "custom" | "never";
+  interval: number;
+  daysOfWeek: string[];
+  dayOfMonth: number | null;
+  endCondition: "never" | "onDate" | "afterOccurrences";
+  endDate: string | null;
+  occurrences: number | null;
+  suggestedTime: string | null;
+  preview: string;
+  confidence: number;
+};
 
 export type ApiTask = {
-  id: string
-  title: string
-  description: string
-  priority: ApiTaskPriority
-  status: ApiTaskStatus
-  progress: number
-  dueDate?: string
-  dueTime: string
-  scheduledDate?: string
-  scheduledStartTime?: string
-  scheduledEndTime?: string
-  destination?: TaskDestination
-  weatherTravelEnabled?: boolean
-  travelMode?: 'driving' | 'walking' | 'cycling'
-  category: string
-  notes: string
-  estimatedTimeMinutes: number
-  spentTimeMinutes: number
+  id: string;
+  title: string;
+  description: string;
+  priority: ApiTaskPriority;
+  status: ApiTaskStatus;
+  progress: number;
+  dueDate?: string;
+  dueTime: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  destination?: TaskDestination;
+  weatherTravelEnabled?: boolean;
+  travelMode?: "driving" | "walking" | "cycling";
+  category: string;
+  notes: string;
+  estimatedTimeMinutes: number;
+  spentTimeMinutes: number;
   // Manual half of spent time (spentTimeMinutes = manual + focused). Optional
   // for backward compatibility with older cached payloads / fixtures.
-  manualSpentMinutes?: number
-  remainingTimeMinutes: number
-  estimatedHours: number
-  spentHours: number
-  manualSpentHours?: number
-  remainingHours: number
-  progressPercentage: number
-  reminderEnabled: boolean
-  reminderBeforeMinutes?: number
-  labels: string[]
-  labelDetails?: ApiTaskLabel[]
-  attachments: ApiTaskAttachment[]
-  isFavorite: boolean
-  isFocusTask: boolean
-  isBlocked: boolean
-  dependenciesComplete: boolean
-  subtasks: ApiSubtask[]
-  dependencies: ApiDependency[]
-  recurrence: ApiRecurrence | null
-  activities: ApiTaskActivity[]
+  manualSpentMinutes?: number;
+  remainingTimeMinutes: number;
+  estimatedHours: number;
+  spentHours: number;
+  manualSpentHours?: number;
+  remainingHours: number;
+  progressPercentage: number;
+  reminderEnabled: boolean;
+  reminderBeforeMinutes?: number;
+  labels: string[];
+  labelDetails?: ApiTaskLabel[];
+  attachments: ApiTaskAttachment[];
+  isFavorite: boolean;
+  isFocusTask: boolean;
+  isBlocked: boolean;
+  dependenciesComplete: boolean;
+  subtasks: ApiSubtask[];
+  dependencies: ApiDependency[];
+  recurrence: ApiRecurrence | null;
+  activities: ApiTaskActivity[];
   // Set by the API on done/non-done transitions. Used for time-based analytics.
-  completedAt?: string
-  createdAt: string
-  updatedAt: string
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
   // Collaboration context (present on GET /tasks/:id). Optional so personal
   // tasks and list payloads that omit them stay valid. Defaults treat a task
   // as personal + owner-controlled.
-  isShared?: boolean
-  viewerRole?: 'owner' | 'editor' | 'viewer'
-  canEdit?: boolean
-  canManageMembers?: boolean
-}
+  isShared?: boolean;
+  viewerRole?: "owner" | "editor" | "viewer";
+  canEdit?: boolean;
+  canManageMembers?: boolean;
+};
 
-export type TaskRole = 'owner' | 'editor' | 'viewer'
+export type TaskRole = "owner" | "editor" | "viewer";
 
 export type TaskPayload = Partial<
   Pick<
     ApiTask,
-    | 'title'
-    | 'description'
-    | 'priority'
-    | 'status'
-    | 'progress'
-    | 'dueDate'
-    | 'dueTime'
-    | 'scheduledDate'
-    | 'scheduledStartTime'
-    | 'scheduledEndTime'
-    | 'destination'
-    | 'weatherTravelEnabled'
-    | 'travelMode'
-    | 'category'
-    | 'notes'
-    | 'estimatedTimeMinutes'
-    | 'spentTimeMinutes'
-    | 'remainingTimeMinutes'
-    | 'reminderEnabled'
-    | 'reminderBeforeMinutes'
-    | 'labels'
-    | 'attachments'
-    | 'isFavorite'
-    | 'isFocusTask'
-    | 'recurrence'
+    | "title"
+    | "description"
+    | "priority"
+    | "status"
+    | "progress"
+    | "dueDate"
+    | "dueTime"
+    | "scheduledDate"
+    | "scheduledStartTime"
+    | "scheduledEndTime"
+    | "destination"
+    | "weatherTravelEnabled"
+    | "travelMode"
+    | "category"
+    | "notes"
+    | "estimatedTimeMinutes"
+    | "spentTimeMinutes"
+    | "remainingTimeMinutes"
+    | "reminderEnabled"
+    | "reminderBeforeMinutes"
+    | "labels"
+    | "attachments"
+    | "isFavorite"
+    | "isFocusTask"
+    | "recurrence"
   >
 > & {
-  subtasks?: (SubtaskPayload & { title: string })[]
-}
+  subtasks?: (SubtaskPayload & { title: string })[];
+};
 
 function authHeaders(accessToken: string) {
   return {
     Authorization: `Bearer ${accessToken}`,
-    'Content-Type': 'application/json',
-  }
+    "Content-Type": "application/json",
+  };
 }
 
-async function request<T>(accessToken: string, path: string, init?: RequestInit): Promise<T> {
-  const url = `${apiUrl}${path}`
-  const method = init?.method ?? 'GET'
+async function request<T>(
+  accessToken: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const url = `${apiUrl}${path}`;
+  const method = init?.method ?? "GET";
 
   if (import.meta.env.DEV) {
-    console.log('[BeePlan Tasks API] ->', method, path)
+    console.log("[BeePlan Tasks API] ->", method, path);
   }
 
-  let response: Response
+  let response: Response;
 
   try {
     response = await fetch(url, {
@@ -285,202 +305,547 @@ async function request<T>(accessToken: string, path: string, init?: RequestInit)
         ...authHeaders(accessToken),
         ...init?.headers,
       },
-    })
+    });
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.error('[BeePlan Tasks API] Network request failed', {
+      console.error("[BeePlan Tasks API] Network request failed", {
         url,
         method,
         error: error instanceof Error ? error.message : error,
-      })
+      });
     }
-    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`);
   }
 
   if (response.status === 204) {
-    return undefined as T
+    return undefined as T;
   }
 
-
-  const data = await response.json().catch(() => null)
+  const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
+    const message = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message;
     if (import.meta.env.DEV) {
-      console.error('[BeePlan Tasks API] Request failed', { url, method, status: response.status, data })
+      console.error("[BeePlan Tasks API] Request failed", {
+        url,
+        method,
+        status: response.status,
+        data,
+      });
     }
-    throw new Error(message ?? 'Task request failed. Please try again.')
+    throw new Error(message ?? "Task request failed. Please try again.");
   }
 
-  return data as T
+  return data as T;
 }
 
 export type DashboardSummary = {
-  todayTasks: number
-  completedTasks: number
-  highPriorityTasks: number
-  reminders: number
-  totalTasks: number
-  overallProgress: number
-}
+  todayTasks: number;
+  completedTasks: number;
+  highPriorityTasks: number;
+  reminders: number;
+  totalTasks: number;
+  overallProgress: number;
+};
 
 export function getDashboardSummary(accessToken: string) {
-  return request<DashboardSummary>(accessToken, '/dashboard/summary')
+  return request<DashboardSummary>(accessToken, "/dashboard/summary");
 }
 
-export type DashboardStatusTone = 'success' | 'positive' | 'warning' | 'danger'
-export type DashboardFocus = { id: string; taskId: string | null; taskTitle: string | null; subtaskId: string | null; subtaskTitle: string | null; startedAt: string; endedAt: string | null; plannedMinutes: number; actualMinutes: number | null; status: string; sessionType: string; notes: string | null; createdAt: string }
-export type DashboardRecommendation = { taskId: string; taskTitle: string; subtaskId: string | null; subtaskTitle: string | null; estimatedMinutes: number | null; reason: string; recommendationReason: string; score: number }
-export type DashboardWhyNow = { code: string; label: string; value?: string }
-export type DashboardTimelineBlock = { id: string; type: 'focus' | 'task' | 'break' | 'event' | 'commitment' | 'meal' | 'free' | 'reminder'; startTime: string; endTime: string | null; title: string; taskId: string | null; subtaskId: string | null; status: string; source: string }
+export type DashboardStatusTone = "success" | "positive" | "warning" | "danger";
+export type DashboardFocus = {
+  id: string;
+  taskId: string | null;
+  taskTitle: string | null;
+  subtaskId: string | null;
+  subtaskTitle: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  plannedMinutes: number;
+  actualMinutes: number | null;
+  status: string;
+  sessionType: string;
+  notes: string | null;
+  createdAt: string;
+};
+export type DashboardRecommendation = {
+  taskId: string;
+  taskTitle: string;
+  subtaskId: string | null;
+  subtaskTitle: string | null;
+  estimatedMinutes: number | null;
+  reason: string;
+  recommendationReason: string;
+  score: number;
+};
+export type DashboardWhyNow = { code: string; label: string; value?: string };
+export type DashboardTimelineBlock = {
+  id: string;
+  type:
+    | "focus"
+    | "task"
+    | "break"
+    | "event"
+    | "commitment"
+    | "meal"
+    | "free"
+    | "reminder";
+  startTime: string;
+  endTime: string | null;
+  title: string;
+  taskId: string | null;
+  subtaskId: string | null;
+  status: string;
+  source: string;
+};
 
-export type ScheduledTaskCandidate = { id: string; title: string; priority: string; dueDate: string | null; durationMinutes: number; scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string }
-export type TaskTimeConflict = { id: string; existingTask: ScheduledTaskCandidate; proposedTask: ScheduledTaskCandidate; overlapMinutes: number }
-export type TaskDestination = { displayName: string; address?: string | null; latitude: number; longitude: number; savedPlaceId?: string | null }
+export type ScheduledTaskCandidate = {
+  id: string;
+  title: string;
+  priority: string;
+  dueDate: string | null;
+  durationMinutes: number;
+  scheduledDate: string;
+  scheduledStartTime: string;
+  scheduledEndTime: string;
+};
+export type TaskTimeConflict = {
+  id: string;
+  existingTask: ScheduledTaskCandidate;
+  proposedTask: ScheduledTaskCandidate;
+  overlapMinutes: number;
+};
+export type TaskDestination = {
+  displayName: string;
+  address?: string | null;
+  latitude: number;
+  longitude: number;
+  savedPlaceId?: string | null;
+};
 export type WeatherTravelPreferences = {
-  enabled: boolean; defaultTravelMode: 'driving' | 'walking' | 'cycling'; homeRadiusMeters: number;
-  preparationBufferMinutes: number; parkingWalkingBufferMinutes: number; uncertaintyBufferMinutes: number;
-  weatherLeadMinutes: number; currentLocationFreshnessMinutes: number; coldThresholdC: number; veryColdThresholdC: number;
-  hotThresholdC: number; extremeHeatThresholdC: number; rainThresholdPercent: number; rainAmountThresholdMm: number;
-  windThresholdKph: number; uvThreshold: number; visibilityThresholdMeters: number; currentLocationFallbackEnabled: boolean;
-  approximateTravelFallbackEnabled: boolean; aiPolishingEnabled: boolean; language: string; timezone: string;
+  enabled: boolean;
+  defaultTravelMode: "driving" | "walking" | "cycling";
+  homeRadiusMeters: number;
+  preparationBufferMinutes: number;
+  parkingWalkingBufferMinutes: number;
+  uncertaintyBufferMinutes: number;
+  weatherLeadMinutes: number;
+  currentLocationFreshnessMinutes: number;
+  coldThresholdC: number;
+  veryColdThresholdC: number;
+  hotThresholdC: number;
+  extremeHeatThresholdC: number;
+  rainThresholdPercent: number;
+  rainAmountThresholdMm: number;
+  windThresholdKph: number;
+  uvThreshold: number;
+  visibilityThresholdMeters: number;
+  currentLocationFallbackEnabled: boolean;
+  approximateTravelFallbackEnabled: boolean;
+  aiPolishingEnabled: boolean;
+  language: string;
+  timezone: string;
   advice: Record<string, boolean>;
+};
+export function getWeatherTravelPreferences(accessToken: string) {
+  return request<WeatherTravelPreferences>(
+    accessToken,
+    "/settings/weather-travel",
+  );
 }
-export function getWeatherTravelPreferences(accessToken: string) { return request<WeatherTravelPreferences>(accessToken, '/settings/weather-travel') }
-export function updateWeatherTravelPreferences(accessToken: string, payload: WeatherTravelPreferences) { return request<WeatherTravelPreferences>(accessToken, '/settings/weather-travel', { method: 'PUT', body: JSON.stringify(payload) }) }
-export function getTaskTravelWeatherPreview(accessToken: string, taskId: string, subtaskId?: string) { return request<any>(accessToken, subtaskId ? `/tasks/${taskId}/subtasks/${subtaskId}/travel-weather-preview` : `/tasks/${taskId}/travel-weather-preview`) }
-export type TaskCommitmentConflict = { id: string; conflictType: 'task_commitment'; proposedTask: ScheduledTaskCandidate; commitment: { commitmentId: string; title: string; date: string; startTime: string; endTime: string }; overlapMinutes: number }
-type ScheduleValidationPayload = { id?: string; title: string; priority?: string; dueDate?: string | null; estimatedTimeMinutes?: number; scheduledDate?: string; scheduledStartTime?: string; scheduledEndTime?: string }
+export function updateWeatherTravelPreferences(
+  accessToken: string,
+  payload: WeatherTravelPreferences,
+) {
+  return request<WeatherTravelPreferences>(
+    accessToken,
+    "/settings/weather-travel",
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+export function getTaskTravelWeatherPreview(
+  accessToken: string,
+  taskId: string,
+  subtaskId?: string,
+) {
+  return request<any>(
+    accessToken,
+    subtaskId
+      ? `/tasks/${taskId}/subtasks/${subtaskId}/travel-weather-preview`
+      : `/tasks/${taskId}/travel-weather-preview`,
+  );
+}
+export type TaskAssistantPreferences = {
+  enabled: boolean;
+  preparationChecklistsEnabled: boolean;
+  travelAdviceEnabled: boolean;
+  weatherAdviceEnabled: boolean;
+  documentAdviceEnabled: boolean;
+  clothingAdviceEnabled: boolean;
+  umbrellaAdviceEnabled: boolean;
+  hydrationAdviceEnabled: boolean;
+  proactiveAssistanceEnabled: boolean;
+  dynamicPreparationEnabled: boolean;
+  dynamicPackingEnabled: boolean;
+  contextTimelineEnabled: boolean;
+  contextualNotificationsEnabled: boolean;
+  electronicsAdviceEnabled: boolean;
+  medicationAdviceEnabled: boolean;
+  departureRemindersEnabled: boolean;
+  notificationMode: "smart" | "minimal" | "important_only";
+  defaultTravelMode: "driving" | "walking" | "cycling";
+  language: "en" | "ar";
+};
+export type TaskAssistantSuggestion = {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  reason: string;
+  evidenceType:
+    | "verified_fact"
+    | "deterministic_recommendation"
+    | "general_preparation";
+  status: string;
+  completedAt?: string | null;
+  dismissedAt?: string | null;
+  quantity?: string | null;
+  category?: string | null;
+  priority?: "critical" | "high" | "medium" | "low";
+  userEdited?: boolean;
+};
+export type TaskAssistantState = {
+  context: {
+    primaryContext: string;
+    secondaryContexts: string[];
+    confidence: "high" | "medium" | "low" | "unavailable";
+    confidenceReason: string;
+  };
+  suggestions: TaskAssistantSuggestion[];
+  timeline: Array<{ id: string; stageType: string; title: string; description: string; scheduledAt: string | null; priority: string; status: string; triggerReason: string }>;
+  contextualNotifications: Array<{ id: string; notificationType: string; title: string; body: string; scheduledAt: string; priority: string; status: string }>;
+  travelWeather: any;
+};
+export function getTaskAssistantPreferences(accessToken: string) {
+  return request<TaskAssistantPreferences>(
+    accessToken,
+    "/settings/task-assistant",
+  );
+}
+export function updateTaskAssistantPreferences(
+  accessToken: string,
+  payload: TaskAssistantPreferences,
+) {
+  return request<TaskAssistantPreferences>(
+    accessToken,
+    "/settings/task-assistant",
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+export function getTaskAssistant(accessToken: string, taskId: string) {
+  return request<TaskAssistantState>(
+    accessToken,
+    `/tasks/${taskId}/task-assistant`,
+  );
+}
+export function refreshTaskAssistant(accessToken: string, taskId: string) {
+  return request<TaskAssistantState>(
+    accessToken,
+    `/tasks/${taskId}/task-assistant/refresh`,
+    { method: "POST" },
+  );
+}
+export function correctTaskAssistantContext(
+  accessToken: string,
+  taskId: string,
+  context: string,
+) {
+  return request<TaskAssistantState>(
+    accessToken,
+    `/tasks/${taskId}/task-assistant/context`,
+    { method: "PUT", body: JSON.stringify({ context }) },
+  );
+}
+export function updateTaskAssistantSuggestion(
+  accessToken: string,
+  taskId: string,
+  suggestionId: string,
+  payload: Partial<
+    Pick<TaskAssistantSuggestion, "title" | "description" | "status" | "quantity">
+  >,
+) {
+  return request<TaskAssistantState>(
+    accessToken,
+    `/tasks/${taskId}/task-assistant/suggestions/${suggestionId}`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+  );
+}
+export function updateTaskAssistantNotification(accessToken: string, taskId: string, notificationId: string, payload: { status?: "dismissed" | "cancelled"; scheduledAt?: string }) {
+  return request<TaskAssistantState>(accessToken, `/tasks/${taskId}/task-assistant/notifications/${notificationId}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export type TaskCommitmentConflict = {
+  id: string;
+  conflictType: "task_commitment";
+  proposedTask: ScheduledTaskCandidate;
+  commitment: {
+    commitmentId: string;
+    title: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+  };
+  overlapMinutes: number;
+};
+type ScheduleValidationPayload = {
+  id?: string;
+  title: string;
+  priority?: string;
+  dueDate?: string | null;
+  estimatedTimeMinutes?: number;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+};
 
-export function validateTaskSchedule(accessToken: string, payload: ScheduleValidationPayload) {
-  return request<{ conflicts: TaskTimeConflict[]; taskConflicts: TaskTimeConflict[]; commitmentConflicts: TaskCommitmentConflict[]; normalizedSchedule: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string } | null }>(accessToken, '/tasks/schedule-conflicts/validate', { method: 'POST', body: JSON.stringify({ ...payload, taskId: payload.id }) })
+export function validateTaskSchedule(
+  accessToken: string,
+  payload: ScheduleValidationPayload,
+) {
+  return request<{
+    conflicts: TaskTimeConflict[];
+    taskConflicts: TaskTimeConflict[];
+    commitmentConflicts: TaskCommitmentConflict[];
+    normalizedSchedule: {
+      scheduledDate: string;
+      scheduledStartTime: string;
+      scheduledEndTime: string;
+    } | null;
+  }>(accessToken, "/tasks/schedule-conflicts/validate", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, taskId: payload.id }),
+  });
 }
 
-export function resolveTaskScheduleConflict(accessToken: string, payload: { conflictKey: string; date: string; taskId?: string; commitmentId?: string; resolution: 'move_existing_auto' | 'move_existing_manual' | 'move_new_auto' | 'move_new_manual' | 'cancel_existing' | 'keep_commitment' | 'keep_task' | 'choose_another_time' }) {
-  return request<{ conflictKey: string; lifecycle: 'resolved'; resolution: string }>(accessToken, '/tasks/schedule-conflicts/resolve', { method: 'POST', body: JSON.stringify(payload) })
+export function resolveTaskScheduleConflict(
+  accessToken: string,
+  payload: {
+    conflictKey: string;
+    date: string;
+    taskId?: string;
+    commitmentId?: string;
+    resolution:
+      | "move_existing_auto"
+      | "move_existing_manual"
+      | "move_new_auto"
+      | "move_new_manual"
+      | "cancel_existing"
+      | "keep_commitment"
+      | "keep_task"
+      | "choose_another_time";
+  },
+) {
+  return request<{
+    conflictKey: string;
+    lifecycle: "resolved";
+    resolution: string;
+  }>(accessToken, "/tasks/schedule-conflicts/resolve", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
-export function getNearestTaskSchedule(accessToken: string, payload: ScheduleValidationPayload) {
-  return request<{ schedule: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string } | null }>(accessToken, '/tasks/schedule-conflicts/nearest-slot', { method: 'POST', body: JSON.stringify({ ...payload, taskId: payload.id }) })
+export function getNearestTaskSchedule(
+  accessToken: string,
+  payload: ScheduleValidationPayload,
+) {
+  return request<{
+    schedule: {
+      scheduledDate: string;
+      scheduledStartTime: string;
+      scheduledEndTime: string;
+    } | null;
+  }>(accessToken, "/tasks/schedule-conflicts/nearest-slot", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, taskId: payload.id }),
+  });
 }
-export type DashboardSuggestion = { id: string; type: string; title: string; explanation: string; actionLabel: string; actionPayload: Record<string, unknown>; confidence?: string; source?: string }
-export type DashboardLocationContext = { label: string; tasks: { id: string; title: string }[] } | null
+export type DashboardSuggestion = {
+  id: string;
+  type: string;
+  title: string;
+  explanation: string;
+  actionLabel: string;
+  actionPayload: Record<string, unknown>;
+  confidence?: string;
+  source?: string;
+};
+export type DashboardLocationContext = {
+  label: string;
+  tasks: { id: string; title: string }[];
+} | null;
 export type TodayDashboard = {
-  generatedAt: string; timezone: string; greeting: string
-  dailyStatus: { status: string; statusTone: DashboardStatusTone; summaryLines: string[] }
-  activeFocus: DashboardFocus | null; recommendation: DashboardRecommendation | null; whyNow: DashboardWhyNow[]
-  timeline: DashboardTimelineBlock[]; locationContext: DashboardLocationContext; suggestions: DashboardSuggestion[]
-  progress: { percent: number; completedWorkUnits: number; totalWorkUnits: number; focusMinutes: number; remainingEstimatedMinutes: number; basis: string }
-  tomorrowPreview: { date: string; calendarEvents: unknown[]; dueWorkUnits: number; estimatedWorkMinutes: number; highPriorityItems: number; capacityMinutes: number | null; overloadStatus: 'overloaded' | 'within_capacity' | 'unavailable' }
-}
+  generatedAt: string;
+  timezone: string;
+  greeting: string;
+  dailyStatus: {
+    status: string;
+    statusTone: DashboardStatusTone;
+    summaryLines: string[];
+  };
+  activeFocus: DashboardFocus | null;
+  recommendation: DashboardRecommendation | null;
+  whyNow: DashboardWhyNow[];
+  timeline: DashboardTimelineBlock[];
+  locationContext: DashboardLocationContext;
+  suggestions: DashboardSuggestion[];
+  progress: {
+    percent: number;
+    completedWorkUnits: number;
+    totalWorkUnits: number;
+    focusMinutes: number;
+    remainingEstimatedMinutes: number;
+    basis: string;
+  };
+  tomorrowPreview: {
+    date: string;
+    calendarEvents: unknown[];
+    dueWorkUnits: number;
+    estimatedWorkMinutes: number;
+    highPriorityItems: number;
+    capacityMinutes: number | null;
+    overloadStatus: "overloaded" | "within_capacity" | "unavailable";
+  };
+};
 
 export function getTodayDashboard(accessToken: string) {
-  return request<TodayDashboard>(accessToken, '/dashboard/today')
+  return request<TodayDashboard>(accessToken, "/dashboard/today");
 }
 
-export type TaskDueFilter = 'today' | 'upcoming' | 'overdue'
+export type TaskDueFilter = "today" | "upcoming" | "overdue";
 
 export type TaskFilters = {
-  status?: ApiTaskStatus
-  priority?: ApiTaskPriority
-  category?: string
-  due?: TaskDueFilter
-  focus?: boolean
-  completed?: boolean
-  hasReminder?: boolean
-  shared?: boolean
-  search?: string
-}
+  status?: ApiTaskStatus;
+  priority?: ApiTaskPriority;
+  category?: string;
+  due?: TaskDueFilter;
+  focus?: boolean;
+  completed?: boolean;
+  hasReminder?: boolean;
+  shared?: boolean;
+  search?: string;
+};
 
 export type TaskFilterSummary = {
   counts: {
-    today: number
-    upcoming: number
-    overdue: number
-    focus: number
-    completed: number
-    highPriority: number
-  }
-  categories: { name: string; count: number }[]
-}
+    today: number;
+    upcoming: number;
+    overdue: number;
+    focus: number;
+    completed: number;
+    highPriority: number;
+  };
+  categories: { name: string; count: number }[];
+};
 
 function buildTaskQuery(filters?: TaskFilters) {
-  if (!filters) return ''
+  if (!filters) return "";
 
-  const params = new URLSearchParams()
-  if (filters.status) params.set('status', filters.status)
-  if (filters.priority) params.set('priority', filters.priority)
-  if (filters.category) params.set('category', filters.category)
-  if (filters.due) params.set('due', filters.due)
-  if (filters.focus) params.set('focus', 'true')
-  if (filters.completed) params.set('completed', 'true')
-  if (filters.hasReminder) params.set('hasReminder', 'true')
-  if (filters.shared) params.set('shared', 'true')
-  if (filters.search) params.set('search', filters.search)
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.priority) params.set("priority", filters.priority);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.due) params.set("due", filters.due);
+  if (filters.focus) params.set("focus", "true");
+  if (filters.completed) params.set("completed", "true");
+  if (filters.hasReminder) params.set("hasReminder", "true");
+  if (filters.shared) params.set("shared", "true");
+  if (filters.search) params.set("search", filters.search);
 
-  const query = params.toString()
-  return query ? `?${query}` : ''
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
 export function getTasks(accessToken: string, filters?: TaskFilters) {
-  return request<ApiTask[]>(accessToken, `/tasks${buildTaskQuery(filters)}`)
+  return request<ApiTask[]>(accessToken, `/tasks${buildTaskQuery(filters)}`);
 }
 
 export function getTaskFilterSummary(accessToken: string) {
-  return request<TaskFilterSummary>(accessToken, '/tasks/filters/summary')
+  return request<TaskFilterSummary>(accessToken, "/tasks/filters/summary");
 }
 
 export function getTask(accessToken: string, taskId: string) {
-  return request<ApiTask>(accessToken, `/tasks/${taskId}`)
+  return request<ApiTask>(accessToken, `/tasks/${taskId}`);
 }
 
 export function createTask(accessToken: string, payload: TaskPayload) {
-  return request<ApiTask>(accessToken, '/tasks', {
-    method: 'POST',
+  return request<ApiTask>(accessToken, "/tasks", {
+    method: "POST",
     body: JSON.stringify(payload),
-  })
+  });
 }
 
-export function updateTask(accessToken: string, taskId: string, payload: TaskPayload) {
-  const url = `${apiUrl}/tasks/${taskId}`
-  console.info('[BeePlan Tasks API] updateTask', { taskId, url, payload })
+export function updateTask(
+  accessToken: string,
+  taskId: string,
+  payload: TaskPayload,
+) {
+  const url = `${apiUrl}/tasks/${taskId}`;
+  console.info("[BeePlan Tasks API] updateTask", { taskId, url, payload });
 
   return request<ApiTask>(accessToken, `/tasks/${taskId}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(payload),
-  })
+  });
 }
 
 export function deleteTask(accessToken: string, taskId: string) {
-  return request<void>(accessToken, `/tasks/${taskId}`, { method: 'DELETE' })
+  return request<void>(accessToken, `/tasks/${taskId}`, { method: "DELETE" });
 }
 
 export function changeTaskStatus(
   accessToken: string,
   taskId: string,
-  payload: { status: ApiTaskStatus; progress?: number; completionDate?: string; missedReason?: string },
+  payload: {
+    status: ApiTaskStatus;
+    progress?: number;
+    completionDate?: string;
+    missedReason?: string;
+  },
 ) {
-
   return request<ApiTask>(accessToken, `/tasks/${taskId}/status`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(payload),
-  })
+  });
 }
 
 export function getTaskLabels(accessToken: string, taskId: string) {
-  return request<ApiTaskLabel[]>(accessToken, `/tasks/${taskId}/labels`)
+  return request<ApiTaskLabel[]>(accessToken, `/tasks/${taskId}/labels`);
 }
 
-export function addTaskLabel(accessToken: string, taskId: string, name: string) {
+export function addTaskLabel(
+  accessToken: string,
+  taskId: string,
+  name: string,
+) {
   return request<ApiTaskLabel[]>(accessToken, `/tasks/${taskId}/labels`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ name }),
-  })
+  });
 }
 
-export function removeTaskLabel(accessToken: string, taskId: string, labelId: string) {
-  return request<ApiTaskLabel[]>(accessToken, `/tasks/${taskId}/labels/${encodeURIComponent(labelId)}`, {
-    method: 'DELETE',
-  })
+export function removeTaskLabel(
+  accessToken: string,
+  taskId: string,
+  labelId: string,
+) {
+  return request<ApiTaskLabel[]>(
+    accessToken,
+    `/tasks/${taskId}/labels/${encodeURIComponent(labelId)}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function updateTaskTimeEstimation(
@@ -489,135 +854,172 @@ export function updateTaskTimeEstimation(
   payload: { estimatedHours: number; spentHours: number },
 ) {
   return request<{
-    estimatedHours: number
-    spentHours: number
-    remainingHours: number
-    progressPercentage: number
+    estimatedHours: number;
+    spentHours: number;
+    remainingHours: number;
+    progressPercentage: number;
   }>(accessToken, `/tasks/${taskId}/time-estimation`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(payload),
-  })
+  });
 }
 
 export function getAttachments(accessToken: string, taskId: string) {
-  return request<ApiTaskAttachment[]>(accessToken, `/tasks/${taskId}/attachments`)
+  return request<ApiTaskAttachment[]>(
+    accessToken,
+    `/tasks/${taskId}/attachments`,
+  );
 }
 
-export async function uploadAttachment(accessToken: string, taskId: string, file: File): Promise<ApiTaskAttachment> {
-  const path = `/tasks/${taskId}/attachments`
-  const url = `${apiUrl}${path}`
-  const formData = new FormData()
-  formData.append('file', file)
+export async function uploadAttachment(
+  accessToken: string,
+  taskId: string,
+  file: File,
+): Promise<ApiTaskAttachment> {
+  const path = `/tasks/${taskId}/attachments`;
+  const url = `${apiUrl}${path}`;
+  const formData = new FormData();
+  formData.append("file", file);
 
   if (import.meta.env.DEV) {
-    console.log('[BeePlan Tasks API] ->', 'POST', path)
+    console.log("[BeePlan Tasks API] ->", "POST", path);
   }
 
-  let response: Response
+  let response: Response;
   try {
     // Deliberately not using the shared `request()` helper: it forces
     // `Content-Type: application/json`, which would break the browser's
     // automatic `multipart/form-data; boundary=...` header for FormData.
     response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: formData,
-    })
+    });
   } catch (error) {
-    console.error('[BeePlan Tasks API] Network request failed', { url, error })
-    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+    console.error("[BeePlan Tasks API] Network request failed", { url, error });
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`);
   }
 
-  const data = await response.json().catch(() => null)
+  const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
-    throw new Error(message ?? 'Attachment upload failed. Please try again.')
+    const message = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message;
+    throw new Error(message ?? "Attachment upload failed. Please try again.");
   }
 
-  return data as ApiTaskAttachment
+  return data as ApiTaskAttachment;
 }
 
-export function deleteAttachment(accessToken: string, taskId: string, attachmentId: string) {
-  return request<void>(accessToken, `/tasks/${taskId}/attachments/${encodeURIComponent(attachmentId)}`, {
-    method: 'DELETE',
-  })
+export function deleteAttachment(
+  accessToken: string,
+  taskId: string,
+  attachmentId: string,
+) {
+  return request<void>(
+    accessToken,
+    `/tasks/${taskId}/attachments/${encodeURIComponent(attachmentId)}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
-function attachmentPath(taskId: string, attachment: ApiTaskAttachment, action: 'preview' | 'download') {
+function attachmentPath(
+  taskId: string,
+  attachment: ApiTaskAttachment,
+  action: "preview" | "download",
+) {
   if (attachment.id) {
-    return `/tasks/${taskId}/attachments/${attachment.id}/${action}`
+    return `/tasks/${taskId}/attachments/${attachment.id}/${action}`;
   }
 
-  if (action === 'preview') return attachment.previewUrl ?? attachment.fileUrl ?? attachment.url ?? ''
-  return attachment.downloadUrl ?? attachment.fileUrl ?? attachment.url ?? ''
+  if (action === "preview")
+    return attachment.previewUrl ?? attachment.fileUrl ?? attachment.url ?? "";
+  return attachment.downloadUrl ?? attachment.fileUrl ?? attachment.url ?? "";
 }
 
 function attachmentRequestUrl(path: string) {
-  return /^https?:\/\//i.test(path) ? path : `${apiUrl}${path}`
+  return /^https?:\/\//i.test(path) ? path : `${apiUrl}${path}`;
 }
 
-export async function getAttachmentPreviewBlob(accessToken: string, taskId: string, attachment: ApiTaskAttachment) {
-  const path = attachmentPath(taskId, attachment, 'preview')
+export async function getAttachmentPreviewBlob(
+  accessToken: string,
+  taskId: string,
+  attachment: ApiTaskAttachment,
+) {
+  const path = attachmentPath(taskId, attachment, "preview");
   if (!path) {
-    throw new Error('Unable to preview attachment. Please try again.')
+    throw new Error("Unable to preview attachment. Please try again.");
   }
 
-  let response: Response
+  let response: Response;
   try {
     response = await fetch(attachmentRequestUrl(path), {
       headers: { Authorization: `Bearer ${accessToken}` },
-    })
+    });
   } catch {
-    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`);
   }
 
   if (!response.ok) {
-    throw new Error('Unable to preview attachment. Please try again.')
+    throw new Error("Unable to preview attachment. Please try again.");
   }
 
-  const responseBlob = await response.blob()
-  const contentType = response.headers.get('Content-Type') ?? attachment.fileType ?? attachment.type ?? ''
-  const blob = responseBlob.type || !contentType ? responseBlob : new Blob([responseBlob], { type: contentType })
+  const responseBlob = await response.blob();
+  const contentType =
+    response.headers.get("Content-Type") ??
+    attachment.fileType ??
+    attachment.type ??
+    "";
+  const blob =
+    responseBlob.type || !contentType
+      ? responseBlob
+      : new Blob([responseBlob], { type: contentType });
 
   return {
     blob,
     contentType: blob.type || contentType,
-  }
+  };
 }
 
-export async function downloadAttachment(accessToken: string, taskId: string, attachment: ApiTaskAttachment) {
-  const path = attachmentPath(taskId, attachment, 'download')
+export async function downloadAttachment(
+  accessToken: string,
+  taskId: string,
+  attachment: ApiTaskAttachment,
+) {
+  const path = attachmentPath(taskId, attachment, "download");
   if (!path) {
-    throw new Error('Unable to download attachment. Please try again.')
+    throw new Error("Unable to download attachment. Please try again.");
   }
 
-  let response: Response
+  let response: Response;
   try {
     response = await fetch(attachmentRequestUrl(path), {
       headers: { Authorization: `Bearer ${accessToken}` },
-    })
+    });
   } catch {
-    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`);
   }
 
   if (!response.ok) {
-    throw new Error('Unable to download attachment. Please try again.')
+    throw new Error("Unable to download attachment. Please try again.");
   }
 
-  const blob = await response.blob()
-  const blobUrl = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = blobUrl
-  link.download = attachment.fileName ?? attachment.name ?? 'attachment'
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000)
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = attachment.fileName ?? attachment.name ?? "attachment";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
 }
 
 export function getSubtasks(accessToken: string, taskId: string) {
-  return request<ApiSubtask[]>(accessToken, `/tasks/${taskId}/subtasks`)
+  return request<ApiSubtask[]>(accessToken, `/tasks/${taskId}/subtasks`);
 }
 
 export function addSubtask(
@@ -626,16 +1028,20 @@ export function addSubtask(
   payload: SubtaskPayload & { title: string },
 ) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(payload),
-  })
+  });
 }
 
-export function reorderSubtasks(accessToken: string, taskId: string, subtaskIds: string[]) {
+export function reorderSubtasks(
+  accessToken: string,
+  taskId: string,
+  subtaskIds: string[],
+) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/reorder`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ subtaskIds }),
-  })
+  });
 }
 
 export function updateSubtask(
@@ -644,14 +1050,26 @@ export function updateSubtask(
   subtaskId: string,
   payload: SubtaskPayload,
 ) {
-  return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  })
+  return request<ApiTask>(
+    accessToken,
+    `/tasks/${taskId}/subtasks/${subtaskId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
-export function deleteSubtask(accessToken: string, taskId: string, subtaskId: string) {
-  return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'DELETE' })
+export function deleteSubtask(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+) {
+  return request<ApiTask>(
+    accessToken,
+    `/tasks/${taskId}/subtasks/${subtaskId}`,
+    { method: "DELETE" },
+  );
 }
 
 export function setSubtaskDependencies(
@@ -660,16 +1078,27 @@ export function setSubtaskDependencies(
   subtaskId: string,
   dependsOnSubtaskIds: string[],
 ) {
-  return request<ApiTask>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}/dependencies`, {
-    method: 'PUT',
-    body: JSON.stringify({ dependsOnSubtaskIds }),
-  })
+  return request<ApiTask>(
+    accessToken,
+    `/tasks/${taskId}/subtasks/${subtaskId}/dependencies`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ dependsOnSubtaskIds }),
+    },
+  );
 }
 
 // ---- Subtask attachments (mirror task attachments) ----
 
-export function getSubtaskAttachments(accessToken: string, taskId: string, subtaskId: string) {
-  return request<ApiTaskAttachment[]>(accessToken, `/tasks/${taskId}/subtasks/${subtaskId}/attachments`)
+export function getSubtaskAttachments(
+  accessToken: string,
+  taskId: string,
+  subtaskId: string,
+) {
+  return request<ApiTaskAttachment[]>(
+    accessToken,
+    `/tasks/${taskId}/subtasks/${subtaskId}/attachments`,
+  );
 }
 
 export async function uploadSubtaskAttachment(
@@ -678,31 +1107,33 @@ export async function uploadSubtaskAttachment(
   subtaskId: string,
   file: File,
 ): Promise<ApiTaskAttachment> {
-  const path = `/tasks/${taskId}/subtasks/${subtaskId}/attachments`
-  const url = `${apiUrl}${path}`
-  const formData = new FormData()
-  formData.append('file', file)
+  const path = `/tasks/${taskId}/subtasks/${subtaskId}/attachments`;
+  const url = `${apiUrl}${path}`;
+  const formData = new FormData();
+  formData.append("file", file);
 
-  let response: Response
+  let response: Response;
   try {
     // See uploadAttachment(): FormData must set its own multipart boundary.
     response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: formData,
-    })
+    });
   } catch (error) {
-    console.error('[BeePlan Tasks API] Network request failed', { url, error })
-    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+    console.error("[BeePlan Tasks API] Network request failed", { url, error });
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`);
   }
 
-  const data = await response.json().catch(() => null)
+  const data = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message
-    throw new Error(message ?? 'Attachment upload failed. Please try again.')
+    const message = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message;
+    throw new Error(message ?? "Attachment upload failed. Please try again.");
   }
 
-  return data as ApiTaskAttachment
+  return data as ApiTaskAttachment;
 }
 
 export function deleteSubtaskAttachment(
@@ -714,8 +1145,8 @@ export function deleteSubtaskAttachment(
   return request<void>(
     accessToken,
     `/tasks/${taskId}/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
-    { method: 'DELETE' },
-  )
+    { method: "DELETE" },
+  );
 }
 
 export async function downloadSubtaskAttachment(
@@ -726,35 +1157,41 @@ export async function downloadSubtaskAttachment(
 ) {
   const path = attachment.id
     ? `/tasks/${taskId}/subtasks/${subtaskId}/attachments/${attachment.id}/download`
-    : (attachment.downloadUrl ?? attachment.fileUrl ?? attachment.url ?? '')
-  if (!path) throw new Error('Unable to download attachment. Please try again.')
+    : (attachment.downloadUrl ?? attachment.fileUrl ?? attachment.url ?? "");
+  if (!path)
+    throw new Error("Unable to download attachment. Please try again.");
 
-  let response: Response
+  let response: Response;
   try {
     response = await fetch(attachmentRequestUrl(path), {
       headers: { Authorization: `Bearer ${accessToken}` },
-    })
+    });
   } catch {
-    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`)
+    throw new Error(`Unable to reach BeePlan API at ${apiUrl}.`);
   }
-  if (!response.ok) throw new Error('Unable to download attachment. Please try again.')
+  if (!response.ok)
+    throw new Error("Unable to download attachment. Please try again.");
 
-  const blob = await response.blob()
-  const blobUrl = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = blobUrl
-  link.download = attachment.fileName ?? attachment.name ?? 'attachment'
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000)
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = attachment.fileName ?? attachment.name ?? "attachment";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
 }
 
-export function addDependencies(accessToken: string, taskId: string, dependencyTaskIds: string[]) {
+export function addDependencies(
+  accessToken: string,
+  taskId: string,
+  dependencyTaskIds: string[],
+) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/dependencies`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ dependencyTaskIds }),
-  })
+  });
 }
 
 export function replaceDependency(
@@ -763,60 +1200,93 @@ export function replaceDependency(
   dependencyTaskId: string,
   replacementTaskId: string,
 ) {
-  return request<ApiTask>(accessToken, `/tasks/${taskId}/dependencies/${dependencyTaskId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ replacementTaskId }),
-  })
+  return request<ApiTask>(
+    accessToken,
+    `/tasks/${taskId}/dependencies/${dependencyTaskId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ replacementTaskId }),
+    },
+  );
 }
 
-export function removeDependency(accessToken: string, taskId: string, dependencyTaskId: string) {
-  return request<ApiTask>(accessToken, `/tasks/${taskId}/dependencies/${dependencyTaskId}`, { method: 'DELETE' })
+export function removeDependency(
+  accessToken: string,
+  taskId: string,
+  dependencyTaskId: string,
+) {
+  return request<ApiTask>(
+    accessToken,
+    `/tasks/${taskId}/dependencies/${dependencyTaskId}`,
+    { method: "DELETE" },
+  );
 }
 
 export function getDependencies(accessToken: string, taskId: string) {
-  return request<ApiDependency[]>(accessToken, `/tasks/${taskId}/dependencies`)
+  return request<ApiDependency[]>(accessToken, `/tasks/${taskId}/dependencies`);
 }
 
-export function saveRecurrence(accessToken: string, taskId: string, recurrence: ApiRecurrence) {
+export function saveRecurrence(
+  accessToken: string,
+  taskId: string,
+  recurrence: ApiRecurrence,
+) {
   return request<ApiTask>(accessToken, `/tasks/${taskId}/recurrence`, {
-    method: 'PUT',
+    method: "PUT",
     body: JSON.stringify(recurrence),
-  })
+  });
 }
 
-export function recurrenceToApi(recurrence: UiRecurrence | null | undefined): ApiRecurrence | null {
-  if (!recurrence) return null
+export function recurrenceToApi(
+  recurrence: UiRecurrence | null | undefined,
+): ApiRecurrence | null {
+  if (!recurrence) return null;
 
   const endType =
-    recurrence.endType === 'onDate'
-      ? 'date'
-      : recurrence.endType === 'after'
-        ? 'occurrences'
-        : 'never'
+    recurrence.endType === "onDate"
+      ? "date"
+      : recurrence.endType === "after"
+        ? "occurrences"
+        : "never";
 
   return {
     ...recurrence,
     endType,
     // Always send a machine date (YYYY-MM-DD) — never a display/localized
     // string. Omit it entirely unless the recurrence actually ends on a date.
-    endDate: endType === 'date' ? (toApiDate(recurrence.endDate) ?? undefined) : undefined,
-  }
+    endDate:
+      endType === "date"
+        ? (toApiDate(recurrence.endDate) ?? undefined)
+        : undefined,
+  };
 }
 
 const MONTH_INDEX: Record<string, number> = {
-  january: 0, jan: 0,
-  february: 1, feb: 1,
-  march: 2, mar: 2,
-  april: 3, apr: 3,
+  january: 0,
+  jan: 0,
+  february: 1,
+  feb: 1,
+  march: 2,
+  mar: 2,
+  april: 3,
+  apr: 3,
   may: 4,
-  june: 5, jun: 5,
-  july: 6, jul: 6,
-  august: 7, aug: 7,
-  september: 8, sep: 8, sept: 8,
-  october: 9, oct: 9,
-  november: 10, nov: 10,
-  december: 11, dec: 11,
-}
+  june: 5,
+  jun: 5,
+  july: 6,
+  jul: 6,
+  august: 7,
+  aug: 7,
+  september: 8,
+  sep: 8,
+  sept: 8,
+  october: 9,
+  oct: 9,
+  november: 10,
+  nov: 10,
+  december: 11,
+  dec: 11,
+};
 
 /**
  * Convert any date-ish value into a validated API date string (YYYY-MM-DD), or
@@ -827,167 +1297,211 @@ const MONTH_INDEX: Record<string, number> = {
  * This is the payload counterpart to the display formatters — display code may
  * render "Aug 31, 2026", but the API always receives "2026-08-31".
  */
-export function toApiDate(value: unknown, referenceDate: Date = new Date()): string | null {
-  if (value == null) return null
+export function toApiDate(
+  value: unknown,
+  referenceDate: Date = new Date(),
+): string | null {
+  if (value == null) return null;
 
   if (value instanceof Date) {
     return Number.isNaN(value.getTime())
       ? null
-      : buildApiDate(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())
+      : buildApiDate(
+          value.getUTCFullYear(),
+          value.getUTCMonth(),
+          value.getUTCDate(),
+        );
   }
 
-  if (typeof value !== 'string') return null
-  const raw = value.trim()
-  if (!raw) return null
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw) return null;
 
   // ISO date or datetime — keep only the calendar-date part.
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/)
-  if (iso) return buildApiDate(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (iso)
+    return buildApiDate(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
 
-  const reference = Number.isNaN(referenceDate.getTime()) ? new Date() : referenceDate
-  const lower = raw.toLowerCase()
+  const reference = Number.isNaN(referenceDate.getTime())
+    ? new Date()
+    : referenceDate;
+  const lower = raw.toLowerCase();
 
   // YYYY/MM/DD
-  let match = lower.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
-  if (match) return buildApiDate(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  let match = lower.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (match)
+    return buildApiDate(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+    );
 
   // MM/DD/YYYY or DD/MM/YYYY (disambiguated when a value exceeds 12)
-  match = lower.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
+  match = lower.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
   if (match) {
-    const first = Number(match[1])
-    const second = Number(match[2])
-    const year = Number(match[3])
+    const first = Number(match[1]);
+    const second = Number(match[2]);
+    const year = Number(match[3]);
     return first > 12 && second <= 12
       ? buildApiDate(year, second - 1, first)
-      : buildApiDate(year, first - 1, second)
+      : buildApiDate(year, first - 1, second);
   }
 
   // Month name based: "August", "August 15", "31 Aug 2026", "Aug 31, 2026".
-  let monthIndex: number | null = null
-  let matchedToken = ''
+  let monthIndex: number | null = null;
+  let matchedToken = "";
   for (const [name, index] of Object.entries(MONTH_INDEX)) {
-    if (new RegExp(`\\b${name}\\b`).test(lower) && name.length > matchedToken.length) {
-      matchedToken = name
-      monthIndex = index
+    if (
+      new RegExp(`\\b${name}\\b`).test(lower) &&
+      name.length > matchedToken.length
+    ) {
+      matchedToken = name;
+      monthIndex = index;
     }
   }
   if (monthIndex !== null) {
-    let day: number | null = null
-    let year: number | null = null
+    let day: number | null = null;
+    let year: number | null = null;
     for (const token of lower.match(/\d{1,4}/g) ?? []) {
-      const number = Number(token)
-      if (number >= 1000) year = number
-      else if (day === null && number >= 1 && number <= 31) day = number
+      const number = Number(token);
+      if (number >= 1000) year = number;
+      else if (day === null && number >= 1 && number <= 31) day = number;
     }
-    const resolvedYear = year ?? yearForMonthDay(monthIndex, day, reference)
+    const resolvedYear = year ?? yearForMonthDay(monthIndex, day, reference);
     if (day === null) {
-      const lastDay = new Date(Date.UTC(resolvedYear, monthIndex + 1, 0)).getUTCDate()
-      return buildApiDate(resolvedYear, monthIndex, lastDay)
+      const lastDay = new Date(
+        Date.UTC(resolvedYear, monthIndex + 1, 0),
+      ).getUTCDate();
+      return buildApiDate(resolvedYear, monthIndex, lastDay);
     }
-    return buildApiDate(resolvedYear, monthIndex, day)
+    return buildApiDate(resolvedYear, monthIndex, day);
   }
 
-  return null
+  return null;
 }
 
-function buildApiDate(year: number, monthIndex: number, day: number): string | null {
-  if (!Number.isInteger(year) || year < 1970 || year > 9999) return null
-  if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null
-  const date = new Date(Date.UTC(year, monthIndex, day))
+function buildApiDate(
+  year: number,
+  monthIndex: number,
+  day: number,
+): string | null {
+  if (!Number.isInteger(year) || year < 1970 || year > 9999) return null;
+  if (monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, monthIndex, day));
   // Reject overflowed dates like "Feb 30" that JS silently rolls forward.
   if (
     date.getUTCFullYear() !== year ||
     date.getUTCMonth() !== monthIndex ||
     date.getUTCDate() !== day
   ) {
-    return null
+    return null;
   }
-  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-function yearForMonthDay(monthIndex: number, day: number | null, reference: Date): number {
-  const year = reference.getUTCFullYear()
-  const refMonth = reference.getUTCMonth()
-  const refDay = reference.getUTCDate()
-  if (monthIndex < refMonth) return year + 1
-  if (monthIndex === refMonth && day !== null && day < refDay) return year + 1
-  return year
+function yearForMonthDay(
+  monthIndex: number,
+  day: number | null,
+  reference: Date,
+): number {
+  const year = reference.getUTCFullYear();
+  const refMonth = reference.getUTCMonth();
+  const refDay = reference.getUTCDate();
+  if (monthIndex < refMonth) return year + 1;
+  if (monthIndex === refMonth && day !== null && day < refDay) return year + 1;
+  return year;
 }
 
-export function recurrenceToUi(recurrence: ApiRecurrence | null | undefined): UiRecurrence | null {
-  if (!recurrence) return null
+export function recurrenceToUi(
+  recurrence: ApiRecurrence | null | undefined,
+): UiRecurrence | null {
+  if (!recurrence) return null;
 
   return {
     ...recurrence,
     endType:
-      recurrence.endType === 'date'
-        ? 'onDate'
-        : recurrence.endType === 'occurrences'
-          ? 'after'
-          : 'never',
-    endDate: recurrence.endDate ?? '',
-  }
+      recurrence.endType === "date"
+        ? "onDate"
+        : recurrence.endType === "occurrences"
+          ? "after"
+          : "never",
+    endDate: recurrence.endDate ?? "",
+  };
 }
 
 export function removeRecurrence(accessToken: string, taskId: string) {
-  return request<ApiTask>(accessToken, `/tasks/${taskId}/recurrence`, { method: 'DELETE' })
+  return request<ApiTask>(accessToken, `/tasks/${taskId}/recurrence`, {
+    method: "DELETE",
+  });
 }
 
 export function getRecurrence(accessToken: string, taskId: string) {
-  return request<ApiRecurrence | null>(accessToken, `/tasks/${taskId}/recurrence`)
+  return request<ApiRecurrence | null>(
+    accessToken,
+    `/tasks/${taskId}/recurrence`,
+  );
 }
 
 export function parseRecurrenceWithAi(
   accessToken: string,
   payload: { message: string; currentDate: string; timezone: string },
 ) {
-  return request<AiRecurrenceParseResponse>(accessToken, '/ai/recurrence/parse', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
+  return request<AiRecurrenceParseResponse>(
+    accessToken,
+    "/ai/recurrence/parse",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function getRecurrenceSuggestions(accessToken: string) {
-  return request<{ suggestions: RecurrenceSuggestion[] }>(accessToken, '/ai/recurrence/suggestions')
+  return request<{ suggestions: RecurrenceSuggestion[] }>(
+    accessToken,
+    "/ai/recurrence/suggestions",
+  );
 }
 
-export function dismissRecurrenceSuggestion(accessToken: string, suggestionId: string) {
+export function dismissRecurrenceSuggestion(
+  accessToken: string,
+  suggestionId: string,
+) {
   return request<{ ok: boolean }>(
     accessToken,
     `/ai/recurrence/suggestions/${encodeURIComponent(suggestionId)}/dismiss`,
-    { method: 'POST' },
-  )
+    { method: "POST" },
+  );
 }
 
 export function getTaskActivity(accessToken: string, taskId: string) {
-  return request<ApiTaskActivity[]>(accessToken, `/tasks/${taskId}/activity`)
+  return request<ApiTaskActivity[]>(accessToken, `/tasks/${taskId}/activity`);
 }
 
 export function toUiStatus(status: ApiTaskStatus) {
-  if (status === 'todo') return 'To Do'
-  if (status === 'in_progress') return 'In Progress'
-  if (status === 'done') return 'Done'
-  return 'Missed'
+  if (status === "todo") return "To Do";
+  if (status === "in_progress") return "In Progress";
+  if (status === "done") return "Done";
+  return "Missed";
 }
 
 export function toApiStatus(status: string): ApiTaskStatus {
-  if (status === 'To Do') return 'todo'
-  if (status === 'In Progress') return 'in_progress'
-  if (status === 'Done') return 'done'
-  return 'missed'
+  if (status === "To Do") return "todo";
+  if (status === "In Progress") return "in_progress";
+  if (status === "Done") return "done";
+  return "missed";
 }
 
 export function toUiPriority(priority: ApiTaskPriority) {
-  if (priority === 'low') return 'Low'
-  if (priority === 'high') return 'High'
-  if (priority === 'urgent') return 'Urgent'
-  return 'Medium'
+  if (priority === "low") return "Low";
+  if (priority === "high") return "High";
+  if (priority === "urgent") return "Urgent";
+  return "Medium";
 }
 
 export function toApiPriority(priority: string): ApiTaskPriority {
-  if (priority === 'Low') return 'low'
-  if (priority === 'High') return 'high'
-  if (priority === 'Urgent') return 'urgent'
-  return 'medium'
+  if (priority === "Low") return "low";
+  if (priority === "High") return "high";
+  if (priority === "Urgent") return "urgent";
+  return "medium";
 }
-

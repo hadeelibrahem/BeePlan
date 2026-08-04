@@ -1,15 +1,172 @@
-import { useEffect, useState } from 'react'
-import { getWeatherTravelPreferences, updateWeatherTravelPreferences, type WeatherTravelPreferences } from '../../lib/tasksApi'
-import { SectionCard } from '../../components/layout'
-const input = 'mt-1 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-[var(--bp-text)]'
-const numericFields: [keyof WeatherTravelPreferences, string][] = [['homeRadiusMeters','Home radius (m)'],['preparationBufferMinutes','Preparation buffer (min)'],['parkingWalkingBufferMinutes','Parking/walking buffer (min)'],['uncertaintyBufferMinutes','Uncertainty buffer (min)'],['weatherLeadMinutes','Weather lead (min)'],['currentLocationFreshnessMinutes','Location freshness (min)'],['coldThresholdC','Cold threshold °C'],['veryColdThresholdC','Very cold threshold °C'],['hotThresholdC','Hot threshold °C'],['extremeHeatThresholdC','Extreme heat threshold °C'],['rainThresholdPercent','Rain probability %'],['rainAmountThresholdMm','Rain amount mm'],['windThresholdKph','Wind threshold km/h'],['uvThreshold','UV threshold'],['visibilityThresholdMeters','Visibility threshold m']]
-const adviceLabels = [['coat','Coat advice'],['lightClothing','Light-clothing advice'],['umbrella','Umbrella advice'],['hydration','Hydration advice'],['uv','UV advice'],['wind','Wind warning'],['severeWeather','Severe weather alerts']] as const
-function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) { return <label className="flex items-center justify-between gap-2 text-xs font-bold text-[var(--bp-text)]">{label}<input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} /></label> }
+import { useEffect, useState } from "react";
+import { SectionCard } from "../../components/layout";
+import {
+  getTaskAssistantPreferences,
+  updateTaskAssistantPreferences,
+  type TaskAssistantPreferences,
+} from "../../lib/tasksApi";
+
+const toggles: [keyof TaskAssistantPreferences, string][] = [
+  ["proactiveAssistanceEnabled", "Proactive assistance"],
+  ["dynamicPreparationEnabled", "Dynamic preparation lists"],
+  ["dynamicPackingEnabled", "Dynamic packing lists"],
+  ["contextTimelineEnabled", "Context timeline"],
+  ["contextualNotificationsEnabled", "Contextual notifications"],
+  ["preparationChecklistsEnabled", "Preparation checklists"],
+  ["travelAdviceEnabled", "Travel and departure advice"],
+  ["weatherAdviceEnabled", "Weather advice"],
+  ["documentAdviceEnabled", "Document reminders"],
+  ["clothingAdviceEnabled", "Clothing suggestions"],
+  ["umbrellaAdviceEnabled", "Umbrella reminders"],
+  ["hydrationAdviceEnabled", "Hydration reminders"],
+  ["electronicsAdviceEnabled", "Electronics"],
+  ["medicationAdviceEnabled", "Medication"],
+  ["departureRemindersEnabled", "Departure reminders"],
+];
 export function WeatherTravelSettings({ token }: { token?: string }) {
-  const [value, setValue] = useState<WeatherTravelPreferences | null>(null); const [status, setStatus] = useState('')
-  useEffect(() => { if (token) void getWeatherTravelPreferences(token).then(setValue).catch(() => setStatus('Could not load settings.')) }, [token])
-  if (!token || !value) return null
-  const set = <K extends keyof WeatherTravelPreferences>(key: K, next: WeatherTravelPreferences[K]) => setValue({ ...value, [key]: next })
-  const save = async () => { setStatus('Saving…'); try { setValue(await updateWeatherTravelPreferences(token, value)); setStatus('Saved') } catch { setStatus('Could not save settings.') } }
-  return <SectionCard><div className="flex items-center justify-between gap-4"><div><h3 className="text-sm font-black">Weather &amp; Travel</h3><p className="mt-1 text-xs text-[var(--bp-muted)]">BeePlan checks route and forecast before scheduled tasks away from Home.</p></div><span className="rounded-full bg-[var(--bp-accent-soft)] px-2.5 py-1 text-xs font-bold text-[var(--bp-accent-ink)]">{value.enabled ? 'On' : 'Off'}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="flex items-center justify-between gap-3 rounded-xl border border-[var(--bp-border)] p-3 text-sm font-bold">Enable advice<input aria-label="Enable weather and travel advice" type="checkbox" checked={value.enabled} onChange={(e) => set('enabled', e.target.checked)} /></label><label className="block text-sm">Default travel mode<select className={input} value={value.defaultTravelMode} onChange={(e) => set('defaultTravelMode', e.target.value as WeatherTravelPreferences['defaultTravelMode'])}><option value="driving">Driving</option><option value="walking">Walking</option><option value="cycling">Cycling</option></select></label></div><details className="mt-4 rounded-xl border border-[var(--bp-border)] p-3"><summary className="cursor-pointer text-xs font-black text-[var(--bp-muted)]">Advanced Weather &amp; Travel Settings</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{numericFields.map(([key, label]) => <label key={key} className="text-xs font-bold text-[var(--bp-muted)]">{label}<input className={input} type="number" value={value[key] as number} onChange={(e) => set(key, Number(e.target.value) as never)} /></label>)}</div><div className="mt-3 grid gap-2 sm:grid-cols-2"><Toggle label="Use current location fallback" value={value.currentLocationFallbackEnabled} onChange={(v) => set('currentLocationFallbackEnabled', v)} /><Toggle label="Allow approximate travel fallback" value={value.approximateTravelFallbackEnabled} onChange={(v) => set('approximateTravelFallbackEnabled', v)} /><Toggle label="AI message polishing" value={value.aiPolishingEnabled} onChange={(v) => set('aiPolishingEnabled', v)} />{adviceLabels.map(([key,label]) => <Toggle key={key} label={label} value={value.advice[key] !== false} onChange={(v) => set('advice', { ...value.advice, [key]: v })} />)}</div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-[var(--bp-muted)]">Preferred language<select className={input} value={value.language} onChange={(e) => set('language', e.target.value)}><option value="en">English</option><option value="ar">العربية</option></select></label><label className="text-xs font-bold text-[var(--bp-muted)]">Timezone<input className={input} value={value.timezone} onChange={(e) => set('timezone', e.target.value)} /></label></div></details><button type="button" onClick={() => void save()} className="mt-4 rounded-xl bg-[var(--bp-accent)] px-4 py-2 font-black text-[var(--bp-accent-text)]">Save Weather &amp; Travel</button><span aria-live="polite" className="ms-3 text-xs text-[var(--bp-muted)]">{status}</span></SectionCard>
+  const [value, setValue] = useState<TaskAssistantPreferences | null>(null);
+  const [status, setStatus] = useState("");
+  useEffect(() => {
+    if (token)
+      void getTaskAssistantPreferences(token)
+        .then(setValue)
+        .catch(() => setStatus("Could not load settings."));
+  }, [token]);
+  if (!token || !value)
+    return (
+      <SectionCard>
+        <h3 className="text-sm font-black">Task Context Assistant</h3>
+        <p className="mt-1 text-xs text-[var(--bp-muted)]">
+          {status || "Loading settings…"}
+        </p>
+      </SectionCard>
+    );
+  const set = <K extends keyof TaskAssistantPreferences>(
+    key: K,
+    next: TaskAssistantPreferences[K],
+  ) => setValue({ ...value, [key]: next });
+  const save = async () => {
+    setStatus("Saving…");
+    try {
+      setValue(await updateTaskAssistantPreferences(token, value));
+      setStatus("Saved");
+    } catch {
+      setStatus("Could not save settings.");
+    }
+  };
+  return (
+    <SectionCard>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-black">Task Context Assistant</h3>
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">
+            Relevant preparation, travel, and weather guidance for each task.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm font-bold">
+          Enabled
+          <input
+            aria-label="Enable Task Context Assistant"
+            type="checkbox"
+            checked={value.enabled}
+            onChange={(event) => set("enabled", event.target.checked)}
+          />
+        </label>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {toggles.map(([key, label]) => (
+          <Toggle
+            key={key}
+            label={label}
+            value={Boolean(value[key])}
+            onChange={(next) => set(key, next as never)}
+          />
+        ))}
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <label className="text-xs font-bold text-[var(--bp-muted)]">
+          Notification timing
+          <select
+            aria-label="Notification timing"
+            className={input}
+            value={value.notificationMode}
+            onChange={(event) =>
+              set("notificationMode", event.target.value as any)
+            }
+          >
+            <option value="smart">Smart timing</option>
+            <option value="minimal">Minimal notifications</option>
+            <option value="important_only">Important only</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold text-[var(--bp-muted)]">
+          Default travel mode
+          <select
+            className={input}
+            value={value.defaultTravelMode}
+            onChange={(event) =>
+              set("defaultTravelMode", event.target.value as any)
+            }
+          >
+            <option value="driving">Driving</option>
+            <option value="walking">Walking</option>
+            <option value="cycling">Cycling</option>
+          </select>
+        </label>
+        <label className="text-xs font-bold text-[var(--bp-muted)]">
+          Preferred language
+          <select
+            className={input}
+            value={value.language}
+            onChange={(event) => set("language", event.target.value as any)}
+          >
+            <option value="en">English</option>
+            <option value="ar">العربية</option>
+          </select>
+        </label>
+      </div>
+      <details className="mt-4 rounded-xl border border-[var(--bp-border)] p-3">
+        <summary className="cursor-pointer text-xs font-black text-[var(--bp-muted)]">
+          Advanced Settings
+        </summary>
+        <p className="mt-2 text-xs text-[var(--bp-muted)]">
+          Weather thresholds, provider caches, routing fallbacks, and location
+          freshness continue to use the existing safe Weather &amp; Travel
+          defaults.
+        </p>
+      </details>
+      <button
+        type="button"
+        onClick={() => void save()}
+        className="mt-4 rounded-xl bg-[var(--bp-accent)] px-4 py-2 font-black text-[var(--bp-accent-text)]"
+      >
+        Save Task Assistant
+      </button>
+      <span aria-live="polite" className="ms-3 text-xs text-[var(--bp-muted)]">
+        {status}
+      </span>
+    </SectionCard>
+  );
 }
+function Toggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-xl border border-[var(--bp-border)] p-3 text-sm font-bold">
+      {label}
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
+  );
+}
+const input =
+  "mt-1 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-[var(--bp-text)]";

@@ -12,7 +12,12 @@ import { PushDevicesController } from './push-devices.controller';
   // available here without re-registering it.
   imports: [DatabaseModule],
   controllers: [NotificationsController, PushDevicesController],
-  providers: [NotificationsService, NotificationSchedulerService, PushNotificationsService, JwtAuthGuard],
+  providers: [
+    NotificationsService,
+    NotificationSchedulerService,
+    PushNotificationsService,
+    JwtAuthGuard,
+  ],
   // Exported so the collaboration and tasks modules can fan out notifications.
   exports: [NotificationsService],
 })

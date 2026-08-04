@@ -1,65 +1,910 @@
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
-  AppLayout, CalendarIcon, EmptyState, PageHeader, SectionCard, TopActionBar,
+  AppLayout,
+  CalendarIcon,
+  EmptyState,
+  PageHeader,
+  SectionCard,
+  TopActionBar,
   type SidebarNavHandlers,
-} from '../components/layout'
-import { useLanguage } from '../i18n/LanguageContext'
-import { useTheme } from '../theme/ThemeContext'
-import type { ApiTask } from '../lib/tasksApi'
-import type { Reminder } from '../features/reminders'
-import { formatDate, parseLocalDate } from '../lib/dateTime'
-import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict'
-import { ExistingTaskTimeConflict } from '../components/ExistingTaskTimeConflict'
-import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
-import { changeTaskStatus, getNearestTaskSchedule, resolveTaskScheduleConflict, updateTask, validateTaskSchedule, type TaskTimeConflict } from '../lib/tasksApi'
-import { ArrowRight, Bot, Check, ChevronLeft, ChevronRight, Clock3, CloudSun, MapPin, Plus, Sparkles, Target, X } from 'lucide-react'
-import { GoogleCalendarEvents } from '../features/calendar/GoogleCalendarEvents'
+} from "../components/layout";
+import { useLanguage } from "../i18n/LanguageContext";
+import { useTheme } from "../theme/ThemeContext";
+import type { ApiTask } from "../lib/tasksApi";
+import type { Reminder } from "../features/reminders";
+import { formatDate, parseLocalDate } from "../lib/dateTime";
+import { ExistingScheduleConflict } from "../components/ExistingScheduleConflict";
+import { ExistingTaskTimeConflict } from "../components/ExistingTaskTimeConflict";
+import {
+  TaskTimeConflictModal,
+  type ScheduleChoice,
+} from "../components/TaskTimeConflictModal";
+import {
+  changeTaskStatus,
+  getNearestTaskSchedule,
+  resolveTaskScheduleConflict,
+  updateTask,
+  validateTaskSchedule,
+  type TaskTimeConflict,
+} from "../lib/tasksApi";
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  CloudSun,
+  MapPin,
+  Plus,
+  Sparkles,
+  Target,
+  X,
+} from "lucide-react";
+import { GoogleCalendarEvents } from "../features/calendar/GoogleCalendarEvents";
 
-type CalendarScreenProps = SidebarNavHandlers & { tasks?: ApiTask[]; reminders?: Reminder[]; onViewTask?: (taskId: string) => void; onViewReminder?: (reminderId: string) => void; onCreateTaskForDate?: (date: string) => void; onSignOut?: () => void; accessToken?: string }
-type ViewMode = 'month' | 'week' | 'day' | 'agenda'
-type Day = { date: Date; key: string; inCurrentMonth: boolean; isToday: boolean }
+type CalendarScreenProps = SidebarNavHandlers & {
+  tasks?: ApiTask[];
+  reminders?: Reminder[];
+  onViewTask?: (taskId: string) => void;
+  onViewReminder?: (reminderId: string) => void;
+  onCreateTaskForDate?: (date: string) => void;
+  onSignOut?: () => void;
+  accessToken?: string;
+};
+type ViewMode = "month" | "week" | "day" | "agenda";
+type Day = {
+  date: Date;
+  key: string;
+  inCurrentMonth: boolean;
+  isToday: boolean;
+};
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-function toDateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
-export function isoToDateKey(iso?: string) { const date = parseLocalDate(iso); return date ? toDateKey(date) : null }
-function timeLabel(value?: string) { if (!value) return ''; const [h, m] = value.split(':').map(Number); const date = new Date(2020, 0, 1, h, m || 0); return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) }
-function minutesLabel(minutes: number) { return minutes >= 60 ? `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ''}` : `${minutes}m` }
-function workload(minutes: number, count: number) { if (minutes >= 360 || count >= 7) return { label: 'Overloaded', color: 'red', dot: 'bg-red-400', soft: 'bg-red-400/10' }; if (minutes >= 240 || count >= 5) return { label: 'Busy', color: 'orange', dot: 'bg-orange-400', soft: 'bg-orange-400/10' }; if (minutes >= 90 || count >= 3) return { label: 'Normal', color: 'yellow', dot: 'bg-yellow-400', soft: 'bg-yellow-400/10' }; return { label: 'Light', color: 'green', dot: 'bg-emerald-400', soft: 'bg-emerald-400/10' } }
-
-export default function CalendarScreen({ tasks = [], reminders = [], onViewTask, onViewReminder, onCreateTaskForDate, onSignOut, accessToken = '', ...nav }: CalendarScreenProps) {
-  const { t, toggleLanguage, isRTL } = useLanguage(); const { mode, toggleTheme } = useTheme(); const today = useMemo(() => new Date(), [])
-  const [viewDate, setViewDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1)); const [selectedDateKey, setSelectedDateKey] = useState(toDateKey(today)); const [viewMode, setViewMode] = useState<ViewMode>('month'); const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(null); const [optimized, setOptimized] = useState(false)
-  const tasksByDate = useMemo(() => { const map = new Map<string, ApiTask[]>(); tasks.forEach((task) => { const key = task.scheduledDate ?? isoToDateKey(task.dueDate); if (key) map.set(key, [...(map.get(key) ?? []), task]) }); return map }, [tasks])
-  const remindersByDate = useMemo(() => { const map = new Map<string, Reminder[]>(); reminders.forEach((item) => { const key = isoToDateKey(item.remindAt); if (key) map.set(key, [...(map.get(key) ?? []), item]) }); return map }, [reminders])
-  const monthLabel = viewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-  const gridDays = useMemo(() => { const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1); const start = new Date(first.getFullYear(), first.getMonth(), 1 - first.getDay()); return Array.from({ length: 42 }, (_, i) => { const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i); return { date, key: toDateKey(date), inCurrentMonth: date.getMonth() === viewDate.getMonth(), isToday: toDateKey(date) === toDateKey(today) } }) }, [viewDate, today])
-  const weekDays = useMemo(() => { const date = parseLocalDate(selectedDateKey) ?? today; const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay()); return Array.from({ length: 7 }, (_, i) => { const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i); return { date: d, key: toDateKey(d), inCurrentMonth: true, isToday: toDateKey(d) === toDateKey(today) } }) }, [selectedDateKey, today])
-  const selectedTasks = tasksByDate.get(selectedDateKey) ?? []; const selectedReminders = remindersByDate.get(selectedDateKey) ?? []
-  const selectedMinutes = selectedTasks.reduce((sum, task) => sum + (task.estimatedTimeMinutes || 0), 0); const selectedDone = selectedTasks.filter((task) => task.status === 'done').length; const selectedLoad = workload(selectedMinutes, selectedTasks.length + selectedReminders.length)
-  const daySummary = (key: string) => { const dayTasks = tasksByDate.get(key) ?? []; const dayReminders = remindersByDate.get(key) ?? []; const minutes = dayTasks.reduce((sum, task) => sum + (task.estimatedTimeMinutes || 0), 0); return { tasks: dayTasks, reminders: dayReminders, minutes, load: workload(minutes, dayTasks.length + dayReminders.length), done: dayTasks.filter((task) => task.status === 'done').length } }
-  function shift(direction: number) { const amount = viewMode === 'month' ? 1 : viewMode === 'week' ? 7 : 1; setViewDate((current) => new Date(current.getFullYear(), current.getMonth(), current.getDate() + direction * amount)); if (viewMode === 'day') setSelectedDateKey(toDateKey(new Date((parseLocalDate(selectedDateKey) ?? today).getFullYear(), (parseLocalDate(selectedDateKey) ?? today).getMonth(), (parseLocalDate(selectedDateKey) ?? today).getDate() + direction))) }
-  function goToday() { setViewDate(new Date(today.getFullYear(), today.getMonth(), viewMode === 'month' ? 1 : today.getDate())); setSelectedDateKey(toDateKey(today)) }
-  function selectDate(date: Date) { setSelectedDateKey(toDateKey(date)); setViewDate(new Date(date.getFullYear(), date.getMonth(), viewMode === 'month' ? 1 : date.getDate())) }
-  function handleDayKeyDown(event: KeyboardEvent<HTMLButtonElement>, date: Date) { const offsets: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }; if (!(event.key in offsets)) return; event.preventDefault(); selectDate(new Date(date.getFullYear(), date.getMonth(), date.getDate() + offsets[event.key])) }
-  async function moveTaskToDate(taskId: string, date: string) { const task = tasks.find((item) => item.id === taskId); if (!task?.scheduledStartTime || !task.scheduledEndTime || !accessToken) return; const validation = await validateTaskSchedule(accessToken, { ...task, scheduledDate: date }); if (validation.conflicts.length) { setTimeConflict(validation.conflicts[0]); return }; await updateTask(accessToken, task.id, { scheduledDate: date, scheduledStartTime: task.scheduledStartTime, scheduledEndTime: task.scheduledEndTime }) }
-  async function resolveMove(side: 'existing' | 'new', mode: 'auto' | 'manual', manual?: ScheduleChoice) { if (!timeConflict || !accessToken) return; const target = side === 'existing' ? timeConflict.existingTask : timeConflict.proposedTask; const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule; if (!schedule) return; await updateTask(accessToken, target.id, schedule); await resolveTaskScheduleConflict(accessToken, { conflictKey: timeConflict.id, date: target.scheduledDate, taskId: target.id, resolution: side === 'existing' ? `${mode === 'auto' ? 'move_existing_auto' : 'move_existing_manual'}` : `${mode === 'auto' ? 'move_new_auto' : 'move_new_manual'}` }); setTimeConflict(null) }
-
-  const dayButton = (day: Day, compact = false) => { const s = daySummary(day.key); const isSelected = day.key === selectedDateKey; const items = [...s.tasks.map((task) => ({ id: task.id, title: task.title, kind: 'task' as const, task })), ...s.reminders.map((item) => ({ id: item.id, title: item.title, kind: 'reminder' as const }))]; return <button key={day.key} type="button" role="gridcell" aria-selected={isSelected} aria-current={day.isToday ? 'date' : undefined} onClick={() => selectDate(day.date)} onKeyDown={(event) => handleDayKeyDown(event, day.date)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void moveTaskToDate(event.dataTransfer.getData('application/x-beeplan-task'), day.key) }} title={`${s.load.label} day · ${s.tasks.length} tasks · ${s.reminders.length} reminders · ${minutesLabel(s.minutes)} estimated`} className={`relative flex min-h-24 flex-col items-start gap-1 overflow-hidden rounded-xl border p-2 text-left transition hover:border-[var(--bp-accent)] ${isSelected ? 'border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 shadow-sm' : 'border-[var(--bp-border)]/70 bg-[var(--bp-surface)]'} ${!day.inCurrentMonth ? 'opacity-45' : ''} ${compact ? 'min-h-20' : ''}`}><div className="flex w-full items-center justify-between"><span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${day.isToday ? 'bg-[var(--bp-accent)] text-[var(--bp-accent-text)]' : ''}`}>{day.date.getDate()}</span><span className={`h-2 w-2 rounded-full ${s.load.dot}`} aria-label={s.load.label} /></div>{s.tasks.length > 0 && <div className="flex w-full items-center gap-1 text-[10px] text-[var(--bp-muted)]"><span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bp-border)]"><span className={`block h-full ${s.load.dot}`} style={{ width: `${Math.min(100, (s.done / s.tasks.length) * 100)}%` }} /></span><span>{s.done}/{s.tasks.length}</span></div>}{!compact && <div className="hidden w-full space-y-1 sm:block">{items.slice(0, 2).map((item) => <span key={`${item.kind}-${item.id}`} className={`flex w-full items-center gap-1 truncate rounded-md px-1.5 py-1 text-[10px] font-semibold ${item.kind === 'task' ? 'bg-[var(--bp-accent)]/10 text-[var(--bp-text)]' : 'bg-violet-400/10 text-violet-300'}`}><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{item.title}</span>)}{items.length > 2 && <span className="block pl-1 text-[10px] font-bold text-[var(--bp-accent-ink)]">+{items.length - 2} more</span>}</div>}{!compact && <span className="mt-auto text-[9px] font-semibold uppercase tracking-wide text-[var(--bp-muted)]">{s.load.label} · {minutesLabel(s.minutes)}</span>}</button> }
-  const timeline = [...selectedTasks.map((task) => ({ id: task.id, type: 'task' as const, title: task.title, start: task.scheduledStartTime ?? task.dueTime, end: task.scheduledEndTime, task })), ...selectedReminders.map((item) => ({ id: item.id, type: 'reminder' as const, title: item.title, start: item.remindAt ? new Date(item.remindAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : undefined }))].sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''))
-  const dayTitle = formatDate(selectedDateKey, isRTL ? 'ar' : 'en', { weekday: 'long', month: 'long', day: 'numeric' })
-
-  return <AppLayout active="calendar" {...nav}><PageHeader title="Plan your week" subtitle="See workload, focus time, travel, and what deserves your attention." toolbar={<TopActionBar pageOnly themeMode={mode} onToggleTheme={toggleTheme} languageLabel={t('common.languageToggle')} onToggleLanguage={toggleLanguage} onOpenNotifications={nav.onNavigateNotifications} onSignOut={onSignOut} />} /><ExistingScheduleConflict accessToken={accessToken} date={selectedDateKey} /><ExistingTaskTimeConflict accessToken={accessToken} date={selectedDateKey} /><GoogleCalendarEvents token={accessToken} date={selectedDateKey} />
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><button type="button" onClick={() => shift(-1)} aria-label="Previous period" className="rounded-lg border border-[var(--bp-border)] p-2 hover:bg-[var(--bp-border)]"><ChevronLeft size={16} /></button><button type="button" onClick={goToday} className="rounded-lg border border-[var(--bp-border)] px-3 py-2 text-xs font-bold hover:bg-[var(--bp-border)]">Today</button><button type="button" onClick={() => shift(1)} aria-label="Next period" className="rounded-lg border border-[var(--bp-border)] p-2 hover:bg-[var(--bp-border)]"><ChevronRight size={16} /></button><h2 className="ml-1 text-lg font-black">{viewMode === 'month' ? monthLabel : viewMode === 'agenda' ? 'Your agenda' : dayTitle}</h2></div><div className="flex items-center gap-2"><div className="flex rounded-lg border border-[var(--bp-border)] p-0.5">{(['month', 'week', 'day', 'agenda'] as ViewMode[]).map((view) => <button key={view} type="button" onClick={() => setViewMode(view)} className={`rounded-md px-2.5 py-1.5 text-xs font-bold capitalize ${viewMode === view ? 'bg-[var(--bp-text)] text-[var(--bp-surface)]' : 'text-[var(--bp-muted)] hover:text-[var(--bp-text)]'}`}>{view}</button>)}</div><button type="button" onClick={() => setOptimized(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bp-accent)] px-3 py-2 text-xs font-black text-[var(--bp-accent-text)] shadow-sm hover:brightness-95"><Sparkles size={14} /> Optimize week</button></div></div>
-    <div className="mb-4 grid gap-2 sm:grid-cols-4"><Stat label="Planned" value={minutesLabel(tasks.reduce((sum, task) => sum + (task.estimatedTimeMinutes || 0), 0))} icon={<Clock3 size={15} />} /><Stat label="Focus time" value={`${tasks.filter((task) => task.isFocusTask).length} sessions`} icon={<Target size={15} />} /><Stat label="Open items" value={`${tasks.filter((task) => task.status !== 'done').length + reminders.filter((item) => item.status !== 'done').length}`} icon={<Check size={15} />} /><Stat label="Week signal" value={selectedLoad.label} icon={<span className={`h-2 w-2 rounded-full ${selectedLoad.dot}`} />} /></div>
-    {optimized && <div className="mb-4 flex items-start gap-3 rounded-xl border border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 p-3 text-sm"><Bot className="mt-0.5 shrink-0 text-[var(--bp-accent-ink)]" size={18} /><div className="flex-1"><p className="font-bold">A calmer week is possible</p><p className="mt-0.5 text-xs text-[var(--bp-muted)]">Move “Deep work” to Tuesday morning, protect a 30-minute buffer before your off-site task, and keep Friday light.</p></div><button type="button" onClick={() => setOptimized(false)} aria-label="Dismiss optimization"><X size={16} /></button></div>}
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]"><SectionCard className="min-w-0"><div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-[.12em] text-[var(--bp-muted)]">{WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}</div>{viewMode === 'month' && <div role="grid" className="grid grid-cols-7 gap-1">{gridDays.map((day) => dayButton(day))}</div>}{viewMode === 'week' && <div role="grid" className="grid grid-cols-7 gap-1">{weekDays.map((day) => dayButton(day, true))}</div>}{viewMode === 'day' && <DayView tasks={selectedTasks} reminders={selectedReminders} onViewTask={onViewTask} onViewReminder={onViewReminder} />}{viewMode === 'agenda' && <Agenda tasks={tasks} reminders={reminders} onViewTask={onViewTask} onViewReminder={onViewReminder} />}</SectionCard>
-      <SectionCard className="h-fit"><div className="mb-4 flex items-start justify-between gap-2"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[var(--bp-accent-ink)]">Daily plan</p><h2 className="mt-1 text-base font-black">{dayTitle}</h2></div>{onCreateTaskForDate && <button type="button" onClick={() => onCreateTaskForDate(selectedDateKey)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--bp-accent)] px-2.5 py-1.5 text-xs font-bold text-[var(--bp-accent-ink)]"><Plus size={14} /> Add</button>}</div><div className={`mb-4 rounded-xl p-3 ${selectedLoad.soft}`}><div className="flex items-center justify-between"><span className="text-xs font-bold">{selectedLoad.label} workload</span><span className="text-xs text-[var(--bp-muted)]">{minutesLabel(selectedMinutes)} planned</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--bp-border)]"><div className={`h-full ${selectedLoad.dot}`} style={{ width: `${Math.min(100, selectedMinutes / 4)}%` }} /></div><p className="mt-2 text-[11px] text-[var(--bp-muted)]">{selectedDone}/{selectedTasks.length} tasks complete · {selectedReminders.length} reminders</p></div>{timeline.length === 0 ? <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="Nothing scheduled" description="Add a task or reminder to shape this day." /> : <div className="space-y-1">{timeline.map((item, index) => <div key={`${item.type}-${item.id}`}><TimelineItem item={item} onViewTask={onViewTask} onViewReminder={onViewReminder} />{index < timeline.length - 1 && <TravelHint from={item} to={timeline[index + 1]} />}</div>)}</div>}<div className="mt-4 border-t border-[var(--bp-border)] pt-4"><p className="mb-2 flex items-center gap-2 text-xs font-bold"><Sparkles size={14} className="text-[var(--bp-accent-ink)]" /> BeePlan suggests</p><p className="text-xs leading-5 text-[var(--bp-muted)]">{selectedLoad.color === 'red' ? 'This day is overloaded. Protect a buffer or move one task.' : selectedTasks.some((task) => task.isFocusTask) ? 'Keep your focus block protected from meetings.' : 'You have room for one focused session today.'}</p></div></SectionCard></div>
-    <TaskTimeConflictModal conflict={timeConflict} onMoveExisting={(m, s) => void resolveMove('existing', m, s)} onMoveNew={(m, s) => void resolveMove('new', m, s)} onCancelExisting={() => { if (timeConflict && accessToken) void changeTaskStatus(accessToken, timeConflict.existingTask.id, { status: 'missed' }).then(() => setTimeConflict(null)) }} onCancelNew={() => setTimeConflict(null)} onCancelChanges={() => setTimeConflict(null)} />
-  </AppLayout>
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function toDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+export function isoToDateKey(iso?: string) {
+  const date = parseLocalDate(iso);
+  return date ? toDateKey(date) : null;
+}
+function timeLabel(value?: string) {
+  if (!value) return "";
+  const [h, m] = value.split(":").map(Number);
+  const date = new Date(2020, 0, 1, h, m || 0);
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+function minutesLabel(minutes: number) {
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`
+    : `${minutes}m`;
+}
+function workload(minutes: number, count: number) {
+  if (minutes >= 360 || count >= 7)
+    return {
+      label: "Overloaded",
+      color: "red",
+      dot: "bg-red-400",
+      soft: "bg-red-400/10",
+    };
+  if (minutes >= 240 || count >= 5)
+    return {
+      label: "Busy",
+      color: "orange",
+      dot: "bg-orange-400",
+      soft: "bg-orange-400/10",
+    };
+  if (minutes >= 90 || count >= 3)
+    return {
+      label: "Normal",
+      color: "yellow",
+      dot: "bg-yellow-400",
+      soft: "bg-yellow-400/10",
+    };
+  return {
+    label: "Light",
+    color: "green",
+    dot: "bg-emerald-400",
+    soft: "bg-emerald-400/10",
+  };
 }
 
-function Stat({ label, value, icon }: { label: string; value: string; icon: ReactNode }) { return <div className="flex items-center gap-2 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2"><span className="text-[var(--bp-accent-ink)]">{icon}</span><div><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--bp-muted)]">{label}</p><p className="text-sm font-black">{value}</p></div></div> }
-function TimelineItem({ item, onViewTask, onViewReminder }: { item: any; onViewTask?: (id: string) => void; onViewReminder?: (id: string) => void }) { const task = item.task; const isTask = item.type === 'task'; return <button type="button" onClick={() => isTask ? onViewTask?.(item.id) : onViewReminder?.(item.id)} aria-label={`Open ${item.type}: ${item.title}`} className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-[var(--bp-border)]/50"><div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isTask ? 'bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]' : 'bg-violet-400/10 text-violet-300'}`}>{isTask ? <Target size={15} /> : <Clock3 size={15} />}</div><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{item.title}</p><p className="mt-0.5 text-[10px] text-[var(--bp-muted)]">{item.start ? `${timeLabel(item.start)}${item.end ? ` – ${timeLabel(item.end)}` : ''}` : 'Flexible time'}{task?.destination ? ` · ${task.destination.displayName}` : ''}</p></div>{task?.weatherTravelEnabled && <CloudSun size={15} className="shrink-0 text-sky-300" />}{task?.status === 'done' && <Check size={15} className="shrink-0 text-emerald-400" />}</button> }
-function TravelHint({ from, to }: { from: any; to: any }) { if (!from.task?.destination || !to.task?.destination || !from.end || !to.start) return null; return <div className="ml-10 flex items-center gap-1 py-1 text-[10px] text-[var(--bp-muted)]"><ArrowRight size={11} /> 15 min travel buffer <MapPin size={11} /></div> }
-function DayView({ tasks, reminders, onViewTask, onViewReminder }: { tasks: ApiTask[]; reminders: Reminder[]; onViewTask?: (id: string) => void; onViewReminder?: (id: string) => void }) { if (!tasks.length && !reminders.length) return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="Nothing scheduled" description="Add a task or reminder to shape this day." />; return <div className="space-y-2">{[...tasks.map((task) => ({ id: task.id, title: task.title, type: 'task' as const, start: task.scheduledStartTime, task })), ...reminders.map((item) => ({ id: item.id, title: item.title, type: 'reminder' as const, start: item.remindAt }))].sort((a, b) => (a.start ?? '').localeCompare(b.start ?? '')).map((item) => <TimelineItem key={item.id} item={item} onViewTask={onViewTask} onViewReminder={onViewReminder} />)}</div> }
-function Agenda({ tasks, reminders, onViewTask, onViewReminder }: { tasks: ApiTask[]; reminders: Reminder[]; onViewTask?: (id: string) => void; onViewReminder?: (id: string) => void }) { const groups = new Map<string, { tasks: ApiTask[]; reminders: Reminder[] }>(); tasks.forEach((task) => { const key = task.scheduledDate ?? isoToDateKey(task.dueDate); if (key) groups.set(key, { ...(groups.get(key) ?? { tasks: [], reminders: [] }), tasks: [...(groups.get(key)?.tasks ?? []), task] }) }); reminders.forEach((item) => { const key = isoToDateKey(item.remindAt); if (key) groups.set(key, { ...(groups.get(key) ?? { tasks: [], reminders: [] }), reminders: [...(groups.get(key)?.reminders ?? []), item] }) }); if (!groups.size) return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="Nothing scheduled" description="Your upcoming agenda will appear here." />; return <div className="space-y-5">{[...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, group]) => <div key={key}><p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">{formatDate(key, 'en', { weekday: 'long', month: 'short', day: 'numeric' })}</p><div className="space-y-1">{group.tasks.map((task) => <TimelineItem key={task.id} item={{ ...task, id: task.id, type: 'task', start: task.scheduledStartTime, task }} onViewTask={onViewTask} onViewReminder={onViewReminder} />)}{group.reminders.map((item) => <TimelineItem key={item.id} item={{ ...item, type: 'reminder', start: item.remindAt }} onViewTask={onViewTask} onViewReminder={onViewReminder} />)}</div></div>)}</div> }
+export default function CalendarScreen({
+  tasks = [],
+  reminders = [],
+  onViewTask,
+  onViewReminder,
+  onCreateTaskForDate,
+  onSignOut,
+  accessToken = "",
+  ...nav
+}: CalendarScreenProps) {
+  const { t, toggleLanguage, isRTL } = useLanguage();
+  const { mode, toggleTheme } = useTheme();
+  const today = useMemo(() => new Date(), []);
+  const [viewDate, setViewDate] = useState(
+    () => new Date(today.getFullYear(), today.getMonth(), 1),
+  );
+  const [selectedDateKey, setSelectedDateKey] = useState(toDateKey(today));
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [timeConflict, setTimeConflict] = useState<TaskTimeConflict | null>(
+    null,
+  );
+  const [optimized, setOptimized] = useState(false);
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, ApiTask[]>();
+    tasks.forEach((task) => {
+      const key = task.scheduledDate ?? isoToDateKey(task.dueDate);
+      if (key) map.set(key, [...(map.get(key) ?? []), task]);
+    });
+    return map;
+  }, [tasks]);
+  const remindersByDate = useMemo(() => {
+    const map = new Map<string, Reminder[]>();
+    reminders.forEach((item) => {
+      const key = isoToDateKey(item.remindAt);
+      if (key) map.set(key, [...(map.get(key) ?? []), item]);
+    });
+    return map;
+  }, [reminders]);
+  const monthLabel = viewDate.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+  const gridDays = useMemo(() => {
+    const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+    const start = new Date(
+      first.getFullYear(),
+      first.getMonth(),
+      1 - first.getDay(),
+    );
+    return Array.from({ length: 42 }, (_, i) => {
+      const date = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate() + i,
+      );
+      return {
+        date,
+        key: toDateKey(date),
+        inCurrentMonth: date.getMonth() === viewDate.getMonth(),
+        isToday: toDateKey(date) === toDateKey(today),
+      };
+    });
+  }, [viewDate, today]);
+  const weekDays = useMemo(() => {
+    const date = parseLocalDate(selectedDateKey) ?? today;
+    const start = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate() - date.getDay(),
+    );
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate() + i,
+      );
+      return {
+        date: d,
+        key: toDateKey(d),
+        inCurrentMonth: true,
+        isToday: toDateKey(d) === toDateKey(today),
+      };
+    });
+  }, [selectedDateKey, today]);
+  const selectedTasks = tasksByDate.get(selectedDateKey) ?? [];
+  const selectedReminders = remindersByDate.get(selectedDateKey) ?? [];
+  const selectedMinutes = selectedTasks.reduce(
+    (sum, task) => sum + (task.estimatedTimeMinutes || 0),
+    0,
+  );
+  const selectedDone = selectedTasks.filter(
+    (task) => task.status === "done",
+  ).length;
+  const selectedLoad = workload(
+    selectedMinutes,
+    selectedTasks.length + selectedReminders.length,
+  );
+  const daySummary = (key: string) => {
+    const dayTasks = tasksByDate.get(key) ?? [];
+    const dayReminders = remindersByDate.get(key) ?? [];
+    const minutes = dayTasks.reduce(
+      (sum, task) => sum + (task.estimatedTimeMinutes || 0),
+      0,
+    );
+    return {
+      tasks: dayTasks,
+      reminders: dayReminders,
+      minutes,
+      load: workload(minutes, dayTasks.length + dayReminders.length),
+      done: dayTasks.filter((task) => task.status === "done").length,
+    };
+  };
+  function shift(direction: number) {
+    const amount = viewMode === "month" ? 1 : viewMode === "week" ? 7 : 1;
+    setViewDate(
+      (current) =>
+        new Date(
+          current.getFullYear(),
+          current.getMonth(),
+          current.getDate() + direction * amount,
+        ),
+    );
+    if (viewMode === "day")
+      setSelectedDateKey(
+        toDateKey(
+          new Date(
+            (parseLocalDate(selectedDateKey) ?? today).getFullYear(),
+            (parseLocalDate(selectedDateKey) ?? today).getMonth(),
+            (parseLocalDate(selectedDateKey) ?? today).getDate() + direction,
+          ),
+        ),
+      );
+  }
+  function goToday() {
+    setViewDate(
+      new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        viewMode === "month" ? 1 : today.getDate(),
+      ),
+    );
+    setSelectedDateKey(toDateKey(today));
+  }
+  function selectDate(date: Date) {
+    setSelectedDateKey(toDateKey(date));
+    setViewDate(
+      new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        viewMode === "month" ? 1 : date.getDate(),
+      ),
+    );
+  }
+  function handleDayKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    date: Date,
+  ) {
+    const offsets: Record<string, number> = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+      ArrowUp: -7,
+      ArrowDown: 7,
+    };
+    if (!(event.key in offsets)) return;
+    event.preventDefault();
+    selectDate(
+      new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate() + offsets[event.key],
+      ),
+    );
+  }
+  async function moveTaskToDate(taskId: string, date: string) {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task?.scheduledStartTime || !task.scheduledEndTime || !accessToken)
+      return;
+    const validation = await validateTaskSchedule(accessToken, {
+      ...task,
+      scheduledDate: date,
+    });
+    if (validation.conflicts.length) {
+      setTimeConflict(validation.conflicts[0]);
+      return;
+    }
+    await updateTask(accessToken, task.id, {
+      scheduledDate: date,
+      scheduledStartTime: task.scheduledStartTime,
+      scheduledEndTime: task.scheduledEndTime,
+    });
+  }
+  async function resolveMove(
+    side: "existing" | "new",
+    mode: "auto" | "manual",
+    manual?: ScheduleChoice,
+  ) {
+    if (!timeConflict || !accessToken) return;
+    const target =
+      side === "existing"
+        ? timeConflict.existingTask
+        : timeConflict.proposedTask;
+    const schedule =
+      mode === "manual"
+        ? manual
+        : (await getNearestTaskSchedule(accessToken, target)).schedule;
+    if (!schedule) return;
+    await updateTask(accessToken, target.id, schedule);
+    await resolveTaskScheduleConflict(accessToken, {
+      conflictKey: timeConflict.id,
+      date: target.scheduledDate,
+      taskId: target.id,
+      resolution:
+        side === "existing"
+          ? `${mode === "auto" ? "move_existing_auto" : "move_existing_manual"}`
+          : `${mode === "auto" ? "move_new_auto" : "move_new_manual"}`,
+    });
+    setTimeConflict(null);
+  }
+
+  const dayButton = (day: Day, compact = false) => {
+    const s = daySummary(day.key);
+    const isSelected = day.key === selectedDateKey;
+    const items = [
+      ...s.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        kind: "task" as const,
+        task,
+      })),
+      ...s.reminders.map((item) => ({
+        id: item.id,
+        title: item.title,
+        kind: "reminder" as const,
+      })),
+    ];
+    const scheduledCount = items.length;
+    return (
+      <button
+        key={day.key}
+        type="button"
+        role="gridcell"
+        aria-label={`${day.isToday ? "Today, " : ""}${scheduledCount} scheduled ${scheduledCount === 1 ? "item" : "items"}, ${s.load.label} load`}
+        aria-selected={isSelected}
+        aria-current={day.isToday ? "date" : undefined}
+        onClick={() => selectDate(day.date)}
+        onKeyDown={(event) => handleDayKeyDown(event, day.date)}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          void moveTaskToDate(
+            event.dataTransfer.getData("application/x-beeplan-task"),
+            day.key,
+          );
+        }}
+        title={`${s.load.label} day · ${s.tasks.length} tasks · ${s.reminders.length} reminders · ${minutesLabel(s.minutes)} estimated`}
+        className={`relative flex min-h-24 flex-col items-start gap-1 overflow-hidden rounded-xl border p-2 text-left transition hover:border-[var(--bp-accent)] ${isSelected ? "border-[var(--bp-accent)] bg-[var(--bp-accent)]/10 shadow-sm" : "border-[var(--bp-border)]/70 bg-[var(--bp-surface)]"} ${!day.inCurrentMonth ? "opacity-45" : ""} ${compact ? "min-h-20" : ""}`}
+      >
+        <div className="flex w-full items-center justify-between">
+          <span
+            className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${day.isToday ? "bg-[var(--bp-accent)] text-[var(--bp-accent-text)]" : ""}`}
+          >
+            {day.date.getDate()}
+          </span>
+          <span
+            className={`h-2 w-2 rounded-full ${s.load.dot}`}
+            aria-label={s.load.label}
+          />
+        </div>
+        {s.tasks.length > 0 && (
+          <div className="flex w-full items-center gap-1 text-[10px] text-[var(--bp-muted)]">
+            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bp-border)]">
+              <span
+                className={`block h-full ${s.load.dot}`}
+                style={{
+                  width: `${Math.min(100, (s.done / s.tasks.length) * 100)}%`,
+                }}
+              />
+            </span>
+            <span>
+              {s.done}/{s.tasks.length}
+            </span>
+          </div>
+        )}
+        {!compact && (
+          <div className="hidden w-full space-y-1 sm:block">
+            {items.slice(0, 2).map((item) => (
+              <span
+                key={`${item.kind}-${item.id}`}
+                className={`flex w-full items-center gap-1 truncate rounded-md px-1.5 py-1 text-[10px] font-semibold ${item.kind === "task" ? "bg-[var(--bp-accent)]/10 text-[var(--bp-text)]" : "bg-violet-400/10 text-violet-300"}`}
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                {item.title}
+              </span>
+            ))}
+            {items.length > 2 && (
+              <span className="block pl-1 text-[10px] font-bold text-[var(--bp-accent-ink)]">
+                +{items.length - 2} more
+              </span>
+            )}
+          </div>
+        )}
+        {!compact && (
+          <span className="mt-auto text-[9px] font-semibold uppercase tracking-wide text-[var(--bp-muted)]">
+            {s.load.label} · {minutesLabel(s.minutes)}
+          </span>
+        )}
+      </button>
+    );
+  };
+  const timeline = [
+    ...selectedTasks.map((task) => ({
+      id: task.id,
+      type: "task" as const,
+      title: task.title,
+      start: task.scheduledStartTime ?? task.dueTime,
+      end: task.scheduledEndTime,
+      task,
+    })),
+    ...selectedReminders.map((item) => ({
+      id: item.id,
+      type: "reminder" as const,
+      title: item.title,
+      start: item.remindAt
+        ? new Date(item.remindAt).toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : undefined,
+    })),
+  ].sort((a, b) => (a.start ?? "").localeCompare(b.start ?? ""));
+  const dayTitle = formatDate(selectedDateKey, isRTL ? "ar" : "en", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  return (
+    <AppLayout active="calendar" {...nav}>
+      <PageHeader
+        title="Plan your week"
+        subtitle="See workload, focus time, travel, and what deserves your attention."
+        toolbar={
+          <TopActionBar
+            pageOnly
+            themeMode={mode}
+            onToggleTheme={toggleTheme}
+            languageLabel={t("common.languageToggle")}
+            onToggleLanguage={toggleLanguage}
+            onOpenNotifications={nav.onNavigateNotifications}
+            onSignOut={onSignOut}
+          />
+        }
+      />
+      <ExistingScheduleConflict
+        accessToken={accessToken}
+        date={selectedDateKey}
+      />
+      <ExistingTaskTimeConflict
+        accessToken={accessToken}
+        date={selectedDateKey}
+      />
+      <GoogleCalendarEvents token={accessToken} date={selectedDateKey} />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => shift(-1)}
+            aria-label="Previous period"
+            className="rounded-lg border border-[var(--bp-border)] p-2 hover:bg-[var(--bp-border)]"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={goToday}
+            className="rounded-lg border border-[var(--bp-border)] px-3 py-2 text-xs font-bold hover:bg-[var(--bp-border)]"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={() => shift(1)}
+            aria-label="Next period"
+            className="rounded-lg border border-[var(--bp-border)] p-2 hover:bg-[var(--bp-border)]"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <h2 className="ml-1 text-lg font-black">
+            {viewMode === "month"
+              ? monthLabel
+              : viewMode === "agenda"
+                ? "Your agenda"
+                : dayTitle}
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-[var(--bp-border)] p-0.5">
+            {(["month", "week", "day", "agenda"] as ViewMode[]).map((view) => (
+              <button
+                key={view}
+                type="button"
+                onClick={() => setViewMode(view)}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-bold capitalize ${viewMode === view ? "bg-[var(--bp-text)] text-[var(--bp-surface)]" : "text-[var(--bp-muted)] hover:text-[var(--bp-text)]"}`}
+              >
+                {view}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOptimized(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bp-accent)] px-3 py-2 text-xs font-black text-[var(--bp-accent-text)] shadow-sm hover:brightness-95"
+          >
+            <Sparkles size={14} /> Optimize week
+          </button>
+        </div>
+      </div>
+      <div className="mb-4 grid gap-2 sm:grid-cols-4">
+        <Stat
+          label="Planned"
+          value={minutesLabel(
+            tasks.reduce(
+              (sum, task) => sum + (task.estimatedTimeMinutes || 0),
+              0,
+            ),
+          )}
+          icon={<Clock3 size={15} />}
+        />
+        <Stat
+          label="Focus time"
+          value={`${tasks.filter((task) => task.isFocusTask).length} sessions`}
+          icon={<Target size={15} />}
+        />
+        <Stat
+          label="Open items"
+          value={`${tasks.filter((task) => task.status !== "done").length + reminders.filter((item) => item.status !== "done").length}`}
+          icon={<Check size={15} />}
+        />
+        <Stat
+          label="Week signal"
+          value={selectedLoad.label}
+          icon={<span className={`h-2 w-2 rounded-full ${selectedLoad.dot}`} />}
+        />
+      </div>
+      {optimized && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-[var(--bp-accent)]/30 bg-[var(--bp-accent)]/10 p-3 text-sm">
+          <Bot
+            className="mt-0.5 shrink-0 text-[var(--bp-accent-ink)]"
+            size={18}
+          />
+          <div className="flex-1">
+            <p className="font-bold">A calmer week is possible</p>
+            <p className="mt-0.5 text-xs text-[var(--bp-muted)]">
+              Move “Deep work” to Tuesday morning, protect a 30-minute buffer
+              before your off-site task, and keep Friday light.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOptimized(false)}
+            aria-label="Dismiss optimization"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.85fr)_minmax(320px,1fr)]">
+        <SectionCard className="min-w-0">
+          <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-[.12em] text-[var(--bp-muted)]">
+            {WEEKDAY_LABELS.map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+          {viewMode === "month" && (
+            <div role="grid" className="grid grid-cols-7 gap-1">
+              {gridDays.map((day) => dayButton(day))}
+            </div>
+          )}
+          {viewMode === "week" && (
+            <div role="grid" className="grid grid-cols-7 gap-1">
+              {weekDays.map((day) => dayButton(day, true))}
+            </div>
+          )}
+          {viewMode === "day" && (
+            <DayView
+              tasks={selectedTasks}
+              reminders={selectedReminders}
+              onViewTask={onViewTask}
+              onViewReminder={onViewReminder}
+            />
+          )}
+          {viewMode === "agenda" && (
+            <Agenda
+              tasks={tasks}
+              reminders={reminders}
+              onViewTask={onViewTask}
+              onViewReminder={onViewReminder}
+            />
+          )}
+        </SectionCard>
+        <SectionCard className="h-fit">
+          <div className="mb-4 flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[var(--bp-accent-ink)]">
+                Daily plan
+              </p>
+              <h2 className="mt-1 text-base font-black">{dayTitle}</h2>
+            </div>
+            {onCreateTaskForDate && (
+              <button
+                type="button"
+                onClick={() => onCreateTaskForDate(selectedDateKey)}
+                className="inline-flex items-center gap-1 rounded-lg border border-[var(--bp-accent)] px-2.5 py-1.5 text-xs font-bold text-[var(--bp-accent-ink)]"
+              >
+                <Plus size={14} /> Add
+              </button>
+            )}
+          </div>
+          <div className={`mb-4 rounded-xl p-3 ${selectedLoad.soft}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold">
+                {selectedLoad.label} workload
+              </span>
+              <span className="text-xs text-[var(--bp-muted)]">
+                {minutesLabel(selectedMinutes)} planned
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--bp-border)]">
+              <div
+                className={`h-full ${selectedLoad.dot}`}
+                style={{ width: `${Math.min(100, selectedMinutes / 4)}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--bp-muted)]">
+              {selectedDone}/{selectedTasks.length} tasks complete ·{" "}
+              {selectedReminders.length} reminders
+            </p>
+          </div>
+          {timeline.length === 0 ? (
+            <EmptyState
+              icon={<CalendarIcon className="h-5 w-5" />}
+              title="Nothing scheduled"
+              description="Add a task or reminder to shape this day."
+            />
+          ) : (
+            <div className="space-y-1">
+              {timeline.map((item, index) => (
+                <div key={`${item.type}-${item.id}`}>
+                  <TimelineItem
+                    item={item}
+                    onViewTask={onViewTask}
+                    onViewReminder={onViewReminder}
+                  />
+                  {index < timeline.length - 1 && (
+                    <TravelHint from={item} to={timeline[index + 1]} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-4 border-t border-[var(--bp-border)] pt-4">
+            <p className="mb-2 flex items-center gap-2 text-xs font-bold">
+              <Sparkles size={14} className="text-[var(--bp-accent-ink)]" />{" "}
+              BeePlan suggests
+            </p>
+            <p className="text-xs leading-5 text-[var(--bp-muted)]">
+              {selectedLoad.color === "red"
+                ? "This day is overloaded. Protect a buffer or move one task."
+                : selectedTasks.some((task) => task.isFocusTask)
+                  ? "Keep your focus block protected from meetings."
+                  : "You have room for one focused session today."}
+            </p>
+          </div>
+        </SectionCard>
+      </div>
+      <TaskTimeConflictModal
+        conflict={timeConflict}
+        onMoveExisting={(m, s) => void resolveMove("existing", m, s)}
+        onMoveNew={(m, s) => void resolveMove("new", m, s)}
+        onCancelExisting={() => {
+          if (timeConflict && accessToken)
+            void changeTaskStatus(accessToken, timeConflict.existingTask.id, {
+              status: "missed",
+            }).then(() => setTimeConflict(null));
+        }}
+        onCancelNew={() => setTimeConflict(null)}
+        onCancelChanges={() => setTimeConflict(null)}
+      />
+    </AppLayout>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2">
+      <span className="text-[var(--bp-accent-ink)]">{icon}</span>
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--bp-muted)]">
+          {label}
+        </p>
+        <p className="text-sm font-black">{value}</p>
+      </div>
+    </div>
+  );
+}
+function TimelineItem({
+  item,
+  onViewTask,
+  onViewReminder,
+}: {
+  item: any;
+  onViewTask?: (id: string) => void;
+  onViewReminder?: (id: string) => void;
+}) {
+  const task = item.task;
+  const isTask = item.type === "task";
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        isTask ? onViewTask?.(item.id) : onViewReminder?.(item.id)
+      }
+      aria-label={`Open ${item.type}: ${item.title}`}
+      className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-[var(--bp-border)]/50"
+    >
+      <div
+        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isTask ? "bg-[var(--bp-accent)]/10 text-[var(--bp-accent-ink)]" : "bg-violet-400/10 text-violet-300"}`}
+      >
+        {isTask ? <Target size={15} /> : <Clock3 size={15} />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-bold">{item.title}</p>
+        <p className="mt-0.5 text-[10px] text-[var(--bp-muted)]">
+          {item.start
+            ? `${timeLabel(item.start)}${item.end ? ` – ${timeLabel(item.end)}` : ""}`
+            : "Flexible time"}
+          {task?.destination ? ` · ${task.destination.displayName}` : ""}
+        </p>
+      </div>
+      {task?.weatherTravelEnabled && (
+        <CloudSun size={15} className="shrink-0 text-sky-300" />
+      )}
+      {task?.status === "done" && (
+        <Check size={15} className="shrink-0 text-emerald-400" />
+      )}
+    </button>
+  );
+}
+function TravelHint({ from, to }: { from: any; to: any }) {
+  if (
+    !from.task?.destination ||
+    !to.task?.destination ||
+    !from.end ||
+    !to.start
+  )
+    return null;
+  return (
+    <div className="ml-10 flex items-center gap-1 py-1 text-[10px] text-[var(--bp-muted)]">
+      <ArrowRight size={11} /> 15 min travel buffer <MapPin size={11} />
+    </div>
+  );
+}
+function DayView({
+  tasks,
+  reminders,
+  onViewTask,
+  onViewReminder,
+}: {
+  tasks: ApiTask[];
+  reminders: Reminder[];
+  onViewTask?: (id: string) => void;
+  onViewReminder?: (id: string) => void;
+}) {
+  if (!tasks.length && !reminders.length)
+    return (
+      <EmptyState
+        icon={<CalendarIcon className="h-5 w-5" />}
+        title="Nothing scheduled"
+        description="Add a task or reminder to shape this day."
+      />
+    );
+  return (
+    <div className="space-y-2">
+      {[
+        ...tasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          type: "task" as const,
+          start: task.scheduledStartTime,
+          task,
+        })),
+        ...reminders.map((item) => ({
+          id: item.id,
+          title: item.title,
+          type: "reminder" as const,
+          start: item.remindAt,
+        })),
+      ]
+        .sort((a, b) => (a.start ?? "").localeCompare(b.start ?? ""))
+        .map((item) => (
+          <TimelineItem
+            key={item.id}
+            item={item}
+            onViewTask={onViewTask}
+            onViewReminder={onViewReminder}
+          />
+        ))}
+    </div>
+  );
+}
+function Agenda({
+  tasks,
+  reminders,
+  onViewTask,
+  onViewReminder,
+}: {
+  tasks: ApiTask[];
+  reminders: Reminder[];
+  onViewTask?: (id: string) => void;
+  onViewReminder?: (id: string) => void;
+}) {
+  const groups = new Map<string, { tasks: ApiTask[]; reminders: Reminder[] }>();
+  tasks.forEach((task) => {
+    const key = task.scheduledDate ?? isoToDateKey(task.dueDate);
+    if (key)
+      groups.set(key, {
+        ...(groups.get(key) ?? { tasks: [], reminders: [] }),
+        tasks: [...(groups.get(key)?.tasks ?? []), task],
+      });
+  });
+  reminders.forEach((item) => {
+    const key = isoToDateKey(item.remindAt);
+    if (key)
+      groups.set(key, {
+        ...(groups.get(key) ?? { tasks: [], reminders: [] }),
+        reminders: [...(groups.get(key)?.reminders ?? []), item],
+      });
+  });
+  if (!groups.size)
+    return (
+      <EmptyState
+        icon={<CalendarIcon className="h-5 w-5" />}
+        title="Nothing scheduled"
+        description="Your upcoming agenda will appear here."
+      />
+    );
+  return (
+    <div className="space-y-5">
+      {[...groups.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, group]) => (
+          <div key={key}>
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">
+              {formatDate(key, "en", {
+                weekday: "long",
+                month: "short",
+                day: "numeric",
+              })}
+            </p>
+            <div className="space-y-1">
+              {group.tasks.map((task) => (
+                <TimelineItem
+                  key={task.id}
+                  item={{
+                    ...task,
+                    id: task.id,
+                    type: "task",
+                    start: task.scheduledStartTime,
+                    task,
+                  }}
+                  onViewTask={onViewTask}
+                  onViewReminder={onViewReminder}
+                />
+              ))}
+              {group.reminders.map((item) => (
+                <TimelineItem
+                  key={item.id}
+                  item={{ ...item, type: "reminder", start: item.remindAt }}
+                  onViewTask={onViewTask}
+                  onViewReminder={onViewReminder}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+    </div>
+  );
+}
