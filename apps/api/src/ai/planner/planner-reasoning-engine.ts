@@ -125,6 +125,23 @@ export class PlannerReasoningEngine {
     constraints: PlannerConstraints,
     neighbours: { previous?: PlannerTask },
   ): string {
+    if (task.selectionSource === 'user') {
+      return 'Chosen by you to work on today; original task dates were preserved.';
+    }
+    if (task.scheduleReason === 'scheduled_today') {
+      return task.scheduledStartTime
+        ? `Scheduled for today at ${task.scheduledStartTime}.`
+        : 'Scheduled for today.';
+    }
+    if (task.scheduleReason === 'overdue') {
+      return 'Overdue incomplete work, scheduled today while preserving its original due date.';
+    }
+    if (task.scheduleReason === 'deadline_pressure') {
+      return 'Must start today to stay on track for its deadline.';
+    }
+    if (task.scheduleReason === 'backlog') {
+      return 'Added as a backlog fill session because capacity remains today.';
+    }
     const started = task.spentMinutes > 0 || task.progress > 0;
     const dueToday = constraints.dueTodayTaskIds.has(task.id);
     const overdue = constraints.overdueTaskIds.has(task.id);
@@ -172,6 +189,13 @@ export class PlannerReasoningEngine {
     const deadlinePressure = task.dueDate
       ? Math.max(0, 14 - daysBetween(context.date, new Date(task.dueDate))) * 6
       : 0;
+    const scheduleClass = task.scheduleReason === 'scheduled_today'
+      ? 500
+      : task.scheduleReason === 'deadline_pressure'
+        ? 250
+        : task.scheduleReason === 'backlog'
+          ? -100
+          : 0;
     const focus = task.isFocusTask ? 18 : 0;
     // "Finish started tasks first" — only boosts when the user enabled it, and
     // stays below the overdue / due-today tiers above.
@@ -188,6 +212,7 @@ export class PlannerReasoningEngine {
       overdue +
       dueToday +
       deadlinePressure +
+      scheduleClass +
       focus +
       started +
       missed +

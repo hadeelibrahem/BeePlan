@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
@@ -6,6 +6,7 @@ import * as schema from './schema';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy, OnModuleInit {
+  private readonly logger = new Logger(DatabaseService.name);
   private pool?: Pool;
 
   constructor(private readonly configService: ConfigService) {}
@@ -28,6 +29,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureStandaloneNotesTable();
     await this.ensurePlannerPreferencesTable();
     await this.ensurePlannerAcceptedPlansTable();
+    await this.ensurePlannerDailySelectionsTable();
     await this.ensureFocusSessionsTable();
     await this.ensureSocialTables();
     await this.ensureNotificationsTable();
@@ -38,6 +40,10 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureAiRecommendationsTable();
     await this.ensurePersonalContextTables();
     await this.ensureGoogleCalendarTables();
+    await this.ensureWhiteboardAssetReferencesColumn();
+    await this.ensureMultipleWhiteboardColumns();
+    await this.ensureWhiteboardMembershipTables();
+    await this.ensureAchievementsTables();
   }
 
   async healthCheck() {
@@ -67,6 +73,9 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     this.pool = new Pool({
       connectionString: databaseUrl,
       ssl: dbSsl ? { rejectUnauthorized: false } : undefined,
+      keepAlive: this.configService.get<boolean>('DB_KEEP_ALIVE') ?? true,
+      keepAliveInitialDelayMillis:
+        this.configService.get<number>('DB_KEEP_ALIVE_INITIAL_DELAY_MS') ?? 10_000,
       max: this.configService.get<number>('DB_POOL_MAX') ?? 10,
       connectionTimeoutMillis:
         this.configService.get<number>('DB_CONNECTION_TIMEOUT_MS') ?? 5_000,
@@ -76,6 +85,9 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         this.configService.get<number>('DB_QUERY_TIMEOUT_MS') ?? 10_000,
       statement_timeout:
         this.configService.get<number>('DB_QUERY_TIMEOUT_MS') ?? 10_000,
+    });
+    this.pool.on('error', (error) => {
+      this.logger.warn(`PostgreSQL pool error: ${error.message}`);
     });
 
     return this.pool;
@@ -591,6 +603,30 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists idx_schedule_conflict_resolutions_user_date
         on schedule_conflict_resolutions (user_id, date)
+    `);
+  }
+
+  private async ensurePlannerDailySelectionsTable() {
+    await this.getPool().query(`
+      create table if not exists planner_daily_selections (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        planner_date varchar(10) not null,
+        task_id uuid not null references tasks(id) on delete cascade,
+        subtask_id uuid references subtasks(id) on delete cascade,
+        selection_source varchar(20) not null default 'user',
+        selected_at timestamp default now() not null,
+        removed_at timestamp,
+        planner_run_id uuid
+      )
+    `);
+    await this.getPool().query(`
+      create unique index if not exists planner_daily_selections_unique
+        on planner_daily_selections (user_id, planner_date, task_id, subtask_id)
+    `);
+    await this.getPool().query(`
+      create index if not exists planner_daily_selections_user_date
+        on planner_daily_selections (user_id, planner_date)
     `);
   }
 
@@ -1178,6 +1214,78 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
       create unique index if not exists users_google_id_unique
         on users (google_id)
         where google_id is not null
+    `);
+  }
+
+  private async ensureWhiteboardAssetReferencesColumn() {
+    await this.getPool().query(`
+      alter table whiteboards
+        add column if not exists asset_references jsonb not null default '{}'::jsonb
+    `);
+  }
+
+  private async ensureMultipleWhiteboardColumns() {
+    await this.getPool().query(`
+      alter table whiteboards
+        drop constraint if exists whiteboards_user_id_unique,
+        add column if not exists preview_url text,
+        add column if not exists is_pinned boolean not null default false,
+        add column if not exists is_archived boolean not null default false,
+        add column if not exists last_opened_at timestamp
+    `);
+    await this.getPool().query(`
+      update whiteboards
+      set last_opened_at = coalesce(last_opened_at, updated_at, now())
+      where last_opened_at is null
+    `);
+  }
+
+  private async ensureWhiteboardMembershipTables() {
+    await this.getPool().query(`
+      create table if not exists whiteboard_members (
+        id uuid primary key default gen_random_uuid(), board_id uuid not null references whiteboards(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade, role varchar(10) not null default 'owner',
+        invited_by uuid references users(id) on delete set null, accepted_at timestamp, created_at timestamp default now() not null, updated_at timestamp default now() not null
+      );
+      create unique index if not exists uq_whiteboard_members_board_user on whiteboard_members(board_id, user_id);
+      create index if not exists idx_whiteboard_members_user on whiteboard_members(user_id);
+      create index if not exists idx_whiteboard_members_board on whiteboard_members(board_id);
+      create table if not exists whiteboard_invitations (
+        id uuid primary key default gen_random_uuid(), board_id uuid not null references whiteboards(id) on delete cascade,
+        email_normalized varchar(255) not null, invited_user_id uuid references users(id) on delete set null, role varchar(10) not null,
+        invited_by uuid not null references users(id) on delete cascade, token_hash text not null unique, status varchar(10) not null default 'pending',
+        expires_at timestamp not null, accepted_at timestamp, revoked_at timestamp, created_at timestamp default now() not null, updated_at timestamp default now() not null
+      );
+      create index if not exists idx_whiteboard_invitations_board on whiteboard_invitations(board_id);
+      create index if not exists idx_whiteboard_invitations_email on whiteboard_invitations(email_normalized);
+      insert into whiteboard_members(board_id, user_id, role, invited_by, accepted_at)
+      select id, user_id, 'owner', user_id, now() from whiteboards w
+      where not exists (select 1 from whiteboard_members m where m.board_id = w.id and m.user_id = w.user_id);
+    `);
+  }
+
+  private async ensureAchievementsTables() {
+    await this.getPool().query(`
+      create table if not exists achievements (
+        id uuid primary key default gen_random_uuid() not null,
+        user_id uuid not null references users(id) on delete cascade,
+        title varchar(255) not null, description text, reflection text,
+        achievement_date date not null, category varchar(40) not null default 'Other',
+        related_task_id uuid references tasks(id) on delete set null,
+        created_at timestamp default now() not null, updated_at timestamp default now() not null
+      );
+      create index if not exists idx_achievements_user_date on achievements(user_id, achievement_date);
+      create index if not exists idx_achievements_user_category on achievements(user_id, category);
+      create table if not exists achievement_images (
+        id uuid primary key default gen_random_uuid() not null,
+        achievement_id uuid not null references achievements(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        file_name varchar(255) not null, storage_key text not null,
+        mime_type varchar(120) not null, size_bytes integer not null,
+        sort_order integer not null default 0, is_cover boolean not null default false,
+        created_at timestamp default now() not null
+      );
+      create index if not exists idx_achievement_images_achievement on achievement_images(achievement_id);
     `);
   }
 }

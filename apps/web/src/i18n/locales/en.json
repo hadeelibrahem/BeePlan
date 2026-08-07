@@ -5,6 +5,9 @@
     "cancel": "Cancel",
     "somethingWentWrong": "Something went wrong. Please try again."
   },
+  "navigation": {
+    "whiteboard": "Personal Whiteboard"
+  },
   "notesMotivation": {
     "label": "Your progress today",
     "basedOnActivity": "Based on today’s activity",

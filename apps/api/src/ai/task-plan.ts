@@ -23,6 +23,9 @@ export type TaskPlanMainTask = {
   description: string;
   dueDate: string | null;
   priority: TaskPlanPriority;
+  scheduledDate?: string | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
 };
 
 export type TaskPlanSubtask = {
@@ -30,6 +33,14 @@ export type TaskPlanSubtask = {
   description: string;
   estimatedMinutes: number;
   order: number;
+  priority?: TaskPlanPriority;
+  startDate?: string | null;
+  dueDate?: string | null;
+  scheduledDate?: string | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
+  isFocusTask?: boolean;
+  dependencyTitles?: string[];
 };
 
 export type TaskPlanFocusSession = {
@@ -50,6 +61,8 @@ export type TaskPlan = {
   subtasks: TaskPlanSubtask[];
   focusSessions: TaskPlanFocusSession[];
   reminders: TaskPlanReminder[];
+  mode?: 'structureOnly' | 'scheduledPlan';
+  schedulingNeedsInput?: string[];
 };
 
 export type TaskPlanChatResponse = {
@@ -158,6 +171,14 @@ function normalizeSubtasks(value: unknown): TaskPlanSubtask[] {
         description: readString(record.description, 1000),
         estimatedMinutes: readMinutes(record.estimatedMinutes),
         order: 0,
+        priority: readPriority(record.priority),
+        startDate: readIsoDate(record.startDate),
+        dueDate: readIsoDate(record.dueDate),
+        scheduledDate: readIsoDate(record.scheduledDate),
+        scheduledStartTime: readNullableString(record.scheduledStartTime, 5),
+        scheduledEndTime: readNullableString(record.scheduledEndTime, 5),
+        isFocusTask: record.isFocusTask !== false,
+        dependencyTitles: readStringArray(record.dependencyTitles, MAX_SUBTASKS, TITLE_MAX),
       };
     })
     .filter((subtask) => subtask.title)
@@ -207,6 +228,25 @@ function normalizeReminders(value: unknown, now: Date): TaskPlanReminder[] {
     .slice(0, MAX_REMINDERS);
 }
 
+function attachSessionWindows(subtasks: TaskPlanSubtask[], sessions: TaskPlanFocusSession[]): TaskPlanSubtask[] {
+  return subtasks.map((subtask) => {
+    const related = sessions
+      .filter((session) => session.relatedSubtaskTitle === subtask.title)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const first = related[0];
+    const last = related[related.length - 1];
+    if (!first || !last) return subtask;
+    return {
+      ...subtask,
+      startDate: subtask.startDate ?? first.startTime,
+      dueDate: subtask.dueDate ?? last.endTime,
+      scheduledDate: subtask.scheduledDate ?? first.startTime.slice(0, 10),
+      scheduledStartTime: subtask.scheduledStartTime ?? first.startTime.slice(11, 16),
+      scheduledEndTime: subtask.scheduledEndTime ?? last.endTime.slice(11, 16),
+    };
+  });
+}
+
 /**
  * Coerce whatever the model returned into the strict response contract.
  * A malformed "plan" downgrades to a follow-up question rather than erroring,
@@ -228,6 +268,9 @@ export function normalizeTaskPlanChatResponse(raw: unknown, now = new Date()): T
     const title = readString(mainRecord.title);
 
     if (title) {
+      const focusSessions = normalizeFocusSessions(planRecord.focusSessions, now);
+      const subtasks = attachSessionWindows(normalizeSubtasks(planRecord.subtasks), focusSessions);
+      const hasConcreteSchedule = subtasks.some((subtask) => subtask.scheduledDate && subtask.scheduledStartTime);
       return {
         type: 'plan',
         message: message || 'Here is your plan. Review it and save when ready.',
@@ -239,10 +282,27 @@ export function normalizeTaskPlanChatResponse(raw: unknown, now = new Date()): T
             description: readString(mainRecord.description, 2000),
             dueDate: readIsoDate(mainRecord.dueDate),
             priority: readPriority(mainRecord.priority),
+            ...(readIsoDate(mainRecord.scheduledDate) || focusSessions[0]
+              ? { scheduledDate: readIsoDate(mainRecord.scheduledDate) ?? focusSessions[0]?.startTime.slice(0, 10) }
+              : {}),
+            ...(readNullableString(mainRecord.scheduledStartTime, 5) || focusSessions[0]
+              ? { scheduledStartTime: readNullableString(mainRecord.scheduledStartTime, 5) ?? focusSessions[0]?.startTime.slice(11, 16) }
+              : {}),
+            ...(readNullableString(mainRecord.scheduledEndTime, 5) || focusSessions[focusSessions.length - 1]
+              ? { scheduledEndTime: readNullableString(mainRecord.scheduledEndTime, 5) ?? focusSessions[focusSessions.length - 1]?.endTime.slice(11, 16) }
+              : {}),
           },
-          subtasks: normalizeSubtasks(planRecord.subtasks),
-          focusSessions: normalizeFocusSessions(planRecord.focusSessions, now),
+          subtasks,
+          focusSessions,
           reminders: normalizeReminders(planRecord.reminders, now),
+          mode: hasConcreteSchedule || focusSessions.length > 0
+            ? 'scheduledPlan'
+            : 'structureOnly',
+          schedulingNeedsInput: readStringArray(record.schedulingNeedsInput, 4, 160).length
+            ? readStringArray(record.schedulingNeedsInput, 4, 160)
+            : !mainRecord.dueDate && !hasConcreteSchedule && focusSessions.length === 0
+              ? ['deadline or available planning window']
+              : [],
         },
       };
     }

@@ -23,7 +23,12 @@ const NORMAL = new Set<NotificationType>([
   'workload_warning',
   'planner_suggestion',
   'due_date_changed',
-  'priority_changed',
+  'ai_blocked_dependency',
+  'ai_upcoming_deadline',
+  'ai_inactivity',
+  'ai_dependency_completed',
+  'ai_missing_assignment',
+  'ai_daily_summary',
 ]);
 
 export function pushPriorityFor(type: NotificationType): PushPriority | null {

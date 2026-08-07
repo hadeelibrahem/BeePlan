@@ -8,6 +8,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
   time,
   timestamp,
@@ -90,6 +91,95 @@ export const standaloneNotes = pgTable('standalone_notes', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+export const whiteboards = pgTable('whiteboards', {
+  id: id(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 })
+    .notNull()
+    .default('Personal Whiteboard'),
+  snapshot: jsonb('snapshot'),
+  assetReferences: jsonb('asset_references').notNull().default({}),
+  cameraX: real('camera_x').notNull().default(0),
+  cameraY: real('camera_y').notNull().default(0),
+  cameraZoom: real('camera_zoom').notNull().default(1),
+  previewUrl: text('preview_url'),
+  isPinned: boolean('is_pinned').notNull().default(false),
+  isArchived: boolean('is_archived').notNull().default(false),
+  lastOpenedAt: timestamp('last_opened_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const whiteboardAssets = pgTable(
+  'whiteboard_assets',
+  {
+    id: id(),
+    whiteboardId: uuid('whiteboard_id')
+      .notNull()
+      .references(() => whiteboards.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 16 }).notNull(),
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    storagePath: text('storage_path').notNull(),
+    mimeType: varchar('mime_type', { length: 160 }).notNull(),
+    size: integer('size').notNull(),
+    width: integer('width'),
+    height: integer('height'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at'),
+  },
+  (table) => [
+    index('idx_whiteboard_assets_whiteboard_id').on(table.whiteboardId),
+    index('idx_whiteboard_assets_user_id').on(table.userId),
+  ],
+);
+
+export const whiteboardMembers = pgTable(
+  'whiteboard_members',
+  {
+    id: id(),
+    boardId: uuid('board_id').notNull().references(() => whiteboards.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 10 }).notNull().default('owner'),
+    invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    acceptedAt: timestamp('accepted_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_whiteboard_members_board_user').on(table.boardId, table.userId),
+    index('idx_whiteboard_members_user').on(table.userId),
+    index('idx_whiteboard_members_board').on(table.boardId),
+  ],
+);
+
+export const whiteboardInvitations = pgTable(
+  'whiteboard_invitations',
+  {
+    id: id(),
+    boardId: uuid('board_id').notNull().references(() => whiteboards.id, { onDelete: 'cascade' }),
+    emailNormalized: varchar('email_normalized', { length: 255 }).notNull(),
+    invitedUserId: uuid('invited_user_id').references(() => users.id, { onDelete: 'set null' }),
+    role: varchar('role', { length: 10 }).notNull(),
+    invitedBy: uuid('invited_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    status: varchar('status', { length: 10 }).notNull().default('pending'),
+    expiresAt: timestamp('expires_at').notNull(),
+    acceptedAt: timestamp('accepted_at'),
+    revokedAt: timestamp('revoked_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_whiteboard_invitations_board').on(table.boardId),
+    index('idx_whiteboard_invitations_email').on(table.emailNormalized),
+  ],
+);
 
 export const plannerPreferences = pgTable('planner_preferences', {
   id: id(),
@@ -1307,6 +1397,25 @@ export const personalTaskPreferences = pgTable(
   ],
 );
 
+export const plannerDailySelections = pgTable(
+  'planner_daily_selections',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    plannerDate: varchar('planner_date', { length: 10 }).notNull(),
+    taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, { onDelete: 'cascade' }),
+    selectionSource: varchar('selection_source', { length: 20 }).notNull().default('user'),
+    selectedAt: timestamp('selected_at').defaultNow().notNull(),
+    removedAt: timestamp('removed_at'),
+    plannerRunId: uuid('planner_run_id'),
+  },
+  (table) => [
+    uniqueIndex('planner_daily_selections_unique').on(table.userId, table.plannerDate, table.taskId, table.subtaskId),
+    index('planner_daily_selections_user_date').on(table.userId, table.plannerDate),
+  ],
+);
+
 // Durable producer idempotency. A worker may run on several API instances and
 // may safely retry the same event without creating duplicate inbox rows.
 export const notificationDeliveries = pgTable(
@@ -1330,6 +1439,79 @@ export const notificationDeliveries = pgTable(
       table.entityId,
     ),
   ],
+);
+
+// Durable, explainable notifications emitted by the proactive AI Task Manager.
+// This is intentionally separate from the activity inbox: lifecycle actions
+// (snooze/dismiss/action) and dedupe state must survive presentation changes.
+export const aiTaskManagerNotifications = pgTable(
+  'ai_task_manager_notifications',
+  {
+    id: id(),
+    taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, { onDelete: 'cascade' }),
+    recipientUserId: uuid('recipient_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    notificationType: varchar('notification_type', { length: 50 }).notNull(),
+    severity: varchar('severity', { length: 20 }).notNull().default('info'),
+    title: varchar('title', { length: 255 }).notNull(),
+    summary: text('summary').notNull(),
+    explanation: text('explanation').notNull(),
+    evidence: jsonb('evidence').notNull().default([]),
+    confidence: integer('confidence').notNull().default(80),
+    recommendedAction: jsonb('recommended_action').notNull().default({}),
+    fingerprint: varchar('fingerprint', { length: 255 }).notNull().unique(),
+    status: varchar('status', { length: 20 }).notNull().default('unread'),
+    readAt: timestamp('read_at'),
+    dismissedAt: timestamp('dismissed_at'),
+    snoozedUntil: timestamp('snoozed_until'),
+    actionedAt: timestamp('actioned_at'),
+    expiresAt: timestamp('expires_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_ai_tm_recipient_status').on(table.recipientUserId, table.status),
+    index('idx_ai_tm_task').on(table.taskId),
+    index('idx_ai_tm_created').on(table.createdAt),
+    index('idx_ai_tm_fingerprint').on(table.fingerprint),
+  ],
+);
+
+export const achievements = pgTable(
+  'achievements',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    reflection: text('reflection'),
+    achievementDate: date('achievement_date').notNull(),
+    category: varchar('category', { length: 40 }).notNull().default('Other'),
+    relatedTaskId: uuid('related_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_achievements_user_date').on(table.userId, table.achievementDate),
+    index('idx_achievements_user_category').on(table.userId, table.category),
+  ],
+);
+
+export const achievementImages = pgTable(
+  'achievement_images',
+  {
+    id: id(),
+    achievementId: uuid('achievement_id').notNull().references(() => achievements.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    storageKey: text('storage_key').notNull(),
+    mimeType: varchar('mime_type', { length: 120 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    isCover: boolean('is_cover').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [index('idx_achievement_images_achievement').on(table.achievementId)],
 );
 
 export const userPushDevices = pgTable(

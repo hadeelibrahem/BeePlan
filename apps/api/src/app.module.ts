@@ -23,6 +23,8 @@ import { TasksModule } from './tasks/tasks.module';
 import { WeatherTravelModule } from './weather-travel/weather-travel.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { TaskAssistantModule } from './task-assistant/task-assistant.module';
+import { WhiteboardModule } from './whiteboard/whiteboard.module';
+import { AchievementsModule } from './achievements/achievements.module';
 
 @Module({
   imports: [
@@ -55,6 +57,8 @@ import { TaskAssistantModule } from './task-assistant/task-assistant.module';
     WeatherTravelModule,
     GoogleCalendarModule,
     TaskAssistantModule,
+    WhiteboardModule,
+    AchievementsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

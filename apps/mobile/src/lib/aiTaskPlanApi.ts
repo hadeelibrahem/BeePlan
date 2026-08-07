@@ -25,6 +25,9 @@ export type TaskPlanMainTask = {
   description: string;
   dueDate: string | null;
   priority: TaskPlanPriority;
+  scheduledDate?: string | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
 };
 
 export type TaskPlanSubtask = {
@@ -32,6 +35,14 @@ export type TaskPlanSubtask = {
   description: string;
   estimatedMinutes: number;
   order: number;
+  priority?: TaskPlanPriority;
+  startDate?: string | null;
+  dueDate?: string | null;
+  scheduledDate?: string | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
+  isFocusTask?: boolean;
+  dependencyTitles?: string[];
 };
 
 export type TaskPlanFocusSession = {
@@ -52,6 +63,8 @@ export type TaskPlan = {
   subtasks: TaskPlanSubtask[];
   focusSessions: TaskPlanFocusSession[];
   reminders: TaskPlanReminder[];
+  mode?: 'structureOnly' | 'scheduledPlan';
+  schedulingNeedsInput?: string[];
 };
 
 export type TaskPlanChatResponse = {

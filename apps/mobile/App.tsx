@@ -838,7 +838,7 @@ function ThemedApp() {
       onNoticeShown={() => setTaskDetailsNotice('')} onBack={() => {
         if (props.navigation.canGoBack()) props.navigation.goBack()
         else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Tasks' } }] })
-      }} onEdit={() => props.navigation.navigate('EditTask', { taskId: props.route.params.taskId })}
+      }} onEdit={() => props.navigation.navigate('EditTask', { taskId: props.route.params.taskId })} onAddToAchievement={() => { const sourceTask = tasks.find((task) => task.id === props.route.params.taskId); props.navigation.navigate('AchievementMuseum', { taskId: props.route.params.taskId, title: sourceTask?.title, achievementDate: (sourceTask?.completedAt ?? sourceTask?.updatedAt ?? new Date().toISOString()).slice(0, 10) }) }} onViewAchievement={(achievementId) => props.navigation.navigate('AchievementMuseum', { achievementId })}
       onDelete={async () => {
         const taskId = props.route.params.taskId
         if (deletingTaskRef.current) return deletingTaskRef.current

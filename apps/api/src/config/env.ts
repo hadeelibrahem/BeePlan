@@ -4,6 +4,8 @@ export const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().url().optional(),
   DB_SSL: z.coerce.boolean().default(false),
+  DB_KEEP_ALIVE: z.coerce.boolean().default(true),
+  DB_KEEP_ALIVE_INITIAL_DELAY_MS: z.coerce.number().int().positive().default(10_000),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(30).default(10),
   DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   DB_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),

@@ -41,6 +41,7 @@ import {
   type RecurrenceSuggestion,
   type UiRecurrence,
 } from '../lib/tasksApi'
+import { getAchievements } from '../lib/achievementsApi'
 
 type TaskDetailsScreenProps = SidebarNavHandlers & {
   task?: ApiTask | null
@@ -55,6 +56,8 @@ type TaskDetailsScreenProps = SidebarNavHandlers & {
   onBack?: () => void
   onEdit?: () => void
   onOpenAiCollaboration?: () => void
+  onAddToAchievement?: () => void
+  onViewAchievement?: (achievementId: string) => void
   onDelete?: () => Promise<void> | void
   onMarkDone?: () => void
   onMakeRecurringSuggestion?: (suggestion: RecurrenceSuggestion) => void
@@ -75,6 +78,8 @@ export default function TaskDetailsScreen({
   onBack,
   onEdit,
   onOpenAiCollaboration,
+  onAddToAchievement,
+  onViewAchievement,
   onDelete,
   onMakeRecurringSuggestion,
   onDismissRecurrenceSuggestion,
@@ -101,6 +106,8 @@ export default function TaskDetailsScreen({
   const [previewAttachment, setPreviewAttachment] = useState<ApiTaskAttachment | null>(null)
   const [sharedMemberCount, setSharedMemberCount] = useState(0)
   const [error, setError] = useState('')
+  const [linkedAchievementId, setLinkedAchievementId] = useState<string | null>(null)
+  useEffect(() => { if (status !== 'Done' || !accessToken || !task) { setLinkedAchievementId(null); return }; let active = true; void getAchievements(accessToken).then((all) => { if (active) setLinkedAchievementId(all.find((item) => item.relatedTaskId === task.id)?.id ?? null) }).catch(() => undefined); return () => { active = false } }, [accessToken, status, task?.id])
 
   const isOwner = task?.viewerRole === 'owner'
   const [subtaskFilter, setSubtaskFilter] = useState<SubtaskFilter>(
@@ -398,6 +405,7 @@ export default function TaskDetailsScreen({
 
             {isViewer ? null : (
               <div className="flex shrink-0 flex-wrap gap-2">
+                {status === 'Done' && linkedAchievementId && onViewAchievement ? <OutlineButton size="sm" onClick={() => onViewAchievement(linkedAchievementId)}>View Achievement</OutlineButton> : status === 'Done' && onAddToAchievement ? <OutlineButton size="sm" onClick={onAddToAchievement}>Add to Achievement Museum</OutlineButton> : null}
                 <PrimaryButton size="sm" onClick={onEdit}>Edit Task</PrimaryButton>
                 <OutlineButton
                   size="sm"

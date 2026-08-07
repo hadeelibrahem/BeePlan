@@ -274,7 +274,7 @@ export type TaskPayload = Partial<
     | "recurrence"
   >
 > & {
-  subtasks?: (SubtaskPayload & { title: string })[];
+  subtasks?: (SubtaskPayload & { title: string; dependencyTitles?: string[] })[];
 };
 
 function authHeaders(accessToken: string) {

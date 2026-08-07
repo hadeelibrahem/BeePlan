@@ -15,13 +15,17 @@ export type AppScreen =
   | 'edit'
   | 'calendar'
   | 'notes'
+  | 'whiteboard'
+  | 'whiteboards'
+  | 'whiteboardEditor'
   | 'analytics'
+  | 'achievements'
   | 'social'
   | 'notifications'
   | 'settings'
   | 'notFound'
 
-export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string }
+export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string; boardId?: string }
 
 const STATIC_ROUTES: Record<string, AppScreen> = {
   '/': 'dashboard',
@@ -37,7 +41,10 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/reminders/new': 'create',
   '/calendar': 'calendar',
   '/notes': 'notes',
+  '/whiteboard': 'whiteboard',
+  '/whiteboards': 'whiteboards',
   '/analytics': 'analytics',
+  '/achievements': 'achievements',
   '/people': 'social',
   '/notifications': 'notifications',
   '/settings': 'settings',
@@ -47,6 +54,9 @@ export function resolveAppRoute(pathname: string): AppRoute {
   const normalized = pathname.replace(/\/+$/, '') || '/'
   const staticScreen = STATIC_ROUTES[normalized]
   if (staticScreen) return { screen: staticScreen }
+
+  const whiteboard = normalized.match(/^\/whiteboards\/([^/]+)$/)
+  if (whiteboard) return { screen: 'whiteboardEditor', boardId: decodeURIComponent(whiteboard[1]) }
 
   const task = normalized.match(/^\/tasks\/([^/]+)(?:\/(edit|collaboration))?$/)
   if (task) {
@@ -67,7 +77,7 @@ export function resolveAppRoute(pathname: string): AppRoute {
   return { screen: 'notFound' }
 }
 
-export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { taskId?: string | null; reminderId?: string | null } = {}) {
+export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { taskId?: string | null; reminderId?: string | null; boardId?: string | null } = {}) {
   switch (screen) {
     case 'dashboard': return '/dashboard'
     case 'tasks': return '/tasks'
@@ -85,7 +95,11 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'edit': return ids.reminderId ? `/reminders/${encodeURIComponent(ids.reminderId)}/edit` : '/reminders'
     case 'calendar': return '/calendar'
     case 'notes': return '/notes'
+    case 'whiteboard': return '/whiteboard'
+    case 'whiteboards': return '/whiteboards'
+    case 'whiteboardEditor': return ids.boardId ? `/whiteboards/${encodeURIComponent(ids.boardId)}` : '/whiteboards'
     case 'analytics': return '/analytics'
+    case 'achievements': return '/achievements'
     case 'social': return '/people'
     case 'notifications': return '/notifications'
     case 'settings': return '/settings'

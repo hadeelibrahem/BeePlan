@@ -49,6 +49,7 @@ export type PostponeStatus =
   | 'POSTPONED_CAPACITY' // deliberately moved to a later day (capacity/limits)
   | 'BLOCKED_DEPENDENCY' // cannot run until a dependency is completed
   | 'NO_VALID_TIME_SLOT' // no free window big enough remained today
+  | 'FUTURE_SCHEDULED' // explicitly scheduled for a later user-local day
   | 'INVALID_TASK_DATA'; // task data was unusable (e.g. non-positive duration)
 
 /** Fine-grained machine reason, surfaced to the UI for a precise explanation. */
@@ -63,6 +64,7 @@ export type PostponeReasonCode =
   | 'max_daily_work_limit'
   | 'sleep_lunch_unavailable_hours'
   | 'task_too_large'
+  | 'scheduled_for_future'
   | 'invalid_task_data';
 
 /**
@@ -95,12 +97,19 @@ export type BreakInput = { start: string; end: string; title?: string };
 export type LockedInput = { taskId?: string; reminderId?: string; startTime: string; endTime: string };
 
 export type PlannerRequest = {
+  requestId?: string;
+  regenerate?: boolean;
   date?: string;
   currentTime?: string;
+  timezone?: string;
+  mode?: 'selectedOnly' | 'selectedPlusAutoFill';
+  selectedItems?: PlannerSelectionItem[];
   workingHours?: { start?: string; end?: string };
   breaks?: BreakInput[];
   lockedItems?: LockedInput[];
 };
+
+export type PlannerSelectionItem = { taskId: string; subtaskId?: string | null };
 
 // -------- Public response shape (unchanged) ---------------------------------
 
@@ -120,7 +129,16 @@ export type DailyPlanItem = {
   isFocusTask?: boolean;
   locked?: boolean;
   rationale?: string;
+  selectionSource?: 'user' | 'autoFill' | 'scheduled';
   destination?: { displayName: string; latitude: number; longitude: number } | null;
+  /** Allocation context shared by web and mobile timeline consumers. */
+  estimatedMinutes?: number;
+  remainingMinutesBeforePlanning?: number;
+  scheduledTodayMinutes?: number;
+  unscheduledMinutes?: number;
+  allocationStatus?: 'fullyScheduled' | 'partiallyScheduled' | 'notScheduled';
+  sessionIndex?: number;
+  sessionCount?: number;
 };
 
 export type UnscheduledItem = {
@@ -141,6 +159,10 @@ export type UnscheduledItem = {
   deadline?: string;
   /** Suggested day to try this task next (YYYY-MM-DD). */
   suggestedDate?: string;
+  remainingMinutesBeforePlanning?: number;
+  scheduledTodayMinutes?: number;
+  unscheduledMinutes?: number;
+  allocationStatus?: 'fullyScheduled' | 'partiallyScheduled' | 'notScheduled';
 };
 
 /**
@@ -186,6 +208,7 @@ export type ScheduleConflict = {
 };
 
 export type DailyPlan = {
+  generationRequestId?: string;
   date: string;
   generatedAt: string;
   source: 'ai' | 'fallback';
@@ -197,6 +220,7 @@ export type DailyPlan = {
   conflicts: ScheduleConflict[];
   taskConflicts: TaskTimeConflict[];
   travelFeasibilityConflicts?: TravelFeasibilityConflict[];
+  unscheduledSelectedItems?: UnscheduledItem[];
 };
 export type TravelFeasibilityConflict = { type: 'travel_feasibility_conflict'; affectedItem: { id: string; title: string }; conflictingItem: { id: string; title: string } | null; requiredTravelDurationMinutes: number; requiredDeparture: string; availableGapMinutes: number; suggestedValidAlternative: string; fallbackUsed: boolean };
 
@@ -236,6 +260,13 @@ export interface PlannerTask {
   spentMinutes: number;
   progress: number;
   isFocusTask: boolean;
+  startDate?: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
+  scheduleReason?: 'scheduled_today' | 'overdue' | 'deadline_pressure' | 'backlog';
+  todayRequiredMinutes?: number;
+  selectionSource?: 'user' | 'autoFill';
   updatedAt: string; // ISO
   /** Cross-task dependencies (other task ids that must complete first). */
   dependencyTaskIds: string[];
@@ -283,6 +314,7 @@ export interface PlannerContext {
   /** Active recurring commitments that fall on `date` (hard busy blocks). */
   commitments: PlannerCommitment[];
   preferences: PlannerPreferences;
+  timezone?: string;
   /**
    * Every incomplete parent task id (whether it is scheduled directly or via its
    * subtasks). Cross-task dependency resolution uses this so a dependency on a

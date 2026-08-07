@@ -27,6 +27,9 @@ const fullPlan = {
       description: 'Cover chapters 4-7 and take two mock exams.',
       dueDate: '2026-07-25T08:00:00.000Z',
       priority: 'high',
+      scheduledDate: '2026-07-19T00:00:00.000Z',
+      scheduledStartTime: '09:00',
+      scheduledEndTime: '11:00',
     },
     subtasks: [
       {
@@ -78,6 +81,9 @@ describe('normalizeTaskPlanChatResponse', () => {
       description: 'Cover chapters 4-7 and take two mock exams.',
       dueDate: '2026-07-25T08:00:00.000Z',
       priority: 'high',
+      scheduledDate: '2026-07-19T00:00:00.000Z',
+      scheduledStartTime: '09:00',
+      scheduledEndTime: '11:00',
     });
     // Order is reassigned sequentially — the dependency-safe execution order.
     expect(plan.subtasks.map((s) => s.order)).toEqual([1, 2]);
@@ -100,6 +106,28 @@ describe('normalizeTaskPlanChatResponse', () => {
     const result = normalizeTaskPlanChatResponse(raw, now);
     expect(result.plan!.focusSessions).toHaveLength(1);
     expect(result.plan!.focusSessions[0].title).toBe('Mock exam session');
+  });
+
+  it('derives persisted subtask windows from valid focus sessions', () => {
+    const result = normalizeTaskPlanChatResponse(fullPlan, now);
+    const subtask = result.plan!.subtasks[0];
+    expect(subtask.scheduledDate).toBe('2026-07-19');
+    expect(subtask.scheduledStartTime).toBe('09:00');
+    expect(subtask.scheduledEndTime).toBe('10:30');
+    expect(subtask.startDate).toBe('2026-07-19T09:00:00.000Z');
+    expect(result.plan!.mode).toBe('scheduledPlan');
+  });
+
+  it('does not fabricate a schedule when no deadline or schedule is supplied', () => {
+    const raw = { type: 'plan', message: 'Plan', plan: {
+      mainTask: { title: 'Read', description: '', dueDate: null, priority: 'medium' },
+      subtasks: [{ title: 'Read chapter', description: 'Notes', estimatedMinutes: 45 }],
+      focusSessions: [], reminders: [],
+    }};
+    const result = normalizeTaskPlanChatResponse(raw, now);
+    expect(result.plan!.mode).toBe('structureOnly');
+    expect(result.plan!.schedulingNeedsInput).toEqual(['deadline or available planning window']);
+    expect(result.plan!.subtasks[0].scheduledDate).toBeNull();
   });
 
   it('drops focus sessions with an inverted time range', () => {

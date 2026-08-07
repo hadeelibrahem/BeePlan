@@ -8,28 +8,33 @@ type AppLayoutProps = SidebarNavHandlers & {
   panelCaption?: string
   panelPercent?: number
   fab?: ReactNode
+  focusMode?: boolean
   children: ReactNode
 }
 
-export function AppLayout({ active, panelTitle, panelCaption, panelPercent, fab, children, ...nav }: AppLayoutProps) {
+export function AppLayout({ active, panelTitle, panelCaption, panelPercent, fab, focusMode = false, children, ...nav }: AppLayoutProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   return (
-    <div className="bp-app-layout flex h-screen w-screen overflow-hidden bg-[#1A1F2C] text-[var(--bp-text)]">
-      <Sidebar
-        active={active}
-        panelTitle={panelTitle}
-        panelCaption={panelCaption}
-        panelPercent={panelPercent}
-        mobileOpen={mobileNavOpen}
-        onCloseMobile={() => setMobileNavOpen(false)}
-        {...nav}
-      />
+    <div className={`bp-app-layout flex h-screen w-screen overflow-hidden bg-[#1A1F2C] text-[var(--bp-text)] ${focusMode ? 'fixed inset-0 z-[60]' : ''}`}>
+      <div className={focusMode ? 'hidden' : 'contents'}>
+        <Sidebar
+          active={active}
+          panelTitle={panelTitle}
+          panelCaption={panelCaption}
+          panelPercent={panelPercent}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
+          {...nav}
+        />
+      </div>
 
       <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden">
-        <GlobalHeader onOpenMenu={() => setMobileNavOpen(true)} onOpenNotifications={nav.onNavigateNotifications} onOpenSettings={nav.onNavigateSettings} />
+        <div className={focusMode ? 'hidden' : 'contents'}>
+          <GlobalHeader onOpenMenu={() => setMobileNavOpen(true)} onOpenNotifications={nav.onNavigateNotifications} onOpenSettings={nav.onNavigateSettings} />
+        </div>
 
-        <main className="flex-1 overflow-y-auto min-w-0 animate-[beeplanFadeIn_300ms_ease-out] px-4 py-3 sm:px-6 lg:px-8">
+        <main className={`flex min-h-0 flex-1 min-w-0 flex-col animate-[beeplanFadeIn_300ms_ease-out] ${active === 'achievements' ? 'achievement-museum-room' : ''} ${focusMode ? 'overflow-hidden p-0' : 'overflow-y-auto px-4 py-3 sm:px-6 lg:px-8'}`}>
           {children}
         </main>
       </div>

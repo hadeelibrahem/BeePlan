@@ -18,6 +18,7 @@ import {
 } from '../lib/api';
 import { setAuthToken } from '../lib/authToken';
 import { authService } from '../services/auth.service';
+import { isMobileWebView, MOBILE_AUTH_CLEAR, MOBILE_AUTH_READY, parseMobileAuthMessage } from '../lib/mobileAuthBridge';
 
 const AUTH_STORAGE_KEY = 'beeplan_auth_session';
 
@@ -41,6 +42,9 @@ type AuthContextValue = {
   updatePassword: (password: string) => Promise<void>;
   updateUser: (user: AuthUser) => void;
   signOut: () => Promise<void>;
+  mobileAuthWaiting: boolean;
+  mobileAuthError: string;
+  retryMobileAuth: () => void;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,6 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [oauthMessage, setOauthMessage] = useState('');
   const [pendingApprovalToken, setPendingApprovalToken] = useState('');
   const [verifiedReset, setVerifiedReset] = useState<{ email: string; code: string } | null>(null);
+  const mobileWebView = isMobileWebView(window.location.search);
+  const [mobileAuthWaiting, setMobileAuthWaiting] = useState(mobileWebView);
+  const [mobileAuthError, setMobileAuthError] = useState('');
 
   const saveSession = useCallback((nextSession: AuthSession) => {
     window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
@@ -71,6 +78,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+
+    if (mobileWebView) {
+      const sendReady = () => window.ReactNativeWebView?.postMessage(MOBILE_AUTH_READY);
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin && event.origin !== window.location.origin) return;
+        if (event.data === MOBILE_AUTH_READY) { sendReady(); return; }
+        const message = parseMobileAuthMessage(event.data);
+        if (!message) {
+          if (typeof event.data === 'string' && event.data.includes('BEEPLAN_')) setMobileAuthError('The mobile authentication message was invalid.');
+          return;
+        }
+        if (message.type === MOBILE_AUTH_CLEAR) {
+          window.localStorage.removeItem(AUTH_STORAGE_KEY);
+          setAuthToken(null);
+          setSession(null);
+          setMobileAuthError('');
+          setMobileAuthWaiting(true);
+          sendReady();
+          return;
+        }
+        try {
+          const expiresAt = message.payload.expiresAt;
+          if (expiresAt !== undefined && new Date(expiresAt).getTime() <= Date.now()) throw new Error('The mobile session has expired.');
+          const nextSession = { accessToken: message.payload.accessToken, user: message.payload.user };
+          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+          setSession(nextSession);
+          setMobileAuthError('');
+          setMobileAuthWaiting(false);
+          setLoading(false);
+        } catch (error) {
+          setMobileAuthError(error instanceof Error ? error.message : 'Unable to install the mobile session.');
+          setMobileAuthWaiting(false);
+          setLoading(false);
+        }
+      };
+      window.addEventListener('message', onMessage);
+      document.addEventListener('message', onMessage as EventListener);
+      const readyTimer = window.setTimeout(sendReady, 0);
+      return () => { active = false; window.clearTimeout(readyTimer); window.removeEventListener('message', onMessage); document.removeEventListener('message', onMessage as EventListener); };
+    }
+
     const storedSession = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
     if (storedSession) {
@@ -120,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [saveSession]);
+  }, [mobileWebView, saveSession]);
 
   useEffect(() => {
     if (!pendingApprovalToken || session) return;
@@ -252,7 +300,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOauthMessage('');
     setPendingApprovalToken('');
     setSession(null);
-  }, [session]);
+    if (mobileWebView) window.ReactNativeWebView?.postMessage(JSON.stringify({ type: MOBILE_AUTH_CLEAR }));
+  }, [mobileWebView, session]);
 
   const updateUser = useCallback((user: AuthUser) => {
     setSession((current) => {
@@ -268,6 +317,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOauthMessage('');
     setPendingApprovalToken('');
   }, []);
+
+  const retryMobileAuth = useCallback(() => {
+    setMobileAuthError('');
+    setMobileAuthWaiting(mobileWebView);
+    window.ReactNativeWebView?.postMessage(MOBILE_AUTH_READY);
+  }, [mobileWebView]);
 
   const value = useMemo(
     () => ({
@@ -285,6 +340,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updatePassword,
       updateUser,
       signOut,
+      mobileAuthWaiting,
+      mobileAuthError,
+      retryMobileAuth,
     }),
     [
       clearOAuthError,
@@ -299,6 +357,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updatePassword,
       updateUser,
       verifyRecoveryCode,
+      mobileAuthError,
+      mobileAuthWaiting,
+      retryMobileAuth,
     ],
   );
 

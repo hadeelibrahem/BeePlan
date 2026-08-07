@@ -1,9 +1,18 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // The installed Nest 11 websocket packages expose compatible runtime APIs,
+  // but their minor versions currently produce an overly narrow adapter type.
+  app.useWebSocketAdapter(
+    new IoAdapter(app) as unknown as Parameters<typeof app.useWebSocketAdapter>[0],
+  );
+  app.use(json({ limit: '4mb' }));
+  app.use(urlencoded({ extended: true, limit: '1mb' }));
   const allowedOrigins = new Set(
     [
       'http://localhost:5173',

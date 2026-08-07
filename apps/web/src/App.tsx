@@ -13,6 +13,8 @@ import {
   type ReminderType,
 } from './features/reminders'
 import { SocialScreen } from './features/social'
+import { WhiteboardScreen } from './features/whiteboard/WhiteboardScreen'
+import { WhiteboardsDashboardScreen } from './features/whiteboard/WhiteboardsDashboardScreen'
 import { NotificationsScreen } from './features/collaboration'
 import { notificationTarget } from './features/collaboration/notificationRoutes'
 import { useAuth } from './hooks/useAuth'
@@ -38,6 +40,8 @@ import {
 import AuthScreen from './screens/AuthScreen'
 import AllTasksScreen from './screens/AllTasksScreen'
 import AnalyticsScreen from './screens/AnalyticsScreen'
+import AchievementMuseumScreen from './screens/AchievementMuseumScreen'
+import YearInReviewScreen from './screens/YearInReviewScreen'
 import AiPlannerScreen from './screens/AiPlannerScreen'
 import AiTaskBuilderScreen from './screens/AiTaskBuilderScreen'
 import CalendarScreen from './screens/CalendarScreen'
@@ -106,11 +110,12 @@ function ThemedApp() {
   const [recurrenceSuggestions, setRecurrenceSuggestions] = useState<RecurrenceSuggestion[]>([])
   const [activeRecurrenceSuggestion, setActiveRecurrenceSuggestion] = useState<RecurrenceSuggestion | null>(null)
   const [plannerRefreshKey, setPlannerRefreshKey] = useState(0)
+  const [whiteboardFocusMode, setWhiteboardFocusMode] = useState(false)
   const [selectedIdState, setSelectedId] = useState<string | null>(null)
   const [selectedTaskIdState, setSelectedTaskId] = useState<string | null>(null)
   const selectedId = route.reminderId ?? selectedIdState
   const selectedTaskId = route.taskId ?? selectedTaskIdState
-  const { accessToken, loading, user, signOut } = useAuth()
+  const { accessToken, loading, user, signOut, mobileAuthWaiting, mobileAuthError, retryMobileAuth } = useAuth()
   const { showToast } = useToast()
   const queryClient = useQueryClient()
   // The base task list is the single task source for the app shell. Filtered
@@ -139,6 +144,19 @@ function ThemedApp() {
   const refreshPlanner = useCallback(() => setPlannerRefreshKey((value) => value + 1), [])
 
   useEffect(() => setAuthScreen(getAuthScreenFromPath()), [location.pathname])
+
+  useEffect(() => {
+    if (screen !== 'whiteboard' && screen !== 'whiteboardEditor') setWhiteboardFocusMode(false)
+  }, [screen])
+
+  useEffect(() => {
+    if (!whiteboardFocusMode || (screen !== 'whiteboard' && screen !== 'whiteboardEditor')) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setWhiteboardFocusMode(false)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [screen, whiteboardFocusMode])
 
   useEffect(() => {
     // Restore the dedicated focus workspace only from the initial dashboard route.
@@ -478,7 +496,9 @@ function ThemedApp() {
     onNavigateNotifications: () => setScreen('notifications'),
     onNavigateCalendar: () => setScreen('calendar'),
     onNavigateNotes: () => setScreen('notes'),
+    onNavigateWhiteboard: () => setScreen('whiteboards'),
     onNavigateAnalytics: () => setScreen('analytics'),
+    onNavigateAchievements: () => setScreen('achievements'),
     onNavigateSettings: () => setScreen('settings'),
   }
 
@@ -496,6 +516,14 @@ function ThemedApp() {
         />
       </>
     )
+  }
+
+  if (mobileAuthWaiting) {
+    return <div className="flex min-h-screen items-center justify-center bg-[var(--bp-bg)] px-6 text-[var(--bp-text)]"><div className="text-center"><div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[rgba(253,239,75,0.3)] border-t-[var(--bp-accent)]" /><p className="mt-4 font-semibold">Connecting to BeePlan…</p></div></div>
+  }
+
+  if (mobileAuthError) {
+    return <div className="flex min-h-screen items-center justify-center bg-[var(--bp-bg)] px-6 text-[var(--bp-text)]"><div className="max-w-sm text-center"><h1 className="text-lg font-black">Mobile authentication failed</h1><p className="mt-2 text-sm text-[var(--bp-muted)]">{mobileAuthError}</p><div className="mt-5 flex justify-center gap-3"><button type="button" onClick={retryMobileAuth} className="rounded-xl bg-[var(--bp-accent)] px-4 py-2 text-sm font-bold text-[var(--bp-accent-text)]">Retry</button><button type="button" onClick={() => window.history.back()} className="rounded-xl border border-[var(--bp-border)] px-4 py-2 text-sm font-bold">Back</button></div></div></div>
   }
 
   if (loading) {
@@ -658,6 +686,41 @@ function ThemedApp() {
     return <NotesScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
   }
 
+  if (screen === 'whiteboard') {
+    return (
+      <AppLayout active="whiteboard" focusMode={whiteboardFocusMode} {...sidebarNav}>
+        <WhiteboardScreen
+          focusMode={whiteboardFocusMode}
+          onToggleFocusMode={() => setWhiteboardFocusMode((value) => !value)}
+          onOpenTask={openTaskDetails}
+          onStartFocus={async (task) => {
+            const started = await focus.start(
+              { id: task.id, title: task.title, priority: task.priority, category: task.category },
+              'pomodoro',
+              task.estimatedTimeMinutes ?? 25,
+            )
+            if (started) setScreen('focusSession')
+          }}
+        />
+      </AppLayout>
+    )
+  }
+
+  if (screen === 'whiteboards') {
+    return <AppLayout active="whiteboard" {...sidebarNav}><WhiteboardsDashboardScreen /></AppLayout>
+  }
+
+  if (screen === 'whiteboardEditor') {
+    return (
+      <AppLayout active="whiteboard" focusMode={whiteboardFocusMode} {...sidebarNav}>
+        <WhiteboardScreen boardId={route.boardId} focusMode={whiteboardFocusMode} onToggleFocusMode={() => setWhiteboardFocusMode((value) => !value)} onLeaveBoard={() => navigate('/whiteboards')} onOpenTask={openTaskDetails} onStartFocus={async (task) => {
+          const started = await focus.start({ id: task.id, title: task.title, priority: task.priority, category: task.category }, 'pomodoro', task.estimatedTimeMinutes ?? 25)
+          if (started) setScreen('focusSession')
+        }} />
+      </AppLayout>
+    )
+  }
+
   if (screen === 'social') {
     return <SocialScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
   }
@@ -679,6 +742,12 @@ function ThemedApp() {
 
   if (screen === 'analytics') {
     return <AnalyticsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
+  }
+
+  if (screen === 'achievements') {
+    const reviewYear = new URLSearchParams(location.search).get('yearReview')
+    if (reviewYear && /^\d{4}$/.test(reviewYear)) return <YearInReviewScreen {...sidebarNav} accessToken={accessToken ?? ''} year={Number(reviewYear)} onBack={() => navigate('/achievements')} onOpenAchievement={(id) => navigate(`/achievements?achievementId=${encodeURIComponent(id)}`)} onChangeYear={(nextYear) => navigate(`/achievements?yearReview=${nextYear}`)} />
+    return <AchievementMuseumScreen {...sidebarNav} accessToken={accessToken ?? ''} onOpenTask={openTaskDetails} />
   }
 
   if (screen === 'settings') {
@@ -739,6 +808,8 @@ function ThemedApp() {
         onRefresh={() => void refreshSelectedTask(selectedTask.id)}
         onBack={() => setScreen('tasks')}
         onEdit={() => void openEditTask(selectedTask.id)}
+        onAddToAchievement={() => navigate(`/achievements?taskId=${encodeURIComponent(selectedTask.id)}&title=${encodeURIComponent(selectedTask.title)}&date=${encodeURIComponent((selectedTask.completedAt ?? selectedTask.updatedAt ?? new Date().toISOString()).slice(0, 10))}`)}
+        onViewAchievement={(achievementId) => navigate(`/achievements?achievementId=${encodeURIComponent(achievementId)}`)}
         onOpenAiCollaboration={() => setScreen('aiCollaboration')}
         onDelete={() => void handleDeleteTask(selectedTask.id)}
         onMakeRecurringSuggestion={setActiveRecurrenceSuggestion}

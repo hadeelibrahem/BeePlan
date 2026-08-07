@@ -274,6 +274,12 @@ export class SubtaskDto {
   @IsArray()
   @IsUUID('4', { each: true })
   dependencyIds?: string[];
+
+  /** AI Plan uses stable preceding titles before database ids exist. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dependencyTitles?: string[];
 }
 
 export class SubtaskDependencyDto {

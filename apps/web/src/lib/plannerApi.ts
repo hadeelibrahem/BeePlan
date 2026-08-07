@@ -1,4 +1,5 @@
 const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '')
+const plannerRequestId = () => globalThis.crypto?.randomUUID?.() ?? `web-planner-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 export type DailyPlanItem = {
   id: string
@@ -16,6 +17,7 @@ export type DailyPlanItem = {
   isFocusTask?: boolean
   locked?: boolean
   rationale?: string
+  selectionSource?: 'user' | 'autoFill' | 'scheduled'
 }
 
 export type PostponeStatus =
@@ -94,20 +96,60 @@ export type DailyPlan = {
 }
 
 export type GenerateDailyPlanPayload = {
+  regenerate?: boolean
   date?: string
   currentTime?: string
+  timezone?: string
+  mode?: 'selectedOnly' | 'selectedPlusAutoFill'
+  selectedItems?: { taskId: string; subtaskId?: string | null }[]
   workingHours?: { start?: string; end?: string }
   lockedItems?: { taskId?: string; reminderId?: string; startTime: string; endTime: string }[]
 }
 
+export type PlannerCandidate = {
+  taskId: string
+  subtaskId: string | null
+  id: string
+  title: string
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  dueDate?: string
+  estimatedMinutes: number
+  scheduleReason?: string
+  scheduleCategory?: 'scheduledToday' | 'overdue' | 'upcoming' | 'unscheduled'
+  scheduledStartAt?: string
+  isAutoEligibleToday?: boolean
+  isManuallySelectable?: boolean
+  blockedReason?: string | null
+}
+export type PlannerCandidates = { date: string; timezone?: string; availableMinutes: number; selectedItems: { taskId: string; subtaskId?: string | null }[]; items: PlannerCandidate[]; blockedItems: (PlannerCandidate & { reason: string; status: string })[] }
+
+export async function getDailyPlannerCandidates(accessToken: string, date: string, timezone?: string) {
+  const params = new URLSearchParams({ date, timezone: timezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC') })
+  const response = await fetch(`${apiUrl}/ai/planner/daily/candidates?${params}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(data?.message ?? 'Unable to load planner candidates.')
+  return data as PlannerCandidates
+}
+
+export async function saveDailyPlannerSelection(accessToken: string, payload: { date: string; timezone?: string; selectedItems: { taskId: string; subtaskId?: string | null }[] }) {
+  const response = await fetch(`${apiUrl}/ai/planner/daily/selection`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` }, body: JSON.stringify(payload) })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(data?.message ?? 'Unable to save planner selection.')
+  return data as { selectedItems: { taskId: string; subtaskId?: string | null }[] }
+}
+
 export async function generateDailyPlan(accessToken: string, payload: GenerateDailyPlanPayload = {}) {
+  const requestId = plannerRequestId()
+  const requestPayload = { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', ...payload }
   const response = await fetch(`${apiUrl}/ai/planner/daily`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
+      'X-Planner-Request-Id': requestId,
     },
-    body: JSON.stringify(payload),
+    cache: 'no-store',
+    body: JSON.stringify(requestPayload),
   })
   const data = await response.json().catch(() => null)
 
@@ -116,6 +158,7 @@ export async function generateDailyPlan(accessToken: string, payload: GenerateDa
     throw new Error(message ?? 'Unable to generate today\'s plan.')
   }
 
+  console.debug('[planner] generated response', { requestId, generationRequestId: data?.generationRequestId, generatedAt: data?.generatedAt, taskSessions: Object.values(data?.sections ?? {}).flat().filter((item: any) => item.type === 'task').length })
   return data as DailyPlan
 }
 
@@ -132,6 +175,7 @@ export async function acceptDailyPlan(accessToken: string, plan: DailyPlan) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
+    cache: 'no-store',
     body: JSON.stringify({ plan }),
   })
   const data = await response.json().catch(() => null)
