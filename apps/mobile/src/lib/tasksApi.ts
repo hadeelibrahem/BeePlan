@@ -240,7 +240,9 @@ export type TaskPayload = Partial<
     | "isFocusTask"
     | "recurrence"
   >
->;
+> & {
+  subtasks?: (SubtaskPayload & { title: string; dependencyTitles?: string[] })[];
+};
 
 async function request<T>(
   accessToken: string,

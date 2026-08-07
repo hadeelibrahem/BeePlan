@@ -14,6 +14,7 @@ const LOCK_ID = 742_019_332;
 @Injectable()
 export class TaskContextNotificationWorker {
   private readonly logger = new Logger(TaskContextNotificationWorker.name);
+  private running = false;
   constructor(
     private readonly database: DatabaseService,
     private readonly notifications: NotificationsService,
@@ -21,7 +22,10 @@ export class TaskContextNotificationWorker {
   ) {}
   @Cron(CronExpression.EVERY_MINUTE)
   async tick() {
-    await this.database.db.transaction(async (tx) => {
+    if (this.running) return;
+    this.running = true;
+    try {
+      await this.database.db.transaction(async (tx) => {
       const lock = await tx.execute(
         sql`select pg_try_advisory_xact_lock(${LOCK_ID}) as locked`,
       );
@@ -115,6 +119,13 @@ export class TaskContextNotificationWorker {
           );
         }
       }
-    });
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Task-context notification run skipped; it will retry next run: ${error instanceof Error ? error.message : 'database error'}`,
+      );
+    } finally {
+      this.running = false;
+    }
   }
 }

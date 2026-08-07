@@ -30,6 +30,17 @@ describe('DailyMotivationService', () => {
     expect(aiService.generateDailyMotivation).toHaveBeenCalledTimes(1);
   });
 
+  it('deduplicates concurrent motivation requests for the same user and day', async () => {
+    const { service, aiService } = build('You completed two tasks today, so let your next focused step stay calm and clear.');
+
+    await Promise.all([
+      service.getForUser('user', undefined, 'en', new Date('2026-07-24T10:30:00.000Z')),
+      service.getForUser('user', undefined, 'en', new Date('2026-07-24T10:30:01.000Z')),
+    ]);
+
+    expect(aiService.generateDailyMotivation).toHaveBeenCalledTimes(1);
+  });
+
   it('generates a fresh message when the activity fingerprint changes', async () => {
     const { service, aiService } = build('You completed two tasks today, so let your next focused step stay calm and clear.');
     const getSummary = jest.spyOn(service as never, 'getSummary');

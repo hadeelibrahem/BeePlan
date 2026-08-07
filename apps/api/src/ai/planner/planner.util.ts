@@ -38,6 +38,49 @@ export function todayString(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+/** Canonical user-local calendar key for an instant. */
+export function dateKeyInTimeZone(value: Date, timezone = 'UTC'): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(value);
+  } catch {
+    return value.toISOString().slice(0, 10);
+  }
+}
+
+export function timeStringInTimeZone(value: Date, timezone = 'UTC'): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(value);
+    const hour = parts.find((part) => part.type === 'hour')?.value ?? '00';
+    const minute = parts.find((part) => part.type === 'minute')?.value ?? '00';
+    return `${hour}:${minute}`;
+  } catch {
+    return timeString(value);
+  }
+}
+
+export function isSameUserDay(value: Date | string | null | undefined, day: string, timezone = 'UTC'): boolean {
+  if (!value) return false;
+  return dateKeyInTimeZone(typeof value === 'string' ? new Date(value) : value, timezone) === day;
+}
+
+export function isAfterUserDay(value: Date | string | null | undefined, day: string, timezone = 'UTC'): boolean {
+  if (!value) return false;
+  return dateKeyInTimeZone(typeof value === 'string' ? new Date(value) : value, timezone) > day;
+}
+
+export function isBeforeUserDay(value: Date | string | null | undefined, day: string, timezone = 'UTC'): boolean {
+  if (!value) return false;
+  return dateKeyInTimeZone(typeof value === 'string' ? new Date(value) : value, timezone) < day;
+}
+
 /**
  * Convert an HH:mm..HH:mm window into the minute ranges it occupies within a
  * single day. A window whose end is not after its start is treated as crossing

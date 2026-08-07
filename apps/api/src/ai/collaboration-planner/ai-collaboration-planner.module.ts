@@ -18,13 +18,15 @@ import { TeamInsightsService } from './team-insights.service';
 import { ProjectHealthService } from './project-health.service';
 import { RecommendationPreviewService } from './recommendation-preview.service';
 import { RecommendationSimulationService } from './recommendation-simulation.service';
+import { AiTaskManagerController } from '../task-manager.controller';
+import { AiTaskManagerService } from '../task-manager.service';
 
 @Module({
   // CollaborationModule provides TaskAccessService (owner-only gating) and
   // TaskActivityService (shared timeline). Neither it nor NotificationsModule
   // imports this module, so there is no circular dependency.
   imports: [DatabaseModule, CollaborationModule, NotificationsModule],
-  controllers: [AiCollaborationPlannerController, AiCollaborationController, ProjectPlanController],
+  controllers: [AiCollaborationPlannerController, AiCollaborationController, ProjectPlanController, AiTaskManagerController],
   providers: [
     AiCollaborationPlannerService,
     WorkloadCapacityService,
@@ -36,6 +38,7 @@ import { RecommendationSimulationService } from './recommendation-simulation.ser
     ProjectHealthService,
     RecommendationPreviewService,
     RecommendationSimulationService,
+    AiTaskManagerService,
     // Reused as-is from the solo AI planner (apps/api/src/ai/planner) for its
     // maxDailyWorkMinutes default — provided here too rather than importing
     // AiModule, which would create a cross-module dependency for one service.

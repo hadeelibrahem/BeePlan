@@ -80,6 +80,320 @@ body {
   font-family: var(--bp-font-ui);
 }
 
+.bp-whiteboard-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: calc(100vw - 1rem);
+  overflow-x: auto;
+  padding: 0.375rem;
+  border: 1px solid var(--bp-border);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--bp-surface-elevated) 94%, transparent);
+  box-shadow: 0 10px 30px var(--bp-shadow);
+  scrollbar-width: none;
+}
+
+.bp-whiteboard-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.bp-whiteboard-tool {
+  display: inline-flex;
+  min-height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.625rem;
+  padding: 0 0.625rem;
+  color: var(--bp-muted);
+  font-family: var(--bp-font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.bp-whiteboard-tool:hover:not(:disabled) {
+  background: var(--bp-accent-soft);
+  color: var(--bp-text);
+}
+
+.bp-whiteboard-tool:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.bp-whiteboard-tool-active {
+  background: var(--bp-accent);
+  color: var(--bp-accent-text);
+}
+
+.bp-whiteboard-tool:disabled {
+  cursor: not-allowed;
+  color: var(--bp-disabled-text);
+  opacity: 0.65;
+}
+
+.bp-whiteboard-action-button {
+  display: inline-flex;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--bp-muted);
+  transition: background-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+
+.bp-whiteboard-action-button:hover:not(:disabled),
+.bp-whiteboard-action-active {
+  background: var(--bp-accent-soft);
+  color: var(--bp-text);
+}
+
+.bp-whiteboard-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.bp-whiteboard-drawing-controls {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 0.625rem;
+  padding: 0.2rem 0.35rem;
+  background: color-mix(in srgb, var(--bp-bg) 42%, transparent);
+}
+
+.bp-whiteboard-color-swatch {
+  height: 0.875rem;
+  width: 0.875rem;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bp-text) 22%, transparent);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.bp-whiteboard-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.bp-whiteboard-color-selected {
+  box-shadow: 0 0 0 2px var(--bp-surface-elevated), 0 0 0 4px var(--bp-accent);
+}
+
+.bp-whiteboard-color-black { background: #1f2937; }
+.bp-whiteboard-color-red { background: #ef4444; }
+.bp-whiteboard-color-orange { background: #f97316; }
+.bp-whiteboard-color-yellow { background: #facc15; }
+.bp-whiteboard-color-green { background: #22c55e; }
+.bp-whiteboard-color-blue { background: #3b82f6; }
+.bp-whiteboard-color-violet { background: #8b5cf6; }
+
+.bp-whiteboard-size-option {
+  display: inline-flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+}
+
+.bp-whiteboard-size-option:hover,
+.bp-whiteboard-size-selected {
+  background: var(--bp-accent-soft);
+}
+
+.bp-whiteboard-size-dot {
+  display: block;
+  border-radius: 999px;
+  background: var(--bp-text);
+}
+
+.bp-whiteboard-size-s { height: 0.25rem; width: 0.25rem; }
+.bp-whiteboard-size-m { height: 0.375rem; width: 0.375rem; }
+.bp-whiteboard-size-l { height: 0.5rem; width: 0.5rem; }
+.bp-whiteboard-size-xl { height: 0.6875rem; width: 0.6875rem; }
+
+.bp-whiteboard-task-picker {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 1002;
+  display: flex;
+  width: min(22rem, 100vw);
+  flex-direction: column;
+  border-left: 1px solid var(--bp-border);
+  background: var(--bp-surface);
+  box-shadow: -12px 0 30px var(--bp-shadow);
+}
+
+.bp-whiteboard-picker-close {
+  display: inline-flex;
+  height: 2rem;
+  width: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  color: var(--bp-muted);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.bp-whiteboard-picker-close:hover {
+  background: var(--bp-accent-soft);
+  color: var(--bp-text);
+}
+
+.bp-whiteboard-task-option {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  text-align: left;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.bp-whiteboard-task-option:hover {
+  border-color: var(--bp-accent-soft);
+  background: var(--bp-accent-soft);
+}
+
+.bp-task-card {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--bp-border);
+  border-radius: 1rem;
+  background: var(--bp-surface-elevated);
+  padding: 1rem;
+  box-shadow: 0 12px 28px var(--bp-shadow);
+  font-family: var(--bp-font-ui);
+}
+
+.bp-task-card-missing {
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--bp-muted);
+  text-align: center;
+}
+
+.bp-task-card-eyebrow {
+  color: var(--bp-accent-text);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bp-task-card-status,
+.bp-task-card-pill {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--bp-accent-soft);
+  padding: 0.25rem 0.5rem;
+  color: var(--bp-accent-ink);
+}
+
+.bp-task-card-status {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  font-weight: 800;
+}
+
+.bp-task-card-status-done {
+  background: color-mix(in srgb, var(--bp-success) 18%, transparent);
+  color: var(--bp-success);
+}
+
+.bp-task-card-pill {
+  font-size: 0.6875rem;
+}
+
+.bp-task-card-action {
+  min-width: 0;
+  flex: 1;
+  border-radius: 0.5rem;
+  background: var(--bp-accent-soft);
+  padding: 0.4rem 0.35rem;
+  color: var(--bp-text);
+  font-size: 0.625rem;
+  font-weight: 700;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.bp-task-card-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bp-accent) 28%, transparent);
+}
+
+.bp-task-card-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.bp-task-card-action-primary {
+  background: var(--bp-accent);
+  color: var(--bp-accent-text);
+}
+
+.bp-file-card {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--bp-border);
+  border-radius: 1rem;
+  background: var(--bp-surface-elevated);
+  padding: 1rem;
+  box-shadow: 0 12px 28px var(--bp-shadow);
+  font-family: var(--bp-font-ui);
+}
+
+.bp-link-card {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--bp-border);
+  border-radius: 1rem;
+  background: var(--bp-surface-elevated);
+  padding: 1rem;
+  box-shadow: 0 12px 28px var(--bp-shadow);
+  font-family: var(--bp-font-ui);
+}
+
+.bp-link-card-open {
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  background: var(--bp-accent);
+  padding: 0.4rem 0.6rem;
+  color: var(--bp-accent-text);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.bp-link-card-open:hover {
+  filter: brightness(0.96);
+}
+
+@media (max-width: 640px) {
+  .bp-whiteboard-task-picker {
+    inset: auto 0 0;
+    width: 100%;
+    height: min(70vh, 34rem);
+    border-left: 0;
+    border-top: 1px solid var(--bp-border);
+    border-radius: 1rem 1rem 0 0;
+  }
+}
+
 .bp-sidebar-brand {
   display: inline-flex;
   align-items: baseline;
@@ -302,5 +616,31 @@ body {
   }
   50% {
     box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+/* The Museum is intentionally a darker exhibition room inside the BeePlan shell. */
+.achievement-museum-room {
+  background: var(--bp-bg);
+}
+
+.achievement-museum-room > main {
+  background: var(--bp-bg);
+}
+
+.achievement-museum-room > main > div.sticky {
+  margin-top: 0.75rem;
+  border: 1px solid var(--bp-border);
+  border-radius: 1rem;
+  background: var(--bp-surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-museum-room *,
+  .achievement-museum-room *::before,
+  .achievement-museum-room *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }

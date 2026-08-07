@@ -15,7 +15,7 @@ import type { AppNotification, TaskInvitation } from '../types'
 type Props = SidebarNavHandlers & { accessToken: string; onOpenNotification: (notification: AppNotification, target: string) => void; onSignOut: () => void }
 type Filter = 'all' | 'unread' | 'ai' | 'collaboration' | 'reminders' | 'calendar' | 'focus' | 'system'
 const FILTERS: { value: Filter; label: string }[] = [{ value: 'all', label: 'All' }, { value: 'unread', label: 'Unread' }, { value: 'ai', label: 'AI Planner' }, { value: 'collaboration', label: 'Collaboration' }, { value: 'reminders', label: 'Reminders' }, { value: 'calendar', label: 'Calendar' }, { value: 'focus', label: 'Focus' }, { value: 'system', label: 'System' }]
-const AI_TYPES = new Set(['ai_plan_applied', 'ai_recommendation_ready', 'deadline_risk', 'workload_warning', 'planner_suggestion'])
+const AI_TYPES = new Set(['ai_plan_applied', 'ai_recommendation_ready', 'deadline_risk', 'workload_warning', 'planner_suggestion', 'ai_upcoming_deadline', 'ai_inactivity', 'ai_blocked_dependency', 'ai_dependency_completed', 'ai_missing_assignment', 'ai_daily_summary'])
 const COLLAB_TYPES = new Set(['task_invite', 'invite_accepted', 'invite_declined', 'member_joined', 'member_removed', 'member_role_changed', 'ownership_transferred', 'comment_added', 'mention'])
 const CALENDAR_TYPES = new Set(['due_date_changed', 'calendar_event_created', 'calendar_event_updated', 'calendar_event_cancelled', 'calendar_conflict', 'schedule_changed', 'deadline_changed'])
 const FOCUS_TYPES = new Set(['focus_session_scheduled', 'focus_session_completed', 'focus_session_cancelled', 'focus_reminder', 'focus_session_missed'])

@@ -21,6 +21,7 @@ import {
   subtasks,
   taskDependencies,
   taskMembers,
+  plannerDailySelections,
   tasks,
 } from '../db/schema';
 
@@ -177,6 +178,7 @@ function makeDb(
   subtaskRows: unknown[],
   subtaskDepRows: unknown[],
   memberRows: unknown[],
+  selectionRows: unknown[] = [],
 ) {
   return {
     select: jest.fn(() => ({
@@ -188,9 +190,12 @@ function makeDb(
         if (table === subtasks) return query(subtaskRows);
         if (table === subtaskDependencies) return query(subtaskDepRows);
         if (table === taskMembers) return query(memberRows);
+        if (table === plannerDailySelections) return query(selectionRows);
         return query([]);
       },
     })),
+    delete: jest.fn(() => ({ where: jest.fn(async () => { selectionRows.splice(0, selectionRows.length); }) })),
+    insert: jest.fn(() => ({ values: jest.fn(async (rows: unknown[]) => { selectionRows.push(...rows); }) })),
   };
 }
 
@@ -202,6 +207,7 @@ function buildService(
   subtaskRows: unknown[] = [],
   subtaskDepRows: unknown[] = [],
   memberRows: unknown[] = [],
+  selectionRows: unknown[] = [],
 ) {
   const db = makeDb(
     taskRows,
@@ -211,6 +217,7 @@ function buildService(
     subtaskRows,
     subtaskDepRows,
     memberRows,
+    selectionRows,
   );
   const config = { get: () => undefined } as unknown as ConfigService; // no AI keys -> deterministic
   const reasoning = new PlannerReasoningEngine(config);
@@ -509,6 +516,20 @@ describe('AiPlannerService (3-layer pipeline)', () => {
       expect(plan.unscheduled.some((item) => item.taskId === 'done-one')).toBe(
         false,
       );
+    });
+
+    it('never schedules a parent when all of its subtasks are complete', async () => {
+      const taskId = 'fully-complete-parent';
+      const subs = [
+        makeSubtask(taskId, { id: 'done-a', isDone: true, status: 'done' }),
+        makeSubtask(taskId, { id: 'done-b', isDone: false, status: 'done' }),
+      ];
+      const { service } = buildService([makeTask(taskId)], [], [], [], subs);
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+
+      expect(allItems(plan).some((item) => item.taskId === taskId)).toBe(false);
+      expect(plan.unscheduled.some((item) => item.taskId === taskId)).toBe(false);
+      expect(plan.capacity.requestedMinutes).toBe(0);
     });
   });
 
@@ -1163,6 +1184,182 @@ describe('AiPlannerService (3-layer pipeline)', () => {
 
       expect(planSubtaskIds(plan).has('id-match')).toBe(true);
       expect(planSubtaskIds(plan).has('name-trap')).toBe(false);
+    });
+  });
+
+  describe('date eligibility and daily effort budgeting', () => {
+    it('selectedOnly schedules only the user-selected candidate', async () => {
+      const { service } = buildService([makeTask('chosen'), makeTask('not-chosen')]);
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: DATE,
+        mode: 'selectedOnly',
+        selectedItems: [{ taskId: 'chosen' }],
+      });
+
+      expect(new Set(taskItems(plan).map((item) => item.taskId))).toEqual(new Set(['chosen']));
+      expect(taskItems(plan)[0].selectionSource).toBe('user');
+    });
+
+    it('persists the daily selection so a refreshed candidate request restores it', async () => {
+      const { service } = buildService([makeTask('chosen'), makeTask('other')]);
+      await service.saveDailySelection(USER_ID, {
+        date: DATE,
+        selectedItems: [{ taskId: 'chosen' }],
+      });
+      const candidates = await service.getDailyCandidates(USER_ID, { date: DATE });
+
+      expect(candidates.selectedItems).toEqual([{ taskId: 'chosen', subtaskId: null }]);
+    });
+
+    it('returns future incomplete work for display while keeping it out of automatic eligibility', async () => {
+      const { service } = buildService([makeTask('future', { scheduledDate: '2026-07-08' }), makeTask('done', { status: 'done' })]);
+      const candidates = await service.getDailyCandidates(USER_ID, { date: DATE });
+      const future = candidates.items.find((item) => item.taskId === 'future');
+
+      expect(future).toMatchObject({ scheduleCategory: 'upcoming', isAutoEligibleToday: false, isManuallySelectable: true });
+      expect(candidates.items.some((item) => item.taskId === 'done')).toBe(false);
+    });
+
+    it('selectedPlusAutoFill schedules selected work before eligible backlog only', async () => {
+      const { service } = buildService([
+        makeTask('chosen', { priority: 'high' }),
+        makeTask('backlog'),
+        makeTask('dated', { dueDate: new Date('2026-07-10T00:00:00.000Z') }),
+      ]);
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: DATE,
+        mode: 'selectedPlusAutoFill',
+        selectedItems: [{ taskId: 'chosen' }],
+      });
+
+      expect(taskItems(plan).map((item) => item.taskId)).toEqual(expect.arrayContaining(['chosen', 'backlog']));
+      expect(taskItems(plan).find((item) => item.taskId === 'chosen')?.selectionSource).toBe('user');
+      expect(taskItems(plan).find((item) => item.taskId === 'backlog')?.selectionSource).toBe('autoFill');
+      expect(taskItems(plan).some((item) => item.taskId === 'dated')).toBe(false);
+    });
+
+    it('allows an explicitly selected future item without changing its stored schedule', async () => {
+      const { service } = buildService([makeTask('future', { scheduledDate: '2026-07-08' })]);
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: DATE,
+        mode: 'selectedOnly',
+        selectedItems: [{ taskId: 'future' }],
+      });
+
+      expect(taskItems(plan).some((item) => item.taskId === 'future')).toBe(true);
+      expect(taskItems(plan)[0].selectionSource).toBe('user');
+    });
+
+    it('keeps future scheduled parents and subtasks out of today', async () => {
+      const futureParent = makeTask('future-parent', { scheduledDate: '2026-07-08' });
+      const futureSubtask = makeSubtask('parent-with-subtask', {
+        id: 'future-subtask',
+        scheduledDate: '2026-07-08',
+      });
+      const { service } = buildService(
+        [futureParent, makeTask('parent-with-subtask')],
+        [], [], [], [futureSubtask],
+      );
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+
+      expect(taskItems(plan).map((item) => item.taskId)).not.toContain('future-parent');
+      expect(taskItems(plan).some((item) => item.subtaskId === 'future-subtask')).toBe(false);
+      expect(plan.unscheduled.filter((item) => item.status === 'FUTURE_SCHEDULED')).toHaveLength(2);
+    });
+
+    it('schedules today work at its exact planned time and labels the reason', async () => {
+      const { service } = buildService([
+        makeTask('today', {
+          scheduledDate: DATE,
+          scheduledStartTime: '15:00',
+          scheduledEndTime: '16:00',
+          estimatedTimeMinutes: 60,
+        }),
+      ]);
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+      const item = taskItems(plan).find((entry) => entry.taskId === 'today');
+
+      expect(item).toMatchObject({ startTime: '15:00', endTime: '16:00' });
+      expect(item?.rationale).toContain('Scheduled for today');
+    });
+
+    it('preserves overdue work and only takes the required daily slice before a future due date', async () => {
+      const { service } = buildService([
+        makeTask('overdue', { dueDate: new Date('2026-07-05T00:00:00.000Z') }),
+        makeTask('upcoming', {
+          dueDate: new Date('2026-07-10T00:00:00.000Z'),
+          estimatedTimeMinutes: 600,
+        }),
+      ]);
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+      const upcoming = taskItems(plan).filter((entry) => entry.taskId === 'upcoming');
+      const overdue = taskItems(plan).find((entry) => entry.taskId === 'overdue');
+
+      expect(overdue?.rationale).toContain('Overdue');
+      expect(upcoming.reduce((sum, entry) => sum + entry.durationMinutes, 0)).toBeLessThan(600);
+      expect(taskItems(plan).find((entry) => entry.taskId === 'upcoming')?.rationale).toContain('deadline');
+    });
+
+    it('fills a later free focus window with the candidate remaining effort', async () => {
+      const { service, preferences } = buildService([
+        makeTask('focus-gap', {
+          isFocusTask: true,
+          estimatedTimeMinutes: 180,
+          dueDate: new Date('2026-07-10T00:00:00.000Z'),
+        }),
+      ], [
+        makeReminder('late-reminder', {
+          triggerDateTime: new Date('2026-07-06T22:45:00.000Z'),
+        }),
+      ]);
+      jest.spyOn(preferences, 'getPreferences').mockResolvedValue(withPreferences({
+        focusStartTime: '20:00',
+        focusEndTime: '23:00',
+        workBlockMinutes: 25,
+        breakMinutes: 0,
+        emergencyBufferMinutes: 0,
+      }));
+
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: DATE,
+        breaks: [],
+        workingHours: { start: '20:00', end: '23:00' },
+      });
+      const scheduled = taskItems(plan)
+        .filter((item) => item.taskId === 'focus-gap')
+        .reduce((sum, item) => sum + item.durationMinutes, 0);
+
+      expect(scheduled).toBeGreaterThanOrEqual(125);
+      expect(plan.capacity.scheduledMinutes).toBe(scheduled);
+    });
+
+    it('does not use a completed-subtask parent fallback and fills only remaining capacity with backlog', async () => {
+      const { service } = buildService(
+        [makeTask('all-done-parent', { estimatedTimeMinutes: 300 }), makeTask('backlog', { estimatedTimeMinutes: 30 })],
+        [], [], [],
+        [makeSubtask('all-done-parent', { id: 'done-child', isDone: true, status: 'done' })],
+      );
+      const plan = await service.generateDailyPlan(USER_ID, { date: DATE, breaks: [] });
+
+      expect(taskItems(plan).some((item) => item.taskId === 'all-done-parent')).toBe(false);
+      expect(taskItems(plan).find((item) => item.taskId === 'backlog')?.rationale).toContain('backlog fill');
+    });
+
+    it('uses the requested timezone when deciding whether a scheduled instant is future work', async () => {
+      const { service } = buildService([
+        makeTask('timezone-boundary', {
+          scheduledDate: null,
+          // Tasks use a date key; this mirrors an instant arriving through an API adapter.
+          scheduledStartTime: '00:30',
+        }),
+      ]);
+      const plan = await service.generateDailyPlan(USER_ID, {
+        date: DATE,
+        timezone: 'America/New_York',
+        breaks: [],
+      });
+
+      expect(taskItems(plan).some((item) => item.taskId === 'timezone-boundary')).toBe(true);
     });
   });
 });

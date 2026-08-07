@@ -20,10 +20,15 @@ export type RootStackParamList = {
   Calendar: undefined
   Notes: undefined
   Analytics: undefined
+  AchievementMuseum: { taskId?: string; title?: string; achievementDate?: string; achievementId?: string } | undefined
+  YearInReview: { year: number }
   FocusSession: undefined
   AiCollaboration: { taskId: string }
   Notifications: undefined
   Settings: undefined
+  Whiteboards: undefined
+  Whiteboard: { boardId: string }
+  WhiteboardShare: { boardId: string }
   ReminderDetails: { reminderId: string }
   CreateReminder: { initialType?: 'task' | 'person' | 'checklist'; initialFriendId?: string }
   EditReminder: { reminderId: string }

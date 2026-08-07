@@ -173,9 +173,10 @@ export class TasksService {
     // Focus Sessions yet, so its derived total spent equals the manual value.
     const manualSpentMinutes = dto.spentTimeMinutes ?? 0;
     const spentTimeMinutes = manualSpentMinutes;
-    const [task] = await this.db
-      .insert(tasks)
-      .values({
+    const task = await this.db.transaction(async (tx) => {
+      const [createdTask] = await tx
+        .insert(tasks)
+        .values({
         userId,
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
@@ -205,18 +206,25 @@ export class TasksService {
         attachments: dto.attachments ?? null,
         isFavorite: dto.isFavorite ?? false,
         isFocusTask: dto.isFocusTask ?? false,
-      })
-      .returning();
+        })
+        .returning();
 
-    if (dto.subtasks?.length) {
-      await this.db
-        .insert(subtasks)
-        .values(
-          dto.subtasks.map((subtask, index) =>
-            this.toSubtaskInsert(task.id, subtask, index),
-          ),
+      if (dto.subtasks?.length) {
+        const createdSubtasks = await tx
+          .insert(subtasks)
+          .values(dto.subtasks.map((subtask, index) => this.toSubtaskInsert(createdTask.id, subtask, index)))
+          .returning({ id: subtasks.id, title: subtasks.title });
+        const subtaskIdByTitle = new Map(createdSubtasks.map((row) => [row.title.trim().toLowerCase(), row.id]));
+        const dependencyRows = dto.subtasks.flatMap((subtask, index) =>
+          (subtask.dependencyTitles ?? []).map((title) => ({
+            subtaskId: createdSubtasks[index].id,
+            dependsOnSubtaskId: subtaskIdByTitle.get(title.trim().toLowerCase()),
+          })).filter((row): row is { subtaskId: string; dependsOnSubtaskId: string } => Boolean(row.dependsOnSubtaskId && row.dependsOnSubtaskId !== row.subtaskId)),
         );
-    }
+        if (dependencyRows.length) await tx.insert(subtaskDependencies).values(dependencyRows);
+      }
+      return createdTask;
+    });
 
     if (dto.recurrence && dto.recurrence.frequency !== 'Never') {
       await this.upsertRecurrence(task.id, dto.recurrence);

@@ -2,7 +2,7 @@
 /* eslint-disable prettier/prettier */
 import {
   BadRequestException,
-  Injectable,
+  Injectable, Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -43,6 +43,8 @@ type GoogleEvent = {
 
 @Injectable()
 export class GoogleCalendarService {
+  private readonly logger = new Logger(GoogleCalendarService.name);
+  private outboundQueueRunning = false;
   constructor(
     private readonly dbService: DatabaseService,
     private readonly config: ConfigService,
@@ -248,6 +250,20 @@ export class GoogleCalendarService {
   }
   @Cron('* * * * *')
   async processOutboundQueue() {
+    if (this.outboundQueueRunning) return;
+    this.outboundQueueRunning = true;
+    try {
+      await this.processOutboundQueueOnce();
+    } catch (error) {
+      this.logger.warn(
+        `Outbound calendar queue skipped; it will retry next run: ${error instanceof Error ? error.message : 'database error'}`,
+      );
+    } finally {
+      this.outboundQueueRunning = false;
+    }
+  }
+
+  private async processOutboundQueueOnce() {
     const jobs = await this.db
       .select()
       .from(googleCalendarSyncJobs)

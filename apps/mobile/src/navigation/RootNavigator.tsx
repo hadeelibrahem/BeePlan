@@ -5,6 +5,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { Text, View } from 'react-native'
 import { NavigationBottomTabBar } from '../components/layout/BottomNavBar'
 import { type MainTabParamList, MAIN_TAB_ROUTES, type RootStackParamList } from './types'
+import { WhiteboardsDashboardScreen, WhiteboardEditorScreen, WhiteboardShareScreen } from '../features/whiteboard'
+import AchievementMuseumScreen from '../screens/AchievementMuseumScreen'
+import YearInReviewScreen from '../screens/YearInReviewScreen'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const Tabs = createBottomTabNavigator<MainTabParamList>()
@@ -57,6 +60,11 @@ export function RootNavigator({ tabScreens, taskDetailsRoute: TaskDetailsRoute, 
       {EditReminderRoute ? <Stack.Screen name="EditReminder" component={EditReminderRoute} /> : null}
       {NotificationsRoute ? <Stack.Screen name="Notifications" component={NotificationsRoute} /> : null}
       {SettingsRoute ? <Stack.Screen name="Settings" component={SettingsRoute} /> : null}
+      <Stack.Screen name="Whiteboards" component={WhiteboardsDashboardScreen} />
+      <Stack.Screen name="AchievementMuseum" component={AchievementMuseumScreen} />
+      <Stack.Screen name="YearInReview" component={YearInReviewScreen} />
+      <Stack.Screen name="Whiteboard" component={WhiteboardEditorScreen} />
+      <Stack.Screen name="WhiteboardShare" component={WhiteboardShareScreen} />
     </Stack.Navigator>
   )
 }

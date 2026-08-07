@@ -9,6 +9,8 @@ import { useLanguage } from '../i18n/LanguageContext'
 import {
   acceptDailyPlan,
   generateDailyPlan,
+  getDailyPlannerCandidates,
+  saveDailyPlannerSelection,
   getDailyPlanAcceptance,
   getPlannerPreferences,
   updatePlannerPreferences,
@@ -22,6 +24,7 @@ import {
   type ScheduleConflict,
   type PostponeStatus,
   type UnscheduledItem,
+  type PlannerCandidates,
 } from '../lib/plannerApi'
 import { useTheme } from '../theme/ThemeContext'
 
@@ -136,6 +139,12 @@ export default function AiPlannerScreen({
   } | null>(null)
   const [resolvingConflict, setResolvingConflict] = useState(false)
   const [dismissedConflict, setDismissedConflict] = useState<ScheduleConflict | null>(null)
+  const [candidatePickerOpen, setCandidatePickerOpen] = useState(false)
+  const [candidates, setCandidates] = useState<PlannerCandidates | null>(null)
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [selectionMode, setSelectionMode] = useState<'selectedOnly' | 'selectedPlusAutoFill'>('selectedOnly')
+  const [candidateSearch, setCandidateSearch] = useState('')
+  const [candidateFilter, setCandidateFilter] = useState<'all' | 'today' | 'overdue' | 'upcoming' | 'unscheduled'>('all')
   const [pendingTaskConflict, setPendingTaskConflict] = useState<{ conflict: TaskTimeConflict; proposedItem: DailyPlanItem } | null>(null)
   const today = new Date().toISOString().slice(0, 10)
 
@@ -233,9 +242,12 @@ export default function AiPlannerScreen({
     }
   }
 
-  async function loadPlan(lockedOverride?: typeof lockedPayload) {
+  async function loadPlan(lockedOverride?: typeof lockedPayload, selection?: { mode: 'selectedOnly' | 'selectedPlusAutoFill'; selectedItems: { taskId: string; subtaskId?: string | null }[] }) {
     if (!accessToken) return
 
+    // Regeneration creates a pending draft, so discard the prior accepted
+    // cache entry before fetching it.
+    planCache.delete(planCacheKey(accessToken, today))
     setLoading(true)
     setError('')
     setAcceptError('')
@@ -243,14 +255,17 @@ export default function AiPlannerScreen({
     try {
       const nextPlan = await generateDailyPlan(accessToken, {
         date: today,
+        regenerate: Boolean(plan),
         currentTime: currentTime(),
         lockedItems: lockedOverride ?? lockedPayload,
+        ...(selection ?? {}),
       })
       if (nextPlan.conflicts?.length) {
         setPendingConflict({ conflict: nextPlan.conflicts[0], proposedPlan: nextPlan })
         return
       }
       setPlan(nextPlan)
+      setAccepted(false)
       planCache.set(planCacheKey(accessToken, nextPlan.date), { plan: nextPlan, accepted: false })
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to generate today\'s plan.')
@@ -265,13 +280,34 @@ export default function AiPlannerScreen({
     setAccepting(true)
     setAcceptError('')
     try {
-      await acceptDailyPlan(accessToken, plan)
+      const saved = await acceptDailyPlan(accessToken, plan)
+      setPlan(saved.plan)
       setAccepted(true)
+      planCache.set(planCacheKey(accessToken, saved.date), { plan: saved.plan, accepted: true })
     } catch (acceptErr) {
       setAcceptError(acceptErr instanceof Error ? acceptErr.message : 'Unable to accept plan.')
     } finally {
       setAccepting(false)
     }
+  }
+
+  async function openCandidatePicker() {
+    setCandidatePickerOpen(true)
+    try {
+      const next = await getDailyPlannerCandidates(accessToken, today)
+      setCandidates(next)
+      setSelectedKeys(new Set(next.selectedItems.map((item) => `${item.taskId}:${item.subtaskId ?? ''}`)))
+    } catch (pickerError) {
+      setError(pickerError instanceof Error ? pickerError.message : 'Unable to load what can be scheduled today.')
+    }
+  }
+
+  async function generateFromSelection() {
+    if (!candidates) return
+    const selectedItems = candidates.items.filter((item) => selectedKeys.has(`${item.taskId}:${item.subtaskId ?? ''}`)).map((item) => ({ taskId: item.taskId, subtaskId: item.subtaskId }))
+    await saveDailyPlannerSelection(accessToken, { date: today, selectedItems })
+    setCandidatePickerOpen(false)
+    await loadPlan(undefined, { mode: selectionMode, selectedItems })
   }
 
   function resetPlan() {
@@ -413,6 +449,11 @@ export default function AiPlannerScreen({
   const planDate = plan?.date ?? new Date().toISOString().slice(0, 10)
   const progressPercent = Math.min(100, Math.round((completedCount / Math.max(1, taskCount)) * 100))
   const detailed = viewMode === 'detailed'
+  const visibleCandidateItems = candidates?.items.filter((item) => {
+    const matchesSearch = item.title.toLowerCase().includes(candidateSearch.toLowerCase())
+    const category = item.scheduleCategory === 'scheduledToday' ? 'today' : item.scheduleCategory
+    return matchesSearch && (candidateFilter === 'all' || category === candidateFilter)
+  }) ?? []
 
   return (
     <AppLayout
@@ -486,6 +527,9 @@ export default function AiPlannerScreen({
 
       {/* ACTION BAR + VIEW TOGGLE ---------------------------------------- */}
       <section className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-3 shadow-xl">
+        <SecondaryButton size="md" onClick={() => void openCandidatePicker()} loading={candidatePickerOpen && !candidates}>
+          Choose what to schedule today
+        </SecondaryButton>
         <PrimaryButton size="md" onClick={() => void loadPlan()} loading={loading}>
           <span className="inline-flex items-center gap-1.5"><SparkleGlyph className="h-4 w-4" /> {plan ? 'Regenerate plan' : 'Generate plan'}</span>
         </PrimaryButton>
@@ -499,6 +543,21 @@ export default function AiPlannerScreen({
         </OutlineButton>
         <ViewToggle mode={viewMode} onChange={setViewMode} />
       </section>
+
+      {candidatePickerOpen ? (
+        <section className="mb-4 rounded-2xl border border-[var(--bp-accent)]/30 bg-[var(--bp-surface)] p-4 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h3 className="text-base font-black text-[var(--bp-text)]">Choose what to schedule today</h3><p className="text-sm text-[var(--bp-muted)]">Selected work is revalidated by the API before it is scheduled.</p></div>
+            <div className="flex gap-2"><button className="text-xs font-bold underline" onClick={() => setSelectedKeys(new Set(candidates?.items.map((item) => `${item.taskId}:${item.subtaskId ?? ''}`) ?? []))}>Select all</button><button className="text-xs font-bold underline" onClick={() => setSelectedKeys(new Set())}>Clear all</button></div>
+          </div>
+          {candidates ? <>
+            <div className="mt-3 rounded-xl bg-[var(--bp-bg)] p-3 text-sm"><strong>Selected: {formatDuration((candidates.items.filter((item) => selectedKeys.has(`${item.taskId}:${item.subtaskId ?? ''}`)).reduce((sum, item) => sum + item.estimatedMinutes, 0)))}</strong><span className="ms-3 text-[var(--bp-muted)]">Available today: {formatDuration(candidates.availableMinutes)}</span></div>
+            <div className="mt-3 flex flex-wrap gap-2"><input value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder="Search tasks and subtasks" className="min-w-48 flex-1 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2 text-sm" />{(['all', 'today', 'overdue', 'upcoming', 'unscheduled'] as const).map((filter) => <button key={filter} onClick={() => setCandidateFilter(filter)} className="rounded-lg px-2.5 py-1.5 text-xs font-bold">{filter}</button>)}</div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">{visibleCandidateItems.map((item) => { const key = `${item.taskId}:${item.subtaskId ?? ''}`; const checked = selectedKeys.has(key); return <label key={key} className={`flex cursor-pointer gap-3 rounded-xl border border-[var(--bp-border)] p-3 ${item.isManuallySelectable === false ? 'opacity-60' : ''}`}><input type="checkbox" disabled={item.isManuallySelectable === false} checked={checked} onChange={() => setSelectedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })} /><span className="min-w-0 flex-1"><span className="block text-sm font-bold text-[var(--bp-text)]">{item.title}</span><span className="block text-xs capitalize text-[var(--bp-muted)]">{item.scheduleCategory ?? 'unscheduled'} · {item.priority} · {item.estimatedMinutes} min{item.dueDate ? ` · due ${item.dueDate.slice(0, 10)}` : ''}{item.blockedReason ? ` · ${item.blockedReason}` : ''}</span></span></label> })}</div>
+            <div className="mt-4 flex flex-wrap items-center gap-3"><label className="text-sm font-bold text-[var(--bp-text)]">Mode <select value={selectionMode} onChange={(event) => setSelectionMode(event.target.value as typeof selectionMode)} className="ms-2 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-2 py-1"><option value="selectedOnly">Selected only</option><option value="selectedPlusAutoFill">Selected + backlog fill</option></select></label><PrimaryButton size="sm" onClick={() => void generateFromSelection()} loading={loading}>Plan selected work</PrimaryButton><button className="text-sm font-bold underline" onClick={() => setCandidatePickerOpen(false)}>Cancel</button></div>
+          </> : <p className="mt-4 text-sm text-[var(--bp-muted)]">Loading eligible work…</p>}
+        </section>
+      ) : null}
 
       {acceptError ? (
         <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300">
@@ -1236,6 +1295,7 @@ function PlanCard({
             {overdue ? <Badge tone="red">Overdue</Badge> : null}
             {dueToday ? <Badge tone="yellow">Due Today</Badge> : null}
             {item.isFocusTask ? <Badge tone="focus">Focus</Badge> : null}
+            {item.selectionSource === 'user' ? <Badge tone="plain">Chosen by you</Badge> : item.selectionSource === 'autoFill' ? <Badge tone="yellow">Auto-filled</Badge> : item.selectionSource === 'scheduled' ? <Badge tone="plain">Scheduled for today</Badge> : null}
             {item.category ? <Badge tone="plain">{item.category}</Badge> : null}
             {locked ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-[var(--bp-accent-ink)]">

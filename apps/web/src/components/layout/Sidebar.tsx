@@ -11,7 +11,9 @@ import {
   PlannerIcon,
   RemindersIcon,
   TasksIcon,
+  WhiteboardIcon,
 } from './icons'
+import { useLanguage } from '../../i18n/LanguageContext'
 
 export type SidebarPage =
   | 'dashboard'
@@ -23,7 +25,9 @@ export type SidebarPage =
   | 'notifications'
   | 'calendar'
   | 'notes'
+  | 'whiteboard'
   | 'analytics'
+  | 'achievements'
   | 'settings'
 
 export type SidebarNavHandlers = {
@@ -36,7 +40,9 @@ export type SidebarNavHandlers = {
   onNavigateNotifications?: () => void
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
+  onNavigateWhiteboard?: () => void
   onNavigateAnalytics?: () => void
+  onNavigateAchievements?: () => void
   onNavigateSettings?: () => void
 }
 
@@ -82,6 +88,7 @@ const NAV_GROUPS = [
       { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
       { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
       { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
+      { page: 'whiteboard', labelKey: 'navigation.whiteboard', Icon: WhiteboardIcon, handler: 'onNavigateWhiteboard' },
       { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
     ]
   },
@@ -90,6 +97,7 @@ const NAV_GROUPS = [
     items: [
       { page: 'notifications', label: 'Notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
       { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
+      { page: 'achievements', label: 'Achievement Museum', Icon: AnalyticsIcon, handler: 'onNavigateAchievements' },
       { page: 'settings', label: 'Settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
     ]
   }
@@ -138,6 +146,8 @@ function SidebarContent({
   nav: SidebarNavHandlers
   onNavigate?: () => void
 }) {
+  const { t } = useLanguage()
+
   return (
     <div className="relative flex h-full min-h-0 flex-col py-0">
       {/* Logo container section - aligns perfectly with the h-16 main header bar */}
@@ -168,16 +178,16 @@ function SidebarContent({
               {group.title}
             </div>
             <div className="space-y-1.5">
-              {group.items.map(({ page, label, Icon, handler }) => (
+              {group.items.map((item) => (
                 <SidebarNavItem
-                  key={page}
-                  page={page}
+                  key={item.page}
+                  page={item.page}
                   beeTarget
-                  active={active === page}
-                  icon={<Icon />}
-                  label={label}
+                  active={active === item.page}
+                  icon={<item.Icon />}
+                  label={'labelKey' in item ? t(item.labelKey) : item.label}
                   onClick={() => {
-                    nav[handler]?.()
+                    nav[item.handler]?.()
                     onNavigate?.()
                   }}
                 />

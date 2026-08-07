@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { findSlot } from './planner-rule-engine';
 import { addDays, fromMinutes, toMinutes } from './planner.util';
 import type {
@@ -45,12 +45,15 @@ type Window = { start: number; end: number };
  */
 @Injectable()
 export class PlannerSchedulerEngine {
+  private readonly logger = new Logger(PlannerSchedulerEngine.name);
+
   build(
     reasoning: ReasoningResult,
     constraints: PlannerConstraints,
     context: PlannerContext,
     source: 'ai' | 'fallback',
   ): DailyPlan {
+    this.logger.log(`[scheduler] pid=${process.pid} source=${source} date=${context.date} candidates=${constraints.schedulableTasks.length} decisions=${reasoning.order.length}`);
     const { workingHours, preferences, capacity } = constraints;
     const items: DailyPlanItem[] = constraints.fixedBlocks.map(fixedBlockToItem);
     // Seed "busy" with fixed blocks AND non-rendered reservations (past time).
@@ -94,6 +97,22 @@ export class PlannerSchedulerEngine {
     for (const decision of order) {
       const task = tasksById.get(decision.taskId);
       if (!task) continue;
+      const exactStart = task.scheduledDate === context.date && task.scheduledStartTime
+        ? toMinutes(task.scheduledStartTime)
+        : undefined;
+      const exactEnd = exactStart !== undefined && task.scheduledEndTime
+        ? toMinutes(task.scheduledEndTime)
+        : undefined;
+      // Exact times reserve the first session's window; they do not redefine
+      // the task's effort. Any remaining minutes continue in normal focus
+      // blocks after that exact session.
+      // `todayRequiredMinutes` is a ranking/deadline-pressure hint, not an
+      // allocator stop condition. Once a candidate is eligible, its complete
+      // remaining effort must be offered to the timeline; otherwise the
+      // scheduler can report the task as handled while leaving a large free
+      // window and silently strand the rest of its estimate.
+      const requestedMinutes = task.estimatedMinutes;
+      this.logger.debug(`[scheduler] task=${task.id} remaining=${requestedMinutes} budget=${capacity.workBudgetMinutes - scheduledWorkMinutes}`);
 
       const budgetRemaining = capacity.workBudgetMinutes - scheduledWorkMinutes;
 
@@ -101,10 +120,10 @@ export class PlannerSchedulerEngine {
       // deliberate capacity postponement to a later day.
       if (budgetRemaining < MIN_TASK_MINUTES) {
         unscheduled.push(
-          capacityPostpone(task, task.estimatedMinutes, suggestedDate, budgetBoundByMaxDaily),
+          capacityPostpone(task, requestedMinutes, suggestedDate, budgetBoundByMaxDaily),
         );
         postponedTaskCount += 1;
-        postponedMinutes += task.estimatedMinutes;
+        postponedMinutes += requestedMinutes;
         continue;
       }
 
@@ -113,21 +132,30 @@ export class PlannerSchedulerEngine {
 
       // Cap this task's placement at the remaining budget; the overflow (if any)
       // is postponed for capacity rather than dropped.
-      const placeable = Math.min(task.estimatedMinutes, budgetRemaining);
-      const overBudget = task.estimatedMinutes - placeable;
+      const placeable = Math.min(requestedMinutes, budgetRemaining);
+      const overBudget = requestedMinutes - placeable;
 
       let remaining = placeable;
       let placedForTask = 0;
       const segments: DailyPlanItem[] = [];
       let noSlot = false;
 
+      let exactPending = exactStart !== undefined && Number.isFinite(exactStart);
       while (remaining >= 1) {
-        const duration = Math.min(remaining, workBlock);
-        const slot = findSlotPreferred(workingHours, busy, duration, windows);
+        const exactWindowMinutes = exactPending && exactEnd !== undefined && exactEnd > exactStart!
+          ? exactEnd - exactStart!
+          : undefined;
+        const requestedBlockDuration = exactPending && exactWindowMinutes !== undefined
+          ? Math.min(remaining, exactWindowMinutes)
+          : Math.min(remaining, workBlock);
+        const slot = exactPending
+          ? findSlotAt(workingHours, busy, exactStart!, requestedBlockDuration)
+          : findSlotPreferredFlexible(workingHours, busy, requestedBlockDuration, windows);
         if (!slot) {
           noSlot = true;
           break;
         }
+        const duration = slot.end - slot.start;
 
         segments.push({
           id: `task-${task.id}-${segments.length + 1}`,
@@ -142,12 +170,16 @@ export class PlannerSchedulerEngine {
           priority: task.priority,
           category: task.category ?? undefined,
           isFocusTask: task.isFocusTask,
+          selectionSource: task.selectionSource ?? (task.scheduleReason === 'scheduled_today' ? 'scheduled' : undefined),
           locked: false,
           rationale: decision.rationale,
         });
         busy.push(slot);
         placedForTask += duration;
         remaining -= duration;
+        // A scheduled start/end is a preferred exact session, not a cap on
+        // the item's total effort. Continue allocating the remainder normally.
+        exactPending = false;
 
         // Insert a break of the preferred length between consecutive work
         // blocks so we never chain long sessions back to back.
@@ -165,6 +197,20 @@ export class PlannerSchedulerEngine {
           segment.title = `${task.title} (${index + 1})`;
         });
       }
+      const allocationStatus = placedForTask >= requestedMinutes
+        ? 'fullyScheduled' as const
+        : placedForTask > 0
+          ? 'partiallyScheduled' as const
+          : 'notScheduled' as const;
+      segments.forEach((segment, index) => {
+        segment.estimatedMinutes = requestedMinutes;
+        segment.remainingMinutesBeforePlanning = requestedMinutes;
+        segment.scheduledTodayMinutes = placedForTask;
+        segment.unscheduledMinutes = requestedMinutes - placedForTask;
+        segment.allocationStatus = allocationStatus;
+        segment.sessionIndex = index + 1;
+        segment.sessionCount = segments.length;
+      });
       items.push(...segments);
 
       scheduledWorkMinutes += placedForTask;
@@ -172,7 +218,7 @@ export class PlannerSchedulerEngine {
 
       // Account for whatever couldn't be placed: budget overflow first, then a
       // genuine "no free slot" reason for the part the timeline couldn't hold.
-      const leftover = task.estimatedMinutes - placedForTask;
+      const leftover = requestedMinutes - placedForTask;
       if (leftover > 0) {
         postponedTaskCount += 1;
         postponedMinutes += leftover;
@@ -184,6 +230,7 @@ export class PlannerSchedulerEngine {
           );
         }
       }
+      this.logger.debug(`[scheduler] task=${task.id} placed=${placedForTask} leftover=${leftover} sessions=${segments.length}`);
     }
 
     const capacitySummary: CapacitySummary = {
@@ -277,6 +324,10 @@ function capacityPostpone(
     priority: task.priority,
     deadline: task.dueDate,
     suggestedDate,
+    remainingMinutesBeforePlanning: task.estimatedMinutes,
+    scheduledTodayMinutes: partial ? Math.max(0, task.estimatedMinutes - minutes) : 0,
+    unscheduledMinutes: minutes,
+    allocationStatus: partial ? 'partiallyScheduled' : 'notScheduled',
   };
 }
 
@@ -310,6 +361,10 @@ function noSlotPostpone(
     priority: task.priority,
     deadline: task.dueDate,
     suggestedDate,
+    remainingMinutesBeforePlanning: task.estimatedMinutes,
+    scheduledTodayMinutes: partial ? Math.max(0, task.estimatedMinutes - minutes) : 0,
+    unscheduledMinutes: minutes,
+    allocationStatus: partial ? 'partiallyScheduled' : 'notScheduled',
   };
 }
 
@@ -383,13 +438,41 @@ function findSlotPreferred(workingHours: WorkingHours, busy: Slot[], duration: n
   return findSlot(workingHours, busy, duration);
 }
 
+/**
+ * Prefer the configured block size, but use the largest shorter block that
+ * fits when the remaining focus-window gap is smaller. This is especially
+ * important for the final session before a reminder or the end of Focus Hours:
+ * 20 available minutes must not be discarded merely because the preference is
+ * 25 minutes.
+ */
+function findSlotPreferredFlexible(
+  workingHours: WorkingHours,
+  busy: Slot[],
+  duration: number,
+  windows: Window[],
+): Slot | null {
+  for (let candidate = Math.max(1, Math.round(duration)); candidate >= 1; candidate--) {
+    const slot = findSlotPreferred(workingHours, busy, candidate, windows);
+    if (slot) return slot;
+  }
+  return null;
+}
+
+function findSlotAt(workingHours: WorkingHours, busy: Slot[], start: number, duration: number): Slot | null {
+  const dayStart = toMinutes(workingHours.start);
+  const dayEnd = toMinutes(workingHours.end);
+  if (start < dayStart || start + duration > dayEnd) return null;
+  const conflict = busy.some((slot) => start < slot.end && start + duration > slot.start);
+  return conflict ? null : { start, end: start + duration };
+}
+
 function findSlotInWindow(windowStart: number, windowEnd: number, busy: Slot[], duration: number): Slot | null {
   let cursor = windowStart;
   const sortedBusy = [...busy].sort((a, b) => a.start - b.start);
   while (cursor + duration <= windowEnd) {
     const conflict = sortedBusy.find((slot) => cursor < slot.end && cursor + duration > slot.start);
     if (!conflict) return { start: cursor, end: cursor + duration };
-    cursor = Math.max(cursor + 15, conflict.end);
+    cursor = conflict.end;
   }
   return null;
 }

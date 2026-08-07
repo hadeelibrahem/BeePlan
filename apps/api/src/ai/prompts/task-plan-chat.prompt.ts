@@ -16,15 +16,19 @@ const RESPONSE_SCHEMA = `{
     "constraints": string[],
     "risks": string[]
   },
+  "schedulingNeedsInput"?: string[],
   "plan"?: {
     "mainTask": {
       "title": string,
       "description": string,
       "dueDate": string | null,
-      "priority": "low" | "medium" | "high"
+      "priority": "low" | "medium" | "high",
+      "scheduledDate": string | null,
+      "scheduledStartTime": string | null,
+      "scheduledEndTime": string | null
     },
     "subtasks": [
-      { "title": string, "description": string, "estimatedMinutes": number, "order": number }
+      { "title": string, "description": string, "estimatedMinutes": number, "order": number, "priority": "low" | "medium" | "high", "startDate": string | null, "dueDate": string | null, "scheduledDate": string | null, "scheduledStartTime": string | null, "scheduledEndTime": string | null, "isFocusTask": boolean, "dependencyTitles": string[] }
     ],
     "focusSessions": [
       { "title": string, "startTime": string, "endTime": string, "relatedSubtaskTitle": string }
@@ -76,6 +80,8 @@ export function buildTaskPlanChatPrompt(
     '',
     'PLAN RULES (apply only once you actually emit type "plan"):',
     '- Break the goal into realistic, concrete subtasks (typically 3-8) that represent real work — never arbitrary chunks. Each subtask\'s "description" must state its concrete deliverable (what exists when it is done). Give an honest estimatedMinutes for each.',
+    '- When a deadline and a valid availability window are known, provide concrete startDate/dueDate and scheduledDate/scheduledStartTime/scheduledEndTime for every schedulable subtask. Use null for exact times when no valid window exists; never invent a deadline.',
+    '- Set dependencyTitles only to earlier subtasks that must precede the current subtask. Keep order chronological and dependency-safe. Set isFocusTask false for errands, calls, travel, and other work that should not be a focus block.',
     '- Keep all generated titles short and clear.',
     '- Order subtasks so that nothing depends on a later item: "order" is the dependency-safe execution order.',
     '- Distribute focus sessions across the available days before the deadline; do not pile everything on one day when there is enough time. Balance the load — avoid overloading any single day, avoid days that already look busy in the user\'s open tasks below, and leave slack before the deadline rather than scheduling right up to it.',
@@ -85,6 +91,7 @@ export function buildTaskPlanChatPrompt(
     `- If a focus-eligible subtask's estimatedMinutes is larger than ${preferences.workBlockMinutes} (the work-block size), split it across MULTIPLE focus sessions — roughly estimatedMinutes divided by ${preferences.workBlockMinutes}, rounded up — whose durations together reasonably cover its estimatedMinutes. Never represent a long subtask with a single short kickoff session; a small rounding variance is acceptable, but under-scheduling must not be the default.`,
     `- Leave about ${preferences.breakMinutes} minutes between consecutive focus sessions on the same day: the break is simply the gap between one session's endTime and the next session's startTime. Never create separate break tasks or break reminders.`,
     '- Each focus session must reference an existing subtask title in "relatedSubtaskTitle".',
+    '- If there is no explicit or implied deadline and no reliable planning window, return structureOnly semantics: retain estimates and ordering, leave dates/times null, set schedulingNeedsInput to the smallest missing inputs, and explain it in message.',
     '- Suggest 1-3 reminders of type "time" (e.g. a kickoff reminder and one before the due date). Every reminder must fire BEFORE the event it supports — a reminder for an exam, deadline, or session after that event is useless and must never be produced. All reminders must be in the future.',
     `- Before responding, verify your own output: every required step exists; no subtask depends on a later one; no session or reminder is in the past; for EACH focus-eligible subtask the sum of ITS OWN focus-session minutes reasonably matches ITS estimatedMinutes (check this per subtask, not across all subtasks — non-focus subtasks correctly have no sessions); same-day sessions respect the ~${preferences.workBlockMinutes}-minute block size and leave ~${preferences.breakMinutes}-minute gaps; and the deadline is met with margin. Repair anything that fails before answering.`,
     preferences.note ? `- Personal user instructions: ${preferences.note}` : '',

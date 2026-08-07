@@ -36,6 +36,41 @@
       "when": 1785758460000,
       "tag": "0020_proactive_task_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785876149047,
+      "tag": "0005_whiteboards",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785880000000,
+      "tag": "0021_whiteboard_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785881000000,
+      "tag": "0022_whiteboard_asset_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785882000000,
+      "tag": "0023_multiple_whiteboards",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785883000000,
+      "tag": "0024_whiteboard_members",
+      "breakpoints": true
     }
   ]
 }
