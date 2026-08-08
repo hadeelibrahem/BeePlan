@@ -86,6 +86,15 @@ export class TasksController {
     return this.tasksService.findAll(request.user.id, query);
   }
 
+  @Get('random-start')
+  randomStart(
+    @Req() request: AuthenticatedRequest,
+    @Query('mode') mode?: 'anything' | 'quick_win' | 'important',
+    @Query('excludeId') excludeId?: string,
+  ) {
+    return this.tasksService.randomStart(request.user.id, mode ?? 'anything', excludeId);
+  }
+
   // Must stay above `:id` — Nest matches routes in declaration order, so a
   // literal segment declared after `:id` would never be reached.
   @Get('filters/summary')

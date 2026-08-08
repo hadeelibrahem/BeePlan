@@ -69,6 +69,11 @@ import {
 } from './dto/task-shared.dto';
 import type { UpdateTaskDto } from './dto/update-task.dto';
 import {
+  getEligibleRandomStartCandidates,
+  selectWeightedRandomStart,
+  type RandomStartMode,
+} from './random-start.logic';
+import {
   canModifySubtask,
   filterVisibleSubtasks,
   type SubtaskView,
@@ -624,6 +629,44 @@ export class TasksService {
         ),
       ),
     );
+  }
+
+  async randomStart(
+    userId: string,
+    mode: RandomStartMode = 'anything',
+    excludeId?: string,
+  ) {
+    const tasks = await this.findAll(userId);
+    const memberRoleByTaskId = await this.getAcceptedMemberRoleMap(userId);
+    const actionableTasks = tasks.map((item) => ({
+      ...item,
+      canEdit:
+        item.userId === userId ||
+        memberRoleByTaskId.get(item.id) === 'editor' ||
+        memberRoleByTaskId.get(item.id) === 'owner',
+    }));
+    const preparedTasks = actionableTasks.map((item) => {
+      const role = item.userId === userId
+        ? 'owner' as const
+        : (memberRoleByTaskId.get(item.id) ?? 'viewer' as const);
+      return {
+        ...item,
+        // The assembled task entity historically reports false for
+        // dependenciesComplete when there are zero task dependencies. That
+        // value is useful to some older views but must not make a valid parent
+        // container block its actionable subtasks.
+        dependenciesComplete:
+          item.dependencies.length === 0 || item.dependenciesComplete,
+        subtasks: item.subtasks.map((subtask) => ({
+          ...subtask,
+          estimatedTimeMinutes: subtask.estimatedDurationMinutes,
+          canEdit: canModifySubtask(subtask, { userId, role }),
+        })),
+      };
+    });
+    const candidates = getEligibleRandomStartCandidates(preparedTasks);
+    const task = selectWeightedRandomStart(candidates, { mode, excludeId });
+    return { task, candidates, eligibleCount: candidates.length };
   }
 
   async getFilterSummary(userId: string): Promise<TaskFilterSummary> {
