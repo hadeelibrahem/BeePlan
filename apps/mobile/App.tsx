@@ -733,6 +733,8 @@ function ThemedApp() {
     return (<>
     <TasksDashboardScreen
       dashboard={summary}
+      accessToken={accessToken ?? undefined}
+      onOpenTask={(taskId) => rootNavigation?.navigate('TaskDetails', { taskId })}
       summaryLoading={summaryLoading}
       summaryError={summaryError}
       onRetrySummary={loadDashboardSummary}

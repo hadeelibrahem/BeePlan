@@ -561,6 +561,8 @@ function ThemedApp() {
           if (started) setScreen('focusSession')
         }}
         onContinueFocus={() => setScreen('focusSession')}
+        accessToken={accessToken ?? undefined}
+        onViewTaskDetails={openTaskDetails}
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
