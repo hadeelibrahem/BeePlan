@@ -9,6 +9,7 @@ import { FocusController } from './focus.controller';
 import { FocusService } from './focus.service';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { FocusRoomsModule } from '../focus-rooms/focus-rooms.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     CollaborationModule,
     GoogleCalendarModule,
     NotificationsModule,
+    FocusRoomsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

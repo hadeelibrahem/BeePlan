@@ -527,6 +527,50 @@ export const taskAttachments = pgTable(
   (table) => [index('idx_task_attachments_task_id').on(table.taskId)],
 );
 
+export const timeCapsules = pgTable(
+  'time_capsules',
+  {
+    id: id(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    message: text('message').notNull(),
+    unlockType: varchar('unlock_type', { length: 32 }).notNull(),
+    unlockAt: timestamp('unlock_at'),
+    linkedTaskId: uuid('linked_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    linkedProjectId: uuid('linked_project_id').references(() => tasks.id, { onDelete: 'set null' }),
+    status: varchar('status', { length: 20 }).notNull().default('locked'),
+    sealedAt: timestamp('sealed_at'),
+    openedAt: timestamp('opened_at'),
+    notificationSentAt: timestamp('notification_sent_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_time_capsules_user').on(table.userId),
+    index('idx_time_capsules_status').on(table.status),
+    index('idx_time_capsules_unlock_at').on(table.unlockAt),
+    index('idx_time_capsules_linked_task').on(table.linkedTaskId),
+    index('idx_time_capsules_linked_project').on(table.linkedProjectId),
+  ],
+);
+
+export const timeCapsuleAttachments = pgTable(
+  'time_capsule_attachments',
+  {
+    id: id(),
+    capsuleId: uuid('capsule_id').notNull().references(() => timeCapsules.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 16 }).notNull(), // image | video | file | audio
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    mimeType: varchar('mime_type', { length: 120 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    storageKey: text('storage_key').notNull(),
+    durationSeconds: integer('duration_seconds'),
+    createdAt: createdAt(),
+  },
+  (table) => [index('idx_time_capsule_attachments_capsule').on(table.capsuleId)],
+);
+
 export const subtasks = pgTable(
   'subtasks',
   {
@@ -772,6 +816,10 @@ export const focusSessions = pgTable(
       .notNull()
       .default('pomodoro'),
     notes: text('notes'),
+    // Set only when a room coordinates this otherwise-normal Focus session.
+    // Timing remains authoritative here; Focus Rooms never store raw timer ticks.
+    commitmentSessionId: uuid('commitment_session_id'),
+    completionReason: varchar('completion_reason', { length: 40 }),
     createdAt: createdAt(),
   },
   (table) => [
@@ -780,6 +828,201 @@ export const focusSessions = pgTable(
     index('idx_focus_sessions_task_id').on(table.taskId),
     // Powers the subtask actual-time rollup (sum of completed sessions).
     index('idx_focus_sessions_subtask_id').on(table.subtaskId),
+    index('idx_focus_sessions_commitment').on(table.commitmentSessionId),
+  ],
+);
+
+export const focusRooms = pgTable(
+  'focus_rooms',
+  {
+    id: id(),
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id'),
+    title: varchar('title', { length: 160 }).notNull(),
+    description: text('description'),
+    visibility: varchar('visibility', { length: 20 })
+      .notNull()
+      .default('public'),
+    mode: varchar('mode', { length: 20 }).notNull().default('casual'),
+    goalType: varchar('goal_type', { length: 30 }),
+    goalTarget: integer('goal_target'),
+    goalTargetMinutes: integer('goal_target_minutes'),
+    maxMembers: integer('max_members'),
+    expiresAt: timestamp('expires_at'),
+    taskTitleVisibilityDefault: boolean('task_title_visibility_default')
+      .notNull()
+      .default(false),
+    statisticsVisible: boolean('statistics_visible').notNull().default(true),
+    leaderboardEnabled: boolean('leaderboard_enabled').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_focus_rooms_discovery').on(
+      table.visibility,
+      table.mode,
+      table.expiresAt,
+    ),
+    index('idx_focus_rooms_owner').on(table.ownerUserId),
+  ],
+);
+
+export const focusRoomMembers = pgTable(
+  'focus_room_members',
+  {
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => focusRooms.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 20 }).notNull().default('member'),
+    state: varchar('state', { length: 20 }).notNull().default('preparing'),
+    joinedAt: timestamp('joined_at').notNull().defaultNow(),
+    leftAt: timestamp('left_at'),
+    anonymous: boolean('anonymous').notNull().default(false),
+    showTaskTitle: boolean('show_task_title').notNull().default(false),
+    showTimer: boolean('show_timer').notNull().default(true),
+    showStatistics: boolean('show_statistics').notNull().default(true),
+  },
+  (table) => [
+    primaryKey({ columns: [table.roomId, table.userId] }),
+    index('idx_focus_room_members_user').on(table.userId),
+    index('idx_focus_room_members_active').on(table.roomId, table.leftAt),
+  ],
+);
+
+export const focusRoomCommitmentSessions = pgTable(
+  'focus_room_commitment_sessions',
+  {
+    id: id(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => focusRooms.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    durationMinutes: integer('duration_minutes').notNull(),
+    goalLabel: varchar('goal_label', { length: 160 }),
+    breakMinutes: integer('break_minutes'),
+    startedAt: timestamp('started_at'),
+    expectedEndAt: timestamp('expected_end_at'),
+    pausedAt: timestamp('paused_at'),
+    accumulatedPausedSeconds: integer('accumulated_paused_seconds').notNull().default(0),
+    endedAt: timestamp('ended_at'),
+    endedByUserId: uuid('ended_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    endReason: varchar('end_reason', { length: 50 }),
+    collectiveEndPolicy: varchar('collective_end_policy', { length: 40 })
+      .notNull()
+      .default('any_participant'),
+    reconnectGraceSeconds: integer('reconnect_grace_seconds')
+      .notNull()
+      .default(60),
+    terminationVersion: integer('termination_version').notNull().default(0),
+    terminationCommandId: uuid('termination_command_id'),
+    reconciliationStatus: varchar('reconciliation_status', { length: 20 })
+      .notNull()
+      .default('not_required'),
+    status: varchar('status', { length: 20 }).notNull().default('lobby'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_focus_commitment_active').on(table.roomId, table.status),
+    uniqueIndex('uq_focus_commitment_command').on(table.terminationCommandId),
+  ],
+);
+
+export const focusRoomCommitmentParticipants = pgTable(
+  'focus_room_commitment_participants',
+  {
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => focusRoomCommitmentSessions.id, {
+        onDelete: 'cascade',
+      }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    acceptedAgreementAt: timestamp('accepted_agreement_at'),
+    readyAt: timestamp('ready_at'),
+    outcome: varchar('outcome', { length: 40 }),
+    leftAt: timestamp('left_at'),
+    focusedDurationMinutes: integer('focused_duration_minutes')
+      .notNull()
+      .default(0),
+    focusSessionId: uuid('focus_session_id').references(
+      () => focusSessions.id,
+      { onDelete: 'set null' },
+    ),
+    selectedTaskId: uuid('selected_task_id').references(() => tasks.id, {
+      onDelete: 'set null',
+    }),
+    selectedSubtaskId: uuid('selected_subtask_id').references(
+      () => subtasks.id,
+      { onDelete: 'set null' },
+    ),
+    reconnectDeadlineAt: timestamp('reconnect_deadline_at'),
+    recoveredDisconnect: boolean('recovered_disconnect')
+      .notNull()
+      .default(false),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.userId] }),
+    index('idx_focus_commitment_participant_user').on(table.userId),
+    uniqueIndex('uq_focus_commitment_focus_session').on(table.focusSessionId),
+  ],
+);
+
+export const focusRoomActivityEvents = pgTable(
+  'focus_room_activity_events',
+  {
+    id: id(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => focusRooms.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    eventType: varchar('event_type', { length: 50 }).notNull(),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_focus_room_events_page').on(table.roomId, table.createdAt),
+  ],
+);
+
+export const focusRoomInvitations = pgTable(
+  'focus_room_invitations',
+  {
+    id: id(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => focusRooms.id, { onDelete: 'cascade' }),
+    invitedUserId: uuid('invited_user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }),
+    invitedEmail: varchar('invited_email', { length: 255 }),
+    invitationType: varchar('invitation_type', { length: 16 })
+      .notNull()
+      .default('email'),
+    inviteCode: varchar('invite_code', { length: 80 }),
+    expiresAt: timestamp('expires_at').notNull(),
+    acceptedAt: timestamp('accepted_at'),
+    createdAt: createdAt(),
+    rejectedAt: timestamp('rejected_at'),
+    revokedAt: timestamp('revoked_at'),
+  },
+  (table) => [
+    uniqueIndex('uq_focus_room_invite_code').on(table.inviteCode),
+    index('idx_focus_room_invited_user').on(table.invitedUserId),
+    index('idx_focus_room_invited_email').on(table.roomId, table.invitedEmail),
   ],
 );
 

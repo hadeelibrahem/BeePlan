@@ -48,6 +48,7 @@ export const NOTIFICATION_TYPES = [
   'ai_dependency_completed',
   'ai_missing_assignment',
   'ai_daily_summary',
+  'time_capsule_ready',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

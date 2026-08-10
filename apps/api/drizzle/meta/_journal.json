@@ -40,43 +40,50 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1785876149047,
-      "tag": "0005_whiteboards",
+      "when": 1786032000000,
+      "tag": "0021_focus_rooms",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "7",
-      "when": 1785880000000,
-      "tag": "0021_whiteboard_assets",
+      "when": 1786118400000,
+      "tag": "0022_focus_rooms_production_integration",
       "breakpoints": true
     },
     {
       "idx": 7,
       "version": "7",
-      "when": 1785881000000,
-      "tag": "0022_whiteboard_asset_references",
+      "when": 1786204800000,
+      "tag": "0023_focus_room_email_invitations",
       "breakpoints": true
     },
     {
       "idx": 8,
       "version": "7",
-      "when": 1785882000000,
-      "tag": "0023_multiple_whiteboards",
+      "when": 1786291200000,
+      "tag": "0024_focus_room_session_goal",
       "breakpoints": true
     },
     {
       "idx": 9,
       "version": "7",
-      "when": 1785883000000,
-      "tag": "0024_whiteboard_members",
+      "when": 1786377600000,
+      "tag": "0025_focus_room_shared_timing",
       "breakpoints": true
     },
     {
       "idx": 10,
       "version": "7",
-      "when": 1786377660000,
-      "tag": "0019_ai_task_manager_notifications",
+      "when": 1786381200000,
+      "tag": "0026_time_capsules",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786384800000,
+      "tag": "0027_time_capsule_video_attachments",
       "breakpoints": true
     }
   ]

@@ -76,6 +76,7 @@ type Props = {
   onTaskUpdated?: (task: ApiTask) => void;
   focus: UseFocusSession;
   onOpenWorkspace: () => void;
+  onOpenRooms?: () => void;
 };
 
 export default function FocusScreen({
@@ -87,6 +88,7 @@ export default function FocusScreen({
   onTaskUpdated,
   focus,
   onOpenWorkspace,
+  onOpenRooms,
 }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
@@ -291,6 +293,7 @@ export default function FocusScreen({
       }
     >
       <PageHeader title="Focus Mode" subtitle="Your deep-work control center" />
+      {onOpenRooms ? <View className="mb-4 rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>Shared Focus Sessions</Text><Text className="mb-3 mt-1" style={{ color: colors.secondaryText }}>Start and finish a synchronized focus session together.</Text><PrimaryButton fullWidth onPress={onOpenRooms}>Explore sessions</PrimaryButton></View> : null}
 
       <StatsRow stats={stats} theme={theme} />
 

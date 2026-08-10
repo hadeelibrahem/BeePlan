@@ -19,6 +19,7 @@
     "railway:start": "node dist/src/main.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
+    "db:migrate:test": "node scripts/migrate-test-db.js",
     "db:studio": "drizzle-kit studio",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

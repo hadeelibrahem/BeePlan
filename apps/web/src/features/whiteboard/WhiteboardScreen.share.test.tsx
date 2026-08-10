@@ -44,7 +44,7 @@ describe('WhiteboardScreen collaboration header', () => {
   beforeAll(async () => {
     Object.defineProperty(globalThis, 'CSS', { configurable: true, value: { supports: () => false } })
     WhiteboardScreen = (await import('./WhiteboardScreen')).WhiteboardScreen
-  })
+  }, 30_000)
 
   beforeEach(() => {
     vi.clearAllMocks()

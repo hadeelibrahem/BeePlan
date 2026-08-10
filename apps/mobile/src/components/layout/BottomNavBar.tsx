@@ -50,7 +50,8 @@ export function NavigationBottomTabBar({ state, descriptors, navigation }: Botto
       navigation.navigate(route as keyof MainTabParamList)
       return
     }
-    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate(route as MoreStackRoute)
+    const parent = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()
+    if (parent) parent.navigate(route)
   }
   return (
     <>

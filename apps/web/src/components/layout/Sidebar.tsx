@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Trophy } from 'lucide-react'
 import { BeePlanLogo } from '../BeePlanLogo'
 import {
   AnalyticsIcon,
@@ -12,9 +11,7 @@ import {
   PlannerIcon,
   RemindersIcon,
   TasksIcon,
-  WhiteboardIcon,
 } from './icons'
-import { useLanguage } from '../../i18n/LanguageContext'
 
 export type SidebarPage =
   | 'dashboard'
@@ -26,10 +23,12 @@ export type SidebarPage =
   | 'notifications'
   | 'calendar'
   | 'notes'
-  | 'whiteboard'
   | 'analytics'
-  | 'achievements'
   | 'settings'
+  | 'timeCapsules'
+  | 'whiteboard'
+  | 'whiteboards'
+  | 'achievements'
 
 export type SidebarNavHandlers = {
   onNavigateDashboard?: () => void
@@ -41,10 +40,9 @@ export type SidebarNavHandlers = {
   onNavigateNotifications?: () => void
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
-  onNavigateWhiteboard?: () => void
   onNavigateAnalytics?: () => void
-  onNavigateAchievements?: () => void
   onNavigateSettings?: () => void
+  onNavigateTimeCapsules?: () => void
 }
 
 function BellIcon() {
@@ -62,10 +60,6 @@ function SettingsIcon() {
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
-}
-
-function AchievementIcon({ className = 'h-5 w-5' }: { className?: string }) {
-  return <Trophy className={className} strokeWidth={1.8} aria-hidden="true" />
 }
 
 type SidebarProps = SidebarNavHandlers & {
@@ -93,7 +87,7 @@ const NAV_GROUPS = [
       { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
       { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
       { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
-      { page: 'whiteboard', labelKey: 'navigation.whiteboard', Icon: WhiteboardIcon, handler: 'onNavigateWhiteboard' },
+      { page: 'timeCapsules', label: 'Time Capsule', Icon: CalendarIcon, handler: 'onNavigateTimeCapsules' },
       { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
     ]
   },
@@ -102,26 +96,33 @@ const NAV_GROUPS = [
     items: [
       { page: 'notifications', label: 'Notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
       { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
-      { page: 'achievements', label: 'Achievement Museum', Icon: AchievementIcon, handler: 'onNavigateAchievements' },
       { page: 'settings', label: 'Settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
     ]
   }
 ] as const
 
 export function Sidebar({ active, panelTitle, panelCaption, panelPercent, mobileOpen, onCloseMobile, ...nav }: SidebarProps) {
-  const sidebarClassName = mobileOpen
-    ? 'bp-sidebar-drawer fixed inset-y-0 start-0 z-[51] flex w-[230px] max-w-[85vw] animate-[beeplanFadeIn_200ms_ease-out] flex-col border-r border-white/5 bg-slate-900 shadow-xl'
-    : 'bp-sidebar sticky top-0 hidden h-screen w-[230px] shrink-0 flex-col border-r border-white/5 bg-slate-900/35 shadow-[8px_0_18px_rgba(0,0,0,0.08)] lg:flex'
-
   return (
     <>
-      <aside className={sidebarClassName}>
-        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} onNavigate={mobileOpen ? onCloseMobile : undefined} />
+      {/* Desktop Sidebar: full-height, 230px, flex column */}
+      <aside className="bp-sidebar sticky top-0 hidden h-screen w-[230px] shrink-0 flex-col border-r border-white/5 bg-slate-900/35 lg:flex shadow-[8px_0_18px_rgba(0,0,0,0.08)]">
+        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} />
       </aside>
 
+      {/* Mobile Drawer Sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-[beeplanFadeIn_150ms_ease-out]" onClick={onCloseMobile} />
+          <aside className="bp-sidebar-drawer absolute inset-y-0 start-0 w-[230px] max-w-[85vw] animate-[beeplanFadeIn_200ms_ease-out] border-r border-white/5 bg-slate-900 flex flex-col">
+            <SidebarContent
+              active={active}
+              panelTitle={panelTitle}
+              panelCaption={panelCaption}
+              panelPercent={panelPercent}
+              nav={nav}
+              onNavigate={onCloseMobile}
+            />
+          </aside>
         </div>
       )}
     </>
@@ -143,8 +144,6 @@ function SidebarContent({
   nav: SidebarNavHandlers
   onNavigate?: () => void
 }) {
-  const { t } = useLanguage()
-
   return (
     <div className="relative flex h-full min-h-0 flex-col py-0">
       {/* Logo container section - aligns perfectly with the h-16 main header bar */}
@@ -175,16 +174,16 @@ function SidebarContent({
               {group.title}
             </div>
             <div className="space-y-1.5">
-              {group.items.map((item) => (
+              {group.items.map(({ page, label, Icon, handler }) => (
                 <SidebarNavItem
-                  key={item.page}
-                  page={item.page}
+                  key={page}
+                  page={page}
                   beeTarget
-                  active={active === item.page}
-                  icon={<item.Icon />}
-                  label={'labelKey' in item ? t(item.labelKey) : item.label}
+                  active={active === page}
+                  icon={<Icon />}
+                  label={label}
                   onClick={() => {
-                    nav[item.handler]?.()
+                    nav[handler]?.()
                     onNavigate?.()
                   }}
                 />
