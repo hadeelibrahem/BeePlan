@@ -1,6 +1,7 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
+import { describeDatabaseError } from '../db/database-error';
 import {
   notificationDeliveries,
   notifications,
@@ -31,7 +32,11 @@ export type CreateNotificationInput = {
   data?: Record<string, unknown> | null;
 };
 
-export type NotificationCreateResult = { inserted: number; skipped: number };
+export type NotificationCreateResult = {
+  inserted: number;
+  skipped: number;
+  reason?: 'preference' | 'duplicate';
+};
 
 export type NotificationDeliveryIdentity = {
   entityType: string;
@@ -44,6 +49,7 @@ const DEFAULT_PAGE_SIZE = 20;
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
   constructor(
     private readonly databaseService: DatabaseService,
     @Optional() private readonly pushNotifications?: PushNotificationsService,
@@ -111,6 +117,13 @@ export class NotificationsService {
       .insert(notifications)
       .values(allowed)
       .returning({ id: notifications.id });
+    this.logger.log(JSON.stringify({
+      event: 'inbox_notification_created',
+      count: inserted.length,
+      type: allowed[0]?.notificationType,
+      userId: allowed[0]?.userId,
+      notificationIds: inserted.map((row) => row.id),
+    }));
     for (let index = 0; index < inserted.length; index += 1) {
       const input = allowed[index];
       if (input)
@@ -124,7 +137,13 @@ export class NotificationsService {
             actorId: input.actorId,
             data: input.data as Record<string, unknown> | null,
           })
-          .catch(() => undefined);
+          .catch((error) => {
+            this.logger.warn(JSON.stringify({
+              event: 'push_job_enqueue_failed',
+              notificationId: inserted[index].id,
+              ...describeDatabaseError(error, 'query'),
+            }));
+          });
     }
     return { inserted: inserted.length, skipped };
   }
@@ -145,7 +164,7 @@ export class NotificationsService {
     identity: NotificationDeliveryIdentity,
   ): Promise<NotificationCreateResult> {
     if (!(await this.isAllowed(input.userId, input.type, input.taskId))) {
-      return { inserted: 0, skipped: 1 };
+      return { inserted: 0, skipped: 1, reason: 'preference' };
     }
     const deliveryKey =
       identity.key ??
@@ -156,20 +175,57 @@ export class NotificationsService {
         identity.entityId,
         identity.triggerAt.toISOString(),
       ].join(':');
-    const [claimed] = await this.db
-      .insert(notificationDeliveries)
-      .values({
+    const result = await this.db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .insert(notificationDeliveries)
+        .values({
+          userId: input.userId,
+          notificationType: input.type,
+          entityType: identity.entityType,
+          entityId: identity.entityId,
+          triggerAt: identity.triggerAt,
+          deliveryKey,
+        })
+        .onConflictDoNothing({ target: notificationDeliveries.deliveryKey })
+        .returning({ id: notificationDeliveries.id });
+      if (!claimed)
+        return { inserted: 0, skipped: 1, reason: 'duplicate' } as const;
+      const [notification] = await tx
+        .insert(notifications)
+        .values({
+          userId: input.userId,
+          notificationType: input.type,
+          title: input.title,
+          body: input.body,
+          taskId: input.taskId ?? null,
+          actorId: input.actorId ?? null,
+          data: input.priority
+            ? { ...(input.data ?? {}), priority: input.priority }
+            : (input.data ?? null),
+        })
+        .returning({ id: notifications.id });
+      if (!notification) throw new Error('Inbox notification insert returned no row.');
+      await this.pushNotifications?.enqueueForNotification(
+        notification.id,
+        input,
+        tx,
+      );
+      return {
+        inserted: 1,
+        skipped: 0,
+        notificationId: notification.id,
+      } as const;
+    });
+    if ('notificationId' in result) {
+      this.logger.log(JSON.stringify({
+        event: 'inbox_notification_created',
+        count: 1,
+        type: input.type,
         userId: input.userId,
-        notificationType: input.type,
-        entityType: identity.entityType,
-        entityId: identity.entityId,
-        triggerAt: identity.triggerAt,
-        deliveryKey,
-      })
-      .onConflictDoNothing({ target: notificationDeliveries.deliveryKey })
-      .returning({ id: notificationDeliveries.id });
-    if (!claimed) return { inserted: 0, skipped: 1 };
-    return this.create(input);
+        notificationIds: [result.notificationId],
+      }));
+    }
+    return result;
   }
 
   private async isAllowed(

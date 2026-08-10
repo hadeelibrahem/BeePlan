@@ -14,6 +14,7 @@ import {
 } from './daily-motivation.logic';
 
 type CachedMotivation = { fingerprint: string; expiresAt: number; response: DailyMotivationResponse };
+type MotivationRequest = { systemPrompt: string; summary: Record<string, unknown> };
 
 export type DailyMotivationResponse = {
   message: string;
@@ -27,6 +28,7 @@ export type DailyMotivationResponse = {
 export class DailyMotivationService {
   private readonly logger = new Logger(DailyMotivationService.name);
   private readonly cache = new Map<string, CachedMotivation>();
+  private readonly inFlight = new Map<string, Promise<string | null>>();
   private readonly cacheMs = 10 * 60 * 1000;
 
   constructor(private readonly databaseService: DatabaseService, private readonly aiService: AiService) {}
@@ -47,17 +49,13 @@ export class DailyMotivationService {
 
     let source: 'ai' | 'fallback' = 'fallback';
     let message = fallbackMotivation(summary, language);
-    try {
-      const candidate = await this.aiService.generateDailyMotivation({
-        systemPrompt: DAILY_MOTIVATION_SYSTEM_PROMPT,
-        summary: { localDate: boundaries.localDate, localTime: new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now), language, ...summary },
-      });
-      if (validateMotivationMessage(candidate)) {
-        message = candidate.trim();
-        source = 'ai';
-      }
-    } catch (error) {
-      this.logger.warn(`Daily motivation AI unavailable: ${error instanceof Error ? error.message : 'unknown error'}`);
+    const candidate = await this.generateMotivationOnce(cacheKey, {
+      systemPrompt: DAILY_MOTIVATION_SYSTEM_PROMPT,
+      summary: { localDate: boundaries.localDate, localTime: new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now), language, ...summary },
+    });
+    if (candidate && validateMotivationMessage(candidate)) {
+      message = candidate.trim();
+      source = 'ai';
     }
 
     const response: DailyMotivationResponse = {
@@ -69,6 +67,24 @@ export class DailyMotivationService {
     };
     this.cache.set(cacheKey, { fingerprint, expiresAt: now.getTime() + this.cacheMs, response });
     return response;
+  }
+
+  private async generateMotivationOnce(cacheKey: string, input: MotivationRequest) {
+    const existing = this.inFlight.get(cacheKey);
+    if (existing) return existing;
+
+    const request = this.aiService
+      .generateDailyMotivation(input)
+      .catch((error) => {
+        this.logger.warn(`Daily motivation AI unavailable: ${error instanceof Error ? error.message : 'unknown error'}`);
+        return null;
+      })
+      .finally(() => {
+        if (this.inFlight.get(cacheKey) === request) this.inFlight.delete(cacheKey);
+      });
+
+    this.inFlight.set(cacheKey, request);
+    return request;
   }
 
   private async getSummary(userId: string, localDate: string, start: Date, end: Date): Promise<DailyMotivationSummary> {

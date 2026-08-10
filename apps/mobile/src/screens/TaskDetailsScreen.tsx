@@ -38,6 +38,7 @@ import {
   SectionCard,
 } from '../components/layout';
 import { useTheme } from '../theme/useTheme';
+import { apiFetch, readJsonOrThrow } from '../lib/apiClient';
 import { CollaborationPanel } from '../features/collaboration/components/CollaborationPanel';
 import { SharedBadge } from '../features/collaboration/components/SharedBadge';
 import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
@@ -58,6 +59,8 @@ type Props = {
   onDelete?: () => Promise<void> | void;
   onMarkDone?: () => void;
   onOpenAiCollaboration?: () => void;
+  onAddToAchievement?: () => void;
+  onViewAchievement?: (achievementId: string) => void;
   initialCommentId?: string;
 };
 
@@ -74,6 +77,8 @@ export default function TaskDetailsScreen({
   onEdit,
   onDelete,
   onOpenAiCollaboration,
+  onAddToAchievement,
+  onViewAchievement,
   initialCommentId,
 }: Props) {
   const { theme } = useTheme();
@@ -91,6 +96,8 @@ export default function TaskDetailsScreen({
   );
   const [attachmentItems, setAttachmentItems] = useState<ApiTaskAttachment[]>([]);
   const [error, setError] = useState('');
+  const [linkedAchievementId, setLinkedAchievementId] = useState<string | null>(null);
+  useEffect(() => { if (status !== 'Done' || !accessToken || !task) { setLinkedAchievementId(null); return; } let active = true; void apiFetch('/achievements', { headers: { Authorization: `Bearer ${accessToken}` } }).then((response) => readJsonOrThrow<Array<{ id: string; relatedTaskId?: string | null }>>(response, '/achievements')).then((all) => { if (active) setLinkedAchievementId(all.find((item) => item.relatedTaskId === task.id)?.id ?? null); }).catch(() => undefined); return () => { active = false; }; }, [accessToken, status, task?.id]);
   const onDeleteRef = useRef(onDelete);
   onDeleteRef.current = onDelete;
   const deleteConfirmationRef = useRef<ReturnType<typeof createTaskDeleteConfirmationController> | null>(null);
@@ -247,6 +254,7 @@ export default function TaskDetailsScreen({
             <OutlineButton size="sm" onPress={() => setIsStatusSheetVisible(true)} className="flex-1">
               Status
             </OutlineButton>
+            {status === 'Done' && linkedAchievementId && onViewAchievement ? <OutlineButton size="sm" onPress={() => onViewAchievement(linkedAchievementId)} className="flex-1">View Museum</OutlineButton> : status === 'Done' && onAddToAchievement ? <OutlineButton size="sm" onPress={onAddToAchievement} className="flex-1">Museum</OutlineButton> : null}
             <PrimaryButton size="sm" onPress={onEdit} className="flex-1">
               Edit Task
             </PrimaryButton>

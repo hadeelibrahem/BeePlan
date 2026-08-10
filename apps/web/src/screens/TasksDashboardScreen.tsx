@@ -18,6 +18,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { useTheme } from "../theme/ThemeContext";
 import type { DashboardRecommendation, TodayDashboard } from "../lib/tasksApi";
 import { focusParentLabel, focusPrimaryTitle } from "../lib/focusDisplay";
+import { RandomStartCard } from "../components/RandomStartCard";
 
 type Props = SidebarNavHandlers & {
   dashboard: TodayDashboard | null;
@@ -30,9 +31,11 @@ type Props = SidebarNavHandlers & {
   onCreateTaskAi?: () => void;
   onCreateReminder?: () => void;
   onViewTaskDetails?: (taskId: string) => void;
+  onOpenRandomStart?: () => void;
   onSignOut?: () => void;
   onStartFocus: (recommendation: DashboardRecommendation) => Promise<void>;
   onContinueFocus: () => void;
+  accessToken?: string;
 };
 
 export default function TasksDashboardScreen({
@@ -44,6 +47,10 @@ export default function TasksDashboardScreen({
   onSignOut,
   onStartFocus,
   onContinueFocus,
+  accessToken,
+  onCreateTask,
+  onViewTaskDetails,
+  onOpenRandomStart,
   ...nav
 }: Props) {
   const { t, toggleLanguage } = useLanguage();
@@ -90,6 +97,7 @@ export default function TasksDashboardScreen({
         ) : dashboard ? (
           <main className="space-y-4 pb-6 xl:space-y-5 2xl:space-y-6">
             <Greeting dashboard={dashboard} />
+            {accessToken && onOpenRandomStart ? <RandomStartCard onOpen={onOpenRandomStart} /> : null}
             <KpiRow dashboard={dashboard} />
             <Hero
               dashboard={dashboard}

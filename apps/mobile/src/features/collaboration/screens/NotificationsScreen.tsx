@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { BottomNavBar, MobileIcon, PrimaryButton, ScreenLayout } from '../../../components/layout';
@@ -39,10 +39,15 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
   const [banner, setBanner] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadInFlightRef = useRef(false);
+  const loadMoreInFlightRef = useRef(false);
   const [search, setSearch] = useState('');
   const [readFilter, setReadFilter] = useState<NotificationReadFilter>('all');
 
   const load = useCallback(async () => {
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
     setLoadError(false);
     try {
       const [invites, notifs] = await Promise.all([getMyInvitations(), getNotifications(1, 20)]);
@@ -52,6 +57,8 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
       setPage(1);
     } catch {
       setLoadError(true);
+    } finally {
+      loadInFlightRef.current = false;
     }
   }, []);
 
@@ -109,6 +116,9 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
   }
 
   async function loadMore() {
+    if (loadMoreInFlightRef.current || loadInFlightRef.current || !hasMore) return;
+    loadMoreInFlightRef.current = true;
+    setLoadingMore(true);
     try {
       const next = await getNotifications(page + 1, 20);
       setNotifications((prev) => [...(prev ?? []), ...next.items]);
@@ -116,6 +126,9 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
       setPage((p) => p + 1);
     } catch {
       /* ignore */
+    } finally {
+      loadMoreInFlightRef.current = false;
+      setLoadingMore(false);
     }
   }
 
@@ -308,10 +321,8 @@ export function NotificationsScreen({ onBack, onSignOut, onOpenNotification, onU
                 </Pressable>
               ))}
               {hasMore ? (
-                <Pressable onPress={() => void loadMore()} className="items-center py-2">
-                  <Text style={{ color: colors.secondaryText }} className="text-xs font-semibold">
-                    Load more
-                  </Text>
+                <Pressable onPress={() => void loadMore()} disabled={loadingMore} className="items-center py-2">
+                  {loadingMore ? <ActivityIndicator color={colors.accent} /> : <Text style={{ color: colors.secondaryText }} className="text-xs font-semibold">Load more</Text>}
                 </Pressable>
               ) : null}
             </View>

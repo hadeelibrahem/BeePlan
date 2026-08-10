@@ -143,24 +143,43 @@ export default function AiTaskBuilderScreen({
 
     try {
       const totalMinutes = plan.subtasks.reduce((sum, subtask) => sum + subtask.estimatedMinutes, 0)
+      const sessions = [...plan.focusSessions].sort((a, b) => a.startTime.localeCompare(b.startTime))
+      const sessionFor = (title: string) => sessions.filter((session) => session.relatedSubtaskTitle === title)
+      const firstSession = sessions[0]
+      const lastSession = sessions[sessions.length - 1]
       const createdTask = await onSaveTask?.({
         title: plan.mainTask.title.trim(),
         description: plan.mainTask.description,
         priority: plan.mainTask.priority,
         status: 'todo',
         dueDate: plan.mainTask.dueDate ?? undefined,
+        scheduledDate: firstSession?.startTime.slice(0, 10),
+        scheduledStartTime: firstSession?.startTime.slice(11, 16),
+        scheduledEndTime: lastSession?.endTime.slice(11, 16),
         estimatedTimeMinutes: totalMinutes,
-        reminderEnabled: true,
-        reminderBeforeMinutes: 30,
+        reminderEnabled: plan.reminders.length > 0,
+        reminderBeforeMinutes: plan.reminders.length > 0 ? 30 : undefined,
         isFocusTask: plan.focusSessions.length > 0,
-        subtasks: plan.subtasks.map((subtask) => ({
-          title: subtask.title,
-          isDone: false,
-          orderIndex: subtask.order,
-          // The plan's Focus choice applies to the executable units it creates,
-          // not only to their parent task.
-          isFocusTask: plan.focusSessions.length > 0,
-        })),
+        subtasks: plan.subtasks.map((subtask) => {
+          const subtaskSessions = sessionFor(subtask.title)
+          const first = subtaskSessions[0]
+          const last = subtaskSessions[subtaskSessions.length - 1]
+          return {
+            title: subtask.title,
+            isDone: false,
+            orderIndex: subtask.order,
+            description: subtask.description,
+            priority: subtask.priority,
+            startDate: subtask.startDate ?? first?.startTime,
+            dueDate: subtask.dueDate ?? last?.endTime,
+            scheduledDate: subtask.scheduledDate ?? first?.startTime?.slice(0, 10),
+            scheduledStartTime: subtask.scheduledStartTime ?? first?.startTime?.slice(11, 16),
+            scheduledEndTime: subtask.scheduledEndTime ?? last?.endTime?.slice(11, 16),
+            estimatedDurationMinutes: subtask.estimatedMinutes,
+            dependencyTitles: subtask.dependencyTitles,
+            isFocusTask: subtask.isFocusTask,
+          }
+        }),
       })
 
       if (!createdTask) return
@@ -546,7 +565,9 @@ function PlanPreview({
             <MetaChip label={`Due: ${formatDate(plan.mainTask.dueDate)}`} />
             <MetaChip label={`Priority: ${plan.mainTask.priority}`} tone={plan.mainTask.priority} />
             <MetaChip label={`Est. total: ${formatHours(totalMinutes)}`} />
+            <MetaChip label={plan.mode === 'scheduledPlan' ? 'Scheduled plan' : 'Structure only'} />
           </div>
+          {plan.schedulingNeedsInput?.length ? <p className="mt-2 text-xs font-semibold text-amber-300">Scheduling needs: {plan.schedulingNeedsInput.join(', ')}.</p> : null}
         </div>
       )}
 

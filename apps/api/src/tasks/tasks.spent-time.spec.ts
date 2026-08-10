@@ -35,7 +35,7 @@ function makeDb(config: DbConfig) {
     return [];
   };
 
-  const db = {
+  const dbCore = {
     select: (_cols?: unknown) => ({
       from: (table: unknown) => chain(rowsFor(table)),
     }),
@@ -51,6 +51,11 @@ function makeDb(config: DbConfig) {
         return { where: () => Promise.resolve(undefined) };
       },
     }),
+  };
+  const db = {
+    ...dbCore,
+    transaction: (callback: (tx: typeof dbCore) => Promise<unknown>) =>
+      callback(dbCore),
   };
 
   return { db, inserts, updates };

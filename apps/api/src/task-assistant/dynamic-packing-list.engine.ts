@@ -22,6 +22,8 @@ type PackingRule = {
   priority: AssistantPriority;
   contexts: string[];
   reason: string;
+  evidenceType?: PreparationSuggestion['evidenceType'];
+  when?: (context: ClassifiedTaskContext) => boolean;
 };
 
 const RULES: PackingRule[] = [
@@ -31,7 +33,9 @@ const RULES: PackingRule[] = [
     category: 'electronics',
     priority: 'medium',
     contexts: ['travel', 'flight', 'university'],
-    reason: 'This task may require powered devices.',
+    reason: 'The task mentions a device or charger that should be available.',
+    evidenceType: 'text_evidence',
+    when: (context) => /\b(laptop|charger|camera|tablet|phone)\b/i.test(context.text),
   },
   {
     type: 'packing_medication',
@@ -73,8 +77,10 @@ export class DynamicPackingListEngine {
     ]);
     const output = RULES.filter(
       (rule) =>
-        rule.contexts.some((value) => contexts.has(value as never)) &&
-        !excludedTypes.has(rule.type),
+        (rule.contexts.some((value) => contexts.has(value as never)) || rule.when?.(context)) &&
+        !excludedTypes.has(rule.type) &&
+        (preferences.travelAdviceEnabled !== false ||
+          !rule.contexts.some((value) => ['travel', 'flight'].includes(value))),
     )
       .filter(
         (rule) => rule.type !== 'packing_passport' || isInternational(context),
@@ -82,15 +88,20 @@ export class DynamicPackingListEngine {
       .filter(
         (rule) =>
           rule.type !== 'packing_medication' ||
-          preferences.medicationAdviceEnabled,
+          preferences.medicationAdviceEnabled !== false,
       )
       .filter(
         (rule) =>
           rule.type !== 'packing_charger' ||
-          preferences.electronicsAdviceEnabled,
+          preferences.electronicsAdviceEnabled !== false,
       )
       .map((rule) => item(context.taskId, rule, null));
-    if (facts.tripDays && !excludedTypes.has('packing_clothes'))
+    if (
+      facts.tripDays &&
+      preferences.travelAdviceEnabled !== false &&
+      preferences.clothingAdviceEnabled !== false &&
+      !excludedTypes.has('packing_clothes')
+    )
       output.push(
         item(
           context.taskId,
@@ -106,6 +117,8 @@ export class DynamicPackingListEngine {
         ),
       );
     else if (
+      preferences.travelAdviceEnabled !== false &&
+      preferences.clothingAdviceEnabled !== false &&
       ['travel', 'flight'].some((value) => contexts.has(value as never)) &&
       !excludedTypes.has('packing_clothes')
     )
@@ -126,7 +139,8 @@ export class DynamicPackingListEngine {
       );
     if (
       facts.cold &&
-      preferences.clothingAdviceEnabled &&
+      preferences.weatherAdviceEnabled !== false &&
+      preferences.clothingAdviceEnabled !== false &&
       !excludedTypes.has('packing_warm_layers')
     )
       output.push(
@@ -145,6 +159,7 @@ export class DynamicPackingListEngine {
       );
     if (
       facts.rain &&
+      preferences.weatherAdviceEnabled !== false &&
       preferences.umbrellaAdviceEnabled &&
       !excludedTypes.has('packing_rain_protection')
     )
@@ -193,9 +208,7 @@ function item(
     description: rule.title,
     reason: rule.reason,
     evidence: {},
-    evidenceType: rule.reason.startsWith('Verified')
-      ? 'verified_fact'
-      : 'general_preparation',
+    evidenceType: rule.evidenceType ?? (rule.reason.startsWith('Verified') ? 'verified_fact' : 'general_preparation'),
     category: rule.category,
     priority: rule.priority,
     quantity,

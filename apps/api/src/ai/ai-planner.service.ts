@@ -9,6 +9,7 @@ import {
   taskDependencies,
   taskMembers,
   tasks,
+  plannerDailySelections,
 } from '../db/schema';
 import { isSubtaskOwnedByUser } from '../tasks/subtask-ownership';
 import { PlannerAcceptanceService } from './planner/planner-acceptance.service';
@@ -20,17 +21,19 @@ import { PlannerSchedulerEngine } from './planner/planner-scheduler-engine';
 import { detectScheduleConflicts } from './planner/schedule-conflicts';
 import { findTaskTimeConflicts, type ScheduledTaskCandidate } from '../tasks/task-schedule-conflicts';
 import {
-  currentTimeString,
-  isSameLocalDate,
   isTime,
   timeString,
   toMinutes,
+  dateKeyInTimeZone,
+  isAfterUserDay,
+  timeStringInTimeZone,
 } from './planner/planner.util';
 import type {
   DailyPlan,
   PlannerContext,
   PlannerReminder,
   PlannerRequest,
+  PlannerSelectionItem,
   PlannerTask,
   ReasoningResult,
   WorkingHours,
@@ -57,7 +60,7 @@ type SubtaskDependencyRow = typeof subtaskDependencies.$inferSelect;
  * schedules those subtasks in place of the parent task itself.
  */
 function isSchedulableSubtask(row: SubtaskRow): boolean {
-  return !row.isDone && row.status !== 'done' && row.status !== 'missed';
+  return !row.isDone && row.status !== 'done';
 }
 
 const DEFAULT_WORKING_HOURS: WorkingHours = { start: '08:00', end: '21:00' };
@@ -95,11 +98,21 @@ export class AiPlannerService {
   ) {}
 
   async generateDailyPlan(userId: string, request: PlannerRequest = {}): Promise<DailyPlan> {
+    const requestId = request.requestId ?? `planner-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.logger.log(`[planner:${requestId}] generate start pid=${process.pid} date=${request.date ?? 'auto'} timezone=${request.timezone ?? 'UTC'}`);
+    if (request.regenerate) this.logger.log(`[planner:${requestId}] regeneration ignores persisted unlocked task schedules; explicit locked items remain fixed`);
     // 1. Collect context.
     const context = await this.collectContext(userId, request);
 
     // 2. Rule Engine prepares constraints.
     const constraints = this.ruleEngine.prepareConstraints(context);
+
+    // Explicit selection is applied after the normal eligibility pass. This
+    // keeps permission/date/dependency checks centralized in the API and means
+    // stale selections can never bypass today's planner rules.
+    const selectionResult = request.mode
+      ? await this.applyDailySelection(userId, context, constraints, request)
+      : { unscheduledSelectedItems: [], selectedKeys: new Set<string>() };
 
     // 3. Reasoning Engine ranks + explains (AI first, deterministic fallback).
     let source: 'ai' | 'fallback' = 'ai';
@@ -141,7 +154,112 @@ export class AiPlannerService {
     }));
     plan.taskConflicts = scheduledTasks.flatMap((task, index) => findTaskTimeConflicts(task, scheduledTasks.slice(index + 1)));
     plan.travelFeasibilityConflicts = await this.detectTravelFeasibility(plan);
+    const overflowSelected = plan.unscheduled.filter((item) => selectionResult.selectedKeys.has(
+      `${item.taskId ?? ''}:${item.subtaskId ?? ''}`,
+    ));
+    if (selectionResult.unscheduledSelectedItems.length || overflowSelected.length) {
+      plan.unscheduledSelectedItems = [...selectionResult.unscheduledSelectedItems, ...overflowSelected];
+    }
+    plan.generationRequestId = requestId;
+    const generatedItems = Object.values(plan.sections).flat();
+    this.logger.log(`[planner:${requestId}] generate response pid=${process.pid} sessions=${generatedItems.filter((item) => item.type === 'task').length} ranges=${generatedItems.filter((item) => item.type === 'task').map((item) => `${item.startTime}-${item.endTime}`).join(',')} scheduled=${plan.capacity.scheduledMinutes} requested=${plan.capacity.requestedMinutes}`);
     return plan;
+  }
+
+  async getDailyCandidates(userId: string, request: PlannerRequest = {}) {
+    const context = await this.collectContext(userId, request);
+    const constraints = this.ruleEngine.prepareConstraints(context);
+    const selected = await this.loadDailySelection(userId, context.date);
+    const items = context.tasks.map((task) => candidateToSelectionItem(task, context.date, context.timezone ?? 'UTC', constraints));
+    return {
+      date: context.date,
+      timezone: context.timezone,
+      availableMinutes: constraints.capacity.workBudgetMinutes,
+      selectedItems: selected,
+      items,
+      blockedItems: items.filter((item) => !item.isManuallySelectable),
+    };
+  }
+
+  async saveDailySelection(userId: string, input: unknown) {
+    const body = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+    const date = normalizeDate(typeof body.date === 'string' ? body.date : undefined);
+    const timezone = typeof body.timezone === 'string' ? body.timezone : 'UTC';
+    const requested = normalizeSelectionItems(body.selectedItems);
+    const candidates = await this.getDailyCandidates(userId, { date, timezone });
+    const allowed = new Set(candidates.items.filter((item) => item.isManuallySelectable).map((item) => selectionKey(item)));
+    const valid = preferChildSelections(requested).filter((item) => allowed.has(selectionKey(item)));
+    await this.databaseService.db.delete(plannerDailySelections)
+      .where(and(eq(plannerDailySelections.userId, userId), eq(plannerDailySelections.plannerDate, date)));
+    if (valid.length) {
+      await this.databaseService.db.insert(plannerDailySelections).values(valid.map((item) => ({
+        userId,
+        plannerDate: date,
+        taskId: item.taskId,
+        subtaskId: item.subtaskId ?? null,
+        selectionSource: 'user',
+      })));
+    }
+    return { date, timezone, selectedItems: valid, rejectedItems: requested.filter((item) => !valid.some((saved) => selectionKey(saved) === selectionKey(item))) };
+  }
+
+  private async loadDailySelection(userId: string, date: string): Promise<PlannerSelectionItem[]> {
+    const rows = await this.databaseService.db.select({
+      taskId: plannerDailySelections.taskId,
+      subtaskId: plannerDailySelections.subtaskId,
+    }).from(plannerDailySelections).where(and(
+      eq(plannerDailySelections.userId, userId),
+      eq(plannerDailySelections.plannerDate, date),
+    ));
+    return rows.map((row) => ({ taskId: row.taskId, subtaskId: row.subtaskId }));
+  }
+
+  private async applyDailySelection(
+    userId: string,
+    context: PlannerContext,
+    constraints: ReturnType<PlannerRuleEngine['prepareConstraints']>,
+    request: PlannerRequest,
+  ) {
+    const selected = request.selectedItems
+      ? preferChildSelections(request.selectedItems)
+      : await this.loadDailySelection(userId, context.date);
+    const selectedKeys = new Set(selected.map(selectionKey));
+    const eligible = constraints.schedulableTasks;
+    const displayItems = context.tasks.map((task) => candidateToSelectionItem(task, context.date, context.timezone ?? 'UTC', constraints));
+    const manuallySelectableKeys = new Set(displayItems.filter((item) => item.isManuallySelectable).map((item) => selectionKey(item)));
+    const selectedEligible = eligible.filter((task) => selectedKeys.has(taskSelectionKey(task)));
+    const selectedManual = context.tasks.filter((task) => selectedKeys.has(taskSelectionKey(task)) && manuallySelectableKeys.has(taskSelectionKey(task)));
+    const invalid = selected.filter((item) => !manuallySelectableKeys.has(selectionKey(item)));
+    const selectedTaskIds = new Set(selectedManual.map((task) => task.id));
+    const invalidItems = invalid.map((item) => ({
+      taskId: item.taskId,
+      subtaskId: item.subtaskId ?? undefined,
+      title: 'Selected work',
+      reason: 'This selected item is no longer selectable today (completed, blocked, or inaccessible).',
+      status: 'BLOCKED_DEPENDENCY' as const,
+      reasonCode: 'dependency_not_completed' as const,
+      estimatedMinutes: 0,
+      suggestedDate: context.date,
+    }));
+
+    const chosen = request.mode === 'selectedPlusAutoFill'
+      ? context.tasks.filter((task) => selectedKeys.has(taskSelectionKey(task)) || (!selectedKeys.has(taskSelectionKey(task)) && eligible.some((candidate) => candidate.id === task.id && candidate.scheduleReason === 'backlog')))
+      : selectedManual;
+    for (const task of chosen) {
+      const explicitlySelected = selectedKeys.has(taskSelectionKey(task));
+      task.selectionSource = explicitlySelected ? 'user' : 'autoFill';
+      if (!task.scheduleReason) task.scheduleReason = 'scheduled_today';
+      // An explicitly selected item represents an instruction to plan its
+      // complete remaining effort today. The rule engine's daily slice is
+      // useful for automatic deadline spreading, but must not turn a selected
+      // 135-minute subtask into a single default work block.
+      if (explicitlySelected) task.todayRequiredMinutes = task.estimatedMinutes;
+      else if (!task.todayRequiredMinutes) task.todayRequiredMinutes = task.estimatedMinutes;
+    }
+    const chosenIds = new Set(chosen.map((task) => task.id));
+    constraints.blockedTasks = constraints.blockedTasks.filter((entry) => !chosenIds.has(entry.task.id));
+    constraints.schedulableTasks = chosen;
+    return { unscheduledSelectedItems: invalidItems, selectedKeys: new Set(selectedManual.map(taskSelectionKey)) };
   }
 
   private async detectTravelFeasibility(plan: DailyPlan) {
@@ -160,11 +278,16 @@ export class AiPlannerService {
 
   /** Step 1 — gather everything the planner needs into a single context object. */
   private async collectContext(userId: string, request: PlannerRequest): Promise<PlannerContext> {
-    const date = normalizeDate(request.date);
+    const timezone = typeof request.timezone === 'string' && request.timezone.trim()
+      ? request.timezone.trim()
+      : 'UTC';
+    const date = request.date
+      ? normalizeDate(request.date)
+      : dateKeyInTimeZone(new Date(), timezone);
     const requestedHours = normalizeWorkingHours(request.workingHours);
     const breaks = request.breaks?.length ? request.breaks : DEFAULT_BREAKS;
 
-    const [taskRows, reminderRows, dependencyRows, preferences, commitmentWindows] =
+    let [taskRows, reminderRows, dependencyRows, preferences, commitmentWindows] =
       await Promise.all([
         this.databaseService.db
           .select()
@@ -180,6 +303,7 @@ export class AiPlannerService {
         // reduced to hard busy intervals for the date's weekday.
         this.commitmentsService.getBusyWindowsForDate(userId, date),
       ]);
+    taskRows = taskRows.filter((task) => task.status !== 'done');
 
     // The focus window is a hard part of the user's availability: extend the
     // working day so it always covers their configured focus hours. Without
@@ -243,7 +367,7 @@ export class AiPlannerService {
 
     const plannerTasks: PlannerTask[] = units.map((unit) =>
       unit.kind === 'task'
-        ? toPlannerTask(unit.task, dependencyRows, estimates.get(unit.task.id))
+          ? toPlannerTask(unit.task, dependencyRows, estimates.get(unit.task.id), request.regenerate === true && !request.lockedItems?.some((item) => item.taskId === unit.task.id))
         : toPlannerSubtask(
             unit.task,
             unit.subtask,
@@ -251,18 +375,19 @@ export class AiPlannerService {
             estimates.get(unit.subtask.id),
             orderDepsBySubtask.get(unit.subtask.id) ?? [],
             blockingDepsBySubtask.get(unit.subtask.id) ?? [],
+            request.regenerate === true && !request.lockedItems?.some((item) => item.taskId === unit.task.id),
           ),
     );
 
     return {
       userId,
       date,
-      currentTime: request.currentTime ?? currentTimeString(),
+      currentTime: request.currentTime ?? timeStringInTimeZone(new Date(), timezone),
       workingHours,
       breaks,
       lockedItems: request.lockedItems ?? [],
       tasks: plannerTasks,
-      reminders: reminderRows.map((reminder) => toPlannerReminder(reminder, date)),
+      reminders: reminderRows.map((reminder) => toPlannerReminder(reminder, date, timezone)),
       commitments: commitmentWindows.map((window) => ({
         id: window.commitmentId,
         title: window.title,
@@ -271,6 +396,7 @@ export class AiPlannerService {
         placeName: window.placeName,
       })),
       preferences,
+      timezone,
       // Every incomplete parent task, plus any incomplete subtask that blocks one
       // of this user's candidates (e.g. another member's unfinished dependency),
       // so cross-task and cross-member dependencies both resolve to a block.
@@ -337,16 +463,45 @@ export class AiPlannerService {
     return this.preferencesService.savePreferences(userId, input);
   }
 
-  acceptPlan(userId: string, input: unknown) {
+  async acceptPlan(userId: string, input: unknown) {
+    const body = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+    const plan = body.plan;
+    if (plan && typeof plan === 'object' && await this.planContainsCompletedWork(userId, plan as DailyPlan)) {
+      const date = normalizeDate((plan as DailyPlan).date);
+      const regenerated = await this.generateDailyPlan(userId, { date });
+      return this.acceptanceService.acceptPlan(userId, { plan: regenerated });
+    }
     return this.acceptanceService.acceptPlan(userId, input);
   }
 
-  getAcceptance(userId: string, date: string) {
-    return this.acceptanceService.getAcceptance(userId, normalizeDate(date));
+  async getAcceptance(userId: string, date: string) {
+    const normalizedDate = normalizeDate(date);
+    const accepted = await this.acceptanceService.getAcceptance(userId, normalizedDate);
+    if (!accepted || !(await this.planContainsCompletedWork(userId, accepted.plan))) return accepted;
+    const regenerated = await this.generateDailyPlan(userId, { date: normalizedDate });
+    return this.acceptanceService.acceptPlan(userId, { plan: regenerated });
   }
 
   resolveConflict(userId: string, input: unknown) {
     return this.acceptanceService.resolveConflict(userId, input);
+  }
+
+  private async planContainsCompletedWork(userId: string, plan: DailyPlan): Promise<boolean> {
+    const taskItems = Object.values(plan.sections).flat().filter((item) => item.type === 'task');
+    if (taskItems.length === 0) return false;
+    const taskIds = [...new Set(taskItems.map((item) => item.taskId).filter((id): id is string => Boolean(id)))];
+    const subtaskIds = [...new Set(taskItems.map((item) => item.subtaskId).filter((id): id is string => Boolean(id)))];
+    const [taskRows, subtaskRows] = await Promise.all([
+      taskIds.length
+        ? this.databaseService.db.select({ id: tasks.id, status: tasks.status }).from(tasks).where(and(eq(tasks.userId, userId), inArray(tasks.id, taskIds)))
+        : Promise.resolve([] as Array<{ id: string; status: string }>),
+      subtaskIds.length
+        ? this.databaseService.db.select({ id: subtasks.id, status: subtasks.status, isDone: subtasks.isDone }).from(subtasks).where(inArray(subtasks.id, subtaskIds))
+        : Promise.resolve([] as Array<{ id: string; status: string; isDone: boolean }>),
+    ]);
+    const doneTasks = new Set(taskRows.filter((row) => row.status === 'done').map((row) => row.id));
+    const doneSubtasks = new Set(subtaskRows.filter((row) => row.isDone || row.status === 'done').map((row) => row.id));
+    return taskItems.some((item) => (item.taskId ? doneTasks.has(item.taskId) : false) || (item.subtaskId ? doneSubtasks.has(item.subtaskId) : false));
   }
 }
 
@@ -391,7 +546,7 @@ function buildPlanningUnits(
     );
     // No incomplete subtask work anywhere on this task → schedule the parent.
     if (incompleteSubtasks.length === 0) {
-      units.push({ kind: 'task', task });
+      if (!(subtasksByTask.get(task.id)?.length)) units.push({ kind: 'task', task });
       continue;
     }
     // There IS incomplete subtask work: the parent is represented by subtasks
@@ -454,7 +609,7 @@ function classifySubtaskDependencies(
   return { orderDepsBySubtask, blockingDepsBySubtask, blockingDepIds };
 }
 
-function toPlannerTask(task: TaskRow, dependencyRows: DependencyRow[], estimate?: EstimatorResult): PlannerTask {
+function toPlannerTask(task: TaskRow, dependencyRows: DependencyRow[], estimate?: EstimatorResult, ignorePersistedSchedule = false): PlannerTask {
   const known = task.remainingTimeMinutes || task.estimatedTimeMinutes || 0;
   return {
     id: task.id,
@@ -481,6 +636,9 @@ function toPlannerTask(task: TaskRow, dependencyRows: DependencyRow[], estimate?
     dependencyTaskIds: dependencyRows.filter((row) => row.taskId === task.id).map((row) => row.dependencyTaskId),
     orderDependencyIds: [],
     destination: plannerDestination(task.destination),
+    scheduledDate: ignorePersistedSchedule ? undefined : task.scheduledDate ?? undefined,
+    scheduledStartTime: ignorePersistedSchedule ? null : task.scheduledStartTime,
+    scheduledEndTime: ignorePersistedSchedule ? null : task.scheduledEndTime,
   };
 }
 
@@ -498,6 +656,7 @@ function toPlannerSubtask(
   estimate: EstimatorResult | undefined,
   orderDependencyIds: string[],
   blockingDependencyIds: string[],
+  ignorePersistedSchedule = false,
 ): PlannerTask {
   const knownEstimate = subtask.estimatedDurationMinutes ?? 0;
   const fullEstimate = estimate?.minutes ?? knownEstimate;
@@ -536,6 +695,78 @@ function toPlannerSubtask(
     ],
     orderDependencyIds,
     destination: plannerDestination(subtask.destination),
+    startDate: subtask.startDate?.toISOString(),
+    scheduledDate: ignorePersistedSchedule ? undefined : subtask.scheduledDate ?? undefined,
+    scheduledStartTime: ignorePersistedSchedule ? null : subtask.scheduledStartTime,
+    scheduledEndTime: ignorePersistedSchedule ? null : subtask.scheduledEndTime,
+  };
+}
+
+function selectionKey(item: PlannerSelectionItem): string {
+  return `${item.taskId}:${item.subtaskId ?? ''}`;
+}
+
+function taskSelectionKey(task: PlannerTask): string {
+  return selectionKey({ taskId: task.taskId, subtaskId: task.subtaskId ?? null });
+}
+
+function normalizeSelectionItems(value: unknown): PlannerSelectionItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is PlannerSelectionItem => Boolean(
+    item && typeof item === 'object' &&
+    typeof (item as PlannerSelectionItem).taskId === 'string',
+  )).map((item) => ({
+    taskId: item.taskId,
+    subtaskId: typeof item.subtaskId === 'string' ? item.subtaskId : null,
+  }));
+}
+
+function preferChildSelections(items: PlannerSelectionItem[]): PlannerSelectionItem[] {
+  const childrenByTask = new Set(items.filter((item) => item.subtaskId).map((item) => item.taskId));
+  const unique = new Map<string, PlannerSelectionItem>();
+  for (const item of items) {
+    if (!item.subtaskId && childrenByTask.has(item.taskId)) continue;
+    unique.set(selectionKey(item), { ...item, subtaskId: item.subtaskId ?? null });
+  }
+  return [...unique.values()];
+}
+
+function candidateToSelectionItem(
+  task: PlannerTask,
+  date?: string,
+  timezone = 'UTC',
+  constraints?: ReturnType<PlannerRuleEngine['prepareConstraints']>,
+) {
+  const blocked = constraints?.blockedTasks.find((entry) => entry.task.id === task.id);
+  const autoEligible = Boolean(constraints?.schedulableTasks.some((candidate) => candidate.id === task.id));
+  const scheduledDay = task.scheduledDate?.slice(0, 10);
+  const future = Boolean(
+    date && ((scheduledDay && scheduledDay > date) || (task.startDate && isAfterUserDay(task.startDate, date, timezone))),
+  );
+  const dueDay = task.dueDate ? dateKeyInTimeZone(new Date(task.dueDate), timezone) : undefined;
+  const scheduleCategory = scheduledDay === date
+    ? 'scheduledToday'
+    : dueDay && dueDay < (date ?? '')
+      ? 'overdue'
+      : future || dueDay
+        ? 'upcoming'
+        : 'unscheduled';
+  const blockedReason = blocked && blocked.status !== 'FUTURE_SCHEDULED' ? blocked.reason : null;
+  return {
+    taskId: task.taskId,
+    subtaskId: task.subtaskId ?? null,
+    id: task.id,
+    title: task.title,
+    priority: task.priority,
+    dueDate: task.dueDate,
+    estimatedMinutes: task.estimatedMinutes,
+    scheduleReason: task.scheduleReason,
+    selectionSource: task.selectionSource,
+    scheduleCategory,
+    scheduledStartAt: scheduledDay && task.scheduledStartTime ? `${scheduledDay}T${task.scheduledStartTime}:00` : undefined,
+    isAutoEligibleToday: autoEligible,
+    isManuallySelectable: !blockedReason && Number.isFinite(task.estimatedMinutes) && task.estimatedMinutes > 0,
+    blockedReason,
   };
 }
 
@@ -552,14 +783,16 @@ function laterTime(a: string, b: string): string {
   return toMinutes(b) > toMinutes(a) ? b : a;
 }
 
-function toPlannerReminder(reminder: ReminderRow, date: string): PlannerReminder {
-  const onDate = isSameLocalDate(reminder.triggerDateTime, date);
+function toPlannerReminder(reminder: ReminderRow, date: string, timezone: string): PlannerReminder {
+  const onDate = reminder.triggerDateTime
+    ? dateKeyInTimeZone(reminder.triggerDateTime, timezone) === date
+    : false;
   return {
     id: reminder.id,
     title: reminder.title,
     priority: normalizePriority(reminder.priority),
     triggerDateTime: reminder.triggerDateTime?.toISOString(),
-    startTime: onDate && reminder.triggerDateTime ? timeString(reminder.triggerDateTime) : undefined,
+    startTime: onDate && reminder.triggerDateTime ? timeStringInTimeZone(reminder.triggerDateTime, timezone) : undefined,
     type: reminder.type,
   };
 }

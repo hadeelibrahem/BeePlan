@@ -44,9 +44,7 @@ const PRIORITY_RANK: Record<string, number> = {
  */
 export function isFocusEligible(subtask: FocusSubtaskCandidate): boolean {
   const incomplete =
-    !subtask.isDone &&
-    subtask.status !== 'done' &&
-    subtask.status !== 'missed';
+    !subtask.isDone && subtask.status !== 'done' && subtask.status !== 'missed';
   return (
     incomplete &&
     subtask.isFocusTask === true &&
@@ -135,7 +133,10 @@ function byDueDate(a: FocusSubtaskCandidate, b: FocusSubtaskCandidate): number {
 }
 
 // Higher priority first.
-function byPriority(a: FocusSubtaskCandidate, b: FocusSubtaskCandidate): number {
+function byPriority(
+  a: FocusSubtaskCandidate,
+  b: FocusSubtaskCandidate,
+): number {
   return (PRIORITY_RANK[b.priority] ?? 0) - (PRIORITY_RANK[a.priority] ?? 0);
 }
 
@@ -161,10 +162,7 @@ function byOrderIndex(
 
 // --- reason ----------------------------------------------------------------
 
-function buildSubtaskReason(
-  subtask: FocusSubtaskCandidate,
-  now: Date,
-): string {
+function buildSubtaskReason(subtask: FocusSubtaskCandidate, now: Date): string {
   const reasons: string[] = [];
 
   if (subtask.dueDate) {

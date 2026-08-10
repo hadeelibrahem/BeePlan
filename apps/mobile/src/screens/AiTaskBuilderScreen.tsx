@@ -32,7 +32,7 @@ import {
   SectionCard,
 } from '../components/layout';
 import { createReminder, type Reminder, type ReminderFormValues } from '../features/reminders';
-import { addSubtask, type ApiTask, type TaskPayload } from '../lib/tasksApi';
+import { type ApiTask, type TaskPayload } from '../lib/tasksApi';
 import {
   sendTaskPlanChat,
   type ConversationState,
@@ -203,28 +203,46 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
 
     try {
       const totalMinutes = plan.subtasks.reduce((sum, subtask) => sum + subtask.estimatedMinutes, 0);
+      const sessions = [...plan.focusSessions].sort((a, b) => a.startTime.localeCompare(b.startTime));
+      const sessionFor = (title: string) => sessions.filter((session) => session.relatedSubtaskTitle === title);
+      const firstSession = sessions[0];
+      const lastSession = sessions[sessions.length - 1];
       const createdTask = await onSaveTask({
         title: plan.mainTask.title.trim(),
         description: plan.mainTask.description,
         priority: plan.mainTask.priority,
         status: 'todo',
         dueDate: plan.mainTask.dueDate ?? undefined,
+        scheduledDate: firstSession?.startTime.slice(0, 10),
+        scheduledStartTime: firstSession?.startTime.slice(11, 16),
+        scheduledEndTime: lastSession?.endTime.slice(11, 16),
         estimatedTimeMinutes: totalMinutes,
-        reminderEnabled: true,
-        reminderBeforeMinutes: 30,
+        reminderEnabled: plan.reminders.length > 0,
+        reminderBeforeMinutes: plan.reminders.length > 0 ? 30 : undefined,
         isFocusTask: plan.focusSessions.length > 0,
+        subtasks: plan.subtasks.map((subtask) => {
+          const subtaskSessions = sessionFor(subtask.title);
+          const first = subtaskSessions[0];
+          const last = subtaskSessions[subtaskSessions.length - 1];
+          return {
+            title: subtask.title,
+            isDone: false,
+            orderIndex: subtask.order,
+            description: subtask.description,
+            priority: subtask.priority,
+            startDate: subtask.startDate ?? first?.startTime,
+            dueDate: subtask.dueDate ?? last?.endTime,
+            scheduledDate: subtask.scheduledDate ?? first?.startTime?.slice(0, 10),
+            scheduledStartTime: subtask.scheduledStartTime ?? first?.startTime?.slice(11, 16),
+            scheduledEndTime: subtask.scheduledEndTime ?? last?.endTime?.slice(11, 16),
+            estimatedDurationMinutes: subtask.estimatedMinutes,
+            dependencyTitles: subtask.dependencyTitles,
+            isFocusTask: subtask.isFocusTask,
+          };
+        }),
       });
 
       if (!createdTask) return;
-
-      let latestTask = createdTask;
-      for (const subtask of plan.subtasks) {
-        latestTask = await addSubtask(accessToken ?? '', latestTask.id, {
-          title: subtask.title,
-          // Keep the plan's explicit Focus choice on each executable unit.
-          isFocusTask: plan.focusSessions.length > 0,
-        });
-      }
 
       let reminderFailures = 0;
       for (const planReminder of plan.reminders) {
@@ -249,7 +267,7 @@ export default function AiTaskBuilderScreen({ accessToken, onCancel, onSaveTask,
         console.warn(`[AI Task Builder] ${reminderFailures} reminder(s) could not be created.`);
       }
 
-      onSaved(latestTask);
+      onSaved(createdTask);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save the plan.');
     } finally {
@@ -754,7 +772,9 @@ function PlanPreviewCard({ plan, totalMinutes, onChange, onSave, onRegenerate, o
                   <MetaChip label={`Due: ${formatDate(plan.mainTask.dueDate)}`} theme={theme} />
                   <MetaChip label={`Priority: ${plan.mainTask.priority}`} theme={theme} tone={plan.mainTask.priority} />
                   <MetaChip label={`Est: ${formatHours(totalMinutes)}`} theme={theme} />
+                  <MetaChip label={plan.mode === 'scheduledPlan' ? 'Scheduled plan' : 'Structure only'} theme={theme} />
                 </View>
+                {plan.schedulingNeedsInput?.length ? <Text className="mt-2 text-xs font-bold" style={{ color: colors.warning }}>Scheduling needs: {plan.schedulingNeedsInput.join(', ')}.</Text> : null}
               </View>
             )}
 

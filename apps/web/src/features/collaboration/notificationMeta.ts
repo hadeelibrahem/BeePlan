@@ -40,4 +40,10 @@ export const NOTIFICATION_ICON: Record<NotificationType, string> = {
   deadline_risk: '!',
   workload_warning: '!',
   planner_suggestion: 'AI',
+  ai_upcoming_deadline: 'AI',
+  ai_inactivity: 'AI',
+  ai_blocked_dependency: 'AI',
+  ai_dependency_completed: 'AI',
+  ai_missing_assignment: 'AI',
+  ai_daily_summary: 'AI',
 }

@@ -60,6 +60,15 @@ export function NotesIcon({ className = base }: IconProps) {
   )
 }
 
+export function WhiteboardIcon({ className = base }: IconProps) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="4" width="18" height="14" rx="2" />
+      <path d="M7 15l3-3 2 2 4-5 2 3M8 21h8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function AnalyticsIcon({ className = base }: IconProps) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">

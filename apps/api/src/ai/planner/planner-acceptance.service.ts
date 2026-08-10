@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { DatabaseService } from '../../db/database.service';
 import { plannerAcceptedPlans, scheduleConflictResolutions, subtasks, tasks } from '../../db/schema';
@@ -20,6 +20,7 @@ export type PlanAcceptance = {
  */
 @Injectable()
 export class PlannerAcceptanceService {
+  private readonly logger = new Logger(PlannerAcceptanceService.name);
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly commitmentsService: RecurringCommitmentsService,
@@ -110,6 +111,8 @@ export class PlannerAcceptanceService {
         set: values,
       });
 
+    this.logger.log(`[planner-accept] upsert user=${userId} date=${date} generatedAt=${(plan as DailyPlan).generatedAt}`);
+
     await this.syncScheduledItems(userId, date, plan as DailyPlan, acceptedAt);
 
     return {
@@ -121,6 +124,7 @@ export class PlannerAcceptanceService {
 
   private async syncScheduledItems(userId: string, date: string, plan: DailyPlan, updatedAt: Date) {
     const scheduledItems = Object.values(plan.sections).flat().filter((item) => item.type === 'task');
+    this.logger.log(`[planner-accept] sync scheduled rows user=${userId} date=${date} count=${scheduledItems.length}; unlocked generated sessions remain draft-only until this upsert`);
     for (const item of scheduledItems) {
       if (item.subtaskId) {
         await this.databaseService.db.update(subtasks).set({

@@ -80,6 +80,21 @@ describe('TaskTravelWeatherRecommendationEngine', () => {
     expect(result.deterministicBody).toContain('Travel timing is unavailable');
     expect(result.deterministicBody).not.toContain('forecast');
   });
+  it('explains that an origin is required when route timing has no origin', () => {
+    const result = new TaskTravelWeatherRecommendationEngine().recommend({
+      title: 'Trip to University',
+      destinationName: 'Al Najah University',
+      scheduledStart: new Date('2026-08-09T11:00:00Z'),
+      recommendedDeparture: null,
+      route: null,
+      routeUnavailableReason: 'origin_unavailable',
+      forecast: null,
+      thresholds,
+      timezone: 'Asia/Hebron',
+      language: 'en',
+    });
+    expect(result.deterministicBody).toContain('configure a Home or saved origin');
+  });
   it('marks thunderstorms severe without moving the task', () => {
     const result = engine.recommend({
       title: 'class',

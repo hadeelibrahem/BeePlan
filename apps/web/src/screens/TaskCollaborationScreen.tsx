@@ -15,9 +15,10 @@ import { ProjectHealthPanel } from '../features/collaboration/components/ai/Proj
 import { PlanView } from '../features/collaboration/components/ai/PlanView'
 import { OverviewPanel } from '../features/collaboration/components/ai/OverviewPanel'
 import { HistoryFeed } from '../features/collaboration/components/ai/HistoryFeed'
+import { DistributionPanel } from '../features/collaboration/components/ai/DistributionPanel'
 import type { PlanFocus } from '../features/collaboration/api/ai-collaboration.api'
 
-type Tab = 'overview' | 'plan' | 'team' | 'health' | 'activity'
+type Tab = 'overview' | 'plan' | 'team' | 'health' | 'activity' | 'distribution'
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'overview', label: 'Overview' },
@@ -25,6 +26,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'team', label: 'Team' },
   { value: 'health', label: 'Health' },
   { value: 'activity', label: 'Activity' },
+  { value: 'distribution', label: 'Distribution' },
 ]
 
 /** Start a focus session on the recommended unit (wired by the app shell). */
@@ -147,6 +149,7 @@ export default function TaskCollaborationScreen({
               onNavigate={navigateToTab}
             />
           ) : null}
+          {tab === 'distribution' ? <DistributionPanel task={task} accessToken={accessToken} /> : null}
           {tab === 'activity' ? <HistoryFeed taskId={taskId} accessToken={accessToken} /> : null}
         </>
       )}

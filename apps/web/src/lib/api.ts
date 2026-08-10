@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '');
+export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '');
 
 if (import.meta.env.DEV) {
-  console.log('[BeePlan API] Base URL:', apiUrl);
+  console.log('[BeePlan API] Base URL:', API_BASE_URL);
 }
 
 const healthSchema = z.object({
@@ -52,6 +52,7 @@ export type RegisterRequest = {
   email: string;
   password: string;
   username?: string;
+  timezone?: string;
 };
 
 export type LoginRequest = {
@@ -67,8 +68,8 @@ export type SocialLoginRequest = {
   avatarUrl?: string | null;
 };
 
-async function apiRequest(path: string, init?: RequestInit) {
-  const url = `${apiUrl}${path}`;
+export async function apiRequest(path: string, init?: RequestInit) {
+  const url = `${API_BASE_URL}${path}`;
   const method = init?.method ?? 'GET';
 
   if (import.meta.env.DEV) {
@@ -81,7 +82,7 @@ async function apiRequest(path: string, init?: RequestInit) {
     response = await fetch(url, {
       ...init,
       headers: {
-        'Content-Type': 'application/json',
+        ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...init?.headers,
       },
     });
@@ -93,7 +94,7 @@ async function apiRequest(path: string, init?: RequestInit) {
         error: error instanceof Error ? error.message : error,
       });
     }
-    throw new Error(`Unable to reach BeePlan API at ${apiUrl}. Make sure the backend is running on port 3000.`);
+      throw new Error(`Unable to reach BeePlan API at ${API_BASE_URL}. Make sure the backend is running on port 3000.`);
   }
 
   const data = await response.json().catch(() => null);

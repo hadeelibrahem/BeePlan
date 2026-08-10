@@ -274,8 +274,22 @@ export type TaskPayload = Partial<
     | "recurrence"
   >
 > & {
-  subtasks?: (SubtaskPayload & { title: string })[];
+  subtasks?: (SubtaskPayload & { title: string; dependencyTitles?: string[] })[];
 };
+
+export type RandomStartMode = "anything" | "quick_win" | "important";
+export type RandomStartItem = Pick<ApiTask, "id" | "title" | "priority" | "status" | "progress"> & {
+  itemType: "task" | "subtask";
+  candidateKey: string;
+  taskId?: string;
+  parentTitle?: string;
+  dueDate?: string;
+  estimatedTimeMinutes?: number;
+  dependencyCount?: number;
+  incompleteDependencyCount?: number;
+  dependencyTitles?: string[];
+};
+export type RandomStartResponse = { task: RandomStartItem | null; candidates: RandomStartItem[]; eligibleCount: number };
 
 function authHeaders(accessToken: string) {
   return {
@@ -1070,6 +1084,12 @@ export function deleteSubtask(
     `/tasks/${taskId}/subtasks/${subtaskId}`,
     { method: "DELETE" },
   );
+}
+
+export function getRandomStart(accessToken: string, mode: RandomStartMode = "anything", excludeId?: string) {
+  const params = new URLSearchParams({ mode });
+  if (excludeId) params.set("excludeId", excludeId);
+  return request<RandomStartResponse>(accessToken, `/tasks/random-start?${params}`);
 }
 
 export function setSubtaskDependencies(

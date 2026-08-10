@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import assert from 'assert/strict'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import test from 'node:test'
 
 // Mobile RN components can't be rendered under node:test here (no jest-native

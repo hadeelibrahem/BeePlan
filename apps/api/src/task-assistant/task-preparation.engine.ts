@@ -131,6 +131,7 @@ export class TaskPreparationEngine {
     if (
       !preferences.enabled ||
       !preferences.preparationChecklistsEnabled ||
+      preferences.dynamicPreparationEnabled === false ||
       context.confidence === 'unavailable'
     )
       return [];
@@ -152,7 +153,26 @@ export class TaskPreparationEngine {
             'cv',
             'medical_documents',
             'prescription',
+            'booking_documents',
+            'interview_details',
+            'meeting_link',
           ].includes(rule.type),
+      )
+      .filter(
+        (rule) =>
+          preferences.electronicsAdviceEnabled !== false ||
+          !['charger_adapter', 'laptop_charger', 'call_equipment'].includes(
+            rule.type,
+          ),
+      )
+      .filter(
+        (rule) =>
+          preferences.medicationAdviceEnabled !== false ||
+          !['medical_documents', 'prescription'].includes(rule.type),
+      )
+      .filter((rule) =>
+        preferences.travelAdviceEnabled !== false ||
+        !rule.contexts.some((value) => ['travel', 'flight'].includes(value)),
       )
       .map((rule) => ({
         type: rule.type,

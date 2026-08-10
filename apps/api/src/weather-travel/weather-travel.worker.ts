@@ -2,16 +2,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
-import { and, eq, gt, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import {
-  deviceTokens,
+  describeDatabaseError,
+  withTransientDatabaseRetry,
+} from '../db/database-error';
+import {
   subtasks,
-  taskWeatherNotifications,
   tasks,
   weatherTravelPreferences,
 } from '../db/schema';
-import { NotificationsService } from '../notifications/notifications.service';
 import { WeatherTravelService } from './weather-travel.service';
 
 const LOCK_ID = 742_019_331;
@@ -19,33 +20,57 @@ const LOCK_ID = 742_019_331;
 export class WeatherTravelWorker {
   private readonly logger = new Logger(WeatherTravelWorker.name);
   private lastRun = 0;
+  private running = false;
   constructor(
     private readonly database: DatabaseService,
     private readonly config: ConfigService,
     private readonly service: WeatherTravelService,
-    private readonly notifications: NotificationsService,
   ) {}
   @Cron(CronExpression.EVERY_MINUTE)
   async tick() {
+    if (this.running) return;
     const interval =
       (this.config.get<number>('WEATHER_WORKER_INTERVAL_MINUTES') ?? 10) *
       60_000;
     if (Date.now() - this.lastRun < interval) return;
-    this.lastRun = Date.now();
-    await this.database.db.transaction(async (transaction) => {
-      const locked = await transaction.execute(
-        sql`select pg_try_advisory_xact_lock(${LOCK_ID}) as locked`,
+    this.running = true;
+    try {
+      await withTransientDatabaseRetry(
+        () => this.database.db.transaction(async (transaction) => {
+          const locked = await transaction.execute(
+            sql`select pg_try_advisory_xact_lock(${LOCK_ID}) as locked`,
+          );
+          if (!(locked.rows[0] as any)?.locked) return;
+        // Weather/travel remains a provider precomputation pass. Task Assistant
+        // owns contextual notification decisions and delivery.
+          await this.prepare();
+        }),
+        {
+          attempts: 2,
+          onRetry: (error, attempt, delayMs) => this.logger.warn(JSON.stringify({
+            event: 'weather_travel_worker_database_retry',
+            attempt,
+            delayMs,
+            pool: this.database.poolStats(),
+            ...describeDatabaseError(error, 'query'),
+          })),
+        },
       );
-      if (!(locked.rows[0] as any)?.locked) return;
-      try {
-        await this.prepare();
-        await this.deliver();
-      } catch (error) {
-        this.logger.error(
-          `Weather-travel worker failed: ${error instanceof Error ? error.message : 'unknown'}`,
-        );
-      }
-    });
+      this.lastRun = Date.now();
+      this.logger.debug(JSON.stringify({
+        event: 'weather_travel_worker_finished',
+        pool: this.database.poolStats(),
+      }));
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        event: 'weather_travel_worker_failed',
+        retryNextTick: true,
+        pool: this.database.poolStats(),
+        ...describeDatabaseError(error, 'query'),
+      }));
+    } finally {
+      this.running = false;
+    }
   }
   private async prepare() {
     const horizon = new Date(
@@ -104,93 +129,9 @@ export class WeatherTravelWorker {
         'scheduledTaskTime' in preview &&
         new Date(preview.scheduledTaskTime).getTime() <= horizon.getTime()
       )
-        await this.service.schedule(userId, taskId, subtaskId);
+        await this.service.previewTask(userId, taskId, subtaskId);
     } catch {
       /* retry on next worker pass without leaking provider/location data */
     }
-  }
-  private async deliver() {
-    const due = await this.database.db
-      .select()
-      .from(taskWeatherNotifications)
-      .where(
-        and(
-          inArray(taskWeatherNotifications.status, [
-            'pending',
-            'failed_retryable',
-          ]),
-          lte(taskWeatherNotifications.notificationTime, new Date()),
-          gt(taskWeatherNotifications.scheduledTaskTime, new Date()),
-        ),
-      );
-    for (const record of due) {
-      const title = 'Weather & travel';
-      const body = record.polishedMessage ?? record.deterministicMessage;
-      await this.notifications.create({
-        userId: record.userId,
-        taskId: record.taskId,
-        type: 'weather_travel',
-        title,
-        body,
-        data: { weatherTravelNotificationId: record.id },
-      });
-      const tokens = await this.database.db
-        .select()
-        .from(deviceTokens)
-        .where(eq(deviceTokens.userId, record.userId));
-      const delivered = await sendExpo(
-        tokens.map((token) => token.token),
-        title,
-        body,
-        record.id,
-      );
-      await this.database.db
-        .update(taskWeatherNotifications)
-        .set({
-          status:
-            delivered || tokens.length === 0 ? 'delivered' : 'failed_retryable',
-          deliveredAt: delivered || tokens.length === 0 ? new Date() : null,
-          retryCount: record.retryCount + (delivered ? 0 : 1),
-          lastErrorCode:
-            delivered || tokens.length === 0 ? null : 'push_delivery_failed',
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(taskWeatherNotifications.id, record.id),
-            ne(taskWeatherNotifications.status, 'delivered'),
-          ),
-        );
-    }
-  }
-}
-async function sendExpo(
-  tokens: string[],
-  title: string,
-  body: string,
-  id: string,
-) {
-  if (!tokens.length) return false;
-  try {
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify(
-        tokens.map((to) => ({
-          to,
-          title,
-          body,
-          data: { weatherTravelNotificationId: id },
-          sound: 'default',
-        })),
-      ),
-      signal: AbortSignal.timeout(8000),
-    });
-    return response.ok;
-  } catch {
-    return false;
   }
 }

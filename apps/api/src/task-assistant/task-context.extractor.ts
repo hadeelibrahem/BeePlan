@@ -3,6 +3,7 @@ import type {
   ExtractedTaskContext,
   TaskContextInput,
 } from './task-assistant.types';
+import { zonedDateTime } from '../weather-travel/zoned-time';
 
 @Injectable()
 export class TaskContextExtractor {
@@ -23,7 +24,11 @@ export class TaskContextExtractor {
       .toLocaleLowerCase();
     const scheduledExecution =
       input.scheduledDate && input.scheduledStartTime
-        ? `${input.scheduledDate}T${input.scheduledStartTime}:00`
+        ? zonedDateTime(
+            input.scheduledDate,
+            input.scheduledStartTime.slice(0, 5),
+            input.timezone ?? 'UTC',
+          ).toISOString()
         : null;
     const travelRequired = Boolean(input.destination);
     return {

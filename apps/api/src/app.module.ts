@@ -25,6 +25,8 @@ import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { TaskAssistantModule } from './task-assistant/task-assistant.module';
 import { FocusRoomsModule } from './focus-rooms/focus-rooms.module';
 import { TimeCapsulesModule } from './time-capsules/time-capsules.module';
+import { WhiteboardModule } from './whiteboard/whiteboard.module';
+import { AchievementsModule } from './achievements/achievements.module';
 
 @Module({
   imports: [
@@ -59,6 +61,8 @@ import { TimeCapsulesModule } from './time-capsules/time-capsules.module';
     GoogleCalendarModule,
     TaskAssistantModule,
     TimeCapsulesModule,
+    WhiteboardModule,
+    AchievementsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

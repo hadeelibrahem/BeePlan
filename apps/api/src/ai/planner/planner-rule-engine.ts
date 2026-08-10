@@ -4,7 +4,8 @@ import {
   isTime,
   minutesBetween,
   toMinutes,
-  todayString,
+  dateKeyInTimeZone,
+  isAfterUserDay,
   windowToDayRanges,
 } from './planner.util';
 import type {
@@ -244,13 +245,31 @@ export class PlannerRuleEngine {
     const blockedTasks: BlockedTask[] = [];
 
     for (const task of activeTasks) {
+      const timezone = context.timezone ?? 'UTC';
+      const scheduledDay = task.scheduledDate?.slice(0, 10);
+      const futureScheduled = Boolean(
+        (scheduledDay && scheduledDay > date) ||
+        (task.startDate && isAfterUserDay(task.startDate, date, timezone)),
+      );
+
       if (task.dueDate) {
-        const delta = daysBetween(date, new Date(task.dueDate));
+        const dueDay = dateKeyInTimeZone(new Date(task.dueDate), timezone);
+        const delta = daysBetween(date, new Date(`${dueDay}T00:00:00.000Z`));
         if (delta < 0) overdueTaskIds.add(task.id);
         else if (delta === 0) dueTodayTaskIds.add(task.id);
       }
 
       if (lockedTaskIds.has(task.id)) continue; // already fixed on the timeline
+
+      if (futureScheduled) {
+        blockedTasks.push({
+          task,
+          reason: `Scheduled for ${scheduledDay ?? dateKeyInTimeZone(new Date(task.startDate as string), timezone)}; kept out of today’s plan.`,
+          status: 'FUTURE_SCHEDULED',
+          reasonCode: 'scheduled_for_future',
+        });
+        continue;
+      }
 
       const openDependency = task.dependencyTaskIds.find((depId) =>
         depActiveIds.has(depId),
@@ -279,6 +298,22 @@ export class PlannerRuleEngine {
         continue;
       }
 
+      const dueDay = task.dueDate
+        ? dateKeyInTimeZone(new Date(task.dueDate), timezone)
+        : undefined;
+      const daysLeft = dueDay
+        ? daysBetween(date, new Date(`${dueDay}T00:00:00.000Z`))
+        : undefined;
+      task.scheduleReason = task.scheduledDate?.slice(0, 10) === date
+        ? 'scheduled_today'
+        : daysLeft !== undefined && daysLeft <= 0
+          ? 'overdue'
+          : daysLeft !== undefined
+            ? 'deadline_pressure'
+            : 'backlog';
+      task.todayRequiredMinutes = daysLeft !== undefined && daysLeft > 0
+        ? Math.max(1, Math.ceil(task.estimatedMinutes / (daysLeft + 1)))
+        : task.estimatedMinutes;
       schedulableTasks.push(task);
     }
 
@@ -297,7 +332,7 @@ export class PlannerRuleEngine {
     // now (rounded up to the next 5 minutes) — the past is reserved as busy so
     // nothing is ever scheduled behind the clock. For any other date the whole
     // working day is available.
-    const planningToday = date === todayString();
+    const planningToday = date === dateKeyInTimeZone(new Date(), context.timezone ?? 'UTC');
     const nowMinutes =
       planningToday && isTime(context.currentTime)
         ? roundUpTo5(toMinutes(context.currentTime))
@@ -518,7 +553,7 @@ export function findSlot(
       (slot) => cursor < slot.end && cursor + duration > slot.start,
     );
     if (!conflict) return { start: cursor, end: cursor + duration };
-    cursor = Math.max(cursor + 15, conflict.end);
+    cursor = conflict.end;
   }
 
   return null;

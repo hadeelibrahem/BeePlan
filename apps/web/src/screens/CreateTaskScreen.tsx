@@ -17,6 +17,7 @@ import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
 import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal'
 import { WeatherTravelTaskFields } from '../components/WeatherTravelTaskFields'
+import { canValidateTaskSchedule, taskScheduleValidationError } from '../lib/taskScheduleValidation'
 import { skipCommitmentOccurrence } from '../lib/plannerApi'
 import {
   recurrenceToApi,
@@ -65,7 +66,7 @@ export default function CreateTaskScreen({
   const [description, setDescription] = useState('')
   const [notes, setNotes] = useState('')
   const [priority, setPriority] = useState('Medium')
-  const [status, setStatus] = useState('To Do')
+  const [status] = useState('To Do')
   const [category, setCategory] = useState('')
   const [dueDate, setDueDate] = useState(initialDueDate ?? '')
   const [dueTime, setDueTime] = useState('')
@@ -89,6 +90,10 @@ export default function CreateTaskScreen({
   const [uploadingAttachments, setUploadingAttachments] = useState(false)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(null)
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
+  const [moreOptions, setMoreOptions] = useState(false)
+  const [estimatedHours, setEstimatedHours] = useState('')
+  const [labelsText, setLabelsText] = useState('')
   const recurrenceSummary = createRecurrenceSummary(recurrence)
   const availableDependencies = tasks.map(toDependencyTask)
 
@@ -109,6 +114,8 @@ export default function CreateTaskScreen({
       dependencies.length ||
       attachments.length ||
       recurrence ||
+      estimatedHours.trim() ||
+      labelsText.trim() ||
       priority !== 'Medium' ||
       status !== 'To Do' ||
       !reminderEnabled ||
@@ -122,12 +129,14 @@ export default function CreateTaskScreen({
       return
     }
 
-    if ((scheduledDate || scheduledStartTime || scheduledEndTime) && (!scheduledDate || !scheduledStartTime || !scheduledEndTime)) {
-      setError('Scheduled date, start time, and end time must be provided together.')
+    const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60)
+    const scheduleValidationError = taskScheduleValidationError({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })
+    if (scheduleValidationError) {
+      setError(scheduleValidationError)
       return
     }
-    const schedulePayload = { title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : undefined, scheduledDate: scheduledDate || undefined, scheduledStartTime: scheduledStartTime || undefined, scheduledEndTime: scheduledEndTime || undefined }
-    if (accessToken && scheduledDate) {
+    const schedulePayload = { title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : undefined, estimatedTimeMinutes, scheduledDate: scheduledDate || undefined, scheduledStartTime: scheduledStartTime || undefined, scheduledEndTime: scheduledEndTime || undefined }
+    if (accessToken && canValidateTaskSchedule({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })) {
       const validation = await validateTaskSchedule(accessToken, schedulePayload)
       if (validation.commitmentConflicts.length) {
         setCommitmentConflict(validation.commitmentConflicts[0])
@@ -161,6 +170,8 @@ export default function CreateTaskScreen({
         reminderBeforeMinutes: reminderEnabled ? reminderBeforeMinutes : undefined,
         recurrence: recurrenceToApi(recurrence),
         subtasks,
+        estimatedTimeMinutes: Math.round((Number(estimatedHours) || 0) * 60),
+        labels: labelsText.split(',').map((label) => label.trim()).filter(Boolean),
       })
 
       if (!createdTask) return
@@ -308,18 +319,15 @@ export default function CreateTaskScreen({
                 ) : null}
               </div>
 
-              <div className="mb-4 border-t border-[var(--bp-border)] pt-4">
-                <FieldLabel label="Notes" htmlFor="create-task-notes" />
-              <textarea
+              {!showNotes ? <button type="button" onClick={() => setShowNotes(true)} className="mb-4 w-full rounded-xl border border-dashed border-[var(--bp-border)] px-3 py-2.5 text-start text-sm font-bold text-[var(--bp-accent-ink)]">+ Add notes</button> : <div className="mb-4 border-t border-[var(--bp-border)] pt-4"><FieldLabel label="Notes" htmlFor="create-task-notes" /><textarea
                   id="create-task-notes"
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                   className="min-h-20 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
                   placeholder="Additional notes (optional)..."
-                />
-              </div>
+                /></div>}
 
-              <div className="border-t border-[var(--bp-border)] pt-4">
+              {moreOptions ? <div className="border-t border-[var(--bp-border)] pt-4">
                 <FieldLabel label="Attachments" />
                 <TaskAttachmentPicker
                   files={attachments}
@@ -327,7 +335,7 @@ export default function CreateTaskScreen({
                   disabled={saving || uploadingAttachments}
                   onValidationError={setError}
                 />
-              </div>
+              </div> : null}
             </section>
 
             <section className="space-y-3">
@@ -338,13 +346,6 @@ export default function CreateTaskScreen({
                 <div className="mb-4 grid grid-cols-3 gap-2">
                   {['Low', 'Medium', 'High'].map((item) => (
                     <Segment key={item} active={priority === item} label={item} color={item === 'Low' ? 'text-green-400' : item === 'High' ? 'text-red-400' : 'text-orange-400'} onClick={() => setPriority(item)} />
-                  ))}
-                </div>
-
-                <FieldLabel label="Task Status" />
-                <div className="mb-4 grid grid-cols-4 gap-2">
-                  {['To Do', 'In Progress', 'Done', 'Missed'].map((item) => (
-                    <Segment key={item} active={status === item} label={item} color={item === 'Done' ? 'text-green-400' : item === 'Missed' ? 'text-red-400' : item === 'In Progress' ? 'text-blue-400' : 'text-[var(--bp-accent-ink)]'} onClick={() => setStatus(item)} />
                   ))}
                 </div>
 
@@ -359,7 +360,7 @@ export default function CreateTaskScreen({
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <FieldLabel label="Due Date" htmlFor="create-task-due-date" />
+                    <FieldLabel label="Deadline · when this must be finished" htmlFor="create-task-due-date" />
                     <input
                       id="create-task-due-date"
                       type="date"
@@ -369,7 +370,7 @@ export default function CreateTaskScreen({
                     />
                   </div>
                   <div>
-                    <FieldLabel label="Due Time" htmlFor="create-task-due-time" />
+                    <FieldLabel label="Deadline time" htmlFor="create-task-due-time" />
                     <input
                       id="create-task-due-time"
                       type="time"
@@ -380,14 +381,17 @@ export default function CreateTaskScreen({
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div><FieldLabel label="Scheduled Date" htmlFor="create-task-scheduled-date" /><input id="create-task-scheduled-date" type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
-                  <div><FieldLabel label="Scheduled Start" htmlFor="create-task-scheduled-start" /><input id="create-task-scheduled-start" type="time" value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
-                  <div><FieldLabel label="Scheduled End" htmlFor="create-task-scheduled-end" /><input id="create-task-scheduled-end" type="time" value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label="Schedule · when you plan to do this" htmlFor="create-task-scheduled-date" /><input id="create-task-scheduled-date" aria-label="Schedule date" type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label="Start time" htmlFor="create-task-scheduled-start" /><input id="create-task-scheduled-start" aria-label="Schedule start time" type="time" value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label="End time" htmlFor="create-task-scheduled-end" /><input id="create-task-scheduled-end" aria-label="Schedule end time" type="time" value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
                 </div>
-                <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
+                <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-2">
+              <button type="button" onClick={() => setMoreOptions((value) => !value)} className="flex w-full items-center justify-between rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 text-start font-black text-[var(--bp-text)]">More options <span className="text-[var(--bp-muted)]">{moreOptions ? '⌃' : '›'}</span></button>
+              {moreOptions ? <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4"><FieldLabel label="Estimated duration" htmlFor="create-task-estimated-hours" /><input id="create-task-estimated-hours" type="number" min="0" step="0.25" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} placeholder="Hours" className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4"><FieldLabel label="Labels" htmlFor="create-task-labels" /><input id="create-task-labels" value={labelsText} onChange={(event) => setLabelsText(event.target.value)} placeholder="Comma-separated labels" className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
                 <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                   <FieldLabel label="Recurring Task" />
                   <button
@@ -427,7 +431,7 @@ export default function CreateTaskScreen({
                     </p>
                   )}
                 </div>
-              </div>
+              </div> : null}
 
               <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
                 <div className="mb-3 flex items-center justify-between">

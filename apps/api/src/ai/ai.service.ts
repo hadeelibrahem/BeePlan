@@ -133,7 +133,9 @@ export class AiService {
       ]);
       return response.choices[0]?.message?.content?.trim() ?? '';
     } catch (error) {
-      this.logger.error(`Daily motivation request failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      // Daily motivation is optional and has a deterministic server-side
+      // fallback. Provider timeouts should not look like application errors.
+      this.logger.warn(`Daily motivation request failed: ${error instanceof Error ? error.message : 'unknown error'}`);
       throw new InternalServerErrorException('Failed to generate daily motivation with AI.');
     }
   }
