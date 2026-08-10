@@ -4,6 +4,7 @@ export type AppScreen =
   | 'focus'
   | 'focusSession'
   | 'focusRooms'
+  | 'randomStart'
   | 'planner'
   | 'createTask'
   | 'aiPlanTask'
@@ -17,13 +18,17 @@ export type AppScreen =
   | 'calendar'
   | 'notes'
   | 'analytics'
+  | 'whiteboard'
+  | 'whiteboards'
+  | 'whiteboardEditor'
+  | 'achievements'
   | 'social'
   | 'notifications'
   | 'settings'
   | 'timeCapsules'
   | 'notFound'
 
-export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string; roomId?: string }
+export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string; roomId?: string; boardId?: string }
 
 const STATIC_ROUTES: Record<string, AppScreen> = {
   '/': 'dashboard',
@@ -35,12 +40,16 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/focus': 'focus',
   '/focus/session': 'focusSession',
   '/focus/rooms': 'focusRooms',
+  '/random-start': 'randomStart',
   '/planner': 'planner',
   '/reminders': 'list',
   '/reminders/new': 'create',
   '/calendar': 'calendar',
   '/notes': 'notes',
   '/analytics': 'analytics',
+  '/whiteboard': 'whiteboard',
+  '/whiteboards': 'whiteboards',
+  '/achievements': 'achievements',
   '/people': 'social',
   '/notifications': 'notifications',
   '/settings': 'settings',
@@ -54,6 +63,8 @@ export function resolveAppRoute(pathname: string): AppRoute {
 
   const focusRoom = normalized.match(/^\/focus\/rooms\/([^/]+)$/)
   if (focusRoom) return { screen: 'focusRooms', roomId: decodeURIComponent(focusRoom[1]) }
+  const whiteboard = normalized.match(/^\/whiteboards\/([^/]+)$/)
+  if (whiteboard) return { screen: 'whiteboardEditor', boardId: decodeURIComponent(whiteboard[1]) }
 
   const task = normalized.match(/^\/tasks\/([^/]+)(?:\/(edit|collaboration))?$/)
   if (task) {
@@ -74,7 +85,7 @@ export function resolveAppRoute(pathname: string): AppRoute {
   return { screen: 'notFound' }
 }
 
-export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { taskId?: string | null; reminderId?: string | null } = {}) {
+export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { taskId?: string | null; reminderId?: string | null; boardId?: string | null } = {}) {
   switch (screen) {
     case 'dashboard': return '/dashboard'
     case 'tasks': return '/tasks'
@@ -86,6 +97,7 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'focus': return '/focus'
     case 'focusSession': return '/focus/session'
     case 'focusRooms': return '/focus/rooms'
+    case 'randomStart': return '/random-start'
     case 'planner': return '/planner'
     case 'list': return '/reminders'
     case 'create': return '/reminders/new'
@@ -98,5 +110,9 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'notifications': return '/notifications'
     case 'settings': return '/settings'
     case 'timeCapsules': return '/time-capsules'
+    case 'whiteboard': return '/whiteboard'
+    case 'whiteboards': return '/whiteboards'
+    case 'whiteboardEditor': return ids.boardId ? `/whiteboards/${encodeURIComponent(ids.boardId)}` : '/whiteboards'
+    case 'achievements': return '/achievements'
   }
 }

@@ -26,6 +26,9 @@ export type SidebarPage =
   | 'analytics'
   | 'settings'
   | 'timeCapsules'
+  | 'whiteboard'
+  | 'whiteboards'
+  | 'achievements'
 
 export type SidebarNavHandlers = {
   onNavigateDashboard?: () => void
