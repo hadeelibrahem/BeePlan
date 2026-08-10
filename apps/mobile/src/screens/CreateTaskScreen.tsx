@@ -29,6 +29,7 @@ import {
 import { useTheme } from '../theme/useTheme'
 import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard'
 import { createTaskPayload, isCreateTaskDirty, validateCreateTask } from './createTaskForm'
+import { canValidateTaskSchedule } from './taskScheduleValidation'
 
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
 const STATUSES = ['To Do', 'In Progress', 'Done', 'Missed'] as const
@@ -94,8 +95,11 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
   const [reminderBeforeMinutes, setReminderBeforeMinutes] = useState(30)
   const [estimatedHours, setEstimatedHours] = useState('')
   const [labelsText, setLabelsText] = useState('')
-  const [iosPicker, setIosPicker] = useState<'date' | 'time' | null>(null)
+  const [iosPicker, setIosPicker] = useState<'date' | 'time' | 'scheduledDate' | 'scheduledStart' | 'scheduledEnd' | null>(null)
+  const [showNotes, setShowNotes] = useState(false)
+  const [moreOptions, setMoreOptions] = useState(false)
   const [error, setError] = useState('')
+  const [scheduleError, setScheduleError] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploadingAttachments, setUploadingAttachments] = useState(false)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(null)
@@ -151,10 +155,31 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
     setIosPicker('time')
   }
 
+  const openScheduledDatePicker = () => {
+    const value = scheduledDate ? new Date(`${scheduledDate}T12:00:00`) : new Date()
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({ value, mode: 'date', onChange: (event, selected) => { if (event.type === 'set' && selected) setScheduledDate(selected.toISOString().slice(0, 10)) } })
+      return
+    }
+    setIosPicker('scheduledDate')
+  }
+
+  const openScheduledTimePicker = (which: 'scheduledStart' | 'scheduledEnd') => {
+    const value = new Date()
+    const current = which === 'scheduledStart' ? scheduledStartTime : scheduledEndTime
+    if (current) { const [hours, minutes] = current.split(':').map(Number); if (!Number.isNaN(hours)) value.setHours(hours, minutes || 0, 0, 0) }
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({ value, mode: 'time', is24Hour: false, onChange: (event, selected) => { if (event.type === 'set' && selected) { const next = `${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`; if (which === 'scheduledStart') setScheduledStartTime(next); else setScheduledEndTime(next) } } })
+      return
+    }
+    setIosPicker(which)
+  }
+
   async function handleSave() {
     if (submissionRef.current || saving) return
     const validationError = validateCreateTask(formValues)
     if (validationError) {
+      setScheduleError(validationError.includes('scheduled') || validationError.includes('end time') ? validationError : '')
       setError(validationError)
       return
     }
@@ -164,13 +189,14 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
     submissionRef.current = true
     setSaving(true)
     setError('')
+    setScheduleError('')
 
     try {
       const payload = createTaskPayload(formValues, recurrenceToApi(recurrence))
       payload.destination = destination.displayName && Number.isFinite(destination.latitude) && Number.isFinite(destination.longitude) ? destination as TaskDestination : undefined
       payload.weatherTravelEnabled = weatherTravelEnabled
       payload.travelMode = travelMode
-      if (!parentTaskRef.current && accessToken && scheduledDate) {
+      if (!parentTaskRef.current && accessToken && canValidateTaskSchedule({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes: payload.estimatedTimeMinutes })) {
         const validation = await validateTaskSchedule(accessToken, { title: payload.title ?? title, priority: payload.priority, dueDate: payload.dueDate, estimatedTimeMinutes: payload.estimatedTimeMinutes, scheduledDate, scheduledStartTime, scheduledEndTime: scheduledEndTime || undefined })
         if (validation.commitmentConflicts.length) { setCommitmentConflict(validation.commitmentConflicts[0]); submissionRef.current = false; setSaving(false); return }
         if (validation.conflicts.length) { setTimeConflict(validation.conflicts[0]); submissionRef.current = false; setSaving(false); return }
@@ -273,8 +299,7 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
         <Label text="Subtasks" />
         <DraftSubtasksSection items={draftSubtasks} onChange={setDraftSubtasks} disabled={saving || uploadingAttachments || Boolean(createdParent)} />
 
-        <Label text="Notes" />
-        <TextInput
+        {!showNotes ? <Pressable accessibilityRole="button" onPress={() => setShowNotes(true)} className="mb-2 rounded-xl border border-dashed p-3" style={{ borderColor: colors.border }}><Text className="text-sm font-bold" style={{ color: colors.accent }}>+ Add notes</Text></Pressable> : <TextInput
           multiline
           placeholder="Additional notes..."
           value={notes}
@@ -283,7 +308,7 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
           textAlignVertical="top"
           className="h-20 rounded-xl border px-3 py-2.5 text-sm"
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
-        />
+        />}
         {error ? <Text className="mt-2 text-sm font-bold text-red-300">{error}</Text> : null}
       </Card>
 
@@ -293,28 +318,18 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
           {PRIORITIES.map((item) => <Segment key={item} label={item} active={priority === item} color={item === 'Low' ? colors.success : item === 'High' || item === 'Urgent' ? colors.error : colors.accent} onPress={() => setPriority(item)} />)}
         </View>
 
-        <Label text="Status" />
-        <View className="mb-3 flex-row flex-wrap gap-2">
-          {STATUSES.map((item) => <Chip key={item} label={item} active={status === item} onPress={() => setStatus(item)} />)}
-        </View>
-
         <Label text="Category" />
         <Select label={category || 'Select category...'} onPress={() => Alert.alert('Category', 'Choose a category', CATEGORIES.map((item) => ({ text: item, onPress: () => setCategory(item) })))} />
 
-        <View className="mt-3 flex-row gap-2">
-          <View className="flex-1">
-            <Label text="Due Date" />
-            <Select label={formatDateLabel(dueDate)} onPress={openDatePicker} />
-          </View>
-          <View className="flex-1">
-            <Label text="Due Time" />
-            <Select label={formatTimeLabel(dueTime)} onPress={openTimePicker} />
-          </View>
-        </View>
-        <Label text="Scheduled Date (YYYY-MM-DD)" />
-        <TextInput accessibilityLabel="Scheduled date" value={scheduledDate} onChangeText={setScheduledDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.placeholder} className="mb-2 rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} />
-        <View className="flex-row gap-2"><View className="flex-1"><Label text="Scheduled Start" /><TextInput accessibilityLabel="Scheduled start time" value={scheduledStartTime} onChangeText={setScheduledStartTime} placeholder="HH:mm" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View><View className="flex-1"><Label text="Scheduled End" /><TextInput accessibilityLabel="Scheduled end time" value={scheduledEndTime} onChangeText={setScheduledEndTime} placeholder="HH:mm or derived" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View></View>
-        <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
+      </Card>
+
+      <Card title="When & Where" icon="📅">
+        <Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Schedule · when you plan to do this</Text>
+        <View className="flex-row gap-2"><View className="flex-1"><Select label={scheduledDate ? formatDateLabel(new Date(`${scheduledDate}T12:00:00`)) : 'Add date'} onPress={openScheduledDatePicker} /></View><View className="flex-1"><Select label={scheduledStartTime ? `${formatTimeLabel(scheduledStartTime)}${scheduledEndTime ? ` – ${formatTimeLabel(scheduledEndTime)}` : ''}` : 'Add time'} onPress={() => openScheduledTimePicker('scheduledStart')} /></View></View>
+        {scheduledStartTime ? <Pressable accessibilityRole="button" onPress={() => openScheduledTimePicker('scheduledEnd')} className="mt-2"><Text className="text-xs font-bold" style={{ color: colors.accent }}>Set end time</Text></Pressable> : null}
+        {scheduleError ? <Text className="mt-2 text-sm font-bold" style={{ color: colors.error }}>{scheduleError}</Text> : null}
+        <View className="mt-4"><Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Deadline · when this must be finished</Text><View className="flex-row gap-2"><View className="flex-1"><Select label={formatDateLabel(dueDate)} onPress={openDatePicker} /></View><View className="flex-1"><Select label={dueTime ? formatTimeLabel(dueTime) : 'Optional time'} onPress={openTimePicker} /></View></View></View>
+        <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
       </Card>
 
       <Card title="Reminder" icon="🔔">
@@ -327,18 +342,21 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: reminderEnabled }} accessibilityLabel="Enable reminder" onPress={() => setReminderEnabled((enabled) => !enabled)} className={`h-6 w-11 justify-center rounded-full px-1 ${reminderEnabled ? 'items-end' : 'items-start'}`} style={{ backgroundColor: reminderEnabled ? colors.accent : colors.border }}><View className="h-4 w-4 rounded-full bg-white" /></Pressable>
         </View>
 
-        <Label text="Reminder Time" />
-        <Select label={REMINDER_OPTIONS.find((option) => option.value === reminderBeforeMinutes)?.label ?? '30 minutes before'} onPress={() => reminderEnabled && Alert.alert('Reminder time', 'Choose when to be reminded', REMINDER_OPTIONS.map((option) => ({ text: option.label, onPress: () => setReminderBeforeMinutes(option.value) })))} />
+        {reminderEnabled ? <><Label text="Reminder Time" /><Select label={REMINDER_OPTIONS.find((option) => option.value === reminderBeforeMinutes)?.label ?? '30 minutes before'} onPress={() => Alert.alert('Reminder time', 'Choose when to be reminded', REMINDER_OPTIONS.map((option) => ({ text: option.label, onPress: () => setReminderBeforeMinutes(option.value) })))} /></> : null}
       </Card>
 
+      <Pressable accessibilityRole="button" onPress={() => setMoreOptions((value) => !value)} className="mb-3 flex-row items-center justify-between rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>More options</Text><Text style={{ color: colors.secondaryText }}>{moreOptions ? '⌃' : '›'}</Text></Pressable>
+
       <Card title="Time & Labels" icon="â±ï¸">
+        {moreOptions ? <>
         <Label text="Estimated Hours" />
         <TextInput value={estimatedHours} onChangeText={setEstimatedHours} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.placeholder} className="mb-3 rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }} />
         <Label text="Labels" />
         <TextInput value={labelsText} onChangeText={setLabelsText} placeholder="Comma-separated labels" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }} />
+        </> : <Text className="text-sm" style={{ color: colors.secondaryText }}>Estimated duration and labels are in More options.</Text>}
       </Card>
 
-      <Card title="Recurring & Dependencies" icon="🔁">
+      {moreOptions ? <Card title="Recurring & Dependencies" icon="🔁">
         <Label text="Recurring Task" />
         <Select label={recurrenceSummary} onPress={() => setIsRecurrenceSheetVisible(true)} />
 
@@ -347,16 +365,16 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
           {draftDependencies.map((dependency) => <View key={dependency.id} className="mb-2 rounded-xl p-3" style={{ backgroundColor: colors.background }}><Text className="font-bold" style={{ color: colors.text }}>{dependency.title}</Text><Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{dependency.category} · {dependency.status}</Text></View>)}
           <Pressable disabled={saving || uploadingAttachments || Boolean(createdParent)} accessibilityRole="button" accessibilityLabel="Add dependency" onPress={() => setDependenciesSheetVisible(true)} className="rounded-xl border border-dashed py-3 active:opacity-70" style={{ borderColor: colors.border, backgroundColor: colors.background, opacity: createdParent ? 0.5 : 1 }}><Text className="text-center text-sm font-bold" style={{ color: colors.accentInk }}>+ Add Dependency</Text></Pressable>
         </View>
-      </Card>
+      </Card> : null}
 
-      <Card title="Attachments" icon="📎">
+      {moreOptions ? <Card title="Attachments" icon="📎">
       <TaskAttachmentPicker
           files={attachments}
           onChange={setAttachments}
           disabled={saving || uploadingAttachments}
           onValidationError={setError}
         />
-      </Card>
+      </Card> : null}
       <TaskRecurrenceSheet
         visible={isRecurrenceSheetVisible}
         mode={recurrence ? 'edit' : 'create'}
@@ -370,7 +388,7 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
       <TaskDependenciesWorkflowSheet visible={dependenciesSheetVisible} mode="add" currentTaskId="draft-task" availableTasks={dependencyOptions} dependencies={draftDependencies} onClose={() => setDependenciesSheetVisible(false)} onAdd={(selected) => setDraftDependencies((current) => {
         const byId = new Map(current.map((item) => [item.id, item])); selected.forEach((item) => byId.set(item.id, item)); return [...byId.values()]
       })} onSaveReplacement={() => undefined} onRemove={() => undefined} />
-      {iosPicker ? <Modal transparent animationType="slide" visible onRequestClose={() => setIosPicker(null)}><Pressable className="flex-1 justify-end bg-black/40" onPress={() => setIosPicker(null)}><Pressable className="p-4" style={{ backgroundColor: colors.surface }} onPress={() => undefined}><DateTimePicker value={iosPicker === 'date' ? dueDate ?? new Date() : (() => { const date = new Date(); const [hours, minutes] = dueTime.split(':').map(Number); if (!Number.isNaN(hours)) date.setHours(hours, minutes || 0, 0, 0); return date })()} mode={iosPicker} display="spinner" onChange={(_, selected) => { if (!selected) return; if (iosPicker === 'date') setDueDate(selected); else setDueTime(`${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`) }} /><PrimaryButton onPress={() => setIosPicker(null)}>Done</PrimaryButton></Pressable></Pressable></Modal> : null}
+      {iosPicker ? <Modal transparent animationType="slide" visible onRequestClose={() => setIosPicker(null)}><Pressable className="flex-1 justify-end bg-black/40" onPress={() => setIosPicker(null)}><Pressable className="p-4" style={{ backgroundColor: colors.surface }} onPress={() => undefined}><DateTimePicker value={iosPicker === 'date' || iosPicker === 'scheduledDate' ? dueDate ?? new Date() : new Date()} mode={iosPicker === 'scheduledDate' ? 'date' : 'time'} display="spinner" onChange={(_, selected) => { if (!selected) return; if (iosPicker === 'date') setDueDate(selected); else if (iosPicker === 'scheduledDate') setScheduledDate(selected.toISOString().slice(0, 10)); else { const next = `${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`; if (iosPicker === 'time') setDueTime(next); else if (iosPicker === 'scheduledStart') setScheduledStartTime(next); else setScheduledEndTime(next) } }} /><PrimaryButton onPress={() => setIosPicker(null)}>Done</PrimaryButton></Pressable></Pressable></Modal> : null}
       <TaskTimeConflictModal conflict={timeConflict} onMoveExisting={(mode, schedule) => void moveConflictTask('existing', mode, schedule)} onMoveNew={(mode, schedule) => void moveConflictTask('new', mode, schedule)} onCancelExisting={() => {
         if (!timeConflict || !accessToken) return
         Alert.alert('Cancel existing task?', 'It will be marked missed and not deleted.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Mark missed', style: 'destructive', onPress: () => void changeTaskStatus(accessToken, timeConflict.existingTask.id, { status: 'missed' }).then(() => setTimeConflict(null)) }])

@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { connectWhiteboardRealtime, getLocalTextGeometryChanges, shouldDisableWhiteboardRealtime } from './whiteboardRealtime'
+import { AppliedOperationCache, connectWhiteboardRealtime, getLocalTextGeometryChanges, shouldDisableWhiteboardRealtime } from './whiteboardRealtime'
 
 const boardId = '11111111-1111-4111-8111-111111111111'
 const socketState = vi.hoisted(() => ({ socket: null as null | { id: string; connected: boolean; active: boolean; disconnected: boolean; io: { uri: string; opts: Record<string, unknown> }; on: ReturnType<typeof vi.fn>; emit: ReturnType<typeof vi.fn>; volatile: { emit: ReturnType<typeof vi.fn> }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> } }))
 vi.mock('socket.io-client', () => ({ io: vi.fn(() => socketState.socket) }))
+
+function mockSocket(id: string) {
+  return { id, connected: true, active: true, disconnected: false, io: { uri: 'http://127.0.0.1:3000', opts: { path: '/socket.io', autoConnect: false } }, on: vi.fn(), emit: vi.fn(), volatile: { emit: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() }
+}
 
 function connect(editor: Record<string, unknown>, role: 'owner' | 'editor' | 'viewer' = 'owner') {
   const cleanup = connectWhiteboardRealtime('token', boardId, editor as never, { getAccessRole: () => role })
@@ -21,7 +25,7 @@ function shape(id: string, text: string, x = 10) {
 
 describe('whiteboard final-text realtime bridge', () => {
   beforeEach(() => {
-    socketState.socket = { id: 'socket-1', connected: true, active: true, disconnected: false, io: { uri: 'http://127.0.0.1:3000', opts: { path: '/socket.io', autoConnect: false } }, on: vi.fn(), emit: vi.fn(), volatile: { emit: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() }
+    socketState.socket = mockSocket('socket-1')
     let id = 0
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => `id-${++id}`) })
   })
@@ -43,6 +47,28 @@ describe('whiteboard final-text realtime bridge', () => {
     const before = shape('shape:text', 'a', 10)
     const after = { ...shape('shape:text', 'ab', 10), props: { ...shape('shape:text', 'ab', 10).props, growY: 48 } }
     expect(getLocalTextGeometryChanges(before, after)).toEqual({ growY: 48, richText: '[changed]' })
+  })
+
+  it('bounds and expires the applied operation cache', () => {
+    const cache = new AppliedOperationCache(2, 100)
+    cache.add('one', 0); cache.add('two', 10); cache.add('three', 20)
+    expect(cache.has('one', 20)).toBe(false)
+    expect(cache.size).toBe(2)
+    expect(cache.has('two', 200)).toBe(false)
+    expect(cache.size).toBe(0)
+  })
+
+  it('registers each socket listener once and reconnect only rejoins the room', () => {
+    const cleanup = connect({ getEditingShapeId: vi.fn(() => null), store: { listen: vi.fn(() => vi.fn()) } })
+    const listenerCounts = new Map<string, number>()
+    for (const [event] of socketState.socket?.on.mock.calls ?? []) listenerCounts.set(event, (listenerCounts.get(event) ?? 0) + 1)
+    expect([...listenerCounts.values()].every((count) => count === 1)).toBe(true)
+    const onCalls = socketState.socket?.on.mock.calls.length
+    const connectHandler = socketState.socket?.on.mock.calls.find(([event]) => event === 'connect')?.[1] as (() => void)
+    connectHandler()
+    expect(socketState.socket?.on).toHaveBeenCalledTimes(onCalls ?? 0)
+    expect(socketState.socket?.emit.mock.calls.filter(([event]) => event === 'whiteboard:join')).toHaveLength(2)
+    cleanup()
   })
 
   it('keeps the active text shape out of normal patches while unrelated shapes remain immediate', () => {
@@ -128,6 +154,79 @@ describe('whiteboard final-text realtime bridge', () => {
     expect(put).not.toHaveBeenCalled()
     cleanup()
   })
+
+  it('does not reapply an optimistic local operation if it is echoed', () => {
+    let listener: ((entry: unknown) => void) | undefined
+    const put = vi.fn()
+    const editor = { getEditingShapeId: vi.fn(() => null), getCurrentPageId: vi.fn(() => 'page:1'), getCurrentPageShapeIds: vi.fn(() => new Set()), store: { listen: vi.fn((callback: (entry: unknown) => void) => { listener = callback; return vi.fn() }), get: vi.fn(), put, remove: vi.fn(), mergeRemoteChanges: vi.fn((callback: () => void) => callback()) } }
+    const cleanup = connect(editor)
+    const local = { id: 'shape:local', typeName: 'shape', type: 'geo', parentId: 'page:1' }
+    listener?.({ scope: 'document', changes: { added: { 'shape:local': local }, updated: {}, removed: {} } })
+    const emitted = socketState.socket?.emit.mock.calls.find(([event]) => event === 'whiteboard:mutation')?.[1] as Record<string, unknown>
+    const handler = socketState.socket?.on.mock.calls.find(([event]) => event === 'whiteboard:mutation')?.[1] as ((payload: unknown) => void)
+    handler({ ...emitted, serverRevision: 2 })
+    expect(put).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('applies a duplicated remote operationId exactly once', () => {
+    const put = vi.fn()
+    const editor = { getEditingShapeId: vi.fn(() => null), getCurrentPageId: vi.fn(() => 'page:1'), getCurrentPageShapeIds: vi.fn(() => new Set()), store: { listen: vi.fn(() => vi.fn()), get: vi.fn(), put, remove: vi.fn(), mergeRemoteChanges: vi.fn((callback: () => void) => callback()) } }
+    const cleanup = connect(editor, 'viewer')
+    const handler = socketState.socket?.on.mock.calls.find(([event]) => event === 'whiteboard:mutation')?.[1] as ((payload: unknown) => void)
+    const payload = { operationId: 'remote-op', clientId: 'peer-client', eventId: 'remote-event-1', serverRevision: 2, payload: { added: [{ id: 'shape:remote', typeName: 'shape', type: 'geo', parentId: 'page:1' }] } }
+    handler(payload); handler({ ...payload, eventId: 'remote-event-2', serverRevision: 3 })
+    expect(put).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
+  it('keeps two real tldraw stores one-directional until the remote user genuinely edits', async () => {
+    Object.defineProperty(globalThis.CSS, 'supports', { configurable: true, value: vi.fn(() => false) })
+    let uuid = 0
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => `real-store-${++uuid}`), getRandomValues: (bytes: Uint8Array) => { bytes.fill(7); return bytes } })
+    const { PageRecordType, createShapeId, createTLStore, defaultShapeUtils } = await import('tldraw')
+    const page = PageRecordType.create({ id: PageRecordType.createId('shared'), name: 'Shared', index: 'a1' as never })
+    const storeA = createTLStore({ shapeUtils: defaultShapeUtils })
+    const storeB = createTLStore({ shapeUtils: defaultShapeUtils })
+    storeA.put([page]); storeB.put([page])
+    const editorFor = (store: typeof storeA) => ({
+      store,
+      getEditingShapeId: vi.fn(() => null),
+      getCurrentPageId: vi.fn(() => page.id),
+      getCurrentPageShapeIds: vi.fn(() => new Set(store.allRecords().filter((record) => record.typeName === 'shape').map((record) => record.id))),
+    })
+
+    const socketA = mockSocket('socket-a'); socketState.socket = socketA
+    const cleanupA = connect(editorFor(storeA))
+    const socketB = mockSocket('socket-b'); socketState.socket = socketB
+    const cleanupB = connect(editorFor(storeB))
+    const shapeId = createShapeId('freehand-x')
+    const shapeX = storeA.schema.types.shape.create({
+      id: shapeId, type: 'draw', parentId: page.id, index: 'a1' as never, x: 0, y: 0,
+      props: { color: 'black', fill: 'none', dash: 'draw', size: 'm', segments: [{ type: 'free', path: '' }], isComplete: false, isClosed: false, isPen: false, scale: 1, scaleX: 1, scaleY: 1 },
+    } as never)
+
+    storeA.put([shapeX])
+    const operationA = socketA.emit.mock.calls.find(([event]) => event === 'whiteboard:mutation')?.[1]
+    expect(operationA).toBeTruthy()
+    const receiveB = socketB.on.mock.calls.find(([event]) => event === 'whiteboard:mutation')?.[1] as (payload: unknown) => void
+    receiveB({ ...(operationA as object), serverRevision: 2 })
+    expect(storeB.get(shapeId)).toEqual(shapeX)
+    expect(socketA.emit.mock.calls.filter(([event]) => event === 'whiteboard:mutation')).toHaveLength(1)
+    expect(socketB.emit.mock.calls.filter(([event]) => event === 'whiteboard:mutation')).toHaveLength(0)
+
+    const changedByB = { ...shapeX, x: 25 }
+    storeB.put([changedByB])
+    const operationB = socketB.emit.mock.calls.find(([event]) => event === 'whiteboard:mutation')?.[1]
+    expect(operationB).toBeTruthy()
+    const receiveA = socketA.on.mock.calls.find(([event]) => event === 'whiteboard:mutation')?.[1] as (payload: unknown) => void
+    receiveA({ ...(operationB as object), serverRevision: 3 })
+    expect(storeA.get(shapeId)?.x).toBe(25)
+    expect(socketA.emit.mock.calls.filter(([event]) => event === 'whiteboard:mutation')).toHaveLength(1)
+    expect(socketB.emit.mock.calls.filter(([event]) => event === 'whiteboard:mutation')).toHaveLength(1)
+
+    cleanupA(); cleanupB()
+  }, 15_000)
 
   it('synchronizes text deletion immediately', () => {
     let listener: ((entry: unknown) => void) | undefined

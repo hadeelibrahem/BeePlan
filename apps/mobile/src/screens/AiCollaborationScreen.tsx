@@ -8,6 +8,7 @@ import { OverviewPanel } from '../features/collaboration/components/ai/OverviewP
 import { PlanView } from '../features/collaboration/components/ai/PlanView';
 import { ProjectHealthPanel } from '../features/collaboration/components/ai/ProjectHealthPanel';
 import { TeamMemberList } from '../features/collaboration/components/ai/TeamMemberList';
+import { DistributionPanel } from '../features/collaboration/components/ai/DistributionPanel';
 import type { PlanFocus } from '../features/collaboration/api/ai-collaboration.api';
 
 export type StartCollaborationFocusInput = {
@@ -23,7 +24,7 @@ type Props = {
   onStartFocus?: (input: StartCollaborationFocusInput) => void;
 };
 
-type TabKey = 'overview' | 'plan' | 'team' | 'health' | 'activity';
+type TabKey = 'overview' | 'plan' | 'team' | 'health' | 'activity' | 'distribution';
 
 const TABS: { value: TabKey; label: string }[] = [
   { value: 'overview', label: 'Overview' },
@@ -31,6 +32,7 @@ const TABS: { value: TabKey; label: string }[] = [
   { value: 'team', label: 'Team' },
   { value: 'health', label: 'Health' },
   { value: 'activity', label: 'Activity' },
+  { value: 'distribution', label: 'Distribution' },
 ];
 
 /**
@@ -88,6 +90,8 @@ export default function AiCollaborationScreen({ task, accessToken = '', onBack, 
         </View>
       ) : tab === 'health' ? (
         <ProjectHealthPanel taskId={task.id} onNavigate={navigateToTab} />
+      ) : tab === 'distribution' ? (
+        <DistributionPanel task={task} />
       ) : (
         <HistoryFeed taskId={task.id} accessToken={accessToken} />
       )}

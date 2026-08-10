@@ -15,8 +15,11 @@ export type RandomStartTask = {
   isDone?: boolean | null;
   isBlocked?: boolean | null;
   dependenciesComplete?: boolean | null;
-  dependencies?: unknown[];
+  dependencies?: Array<{ id?: string; title?: string; status?: string | null }>;
   canEdit?: boolean | null;
+  dependencyCount?: number;
+  incompleteDependencyCount?: number;
+  dependencyTitles?: string[];
 };
 
 export type RandomStartSubtask = RandomStartTask & {
@@ -32,51 +35,58 @@ export type RandomStartTaskWithSubtasks = RandomStartTask & {
 
 export function getEligibleRandomStartTasks(tasks: RandomStartTask[]) {
   return tasks.filter((task) =>
-    (task.status === 'todo' || task.status === 'in_progress') &&
-    task.isDone !== true &&
-    task.isBlocked !== true &&
-    task.dependenciesComplete !== false &&
-    task.canEdit !== false,
+    task.status !== 'done' &&
+    task.status !== 'deleted' &&
+    task.status !== 'archived' &&
+    task.isDone !== true,
   );
 }
 
-/** Flattens a task tree into the smallest currently actionable work items. */
+/**
+ * Random Start is deliberately permissive: dependencies and planner readiness
+ * are metadata, never eligibility. It only removes completed work while
+ * preserving the established parent-to-visible-subtask candidate shape.
+ */
 export function getEligibleRandomStartCandidates(
   tasks: RandomStartTaskWithSubtasks[],
 ) {
   return tasks.flatMap((task) => {
     if (!task.subtasks?.length) {
+      const dependencies = task.dependencies ?? [];
+      const incompleteDependencies = dependencies.filter((dependency) => dependency.status !== 'done');
       return getEligibleRandomStartTasks([{
         ...task,
         itemType: 'task',
         candidateKey: `task:${task.id}`,
+        dependencyCount: dependencies.length,
+        incompleteDependencyCount: incompleteDependencies.length,
+        dependencyTitles: incompleteDependencies.flatMap((dependency) => dependency.title ? [dependency.title] : []),
       }]);
     }
 
-    // A child is not actionable through an unavailable parent (for example a
-    // parent blocked by a task dependency or no longer accessible).
-    const parentForContainerCheck = task.dependencies?.length === 0
-      ? { ...task, dependenciesComplete: true }
-      : task;
-    if (!getEligibleRandomStartTasks([parentForContainerCheck]).length) return [];
+    if (task.status === 'done' || task.isDone === true) return [];
 
     const subtaskById = new Map(task.subtasks.map((subtask) => [subtask.id, subtask]));
-    return getEligibleRandomStartTasks(task.subtasks.map((subtask) => ({
-      ...subtask,
-      itemType: 'subtask' as const,
-      candidateKey: `subtask:${subtask.id}`,
-      taskId: task.id,
-      parentTitle: task.title,
-      // A subtask may inherit parent planning metadata when its own value is
-      // absent; no metadata is invented here.
-      priority: subtask.priority ?? task.priority,
-      dueDate: subtask.dueDate ?? task.dueDate,
-      estimatedTimeMinutes: subtask.estimatedTimeMinutes ?? task.estimatedTimeMinutes,
-      dependenciesComplete: (subtask.dependencyIds ?? []).every((dependencyId) =>
-        subtaskById.get(dependencyId)?.status === 'done' || subtaskById.get(dependencyId)?.isDone === true,
-      ),
-      isBlocked: subtask.isBlocked === true || subtask.status === 'blocked',
-    })));
+    return getEligibleRandomStartTasks(task.subtasks.map((subtask) => {
+      const dependencyIds = subtask.dependencyIds ?? [];
+      const incompleteDependencies = dependencyIds
+        .map((dependencyId) => subtaskById.get(dependencyId))
+        .filter((dependency): dependency is RandomStartSubtask => dependency !== undefined)
+        .filter((dependency) => dependency.status !== 'done' && dependency.isDone !== true);
+      return {
+        ...subtask,
+        itemType: 'subtask' as const,
+        candidateKey: `subtask:${subtask.id}`,
+        taskId: task.id,
+        parentTitle: task.title,
+        priority: subtask.priority ?? task.priority,
+        dueDate: subtask.dueDate ?? task.dueDate,
+        estimatedTimeMinutes: subtask.estimatedTimeMinutes ?? task.estimatedTimeMinutes,
+        dependencyCount: dependencyIds.length,
+        incompleteDependencyCount: incompleteDependencies.length,
+        dependencyTitles: incompleteDependencies.map((dependency) => dependency.title),
+      };
+    }));
   });
 }
 

@@ -55,6 +55,7 @@ import { useFocusSession } from './src/lib/useFocusSession';
 import { syncWidget, pushSignedOutWidget } from './src/lib/widgetSync';
 import { StrictFocusProvider } from './src/features/focus/StrictFocusContext';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
+import RandomStartScreen from './src/screens/RandomStartScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { useTheme } from './src/theme/useTheme';
@@ -566,6 +567,12 @@ function ThemedApp() {
     screenHistory.current.clear();
   }
 
+  // Notifications reports its unread count to this component. Keep the stack
+  // route identity stable across that state update; otherwise React Navigation
+  // remounts the screen and its mount fetch loops forever.
+  const handleSignOutRef = useRef<() => Promise<void>>(handleSignOut);
+  handleSignOutRef.current = handleSignOut;
+
   async function handleCreateTask(payload: TaskPayload) {
     if (!accessToken) return;
     try {
@@ -716,6 +723,26 @@ function ThemedApp() {
     );
   }
 
+  // This route component must be created before any render branches below. Its
+  // identity stays stable while the screen reports unread-count changes.
+  const NotificationsStackRoute = useCallback((props: NativeStackScreenProps<RootStackParamList, 'Notifications'>) => (
+    <NotificationsScreen
+      onBack={() => props.navigation.goBack()}
+      onSignOut={() => void handleSignOutRef.current()}
+      onOpenNotification={(notification) => {
+        const destination = notificationDestination(notification);
+        if (!destination || destination.screen === 'Notifications') return;
+        if (destination.screen === 'ReminderDetails') { props.navigation.navigate('ReminderDetails', { reminderId: destination.reminderId }); return; }
+        if (destination.screen === 'TaskDetails') { props.navigation.navigate('TaskDetails', { taskId: destination.taskId, commentId: destination.commentId, subtaskId: destination.subtaskId }); return; }
+        if (destination.screen === 'AiCollaboration') { props.navigation.navigate('AiCollaboration', { taskId: destination.taskId }); return; }
+        if (destination.screen === 'Calendar') { props.navigation.navigate('Calendar'); return; }
+        if (destination.screen === 'Focus') { props.navigation.navigate('MainTabs', { screen: 'Focus' }); return; }
+        if (destination.screen === 'AiDailyPlanner') { props.navigation.navigate('AiDailyPlanner'); }
+      }}
+      onUnreadCountChange={setUnreadNotificationCount}
+    />
+  ), []);
+
   if (loading) {
     return (
       <View style={{ alignItems: 'center', backgroundColor: theme.colors.background, flex: 1, justifyContent: 'center' }}>
@@ -735,6 +762,7 @@ function ThemedApp() {
       dashboard={summary}
       accessToken={accessToken ?? undefined}
       onOpenTask={(taskId) => rootNavigation?.navigate('TaskDetails', { taskId })}
+      onOpenRandomStart={() => rootNavigation?.navigate('RandomStart')}
       summaryLoading={summaryLoading}
       summaryError={summaryError}
       onRetrySummary={loadDashboardSummary}
@@ -840,7 +868,7 @@ function ThemedApp() {
       onNoticeShown={() => setTaskDetailsNotice('')} onBack={() => {
         if (props.navigation.canGoBack()) props.navigation.goBack()
         else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Tasks' } }] })
-      }} onEdit={() => props.navigation.navigate('EditTask', { taskId: props.route.params.taskId })} onAddToAchievement={() => { const sourceTask = tasks.find((task) => task.id === props.route.params.taskId); props.navigation.navigate('AchievementMuseum', { taskId: props.route.params.taskId, title: sourceTask?.title, achievementDate: (sourceTask?.completedAt ?? sourceTask?.updatedAt ?? new Date().toISOString()).slice(0, 10) }) }} onViewAchievement={(achievementId) => props.navigation.navigate('AchievementMuseum', { achievementId })}
+      }} onEdit={() => { if (__DEV__) console.debug('[edit_task] edit_task_pressed'); if (__DEV__) console.debug('[edit_task] edit_task_navigation'); props.navigation.navigate('EditTask', { taskId: props.route.params.taskId }) }} onAddToAchievement={() => { const sourceTask = tasks.find((task) => task.id === props.route.params.taskId); props.navigation.navigate('AchievementMuseum', { taskId: props.route.params.taskId, title: sourceTask?.title, achievementDate: (sourceTask?.completedAt ?? sourceTask?.updatedAt ?? new Date().toISOString()).slice(0, 10) }) }} onViewAchievement={(achievementId) => props.navigation.navigate('AchievementMuseum', { achievementId })}
       onDelete={async () => {
         const taskId = props.route.params.taskId
         if (deletingTaskRef.current) return deletingTaskRef.current
@@ -874,28 +902,22 @@ function ThemedApp() {
   const AiCollaborationStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'AiCollaboration'>) => (
     <AiCollaborationRoute {...props} accessToken={accessToken ?? ''} tasks={tasks} onBack={() => props.navigation.goBack()} />
   );
-  const NotificationsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Notifications'>) => (
-    <NotificationsScreen
-      onBack={() => props.navigation.goBack()}
-      onSignOut={() => void handleSignOut()}
-      onOpenNotification={(notification) => {
-        const destination = notificationDestination(notification);
-        if (!destination || destination.screen === 'Notifications') return;
-        if (destination.screen === 'ReminderDetails') { props.navigation.navigate('ReminderDetails', { reminderId: destination.reminderId }); return; }
-        if (destination.screen === 'TaskDetails') { props.navigation.navigate('TaskDetails', { taskId: destination.taskId, commentId: destination.commentId, subtaskId: destination.subtaskId }); return; }
-        if (destination.screen === 'AiCollaboration') { props.navigation.navigate('AiCollaboration', { taskId: destination.taskId }); return; }
-        if (destination.screen === 'Calendar') { props.navigation.navigate('Calendar'); return; }
-        if (destination.screen === 'Focus') { props.navigation.navigate('MainTabs', { screen: 'Focus' }); return; }
-        if (destination.screen === 'AiDailyPlanner') { props.navigation.navigate('AiDailyPlanner'); }
-      }}
-      onUnreadCountChange={setUnreadNotificationCount}
-    />
-  );
   const FocusSessionStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'FocusSession'>) => (
     <FocusSessionScreen focus={focus} tasks={tasks} onExit={() => {
       if (props.navigation.canGoBack()) props.navigation.goBack()
       else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Focus' } }] })
     }} />
+  );
+  const RandomStartStackRoute = ({ navigation }: NativeStackScreenProps<RootStackParamList, 'RandomStart'>) => (
+    <RandomStartScreen
+      accessToken={accessToken ?? ''}
+      onBack={() => navigation.goBack()}
+      onViewTask={(taskId) => navigation.navigate('TaskDetails', { taskId })}
+      onStartFocus={async (task) => {
+        const started = await focus.start({ id: task.taskId ?? task.id, title: task.parentTitle ?? task.title, subtaskId: task.itemType === 'subtask' ? task.id : undefined, subtaskTitle: task.itemType === 'subtask' ? task.title : undefined }, 'pomodoro', task.estimatedTimeMinutes ?? 25)
+        if (started) navigation.replace('FocusSession')
+      }}
+    />
   );
   const AiTaskBuilderStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'AiTaskBuilder'>) => (
     <AiTaskBuilderScreen accessToken={accessToken ?? ''} onCancel={() => {
@@ -972,7 +994,7 @@ function ThemedApp() {
   if (user) {
     return (
       <StrictFocusProvider active={focus.active} remainingMs={focus.remainingMs}>
-        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} settingsRoute={SettingsStackRoute} />
+        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} randomStartRoute={RandomStartStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} settingsRoute={SettingsStackRoute} />
       </StrictFocusProvider>
     );
   }

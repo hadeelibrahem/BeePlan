@@ -6,14 +6,49 @@ import { createWhiteboardUuid } from './whiteboardUuid'
 export type WhiteboardRealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline' | 'access-lost'
 type RecordValue = Record<string, unknown>
 type UpdatedRecord = { before: RecordValue; after: RecordValue; shapeSequence?: number }
-type TextFinalPayload = { protocolVersion: 1; boardId: string; clientId: string; eventId: string; traceId: string; shapeId: string; sequence: number; record: RecordValue }
-type TransformPayload = { protocolVersion: 1; boardId: string; clientId: string; eventId: string; interactionId: string; shapeId: string; sequence: number; final: boolean; record: RecordValue }
+type TextFinalPayload = { protocolVersion: 1; operationId: string; boardId: string; clientId: string; eventId: string; traceId: string; timestamp: string; shapeId: string; sequence: number; record: RecordValue }
+type TransformPayload = { protocolVersion: 1; operationId: string; boardId: string; clientId: string; eventId: string; timestamp: string; interactionId: string; shapeId: string; sequence: number; final: boolean; record: RecordValue }
 export type TextStoreWriteSource = 'local-user' | 'remote-text-content' | 'remote-text-final' | 'remote-normal-mutation' | 'http-reload' | 'snapshot-restore' | 'autosave-response' | 'unknown'
 export type WhiteboardRealtimeDebugApi = { socketId: () => string | undefined; sendDebugMessage: (message: string) => string; sendSyntheticRectangle: () => string }
 export type WhiteboardRealtimeLifecycle = { event: string; error?: string; disconnectReason?: string; url: string; path: string; namespace: string; socketId?: string; socketConnected: boolean; socketActive: boolean; socketDisconnected: boolean }
 type RealtimeCallbacks = { onStatus?: (status: WhiteboardRealtimeStatus) => void; onRemotePatch?: (serverRevision: number, traceId: string) => void; onReloadRequired?: (traceId?: string) => void; getAccessRole?: () => string | undefined; getEditor?: () => Editor | null; getEditorInstanceId?: () => string | undefined; getVisibleEditorInstanceId?: () => string | undefined; onDebugApi?: (api: WhiteboardRealtimeDebugApi | null) => void; onDebugMessage?: (value: { boardId: string; message: string; traceId: string; senderSocketId?: string }) => void; onDebugSynthetic?: (shapeId: string, traceId: string) => void; onLifecycle?: (value: WhiteboardRealtimeLifecycle) => void }
 
 const persistentTypeNames = new Set(['shape', 'binding', 'asset', 'page'])
+const APPLIED_OPERATION_LIMIT = 2_000
+const APPLIED_OPERATION_TTL_MS = 5 * 60_000
+
+/** Bounded, expiring idempotency guard shared by every incoming mutation channel. */
+export class AppliedOperationCache {
+  private readonly values = new Map<string, number>()
+  private readonly limit: number
+  private readonly ttlMs: number
+
+  constructor(limit = APPLIED_OPERATION_LIMIT, ttlMs = APPLIED_OPERATION_TTL_MS) {
+    this.limit = limit
+    this.ttlMs = ttlMs
+  }
+
+  has(operationId: string, now = Date.now()) {
+    this.prune(now)
+    return this.values.has(operationId)
+  }
+
+  add(operationId: string, now = Date.now()) {
+    this.prune(now)
+    this.values.delete(operationId)
+    this.values.set(operationId, now)
+    while (this.values.size > this.limit) this.values.delete(this.values.keys().next().value as string)
+  }
+
+  get size() { return this.values.size }
+
+  private prune(now: number) {
+    for (const [operationId, appliedAt] of this.values) {
+      if (now - appliedAt <= this.ttlMs) break
+      this.values.delete(operationId)
+    }
+  }
+}
 export function shouldDisableWhiteboardRealtime(env: { DEV?: boolean; VITE_WHITEBOARD_DISABLE_REALTIME?: string } = import.meta.env) {
   return env.DEV === true && env.VITE_WHITEBOARD_DISABLE_REALTIME === 'true'
 }
@@ -107,13 +142,12 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
     if (import.meta.env.DEV) console.error(`[WhiteboardRealtimeTrace] ${event}`, lifecycle)
   }
   reportLifecycle('SOCKET_CREATE')
-  let applyingRemote = false
+  let remoteApplyDepth = 0
   let serverRevision = 0
   let latestAppliedRealtimeRevision = 0
   let transportConnected = false
   let joinedBoardId: string | null = null
-  const seen = new Set<string>()
-  const seenTextFinalEvents = new Set<string>()
+  const appliedOperationIds = new AppliedOperationCache()
   const lastAppliedTextSequence = new Map<string, number>()
   const nextTextSequence = new Map<string, number>()
   const textEditSessions = new Map<string, { traceId: string; shapeId: string; finalCount: number }>()
@@ -126,6 +160,17 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
   const editorInstanceId = callbacks.getEditorInstanceId?.() ?? 'editor-at-connection'
 
   const isPersistent = (record: RecordValue) => persistentTypeNames.has(String(record.typeName))
+  const isApplyingRemote = () => remoteApplyDepth > 0
+  const withRemoteApply = (operationId: string, recordIds: string[], apply: () => void) => {
+    remoteApplyDepth += 1
+    if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] REMOTE_APPLY', { operationId, clientId, socketId: socket.id, boardId, recordIds, remoteApplyDepth })
+    try {
+      getActiveEditor()?.store.mergeRemoteChanges(apply)
+    } finally {
+      if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] REMOTE_APPLY_SUPPRESSED_FROM_EMIT', { operationId, clientId, socketId: socket.id, boardId, recordIds, remoteApplyDepth })
+      remoteApplyDepth -= 1
+    }
+  }
   const editingShapeId = () => {
     const candidate = getActiveEditor() as Editor & { getEditingShapeId?: () => string | null }
     return candidate.getEditingShapeId?.() ?? null
@@ -142,7 +187,9 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
   }
   const emitTransform = (record: RecordValue, interactionId: string, final: boolean) => {
     const shapeId = String(record.id)
-    const payload: TransformPayload = { protocolVersion: 1, boardId, clientId, eventId: createWhiteboardUuid(), interactionId, shapeId, sequence: nextTransformSequenceFor(shapeId), final, record }
+    const operationId = createWhiteboardUuid()
+    const payload: TransformPayload = { protocolVersion: 1, operationId, boardId, clientId, eventId: operationId, timestamp: new Date().toISOString(), interactionId, shapeId, sequence: nextTransformSequenceFor(shapeId), final, record }
+    appliedOperationIds.add(operationId)
     if (import.meta.env.DEV) console.error(`[WhiteboardRealtimeTrace] ${final ? 'TRANSFORM_FINAL_EMITTED' : 'TRANSFORM_FLUSHED'}`, { socketId: socket.id, ...payload, shapeType: record.type })
     if (final) {
       socket.emit('whiteboard:transform', payload, (ack: { accepted?: boolean; reason?: string }) => {
@@ -183,7 +230,13 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
     }
     activeTransform = null
   }
-  const emitMutation = (added: RecordValue[], updated: UpdatedRecord[], removed: RecordValue[]) => {
+  const emitMutation = (added: RecordValue[], updated: UpdatedRecord[], removed: RecordValue[], changeSource = 'unknown') => {
+    if (changeSource === 'remote' || isApplyingRemote()) {
+      const details = { changeSource, clientId, socketId: socket.id, boardId, recordIds: [...added, ...updated.map((change) => change.after), ...removed].map((record) => record.id), remoteApplyDepth }
+      console.error('[WhiteboardRealtimeTrace] REMOTE_CHANGE_REEMITTED_AS_LOCAL', details)
+      if (import.meta.env.DEV) throw new Error('REMOTE_CHANGE_REEMITTED_AS_LOCAL')
+      return
+    }
     const currentEditingShapeId = editingShapeId()
     const filteredUpdated = updated.filter((change) => {
       const activeText = isTextShapeRecord(change.after) && currentEditingShapeId === String(change.after.id)
@@ -197,23 +250,37 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
     })
     if (!added.length && !updated.length && !removed.length) { if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] CLIENT_EMIT_SKIPPED', { reason: 'empty_patch', boardId }); return }
     if (import.meta.env.DEV && updated.some((change) => isTextShapeRecord(change.after) && String(change.after.id) === String(currentEditingShapeId))) throw new Error('Active text shape entered a normal whiteboard mutation payload')
-    const eventId = createWhiteboardUuid()
+    const operationId = createWhiteboardUuid()
+    const eventId = operationId
     const traceId = createWhiteboardUuid()
-    seen.add(eventId)
+    appliedOperationIds.add(operationId)
     const accessRole = callbacks.getAccessRole?.()
     const skipReason = !transportConnected ? 'socket_disconnected' : joinedBoardId !== boardId ? 'room_not_joined' : accessRole !== 'owner' && accessRole !== 'editor' ? 'viewer' : null
     if (skipReason) { if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] CLIENT_EMIT_SKIPPED', { reason: skipReason, traceId, eventId, boardId, socketId: socket.id }); return }
     if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] LOCAL_CAPTURE', { traceId, eventId, boardId, clientId, socketId: socket.id, serverRevision, localAppliedRevision: latestAppliedRealtimeRevision, latestServerRevision: serverRevision, loadedRevision: 0, addedIds: added.map((record) => record.id), updatedIds: updated.map((change) => change.after.id), removedIds: removed.map((record) => record.id) })
     const payload = { added, updated, removed }
+    const changedRecords = [...added, ...updated.map((change) => change.after), ...removed]
+    if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] LOCAL_EMIT', {
+      source: 'store-listener', eventId, operationId, clientId, socketId: socket.id, boardId,
+      recordIds: changedRecords.map((record) => record.id),
+      records: changedRecords.map((record) => ({ operationId, recordId: record.id, recordVersion: record.version ?? (record.meta as RecordValue | undefined)?.version ?? null, shapeType: record.type })),
+      shapeTypes: changedRecords.map((record) => record.type).filter(Boolean), changeSource,
+      editorHistorySource: changeSource, isApplyingRemote: isApplyingRemote(), isHydrating: false,
+      stack: new Error().stack,
+    })
     if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] MUTATION_EMIT_SOURCE', { file: 'whiteboardRealtime.ts', function: 'emitMutation', callStack: new Error().stack, updatedRecordIds: updated.map((change) => change.after.id), updatedShapeTypes: updated.map((change) => change.after.type) })
-    socket.emit('whiteboard:mutation', { protocolVersion: 1, boardId, clientId, eventId, traceId, baseRevision: serverRevision, sentAt: new Date().toISOString(), payload })
+    socket.emit('whiteboard:mutation', { protocolVersion: 1, operationId, boardId, clientId, eventId, traceId, baseRevision: serverRevision, sentAt: new Date().toISOString(), payload })
     if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] CLIENT_EMIT', { traceId, eventId, boardId, clientId, socketId: socket.id, serverRevision, localAppliedRevision: latestAppliedRealtimeRevision, latestServerRevision: serverRevision, loadedRevision: 0 })
     return eventId
   }
   const onChange = (entry: { changes: { added: Record<string, RecordValue>; updated: Record<string, [RecordValue, RecordValue]>; removed: Record<string, RecordValue> }; source?: string; scope?: string }, finalizedShapeId: string | null = null) => {
     const { changes } = entry
     if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] STORE_CHANGE_RAW', { boardId, addedKeys: Object.keys(changes.added), updatedKeys: Object.keys(changes.updated), removedKeys: Object.keys(changes.removed), actualTypeNames: [...Object.values(changes.added), ...Object.values(changes.removed)].map((record) => record.typeName), source: entry.source, scope: entry.scope })
-    if (applyingRemote) return
+    if ((entry.source !== undefined && entry.source !== 'user') || isApplyingRemote()) {
+      if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] REMOTE_APPLY_SUPPRESSED_FROM_EMIT', { boardId, clientId, socketId: socket.id, changeSource: entry.source ?? 'unknown', isApplyingRemote: isApplyingRemote(), recordIds: [...Object.keys(changes.added), ...Object.keys(changes.updated), ...Object.keys(changes.removed)] })
+      return
+    }
+    if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] LOCAL_USER_CHANGE', { boardId, clientId, socketId: socket.id, changeSource: entry.source, scope: entry.scope, recordIds: [...Object.keys(changes.added), ...Object.keys(changes.updated), ...Object.keys(changes.removed)] })
     const added = Object.values(changes.added).filter(isPersistent)
     const updated = Object.values(changes.updated).filter(([before, after]) => isPersistent(before) || isPersistent(after)).map(([before, after]) => ({ before, after }))
     const removed = Object.values(changes.removed).filter(isPersistent)
@@ -250,7 +317,7 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
         immediateUpdated.push({ before, after })
       }
     })
-    if (normalAdded.length || immediateUpdated.length || removed.length) emitMutation(normalAdded, immediateUpdated, removed)
+    if (normalAdded.length || immediateUpdated.length || removed.length) emitMutation(normalAdded, immediateUpdated, removed, entry.source ?? 'unknown')
   }
   const emitTextFinal = (shape: RecordValue, session: { traceId: string; shapeId: string; finalCount: number } | undefined) => {
     if (!isTextShapeRecord(shape) || !session || session.finalCount > 0) return
@@ -259,12 +326,13 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
     const shapeId = String(shape.id)
     const sequence = (nextTextSequence.get(shapeId) ?? 0) + 1
     nextTextSequence.set(shapeId, sequence)
-    const eventId = createWhiteboardUuid()
+    const operationId = createWhiteboardUuid()
+    const eventId = operationId
     const trace = { traceId: session.traceId, eventId, boardId, shapeId, sequence, socketId: socket.id, clientId }
     if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_EDIT_ENDED', trace)
     if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_FINAL_CREATED', { ...trace, record: { id: shape.id, type: shape.type, parentId: shape.parentId, x: shape.x, y: shape.y, w: (shape.props as Record<string, unknown>)?.w, h: (shape.props as Record<string, unknown>)?.h, richTextPresent: Boolean((shape.props as Record<string, unknown>)?.richText) } })
-    seen.add(eventId)
-    socket.emit('whiteboard:text-final', { protocolVersion: 1, boardId, clientId, eventId, traceId: session.traceId, shapeId, sequence, record: shape } satisfies TextFinalPayload)
+    appliedOperationIds.add(operationId)
+    socket.emit('whiteboard:text-final', { protocolVersion: 1, operationId, boardId, clientId, eventId, traceId: session.traceId, timestamp: new Date().toISOString(), shapeId, sequence, record: shape } satisfies TextFinalPayload)
     session.finalCount += 1
     if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_FINAL_EMIT', { ...trace, finalCount: session.finalCount })
   }
@@ -298,7 +366,10 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
     onSessionChange()
     if (!entry.scope || entry.scope === 'document') onChange(entry, endedShapeId)
   }
-  const unlisten = editor.store.listen(onStoreEvent as never)
+  // tldraw 5.x officially marks mergeRemoteChanges entries as `remote`. Filtering at
+  // the store boundary prevents any collaboration instance sharing this store from
+  // converting a remote/system write into a fresh local operation.
+  const unlisten = editor.store.listen(onStoreEvent as never, { source: 'user' })
   const performanceApi = (editor as Editor & { performance?: { on?: (event: string, callback: (value: { name: string; path: string }) => void) => () => void } }).performance
   const unlistenTransformStart = performanceApi?.on?.('interaction-start', (event) => {
     if (!isTransformInteraction(event.name, event.path) || activeTransform) return
@@ -317,17 +388,17 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
   socket.on('reconnect_attempt', () => emitStatus('reconnecting'))
   socket.on('disconnect', (reason) => { transportConnected = false; joinedBoardId = null; reportLifecycle('SOCKET_DISCONNECT', { disconnectReason: reason }); emitStatus('offline') })
   socket.on('whiteboard:joined', (value: { boardId?: string; serverRevision?: number }) => { if (value.boardId === boardId) { joinedBoardId = boardId; serverRevision = value.serverRevision ?? serverRevision; emitStatus('connected'); if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] BOARD_JOIN_ACK', { boardId, socketId: socket.id, connected: socket.connected, accessRole: callbacks.getAccessRole?.(), namespace: '/whiteboards', serverRevision }) } })
-  socket.on('whiteboard:mutation-accepted', (value: { serverRevision?: number; eventId?: string }) => { serverRevision = value.serverRevision ?? serverRevision; if (value.eventId) seen.add(value.eventId) })
-  socket.on('whiteboard:text-final-accepted', (value: { serverRevision?: number; eventId?: string }) => { serverRevision = value.serverRevision ?? serverRevision; if (value.eventId) seenTextFinalEvents.add(value.eventId) })
+  socket.on('whiteboard:mutation-accepted', (value: { serverRevision?: number; operationId?: string; eventId?: string }) => { serverRevision = value.serverRevision ?? serverRevision; const id = value.operationId ?? value.eventId; if (id) appliedOperationIds.add(id) })
+  socket.on('whiteboard:text-final-accepted', (value: { serverRevision?: number; operationId?: string; eventId?: string }) => { serverRevision = value.serverRevision ?? serverRevision; const id = value.operationId ?? value.eventId; if (id) appliedOperationIds.add(id) })
   socket.on('whiteboard:reload-required', (value: { traceId?: string; serverRevision?: number }) => { serverRevision = value.serverRevision ?? serverRevision; callbacks.onReloadRequired?.(value.traceId) })
   socket.on('whiteboard:mutation-rejected', (value: { reason?: string; eventId?: string }) => {
     // A generic forbidden mutation can be a viewer or stale-role rejection.
     // Only an explicit revocation means the board membership is gone.
     if (value.reason === 'access_revoked') emitStatus('access-lost')
   })
-  socket.on('whiteboard:mutation', (envelope: { traceId?: string; eventId: string; serverRevision?: number; payload: { added?: RecordValue[]; updated?: UpdatedRecord[]; removed?: RecordValue[] } }) => {
-    if (seen.has(envelope.eventId)) return
-    seen.add(envelope.eventId)
+  socket.on('whiteboard:mutation', (envelope: { operationId?: string; clientId?: string; traceId?: string; eventId: string; serverRevision?: number; payload: { added?: RecordValue[]; updated?: UpdatedRecord[]; removed?: RecordValue[] } }) => {
+    const operationId = envelope.operationId ?? envelope.eventId
+    if (!operationId || envelope.clientId === clientId || appliedOperationIds.has(operationId)) return
     serverRevision = envelope.serverRevision ?? serverRevision
     const payload = envelope.payload
     const added = payload.added ?? []
@@ -343,14 +414,14 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
     const activeEditorInstanceId = callbacks.getEditorInstanceId?.() ?? editorInstanceId
     if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] REMOTE_RECEIVE', { traceId, eventId: envelope.eventId, boardId, socketId: socket.id, editorInstanceId: activeEditorInstanceId, visibleEditorInstanceId, sameInstance: remoteApplyEditor === visibleEditor, serverRevision: envelope.serverRevision, addedIds: added.map((record) => record.id), updatedIds: updated.map((change) => change.after.id), removedIds: removed.map((record) => record.id) })
     if (!remoteApplyEditor) return
-    applyingRemote = true
-    try {
+    appliedOperationIds.add(operationId)
+    withRemoteApply(operationId, [...added, ...acceptedUpdated.map((change) => change.after), ...removed].map((record) => String(record.id)), () => {
       if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] REMOTE_APPLY_BEGIN', { traceId, eventId: envelope.eventId, boardId, socketId: socket.id, editorInstanceId: activeEditorInstanceId, visibleEditorInstanceId, sameInstance: remoteApplyEditor === visibleEditor, serverRevision: envelope.serverRevision })
       const updatedRecords = acceptedUpdated.map((change) => change.after)
       const allAdded = [...added, ...updatedRecords]
       const orderedTypeNames = ['page', 'asset', 'shape', 'binding']
       const recordsByType = (typeName: string) => allAdded.filter((record) => record.typeName === typeName)
-      remoteApplyEditor.store.mergeRemoteChanges(() => {
+      {
         for (const typeName of orderedTypeNames) {
           const records = recordsByType(typeName)
           if (records.length) {
@@ -361,7 +432,7 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
         const otherRecords = allAdded.filter((record) => !orderedTypeNames.includes(String(record.typeName)))
         if (otherRecords.length) remoteApplyEditor.store.put(otherRecords as never)
         remoteApplyEditor.store.remove(removed.map((record) => String(record.id)) as never)
-      })
+      }
       if (import.meta.env.DEV) {
         const ids = [...added, ...acceptedUpdated.map((change) => change.after)]
         console.error('[WhiteboardRealtimeTrace] REMOTE_APPLY_END', { traceId, eventId: envelope.eventId, boardId, socketId: socket.id, editorInstanceId: activeEditorInstanceId, visibleEditorInstanceId, sameInstance: remoteApplyEditor === visibleEditor, serverRevision: envelope.serverRevision, records: ids.map((record) => ({ id: record.id, present: Boolean(remoteApplyEditor.store.get(String(record.id) as never)) })) })
@@ -372,14 +443,15 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
           console.error('[WhiteboardRealtimeTrace] REMOTE_VISIBLE_STORE_CONFIRMED', { recordId: record.id, existsInStore: Boolean(shape), currentPageId, recordParentId: shape?.parentId, visibleOnCurrentPage: currentPageShapeIds.has(record.id as never) })
         }
       }
-    } finally { applyingRemote = false }
+    })
     latestAppliedRealtimeRevision = envelope.serverRevision ?? serverRevision
     if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] REMOTE_REVISION_UPDATED', { traceId, eventId: envelope.eventId, boardId, socketId: socket.id, serverRevision: envelope.serverRevision, localAppliedRevision: latestAppliedRealtimeRevision, latestServerRevision: serverRevision, loadedRevision: 0 })
     callbacks.onRemotePatch?.(latestAppliedRealtimeRevision, traceId)
   })
   socket.on('whiteboard:text-final', (payload: TextFinalPayload) => {
     const trace = { traceId: payload?.traceId, eventId: payload?.eventId, boardId: payload?.boardId, shapeId: payload?.shapeId, sequence: payload?.sequence, socketId: socket.id, clientId: payload?.clientId }
-    if (payload?.protocolVersion !== 1 || payload.boardId !== boardId || typeof payload.eventId !== 'string' || typeof payload.traceId !== 'string' || seenTextFinalEvents.has(`${boardId}:${payload.shapeId}:${payload.eventId}`) || payload.shapeId !== payload.record?.id || !isTextShapeRecord(payload.record) || typeof payload.sequence !== 'number') return
+    const operationId = payload?.operationId ?? payload?.eventId
+    if (payload?.protocolVersion !== 1 || payload.boardId !== boardId || typeof operationId !== 'string' || typeof payload.traceId !== 'string' || payload.clientId === clientId || appliedOperationIds.has(operationId) || payload.shapeId !== payload.record?.id || !isTextShapeRecord(payload.record) || typeof payload.sequence !== 'number') return
     if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_FINAL_REMOTE_RECEIVE', trace)
     const lastSequence = lastAppliedTextSequence.get(payload.shapeId) ?? 0
     if (payload.sequence <= lastSequence) {
@@ -393,39 +465,38 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
       if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_FINAL_REMOTE_REJECTED', { ...trace, reason: 'invalid_parent', currentPageId: targetEditor?.getCurrentPageId?.(), pageExists: Boolean(parent), recordParentId: parentId })
       return
     }
-    seenTextFinalEvents.add(`${boardId}:${payload.shapeId}:${payload.eventId}`)
+    appliedOperationIds.add(operationId)
     lastAppliedTextSequence.set(payload.shapeId, payload.sequence)
-    applyingRemote = true
-    try {
+    withRemoteApply(operationId, [payload.shapeId], () => {
       if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_FINAL_REMOTE_APPLY_BEGIN', trace)
       traceTextStoreWrite(payload.record, 'remote-text-final', payload.sequence, editingShapeId())
-      targetEditor.store.mergeRemoteChanges(() => targetEditor.store.put([payload.record] as never))
+      targetEditor.store.put([payload.record] as never)
       callbacks.onRemotePatch?.(serverRevision, payload.eventId)
       const stored = targetEditor.store.get(payload.shapeId as never) as RecordValue | undefined
       const currentPageId = targetEditor.getCurrentPageId()
       const visibleOnCurrentPage = targetEditor.getCurrentPageShapeIds().has(payload.shapeId as never)
       if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_FINAL_REMOTE_APPLY_END', { ...trace, editorInstanceId, currentPageId, recordParentId: payload.record.parentId, pageExists: Boolean(parent), visibleOnCurrentPage })
       if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] TEXT_FINAL_STORE_CONFIRMED', { ...trace, existsInStore: Boolean(stored), currentPageId, recordParentId: payload.record.parentId, pageExists: Boolean(parent), visibleOnCurrentPage })
-    } finally {
-      applyingRemote = false
-    }
+    })
   })
   socket.on('whiteboard:transform', (payload: TransformPayload) => {
-    if (payload?.protocolVersion !== 1 || payload.boardId !== boardId || typeof payload.shapeId !== 'string' || payload.shapeId !== payload.record?.id || typeof payload.interactionId !== 'string' || typeof payload.sequence !== 'number' || !transformRecord(payload.record)) return
+    const operationId = payload?.operationId ?? payload?.eventId
+    if (payload?.protocolVersion !== 1 || payload.boardId !== boardId || typeof operationId !== 'string' || payload.clientId === clientId || appliedOperationIds.has(operationId) || typeof payload.shapeId !== 'string' || payload.shapeId !== payload.record?.id || typeof payload.interactionId !== 'string' || typeof payload.sequence !== 'number' || !transformRecord(payload.record)) return
     if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] TRANSFORM_REMOTE_RECEIVED', { boardId, clientId, socketId: socket.id, interactionId: payload.interactionId, shapeId: payload.shapeId, sequence: payload.sequence, final: payload.final })
-    const previous = lastAppliedTransform.get(payload.shapeId)
+    const transformKey = `${payload.clientId}:${payload.interactionId}:${payload.shapeId}`
+    const previous = lastAppliedTransform.get(transformKey)
     if (previous && (previous.final || payload.sequence <= previous.sequence)) {
       if (import.meta.env.DEV) console.error('[WhiteboardRealtimeTrace] TRANSFORM_STALE_IGNORED', { boardId, shapeId: payload.shapeId, interactionId: payload.interactionId, sequence: payload.sequence, previous })
       return
     }
     const targetEditor = getActiveEditor()
     if (!targetEditor || !targetEditor.store.get(payload.record.parentId as never)) return
-    applyingRemote = true
-    try {
+    withRemoteApply(operationId, [payload.shapeId], () => {
       if (import.meta.env.DEV) console.error(`[WhiteboardRealtimeTrace] ${payload.final ? 'TRANSFORM_FINAL_APPLIED' : 'TRANSFORM_REMOTE_APPLIED'}`, { boardId, clientId, socketId: socket.id, interactionId: payload.interactionId, shapeId: payload.shapeId, sequence: payload.sequence })
-      targetEditor.store.mergeRemoteChanges(() => targetEditor.store.put([payload.record] as never))
-      lastAppliedTransform.set(payload.shapeId, { interactionId: payload.interactionId, sequence: payload.sequence, final: payload.final })
-    } finally { applyingRemote = false }
+      targetEditor.store.put([payload.record] as never)
+      appliedOperationIds.add(operationId)
+      lastAppliedTransform.set(transformKey, { interactionId: payload.interactionId, sequence: payload.sequence, final: payload.final })
+    })
   })
   socket.on('whiteboard:debug-message', (value: { boardId?: string; message?: string; traceId?: string; senderSocketId?: string }) => {
     if (value.boardId !== boardId || typeof value.message !== 'string' || typeof value.traceId !== 'string') return
@@ -436,13 +507,12 @@ export function connectWhiteboardRealtime(accessToken: string, boardId: string, 
     const activeEditor = getActiveEditor()
     const shapeId = value.shape.id
     if (!activeEditor || typeof shapeId !== 'string') return
-    applyingRemote = true
-    try {
+    const remoteShapeId = shapeId
+    const remoteTraceId = value.traceId
+    withRemoteApply(remoteTraceId, [remoteShapeId], () => {
       activeEditor.createShape(value.shape as never)
-      callbacks.onDebugSynthetic?.(shapeId, value.traceId)
-    } finally {
-      applyingRemote = false
-    }
+      callbacks.onDebugSynthetic?.(remoteShapeId, remoteTraceId)
+    })
   })
   callbacks.onDebugApi?.({
     socketId: () => socket.id,

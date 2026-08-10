@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Trophy } from 'lucide-react'
 import { BeePlanLogo } from '../BeePlanLogo'
 import {
   AnalyticsIcon,
@@ -63,6 +64,10 @@ function SettingsIcon() {
   )
 }
 
+function AchievementIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return <Trophy className={className} strokeWidth={1.8} aria-hidden="true" />
+}
+
 type SidebarProps = SidebarNavHandlers & {
   active: SidebarPage
   panelTitle?: string
@@ -97,34 +102,26 @@ const NAV_GROUPS = [
     items: [
       { page: 'notifications', label: 'Notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
       { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
-      { page: 'achievements', label: 'Achievement Museum', Icon: AnalyticsIcon, handler: 'onNavigateAchievements' },
+      { page: 'achievements', label: 'Achievement Museum', Icon: AchievementIcon, handler: 'onNavigateAchievements' },
       { page: 'settings', label: 'Settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
     ]
   }
 ] as const
 
 export function Sidebar({ active, panelTitle, panelCaption, panelPercent, mobileOpen, onCloseMobile, ...nav }: SidebarProps) {
+  const sidebarClassName = mobileOpen
+    ? 'bp-sidebar-drawer fixed inset-y-0 start-0 z-[51] flex w-[230px] max-w-[85vw] animate-[beeplanFadeIn_200ms_ease-out] flex-col border-r border-white/5 bg-slate-900 shadow-xl'
+    : 'bp-sidebar sticky top-0 hidden h-screen w-[230px] shrink-0 flex-col border-r border-white/5 bg-slate-900/35 shadow-[8px_0_18px_rgba(0,0,0,0.08)] lg:flex'
+
   return (
     <>
-      {/* Desktop Sidebar: full-height, 230px, flex column */}
-      <aside className="bp-sidebar sticky top-0 hidden h-screen w-[230px] shrink-0 flex-col border-r border-white/5 bg-slate-900/35 lg:flex shadow-[8px_0_18px_rgba(0,0,0,0.08)]">
-        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} />
+      <aside className={sidebarClassName}>
+        <SidebarContent active={active} panelTitle={panelTitle} panelCaption={panelCaption} panelPercent={panelPercent} nav={nav} onNavigate={mobileOpen ? onCloseMobile : undefined} />
       </aside>
 
-      {/* Mobile Drawer Sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-[beeplanFadeIn_150ms_ease-out]" onClick={onCloseMobile} />
-          <aside className="bp-sidebar-drawer absolute inset-y-0 start-0 w-[230px] max-w-[85vw] animate-[beeplanFadeIn_200ms_ease-out] border-r border-white/5 bg-slate-900 flex flex-col">
-            <SidebarContent
-              active={active}
-              panelTitle={panelTitle}
-              panelCaption={panelCaption}
-              panelPercent={panelPercent}
-              nav={nav}
-              onNavigate={onCloseMobile}
-            />
-          </aside>
         </div>
       )}
     </>

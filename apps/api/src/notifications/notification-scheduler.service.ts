@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { and, eq, gte, isNotNull, lte, ne } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
+import {
+  describeDatabaseError,
+  withTransientDatabaseRetry,
+} from '../db/database-error';
 import {
   focusSessions,
   googleCalendarEvents,
@@ -15,6 +19,8 @@ const MINUTE = 60_000;
 /** Durable, retry-safe producers for time-based notifications. */
 @Injectable()
 export class NotificationSchedulerService {
+  private readonly logger = new Logger(NotificationSchedulerService.name);
+  private running = false;
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly notifications: NotificationsService,
@@ -25,12 +31,35 @@ export class NotificationSchedulerService {
 
   @Cron('* * * * *')
   async tick() {
+    if (this.running) return;
+    this.running = true;
     const now = new Date();
-    await Promise.allSettled([
-      this.emitTaskReminders(now),
-      this.emitCalendarReminders(now),
-      this.emitFocusReminders(now),
-    ]);
+    try {
+      const scans = [
+        ['tasks', () => this.emitTaskReminders(now)],
+        ['calendar', () => this.emitCalendarReminders(now)],
+        ['focus', () => this.emitFocusReminders(now)],
+      ] as const;
+      const results = await Promise.allSettled(scans.map(([, scan]) =>
+        withTransientDatabaseRetry(scan, { attempts: 2 })));
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') this.logger.warn(JSON.stringify({
+          event: 'notification_scheduler_scan_failed',
+          scan: scans[index][0],
+          retryNextTick: true,
+          pool: this.databaseService.poolStats(),
+          ...describeDatabaseError(result.reason, 'query'),
+        }));
+      });
+      this.logger.debug(JSON.stringify({
+        event: 'notification_scheduler_finished',
+        successfulScans: results.filter((result) => result.status === 'fulfilled').length,
+        failedScans: results.filter((result) => result.status === 'rejected').length,
+        pool: this.databaseService.poolStats(),
+      }));
+    } finally {
+      this.running = false;
+    }
   }
 
   private async emitTaskReminders(now: Date) {

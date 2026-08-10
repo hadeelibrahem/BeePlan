@@ -20,6 +20,7 @@ import { useUnsavedChangesGuard } from '../lib/useUnsavedChangesGuard'
 import { TaskTimeConflictModal, type ScheduleChoice } from '../components/TaskTimeConflictModal'
 import { TaskCommitmentConflictModal } from '../components/TaskCommitmentConflictModal'
 import { WeatherTravelTaskFields } from '../components/WeatherTravelTaskFields'
+import { canValidateTaskSchedule, taskScheduleValidationError } from '../lib/taskScheduleValidation'
 import { skipCommitmentOccurrence } from '../lib/plannerApi'
 import { ManageMembersSection } from '../features/collaboration/components/ManageMembersSection'
 import { ReminderAudienceSection } from '../features/collaboration/components/ReminderAudienceSection'
@@ -137,6 +138,7 @@ export default function EditTaskScreen({
   const [selectedDependency, setSelectedDependency] = useState<ApiDependency | null>(null)
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(recurrenceToUi(task.recurrence))
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
+  const [moreOptions, setMoreOptions] = useState(false)
   const recurrenceSummary = createRecurrenceSummary(recurrence)
 
   // Warn before leaving with unsaved edits (compared against the task as first
@@ -365,11 +367,12 @@ export default function EditTaskScreen({
 
     const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60)
     const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60)
-    if ((scheduledDate || scheduledStartTime || scheduledEndTime) && (!scheduledDate || !scheduledStartTime)) {
-      setError('Scheduled date and start time are required together.')
+    const scheduleValidationError = taskScheduleValidationError({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })
+    if (scheduleValidationError) {
+      setError(scheduleValidationError)
       return
     }
-    if (accessToken && scheduledDate) {
+    if (accessToken && canValidateTaskSchedule({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })) {
       const validation = await validateTaskSchedule(accessToken, { id: task.id, title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate || undefined, scheduledDate, scheduledStartTime, scheduledEndTime: scheduledEndTime || undefined, estimatedTimeMinutes })
       if (validation.commitmentConflicts.length) { setCommitmentConflict(validation.commitmentConflicts[0]); return }
       if (validation.conflicts.length) { setTimeConflict(validation.conflicts[0]); return }
@@ -689,23 +692,24 @@ export default function EditTaskScreen({
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
                   <div>
-                    <FieldLabel label="Due Date" htmlFor="edit-task-due-date" />
+                    <FieldLabel label="Deadline · when this must be finished" htmlFor="edit-task-due-date" />
                     <input id="edit-task-due-date" type="date" className={inputClass} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
                   </div>
                   <div>
-                    <FieldLabel label="Due Time" htmlFor="edit-task-due-time" />
+                    <FieldLabel label="Deadline time" htmlFor="edit-task-due-time" />
                     <input id="edit-task-due-time" type="time" className={inputClass} value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3">
-                  <div><FieldLabel label="Scheduled Date" htmlFor="edit-task-scheduled-date" /><input id="edit-task-scheduled-date" type="date" className={inputClass} value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} /></div>
-                  <div><FieldLabel label="Scheduled Start" htmlFor="edit-task-scheduled-start" /><input id="edit-task-scheduled-start" type="time" className={inputClass} value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} /></div>
-                  <div><FieldLabel label="Scheduled End" htmlFor="edit-task-scheduled-end" /><input id="edit-task-scheduled-end" type="time" className={inputClass} value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} /></div>
+                  <div><FieldLabel label="Schedule · when you plan to do this" htmlFor="edit-task-scheduled-date" /><input id="edit-task-scheduled-date" type="date" className={inputClass} value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} /></div>
+                  <div><FieldLabel label="Start time" htmlFor="edit-task-scheduled-start" /><input id="edit-task-scheduled-start" type="time" className={inputClass} value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} /></div>
+                  <div><FieldLabel label="End time" htmlFor="edit-task-scheduled-end" /><input id="edit-task-scheduled-end" type="time" className={inputClass} value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} /></div>
                 </div>
-                <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
+                <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
               </Card>
 
-              <Card title="Progress Overview" code={`${progress}`}>
+              <button type="button" onClick={() => setMoreOptions((value) => !value)} className="flex w-full items-center justify-between rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 text-start font-black text-[var(--bp-text)]">More options <span className="text-[var(--bp-muted)]">{moreOptions ? '⌃' : '›'}</span></button>
+              {moreOptions ? <Card title="Progress Overview" code={`${progress}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs text-[var(--bp-muted)]">
                     {completedSubtasksCount} of {subtasks.length} subtasks completed
@@ -715,7 +719,7 @@ export default function EditTaskScreen({
                 <div role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2 rounded-full bg-[var(--bp-border)]">
                   <div className="h-2 rounded-full bg-[var(--bp-accent)]" style={{ width: `${progress}%` }} />
                 </div>
-              </Card>
+              </Card> : null}
 
               <Card title="Reminder & Recurring">
                 <FieldLabel label="Reminder" />

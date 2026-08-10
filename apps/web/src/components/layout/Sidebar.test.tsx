@@ -1,10 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Sidebar } from './Sidebar'
+import { LanguageProvider } from '../../i18n/LanguageContext'
 
 describe('Settings sidebar navigation', () => {
   it('constrains the desktop sidebar and makes shared content scrollable', () => {
-    const { container } = render(<Sidebar active="dashboard" />)
+    const { container } = render(<LanguageProvider><Sidebar active="dashboard" /></LanguageProvider>)
     const desktopSidebar = container.querySelector('aside')
     const content = desktopSidebar?.firstElementChild
 
@@ -16,15 +17,13 @@ describe('Settings sidebar navigation', () => {
     const onNavigateSettings = vi.fn()
     const onNavigateNotes = vi.fn()
 
-    render(
-      <Sidebar
-        active="settings"
-        mobileOpen={false}
-        onCloseMobile={() => undefined}
-        onNavigateSettings={onNavigateSettings}
-        onNavigateNotes={onNavigateNotes}
-      />,
-    )
+    render(<LanguageProvider><Sidebar
+      active="settings"
+      mobileOpen={false}
+      onCloseMobile={() => undefined}
+      onNavigateSettings={onNavigateSettings}
+      onNavigateNotes={onNavigateNotes}
+    /></LanguageProvider>)
 
     const settings = screen.getByRole('button', { name: 'Settings' })
     expect(settings).toHaveAttribute('aria-current', 'page')
@@ -34,5 +33,17 @@ describe('Settings sidebar navigation', () => {
 
     expect(onNavigateSettings).toHaveBeenCalledOnce()
     expect(onNavigateNotes).toHaveBeenCalledOnce()
+  })
+
+  it('uses the same single navigation tree for the responsive drawer', () => {
+    const { container } = render(
+      <LanguageProvider>
+        <Sidebar active="calendar" mobileOpen onCloseMobile={() => undefined} />
+      </LanguageProvider>,
+    )
+
+    expect(container.querySelectorAll('aside.bp-sidebar, aside.bp-sidebar-drawer')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Calendar' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByRole('button', { name: 'Dashboard' })).toHaveLength(1)
   })
 })

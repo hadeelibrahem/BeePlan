@@ -56,13 +56,14 @@ import SettingsScreen from './screens/SettingsScreen'
 import TaskCollaborationScreen from './screens/TaskCollaborationScreen'
 import TaskDetailsScreen from './screens/TaskDetailsScreen'
 import TasksDashboardScreen from './screens/TasksDashboardScreen'
+import RandomStartScreen from './screens/RandomStartScreen'
 import { ThemeProvider } from './theme/ThemeContext'
 import {
   TaskRecurrenceModal,
   type RecurrenceSettings,
 } from './components/TaskRecurrenceModal'
 import { RouteFallback } from './components/RouteFallback'
-import { AppLayout, type SidebarNavHandlers } from './components/layout'
+import { AppLayout, type SidebarNavHandlers, type SidebarPage } from './components/layout'
 import { BeeCompanion } from './components/BeeCompanion'
 import { useToast } from './components/feedback/ToastProvider'
 import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
@@ -522,6 +523,10 @@ function ThemedApp() {
     return <div className="flex min-h-screen items-center justify-center bg-[var(--bp-bg)] px-6 text-[var(--bp-text)]"><div className="text-center"><div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[rgba(253,239,75,0.3)] border-t-[var(--bp-accent)]" /><p className="mt-4 font-semibold">Connecting to BeePlan…</p></div></div>
   }
 
+  function renderAuthenticatedPage(content: ReactNode, active: SidebarPage, focusMode = false) {
+    return <AppLayout active={active} focusMode={focusMode} {...sidebarNav}>{content}</AppLayout>
+  }
+
   if (mobileAuthError) {
     return <div className="flex min-h-screen items-center justify-center bg-[var(--bp-bg)] px-6 text-[var(--bp-text)]"><div className="max-w-sm text-center"><h1 className="text-lg font-black">Mobile authentication failed</h1><p className="mt-2 text-sm text-[var(--bp-muted)]">{mobileAuthError}</p><div className="mt-5 flex justify-center gap-3"><button type="button" onClick={retryMobileAuth} className="rounded-xl bg-[var(--bp-accent)] px-4 py-2 text-sm font-bold text-[var(--bp-accent-text)]">Retry</button><button type="button" onClick={() => window.history.back()} className="rounded-xl border border-[var(--bp-border)] px-4 py-2 text-sm font-bold">Back</button></div></div></div>
   }
@@ -551,7 +556,7 @@ function ThemedApp() {
   }
 
   if (screen === 'dashboard') {
-    return renderWithRecurrenceSuggestionModal(
+    return renderAuthenticatedPage(renderWithRecurrenceSuggestionModal(
       <TasksDashboardScreen
         dashboard={summary}
         summaryLoading={summaryLoading}
@@ -563,6 +568,7 @@ function ThemedApp() {
         onContinueFocus={() => setScreen('focusSession')}
         accessToken={accessToken ?? undefined}
         onViewTaskDetails={openTaskDetails}
+        onOpenRandomStart={() => setScreen('randomStart')}
         onRetrySummary={refreshSummary}
         onViewReminders={() => setScreen('list')}
         onViewTasks={() => setScreen('tasks')}
@@ -581,11 +587,11 @@ function ThemedApp() {
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
         onSignOut={() => void handleSignOut()}
       />,
-    )
+    ), 'dashboard')
   }
 
   if (screen === 'tasks') {
-    return renderWithRecurrenceSuggestionModal(
+    return renderAuthenticatedPage(renderWithRecurrenceSuggestionModal(
       <AllTasksScreen
         onBackDashboard={() => setScreen('dashboard')}
         onCreateTask={() => openCreateTask()}
@@ -607,24 +613,41 @@ function ThemedApp() {
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
         onSignOut={() => void handleSignOut()}
       />,
+    ), 'tasks')
+  }
+
+  if (screen === 'randomStart') {
+    return renderAuthenticatedPage(
+      <RandomStartScreen
+        accessToken={accessToken ?? ''}
+        onBack={() => setScreen('dashboard')}
+        onViewTask={openTaskDetails}
+        onStartFocus={async (task) => {
+          const started = await focus.start({ id: task.taskId ?? task.id, title: task.parentTitle ?? task.title, subtaskId: task.itemType === 'subtask' ? task.id : undefined, subtaskTitle: task.itemType === 'subtask' ? task.title : undefined }, 'pomodoro', task.estimatedTimeMinutes ?? 25)
+          if (started) setScreen('focusSession')
+        }}
+      />,
+      'dashboard',
     )
   }
 
   if (screen === 'focusSession') {
-    return (
-      <AppLayout active="focus" {...sidebarNav}>
+    return renderAuthenticatedPage(
+      <>
         <FocusSessionScreen
           accessToken={accessToken ?? ''}
           focus={focus}
           tasks={tasks}
           onExit={() => setScreen('focus')}
         />
-      </AppLayout>
+      </>,
+      'focus',
     )
   }
 
   if (screen === 'focus') {
-    return (
+    return renderAuthenticatedPage(
+      (
       <FocusScreen
         onBackDashboard={() => setScreen('dashboard')}
         onViewTaskDetails={openTaskDetails}
@@ -643,11 +666,14 @@ function ThemedApp() {
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
         onSignOut={() => void handleSignOut()}
       />
+      ),
+      'focus',
     )
   }
 
   if (screen === 'planner') {
-    return (
+    return renderAuthenticatedPage(
+      (
       <AiPlannerScreen
         accessToken={accessToken ?? ''}
         refreshKey={plannerRefreshKey}
@@ -663,11 +689,14 @@ function ThemedApp() {
         onSignOut={() => void handleSignOut()}
         {...sidebarNav}
       />
+      ),
+      'planner',
     )
   }
 
   if (screen === 'calendar') {
-    return (
+    return renderAuthenticatedPage(
+      (
       <CalendarScreen
         {...sidebarNav}
         accessToken={accessToken ?? ''}
@@ -681,16 +710,18 @@ function ThemedApp() {
         onCreateTaskForDate={openCreateTask}
         onSignOut={() => void handleSignOut()}
       />
+      ),
+      'calendar',
     )
   }
 
   if (screen === 'notes') {
-    return <NotesScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
+    return renderAuthenticatedPage(<NotesScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />, 'notes')
   }
 
   if (screen === 'whiteboard') {
-    return (
-      <AppLayout active="whiteboard" focusMode={whiteboardFocusMode} {...sidebarNav}>
+    return renderAuthenticatedPage(
+      <>
         <WhiteboardScreen
           focusMode={whiteboardFocusMode}
           onToggleFocusMode={() => setWhiteboardFocusMode((value) => !value)}
@@ -704,31 +735,36 @@ function ThemedApp() {
             if (started) setScreen('focusSession')
           }}
         />
-      </AppLayout>
+      </>,
+      'whiteboard',
+      whiteboardFocusMode,
     )
   }
 
   if (screen === 'whiteboards') {
-    return <AppLayout active="whiteboard" {...sidebarNav}><WhiteboardsDashboardScreen /></AppLayout>
+    return renderAuthenticatedPage(<WhiteboardsDashboardScreen />, 'whiteboard')
   }
 
   if (screen === 'whiteboardEditor') {
-    return (
-      <AppLayout active="whiteboard" focusMode={whiteboardFocusMode} {...sidebarNav}>
+    return renderAuthenticatedPage(
+      <>
         <WhiteboardScreen boardId={route.boardId} focusMode={whiteboardFocusMode} onToggleFocusMode={() => setWhiteboardFocusMode((value) => !value)} onLeaveBoard={() => navigate('/whiteboards')} onOpenTask={openTaskDetails} onStartFocus={async (task) => {
           const started = await focus.start({ id: task.id, title: task.title, priority: task.priority, category: task.category }, 'pomodoro', task.estimatedTimeMinutes ?? 25)
           if (started) setScreen('focusSession')
         }} />
-      </AppLayout>
+      </>,
+      'whiteboard',
+      whiteboardFocusMode,
     )
   }
 
   if (screen === 'social') {
-    return <SocialScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
+    return renderAuthenticatedPage(<SocialScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />, 'people')
   }
 
   if (screen === 'notifications') {
-    return (
+    return renderAuthenticatedPage(
+      (
       <NotificationsScreen
         {...sidebarNav}
         accessToken={accessToken ?? ''}
@@ -739,25 +775,28 @@ function ThemedApp() {
         }}
         onSignOut={() => void handleSignOut()}
       />
+      ),
+      'notifications',
     )
   }
 
   if (screen === 'analytics') {
-    return <AnalyticsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
+    return renderAuthenticatedPage(<AnalyticsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />, 'analytics')
   }
 
   if (screen === 'achievements') {
     const reviewYear = new URLSearchParams(location.search).get('yearReview')
-    if (reviewYear && /^\d{4}$/.test(reviewYear)) return <YearInReviewScreen {...sidebarNav} accessToken={accessToken ?? ''} year={Number(reviewYear)} onBack={() => navigate('/achievements')} onOpenAchievement={(id) => navigate(`/achievements?achievementId=${encodeURIComponent(id)}`)} onChangeYear={(nextYear) => navigate(`/achievements?yearReview=${nextYear}`)} />
-    return <AchievementMuseumScreen {...sidebarNav} accessToken={accessToken ?? ''} onOpenTask={openTaskDetails} />
+    if (reviewYear && /^\d{4}$/.test(reviewYear)) return renderAuthenticatedPage(<YearInReviewScreen {...sidebarNav} accessToken={accessToken ?? ''} year={Number(reviewYear)} onBack={() => navigate('/achievements')} onOpenAchievement={(id) => navigate(`/achievements?achievementId=${encodeURIComponent(id)}`)} onChangeYear={(nextYear) => navigate(`/achievements?yearReview=${nextYear}`)} />, 'achievements')
+    return renderAuthenticatedPage(<AchievementMuseumScreen {...sidebarNav} accessToken={accessToken ?? ''} onOpenTask={openTaskDetails} />, 'achievements')
   }
 
   if (screen === 'settings') {
-    return <SettingsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />
+    return renderAuthenticatedPage(<SettingsScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />, 'settings')
   }
 
   if (screen === 'aiPlanTask') {
-    return (
+    return renderAuthenticatedPage(
+      (
       <AiTaskBuilderScreen
         accessToken={accessToken ?? ''}
         onCancel={() => setScreen('tasks')}
@@ -767,11 +806,14 @@ function ThemedApp() {
         onSignOut={() => void handleSignOut()}
         {...sidebarNav}
       />
+      ),
+      'tasks',
     )
   }
 
   if (screen === 'createTask') {
-    return (
+    return renderAuthenticatedPage(
+      (
       <CreateTaskScreen
         tasks={tasks}
         accessToken={accessToken ?? ''}
@@ -793,11 +835,13 @@ function ThemedApp() {
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
       />
+      ),
+      'tasks',
     )
   }
 
   if (screen === 'taskDetails' && selectedTask) {
-    return renderWithRecurrenceSuggestionModal(
+    return renderAuthenticatedPage(renderWithRecurrenceSuggestionModal(
       <TaskDetailsScreen
         task={selectedTask}
         tasks={tasks}
@@ -842,11 +886,12 @@ function ThemedApp() {
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
       />,
-    )
+    ), 'tasks')
   }
 
   if (screen === 'aiCollaboration' && selectedTask) {
-    return (
+    return renderAuthenticatedPage(
+      (
       <TaskCollaborationScreen
         task={selectedTask}
         accessToken={accessToken ?? ''}
@@ -871,6 +916,8 @@ function ThemedApp() {
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
       />
+      ),
+      'tasks',
     )
   }
 
@@ -879,7 +926,8 @@ function ThemedApp() {
   }
 
   if (screen === 'editTask' && selectedTask) {
-    return (
+    return renderAuthenticatedPage(
+      (
       <EditTaskScreen
         task={selectedTask}
         tasks={tasks}
@@ -908,6 +956,8 @@ function ThemedApp() {
         onNavigateNotes={sidebarNav.onNavigateNotes}
         onNavigateAnalytics={sidebarNav.onNavigateAnalytics}
       />
+      ),
+      'tasks',
     )
   }
 

@@ -23,6 +23,7 @@ export type RootStackParamList = {
   AchievementMuseum: { taskId?: string; title?: string; achievementDate?: string; achievementId?: string } | undefined
   YearInReview: { year: number }
   FocusSession: undefined
+  RandomStart: undefined
   AiCollaboration: { taskId: string }
   Notifications: undefined
   Settings: undefined

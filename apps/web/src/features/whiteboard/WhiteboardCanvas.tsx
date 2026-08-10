@@ -125,7 +125,12 @@ export function WhiteboardCanvas({ board, loading, error, onRetry, onMount, onRe
         if (import.meta.env.DEV) console.error('[WhiteboardTextTrace] HTTP_SNAPSHOT_APPLY_ALLOWED', { ...details, source: restoreSource })
         const snapshotStore = (repairedSnapshot as { document?: { store?: Record<string, Record<string, unknown>> } }).document?.store ?? {}
         Object.values(snapshotStore).forEach((record) => traceTextStoreWrite(record, restoreSource, undefined, editor.getEditingShapeId()))
-        editor.loadSnapshot(repairedSnapshot as Parameters<Editor['loadSnapshot']>[0])
+        // Snapshot/revision reconciliation is system state, not a user edit. Mark the
+        // entire load as remote so collaboration and autosave listeners cannot echo
+        // every restored document record back through Socket.IO.
+        editor.store.mergeRemoteChanges(() => {
+          editor.loadSnapshot(repairedSnapshot as Parameters<Editor['loadSnapshot']>[0])
+        })
         if (import.meta.env.DEV) console.debug('[Whiteboard] snapshot restored into live editor', { boardId: currentBoardId })
       }
       editor.setCamera({ x: currentBoard.camera.x, y: currentBoard.camera.y, z: currentBoard.camera.zoom })

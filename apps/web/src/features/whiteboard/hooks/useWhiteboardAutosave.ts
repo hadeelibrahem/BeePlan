@@ -99,7 +99,10 @@ export function useWhiteboardAutosave({ editor, enabled, save, getAssetReference
     mountedRef.current = true
     if (!enabled || !editor) return
 
-    const removeListener = editor.store.listen((entry) => { if (entry.source === 'remote') return; schedule() })
+    const removeListener = editor.store.listen(
+      (entry) => { if (entry?.source === 'remote') return; schedule() },
+      { source: 'user', scope: 'document' },
+    )
     const handlePageHide = () => flushRef.current()
     window.addEventListener('pagehide', handlePageHide)
 

@@ -1,4 +1,5 @@
 import { createTaskPayload, validateCreateTask, type CreateTaskFormValues } from './createTaskForm'
+import { canValidateTaskSchedule, INCOMPLETE_SCHEDULE_MESSAGE, taskScheduleValidationError } from './taskScheduleValidation'
 
 const base: CreateTaskFormValues = {
   title: 'Scheduled work',
@@ -31,5 +32,21 @@ describe('mobile task schedule fields', () => {
   it('allows an unscheduled task and validates partial schedules', () => {
     expect(validateCreateTask({ ...base, scheduledDate: '', scheduledStartTime: '', scheduledEndTime: '' })).toBe('')
     expect(validateCreateTask({ ...base, scheduledDate: '2026-07-29', scheduledStartTime: '', scheduledEndTime: '' })).toContain('required together')
+  })
+
+  it('does not validate an incomplete interval', () => {
+    const draft = { scheduledDate: '2026-07-29', scheduledStartTime: '10:00', scheduledEndTime: '', estimatedTimeMinutes: 0 }
+    expect(canValidateTaskSchedule(draft)).toBe(false)
+    expect(taskScheduleValidationError(draft)).toBe(INCOMPLETE_SCHEDULE_MESSAGE)
+  })
+
+  it('validates complete intervals and positive estimated durations', () => {
+    expect(canValidateTaskSchedule({ scheduledDate: '2026-07-29', scheduledStartTime: '10:00', scheduledEndTime: '11:00', estimatedTimeMinutes: 0 })).toBe(true)
+    expect(canValidateTaskSchedule({ scheduledDate: '2026-07-29', scheduledStartTime: '10:00', scheduledEndTime: '', estimatedTimeMinutes: 60 })).toBe(true)
+    expect(canValidateTaskSchedule({ scheduledDate: '', scheduledStartTime: '', scheduledEndTime: '', estimatedTimeMinutes: 0 })).toBe(false)
+  })
+
+  it('maps one estimated hour to a positive duration in minutes', () => {
+    expect(createTaskPayload({ ...base, scheduledEndTime: '', estimatedHours: '1' }, null).estimatedTimeMinutes).toBe(60)
   })
 })

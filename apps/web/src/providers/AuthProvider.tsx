@@ -249,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
         password,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       });
 
       saveSession(authResponse);

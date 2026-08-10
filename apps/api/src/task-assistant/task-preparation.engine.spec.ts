@@ -56,4 +56,26 @@ describe('TaskPreparationEngine', () => {
   );
   it('does not emit generic advice for an ambiguous task', () =>
     expect(build('Handle it')).toHaveLength(0));
+  it('returns the university laptop and study preparation for the exact scenario', () => {
+    const items = build('Trip to University', {
+      displayName: 'Al Najah University',
+      latitude: 32.2211,
+      longitude: 35.2544,
+    });
+    expect(items.map((item) => item.type)).toEqual(
+      expect.arrayContaining(['laptop_charger', 'study_materials']),
+    );
+  });
+  it('keeps interview preparation separate from travel packing while preserving mentioned devices', () => {
+    const context = new TaskContextClassifier().classify(new TaskContextExtractor().extract({
+      taskId: 'interview',
+      title: 'Job interview',
+      description: 'Interview for a software developer position. I need my CV, laptop and charger.',
+      destination: { displayName: 'Company office', latitude: 32.2, longitude: 35.2 },
+    }));
+    const items = new TaskPreparationEngine().generate(context, preferences);
+    expect(items.map((item) => item.type)).toEqual(expect.arrayContaining(['cv', 'interview_details']));
+    expect(items.map((item) => item.type)).not.toContain('passport_check');
+    expect(context.secondaryContexts).not.toContain('travel');
+  });
 });

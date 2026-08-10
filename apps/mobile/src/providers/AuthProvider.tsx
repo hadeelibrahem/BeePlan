@@ -8,7 +8,8 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { Linking } from 'react-native';
+import { AppState, Linking } from 'react-native';
+import { addPushTokenListener } from 'expo-notifications/build/TokenEmitter';
 import {
   forgotPassword,
   login,
@@ -19,7 +20,7 @@ import {
   type AuthUser,
 } from '../lib/api';
 import { setAuthToken } from '../lib/authToken';
-import { disableCurrentDevice } from '../lib/pushDevicesApi';
+import { disableCurrentDevice, registerCurrentDevice } from '../lib/pushDevicesApi';
 import {
   getGoogleApprovalStatus,
   parseApprovalToken,
@@ -100,6 +101,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     setAuthToken(session?.accessToken ?? null);
   }, [session]);
+
+  useEffect(() => {
+    const accessToken = session?.accessToken;
+    if (!accessToken) return;
+    let active = true;
+    let registrationRunning = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryAttempt = 0;
+    const registerIfAllowed = async () => {
+      if (!active || registrationRunning) return;
+      registrationRunning = true;
+      try {
+        const result = await registerCurrentDevice(accessToken, false);
+        if (result === 'failed' && active) {
+          retryAttempt += 1;
+          const delayMs = Math.min(60_000, 5_000 * 2 ** (retryAttempt - 1));
+          if (retryTimer) clearTimeout(retryTimer);
+          retryTimer = setTimeout(() => void registerIfAllowed(), delayMs);
+        } else {
+          retryAttempt = 0;
+          if (retryTimer) {
+            clearTimeout(retryTimer);
+            retryTimer = undefined;
+          }
+        }
+      } finally {
+        registrationRunning = false;
+      }
+    };
+    void registerIfAllowed();
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void registerIfAllowed();
+    });
+    const tokenSubscription = addPushTokenListener(() => {
+      void registerIfAllowed();
+    });
+    return () => {
+      active = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      appStateSubscription.remove();
+      tokenSubscription.remove();
+    };
+  }, [session?.accessToken, session?.user.id]);
 
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
@@ -211,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
         password,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       });
 
       await saveSession(authResponse);

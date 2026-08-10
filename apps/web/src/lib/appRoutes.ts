@@ -3,6 +3,7 @@ export type AppScreen =
   | 'tasks'
   | 'focus'
   | 'focusSession'
+  | 'randomStart'
   | 'planner'
   | 'createTask'
   | 'aiPlanTask'
@@ -36,6 +37,7 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/tasks/ai': 'aiPlanTask',
   '/focus': 'focus',
   '/focus/session': 'focusSession',
+  '/random-start': 'randomStart',
   '/planner': 'planner',
   '/reminders': 'list',
   '/reminders/new': 'create',
@@ -88,6 +90,7 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'aiCollaboration': return ids.taskId ? `/tasks/${encodeURIComponent(ids.taskId)}/collaboration` : '/tasks'
     case 'focus': return '/focus'
     case 'focusSession': return '/focus/session'
+    case 'randomStart': return '/random-start'
     case 'planner': return '/planner'
     case 'list': return '/reminders'
     case 'create': return '/reminders/new'

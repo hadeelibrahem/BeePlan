@@ -238,7 +238,7 @@ export class TasksService {
     await this.recalculateProgress(userId, task.id);
     await this.addActivity(userId, task.id, 'created', 'Task created');
     void this.googleCalendar?.enqueueTaskSync(userId, task.id);
-    void this.taskAssistant?.refresh(userId, task.id).catch(() => undefined);
+    await this.taskAssistant?.refreshWithLogging(userId, task.id, 'task_created');
 
     return this.findOne(userId, task.id);
   }
@@ -557,27 +557,28 @@ export class TasksService {
     // N+1: 4-5 extra queries per task, so 50 tasks meant 200+ round trips).
     const taskIds = rows.map((row) => row.id);
 
-    const [allSubtasks, dependencyLinks, allRecurrences, allActivities] =
-      await Promise.all([
-        this.db
-          .select()
-          .from(subtasks)
-          .where(inArray(subtasks.taskId, taskIds))
-          .orderBy(asc(subtasks.orderIndex), asc(subtasks.createdAt)),
-        this.db
-          .select()
-          .from(taskDependencies)
-          .where(inArray(taskDependencies.taskId, taskIds)),
-        this.db
-          .select()
-          .from(taskRecurrenceRules)
-          .where(inArray(taskRecurrenceRules.taskId, taskIds)),
-        this.db
-          .select()
-          .from(taskActivities)
-          .where(inArray(taskActivities.taskId, taskIds))
-          .orderBy(desc(taskActivities.createdAt)),
-      ]);
+    // Keep these bounded batch reads on one connection at a time. findAll is
+    // called by the dashboard while the minute workers are active; fanning
+    // out four pool acquisitions here made transient pool exhaustion much
+    // more likely without improving correctness.
+    const allSubtasks = await this.db
+      .select()
+      .from(subtasks)
+      .where(inArray(subtasks.taskId, taskIds))
+      .orderBy(asc(subtasks.orderIndex), asc(subtasks.createdAt));
+    const dependencyLinks = await this.db
+      .select()
+      .from(taskDependencies)
+      .where(inArray(taskDependencies.taskId, taskIds));
+    const allRecurrences = await this.db
+      .select()
+      .from(taskRecurrenceRules)
+      .where(inArray(taskRecurrenceRules.taskId, taskIds));
+    const allActivities = await this.db
+      .select()
+      .from(taskActivities)
+      .where(inArray(taskActivities.taskId, taskIds))
+      .orderBy(desc(taskActivities.createdAt));
 
     const dependencyTaskIds = [
       ...new Set(dependencyLinks.map((link) => link.dependencyTaskId)),
@@ -911,7 +912,7 @@ export class TasksService {
     await this.addActivity(userId, taskId, 'updated', 'Task updated');
     await this.notifyMembersOfChange(userId, existingTask, dto);
     void this.googleCalendar?.enqueueTaskSync(userId, taskId);
-    void this.taskAssistant?.refresh(userId, taskId).catch(() => undefined);
+    await this.taskAssistant?.refreshWithLogging(userId, taskId, 'task_updated');
 
     return this.findOne(userId, taskId);
   }
@@ -964,7 +965,7 @@ export class TasksService {
         ?.invalidateTask(userId, taskId)
         .catch(() => undefined);
     else
-      void this.taskAssistant?.refresh(userId, taskId).catch(() => undefined);
+      await this.taskAssistant?.refreshWithLogging(userId, taskId, 'task_status_changed');
 
     return this.findOne(userId, taskId);
   }
@@ -1138,6 +1139,7 @@ export class TasksService {
 
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(userId, taskId, 'subtask_added', 'Subtask added');
+    await this.taskAssistant?.refreshWithLogging(userId, taskId, 'subtask_created');
 
     return this.findOne(userId, taskId);
   }
@@ -1148,6 +1150,15 @@ export class TasksService {
     subtaskId: string,
     dto: Partial<SubtaskDto>,
   ) {
+    const assistantRelevantChange = [
+      'title',
+      'description',
+      'destination',
+      'scheduledDate',
+      'scheduledStartTime',
+      'scheduledEndTime',
+      'attachments',
+    ].some((key) => key in dto);
     const access = await this.access.require(userId, taskId, 'editor');
     const current = await this.getSubtaskForTask(taskId, subtaskId);
     this.assertCanModifySubtask(access.role, userId, current);
@@ -1310,6 +1321,13 @@ export class TasksService {
       }
     }
 
+    if (assistantRelevantChange)
+      await this.taskAssistant?.refreshWithLogging(
+        userId,
+        taskId,
+        'subtask_updated',
+      );
+
     return this.findOne(userId, taskId);
   }
 
@@ -1462,6 +1480,7 @@ export class TasksService {
       'subtask_deleted',
       'Subtask deleted',
     );
+    await this.taskAssistant?.refreshWithLogging(userId, taskId, 'subtask_deleted');
 
     return this.findOne(userId, taskId);
   }

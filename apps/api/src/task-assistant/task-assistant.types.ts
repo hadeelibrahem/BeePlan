@@ -25,6 +25,9 @@ export const TASK_CONTEXTS = [
 export type TaskContextType = (typeof TASK_CONTEXTS)[number];
 export type TaskContextConfidence = 'high' | 'medium' | 'low' | 'unavailable';
 export type EvidenceType =
+  | 'text_evidence'
+  | 'primary_context'
+  | 'logistics_evidence'
   | 'verified_fact'
   | 'deterministic_recommendation'
   | 'general_preparation';
@@ -40,6 +43,7 @@ export type TaskContextInput = {
   destination?: Destination | null;
   scheduledDate?: string | null;
   scheduledStartTime?: string | null;
+  timezone?: string | null;
   dueDate?: Date | string | null;
   travelMode?: TravelMode | null;
   correctedContext?: TaskContextType | null;

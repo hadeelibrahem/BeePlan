@@ -9,9 +9,9 @@ import { WhiteboardAccessService } from './whiteboard-access.service';
 
 type SocketUser = { id: string; email?: string };
 type PatchRecord = Record<string, unknown>;
-type RealtimeEnvelope = { protocolVersion: 1; boardId: string; clientId: string; eventId: string; traceId: string; baseRevision?: number; sentAt: string; payload: { added?: PatchRecord[]; updated?: Array<{ before: PatchRecord; after: PatchRecord }>; removed?: PatchRecord[] } };
-type TextFinalEnvelope = { protocolVersion: 1; boardId: string; clientId: string; eventId: string; traceId: string; shapeId: string; sequence: number; record: PatchRecord };
-type TransformEnvelope = { protocolVersion: 1; boardId: string; clientId: string; eventId: string; interactionId: string; shapeId: string; sequence: number; final: boolean; record: PatchRecord };
+type RealtimeEnvelope = { protocolVersion: 1; operationId?: string; boardId: string; clientId: string; eventId: string; traceId: string; baseRevision?: number; sentAt: string; payload: { added?: PatchRecord[]; updated?: Array<{ before: PatchRecord; after: PatchRecord }>; removed?: PatchRecord[] } };
+type TextFinalEnvelope = { protocolVersion: 1; operationId?: string; boardId: string; clientId: string; eventId: string; traceId: string; timestamp?: string; shapeId: string; sequence: number; record: PatchRecord };
+type TransformEnvelope = { protocolVersion: 1; operationId?: string; boardId: string; clientId: string; eventId: string; timestamp?: string; interactionId: string; shapeId: string; sequence: number; final: boolean; record: PatchRecord };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RECORDS = 250;
@@ -149,15 +149,16 @@ export class WhiteboardGateway {
       const membership = await this.access.require(user.id, envelope.boardId, 'edit');
       if (process.env.NODE_ENV !== 'production') console.debug('[WhiteboardRealtimeTrace] mutation authorized', { socketId: client.id, userId: user.id, boardId: envelope.boardId, eventId: envelope.eventId });
       const room = this.room(envelope.boardId);
-      if (room.eventIds.has(envelope.eventId)) return { accepted: true, duplicate: true, eventId: envelope.eventId, serverRevision: room.revision };
-      room.eventIds.add(envelope.eventId);
+      const operationId = envelope.operationId ?? envelope.eventId;
+      if (room.eventIds.has(operationId)) return { accepted: true, duplicate: true, operationId, eventId: envelope.eventId, serverRevision: room.revision };
+      room.eventIds.add(operationId);
       if (room.eventIds.size > 2000) room.eventIds.delete(room.eventIds.values().next().value as string);
       room.revision += 1;
       if (process.env.NODE_ENV !== 'production') console.error('[WhiteboardRealtimeTrace] MUTATION_EMIT_SOURCE', { file: 'whiteboard.gateway.ts', function: 'mutation', kind: 'room-relay', updatedRecordIds: envelope.payload.updated?.map((change) => change.after.id) ?? [], updatedShapeTypes: envelope.payload.updated?.map((change) => change.after.type) ?? [], callStack: new Error().stack });
-      client.to(this.roomName(envelope.boardId)).emit('whiteboard:mutation', { ...envelope, serverRevision: room.revision, accessRole: membership.role });
+      client.to(this.roomName(envelope.boardId)).emit('whiteboard:mutation', { ...envelope, operationId, serverRevision: room.revision, accessRole: membership.role });
       if (process.env.NODE_ENV !== 'production') console.error('[WhiteboardRealtimeTrace] GATEWAY_BROADCAST', { traceId: envelope.traceId, eventId: envelope.eventId, boardId: envelope.boardId, socketId: client.id, serverRevision: room.revision, localAppliedRevision: 0, latestServerRevision: room.revision, loadedRevision: envelope.baseRevision });
-      client.emit('whiteboard:mutation-accepted', { accepted: true, eventId: envelope.eventId, serverRevision: room.revision });
-      return { accepted: true, eventId: envelope.eventId, serverRevision: room.revision };
+      client.emit('whiteboard:mutation-accepted', { accepted: true, operationId, eventId: envelope.eventId, serverRevision: room.revision });
+      return { accepted: true, operationId, eventId: envelope.eventId, serverRevision: room.revision };
     } catch {
       return this.reject(client, 'forbidden', envelope.eventId);
     }
@@ -168,23 +169,26 @@ export class WhiteboardGateway {
     const user = client.data.user as SocketUser | undefined;
     const record = payload?.record;
     if (!user) return { accepted: false, reason: 'forbidden', eventId: payload?.eventId };
-    if (!payload || payload.protocolVersion !== 1 || !this.validId(payload.boardId) || typeof payload.clientId !== 'string' || typeof payload.eventId !== 'string' || typeof payload.traceId !== 'string' || typeof payload.shapeId !== 'string' || payload.shapeId !== record?.id || typeof payload.sequence !== 'number' || !record || record.typeName !== 'shape' || (record.type !== 'text' && record.type !== 'note') || Buffer.byteLength(JSON.stringify(payload), 'utf8') > MAX_EVENT_BYTES) return { accepted: false, reason: 'invalid_shape', eventId: payload?.eventId };
+    if (!payload || payload.protocolVersion !== 1 || !this.validId(payload.boardId) || typeof payload.clientId !== 'string' || typeof payload.eventId !== 'string' || (payload.operationId !== undefined && (typeof payload.operationId !== 'string' || payload.operationId.length > 120)) || typeof payload.traceId !== 'string' || typeof payload.shapeId !== 'string' || payload.shapeId !== record?.id || typeof payload.sequence !== 'number' || !record || record.typeName !== 'shape' || (record.type !== 'text' && record.type !== 'note') || Buffer.byteLength(JSON.stringify(payload), 'utf8') > MAX_EVENT_BYTES) return { accepted: false, reason: 'invalid_shape', eventId: payload?.eventId };
     if (typeof record.parentId !== 'string' || !record.parentId.startsWith('page:')) return { accepted: false, reason: 'invalid_parent', eventId: payload.eventId };
     if (client.data.boards?.[payload.boardId] === undefined) return { accepted: false, reason: 'room_not_joined', eventId: payload.eventId };
     if (process.env.NODE_ENV !== 'production') console.error('[WhiteboardTextTrace] TEXT_FINAL_GATEWAY_RECEIVE', { traceId: payload.traceId, eventId: payload.eventId, boardId: payload.boardId, shapeId: payload.shapeId, sequence: payload.sequence, socketId: client.id, clientId: payload.clientId });
     try {
       const membership = await this.access.require(user.id, payload.boardId, 'edit');
       const room = this.room(payload.boardId);
-      if (room.eventIds.has(payload.eventId)) return { accepted: true, duplicate: true, eventId: payload.eventId, serverRevision: room.revision };
-      const previousSequence = room.textSequences.get(payload.shapeId) ?? 0;
+      const operationId = payload.operationId ?? payload.eventId;
+      if (room.eventIds.has(operationId)) return { accepted: true, duplicate: true, operationId, eventId: payload.eventId, serverRevision: room.revision };
+      const textSequenceKey = `${payload.clientId}:${payload.shapeId}`;
+      const previousSequence = room.textSequences.get(textSequenceKey) ?? 0;
       if (payload.sequence <= previousSequence) return { accepted: false, reason: 'stale_sequence', eventId: payload.eventId, serverRevision: room.revision };
-      room.textSequences.set(payload.shapeId, payload.sequence);
-      room.eventIds.add(payload.eventId);
+      room.textSequences.set(textSequenceKey, payload.sequence);
+      room.eventIds.add(operationId);
+      if (room.eventIds.size > 2000) room.eventIds.delete(room.eventIds.values().next().value as string);
       room.revision += 1;
       if (process.env.NODE_ENV !== 'production') console.error('[WhiteboardTextTrace] TEXT_FINAL_GATEWAY_BROADCAST', { traceId: payload.traceId, eventId: payload.eventId, boardId: payload.boardId, shapeId: payload.shapeId, sequence: payload.sequence, socketId: client.id, clientId: payload.clientId });
-      client.to(this.roomName(payload.boardId)).emit('whiteboard:text-final', payload);
-      client.emit('whiteboard:text-final-accepted', { accepted: true, eventId: payload.eventId, serverRevision: room.revision, accessRole: membership.role });
-      return { accepted: true, eventId: payload.eventId, serverRevision: room.revision };
+      client.to(this.roomName(payload.boardId)).emit('whiteboard:text-final', { ...payload, operationId });
+      client.emit('whiteboard:text-final-accepted', { accepted: true, operationId, eventId: payload.eventId, serverRevision: room.revision, accessRole: membership.role });
+      return { accepted: true, operationId, eventId: payload.eventId, serverRevision: room.revision };
     } catch {
       return { accepted: false, reason: 'forbidden', eventId: payload.eventId };
     }
@@ -194,28 +198,33 @@ export class WhiteboardGateway {
   async transform(@ConnectedSocket() client: Socket, @MessageBody() payload: TransformEnvelope) {
     const user = client.data.user as SocketUser | undefined;
     const record = payload?.record;
-    const valid = Boolean(user) && payload?.protocolVersion === 1 && this.validId(payload?.boardId) && typeof payload?.clientId === 'string' && typeof payload?.eventId === 'string' && typeof payload?.interactionId === 'string' && typeof payload?.shapeId === 'string' && typeof payload?.sequence === 'number' && typeof payload?.final === 'boolean' && payload.shapeId === record?.id && record?.typeName === 'shape' && record?.type !== 'text' && record?.type !== 'note' && typeof record?.parentId === 'string' && record.parentId.startsWith('page:') && Buffer.byteLength(JSON.stringify(payload), 'utf8') <= MAX_EVENT_BYTES;
+    const valid = Boolean(user) && payload?.protocolVersion === 1 && this.validId(payload?.boardId) && typeof payload?.clientId === 'string' && typeof payload?.eventId === 'string' && (payload.operationId === undefined || (typeof payload.operationId === 'string' && payload.operationId.length <= 120)) && typeof payload?.interactionId === 'string' && typeof payload?.shapeId === 'string' && typeof payload?.sequence === 'number' && typeof payload?.final === 'boolean' && payload.shapeId === record?.id && record?.typeName === 'shape' && record?.type !== 'text' && record?.type !== 'note' && typeof record?.parentId === 'string' && record.parentId.startsWith('page:') && Buffer.byteLength(JSON.stringify(payload), 'utf8') <= MAX_EVENT_BYTES;
     if (process.env.NODE_ENV !== 'production') console.error('[WhiteboardRealtimeTrace] TRANSFORM_GATEWAY_RECEIVE', { boardId: payload?.boardId, shapeId: payload?.shapeId, interactionId: payload?.interactionId, sequence: payload?.sequence, final: payload?.final, socketId: client.id });
     if (!valid) return { accepted: false, reason: 'invalid_transform', eventId: payload?.eventId };
     if (client.data.boards?.[payload.boardId] === undefined) return { accepted: false, reason: 'room_not_joined', eventId: payload.eventId };
     try {
       const membership = await this.access.require(user!.id, payload.boardId, 'edit');
       const room = this.room(payload.boardId);
-      const previous = room.transformSequences.get(payload.shapeId);
+      const operationId = payload.operationId ?? payload.eventId;
+      if (room.eventIds.has(operationId)) return { accepted: true, duplicate: true, operationId, eventId: payload.eventId, serverRevision: room.revision };
+      const transformSequenceKey = `${payload.clientId}:${payload.interactionId}:${payload.shapeId}`;
+      const previous = room.transformSequences.get(transformSequenceKey);
       if (previous && (previous.final || payload.sequence <= previous.sequence)) return { accepted: false, reason: 'stale_sequence', eventId: payload.eventId };
-      room.transformSequences.set(payload.shapeId, { interactionId: payload.interactionId, sequence: payload.sequence, final: payload.final });
+      room.transformSequences.set(transformSequenceKey, { interactionId: payload.interactionId, sequence: payload.sequence, final: payload.final });
+      room.eventIds.add(operationId);
+      if (room.eventIds.size > 2000) room.eventIds.delete(room.eventIds.values().next().value as string);
       if (payload.final) room.revision += 1;
-      const outgoing = { ...payload, accessRole: membership.role, ...(payload.final ? { serverRevision: room.revision } : {}) };
+      const outgoing = { ...payload, operationId, accessRole: membership.role, ...(payload.final ? { serverRevision: room.revision } : {}) };
       if (payload.final) client.to(this.roomName(payload.boardId)).emit('whiteboard:transform', outgoing);
       else client.to(this.roomName(payload.boardId)).volatile.emit('whiteboard:transform', outgoing);
       if (process.env.NODE_ENV !== 'production') console.error('[WhiteboardRealtimeTrace] TRANSFORM_GATEWAY_BROADCAST', { boardId: payload.boardId, shapeId: payload.shapeId, interactionId: payload.interactionId, sequence: payload.sequence, final: payload.final, socketId: client.id });
-      return { accepted: true, eventId: payload.eventId, serverRevision: room.revision };
+      return { accepted: true, operationId, eventId: payload.eventId, serverRevision: room.revision };
     } catch { return { accepted: false, reason: 'forbidden', eventId: payload.eventId }; }
   }
 
   private validId(value: unknown): value is string { return typeof value === 'string' && UUID.test(value); }
   private validEnvelope(value: RealtimeEnvelope) {
-    if (!value || value.protocolVersion !== 1 || !this.validId(value.boardId) || typeof value.clientId !== 'string' || typeof value.eventId !== 'string' || typeof value.traceId !== 'string' || value.eventId.length > 120 || value.traceId.length > 120 || !value.payload) return false;
+    if (!value || value.protocolVersion !== 1 || !this.validId(value.boardId) || typeof value.clientId !== 'string' || typeof value.eventId !== 'string' || (value.operationId !== undefined && typeof value.operationId !== 'string') || typeof value.traceId !== 'string' || (value.operationId?.length ?? 0) > 120 || value.eventId.length > 120 || value.traceId.length > 120 || !value.payload) return false;
     const payload = value.payload;
     const count = (payload.added?.length ?? 0) + (payload.updated?.length ?? 0) + (payload.removed?.length ?? 0);
     return count > 0 && count <= MAX_RECORDS && Buffer.byteLength(JSON.stringify(value), 'utf8') <= MAX_EVENT_BYTES;
