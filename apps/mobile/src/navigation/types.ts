@@ -20,6 +20,10 @@ export type RootStackParamList = {
   Calendar: undefined
   Notes: undefined
   Analytics: undefined
+  AchievementMuseum: { taskId?: string; title?: string; achievementDate?: string; achievementId?: string } | undefined
+  Whiteboards: undefined
+  Whiteboard: { boardId: string }
+  WhiteboardShare: { boardId: string }
   FocusSession: undefined
   FocusRooms: { roomId?: string } | undefined
   AiCollaboration: { taskId: string }

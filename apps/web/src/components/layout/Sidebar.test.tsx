@@ -35,15 +35,18 @@ describe('Settings sidebar navigation', () => {
     expect(onNavigateNotes).toHaveBeenCalledOnce()
   })
 
-  it('uses the same single navigation tree for the responsive drawer', () => {
+  it('renders a desktop sidebar plus an isolated mobile drawer tree when open', () => {
     const { container } = render(
       <LanguageProvider>
         <Sidebar active="calendar" mobileOpen onCloseMobile={() => undefined} />
       </LanguageProvider>,
     )
 
-    expect(container.querySelectorAll('aside.bp-sidebar, aside.bp-sidebar-drawer')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: 'Calendar' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getAllByRole('button', { name: 'Dashboard' })).toHaveLength(1)
+    expect(container.querySelectorAll('aside.bp-sidebar, aside.bp-sidebar-drawer')).toHaveLength(2)
+    expect(container.querySelector('aside.bp-sidebar')).toHaveClass('hidden', 'lg:flex')
+    expect(container.querySelector('aside.bp-sidebar-drawer')?.closest('.lg\\:hidden')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Calendar' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Calendar' }).every((button) => button.getAttribute('aria-current') === 'page')).toBe(true)
+    expect(screen.getAllByRole('button', { name: 'Dashboard' })).toHaveLength(2)
   })
 })

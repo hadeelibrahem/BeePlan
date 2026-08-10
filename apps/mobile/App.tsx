@@ -859,6 +859,8 @@ function ThemedApp() {
         deletingTaskRef.current = deletion
         try { await deletion } finally { if (deletingTaskRef.current === deletion) deletingTaskRef.current = null }
       }} onMarkDone={() => void handleMarkTaskDone()} onTaskUpdated={handleTaskUpdated}
+      onAddToAchievement={() => props.navigation.navigate('AchievementMuseum', { taskId: props.route.params.taskId })}
+      onViewAchievement={(achievementId) => props.navigation.navigate('AchievementMuseum', { achievementId })}
       onRefresh={() => void refreshSelectedTask()} />
   );
   const CreateTaskStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'CreateTask'>) => (

@@ -4,6 +4,10 @@ import type { ComponentType } from "react";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text, View } from "react-native";
 import { NavigationBottomTabBar } from "../components/layout/BottomNavBar";
+import AchievementMuseumScreen from '../screens/AchievementMuseumScreen'
+import WhiteboardsDashboardScreen from '../features/whiteboard/screens/WhiteboardsDashboardScreen'
+import WhiteboardEditorScreen from '../features/whiteboard/screens/WhiteboardEditorScreen'
+import WhiteboardShareScreen from '../features/whiteboard/screens/WhiteboardShareScreen'
 import {
   type MainTabParamList,
   MAIN_TAB_ROUTES,
@@ -172,6 +176,10 @@ export function RootNavigator({
         <Stack.Screen name="Settings" component={SettingsRoute} />
       ) : null}
       {TimeCapsulesRoute ? <Stack.Screen name="TimeCapsules" component={TimeCapsulesRoute} /> : null}
+      <Stack.Screen name="AchievementMuseum" component={AchievementMuseumScreen} />
+      <Stack.Screen name="Whiteboards" component={WhiteboardsDashboardScreen} />
+      <Stack.Screen name="Whiteboard" component={WhiteboardEditorScreen} />
+      <Stack.Screen name="WhiteboardShare" component={WhiteboardShareScreen} />
     </Stack.Navigator>
   );
 }
