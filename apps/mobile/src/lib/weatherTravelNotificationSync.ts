@@ -12,6 +12,11 @@ export async function syncWeatherTravelNotifications(accessToken: string) {
   const previous = JSON.parse((await AsyncStorage.getItem(KEY)) ?? '{}') as Record<string,string>
   const next: Record<string,string> = {}
   for (const record of pending) {
+    // Task Assistant contextual events are backend-owned. Local scheduling is
+    // disabled unless the server explicitly opts a legacy record into the
+    // fallback channel; this prevents a backend push and local alert racing.
+    if (!(record.payload as { localDeliveryEligible?: boolean } | undefined)?.localDeliveryEligible)
+      continue
     const trigger = new Date(record.notificationTime); if (trigger.getTime() <= Date.now()) continue
     const existing = previous[record.id]
     if (existing) { next[record.id] = existing; continue }

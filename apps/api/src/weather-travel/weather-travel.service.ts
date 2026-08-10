@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { and, desc, eq, gt, inArray, isNotNull, lt, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import {
   savedLocations,
@@ -30,6 +30,7 @@ import type {
   WeatherPoint,
 } from './weather-travel.types';
 import { WeatherTravelMessagePolisher } from './message-polisher.service';
+import { isHomeOriginCandidate } from './home-origin';
 
 const ACTIVE = ['todo', 'in_progress', 'blocked'];
 const DEFAULTS = {
@@ -353,6 +354,11 @@ export class WeatherTravelService {
           allowFallback: preferences.approximateTravelFallbackEnabled,
         })
       : null;
+    const routeUnavailableReason = origin.coordinates
+      ? route
+        ? undefined
+        : 'provider_unavailable' as const
+      : 'origin_unavailable' as const;
     const departure = route
       ? this.departure.calculate({
           scheduledDate: item.scheduledDate,
@@ -383,6 +389,7 @@ export class WeatherTravelService {
     let destinationForecast: WeatherPoint | null = null;
     let originForecast: WeatherPoint | null = null;
     const warnings: string[] = [];
+    if (routeUnavailableReason) warnings.push(`route_${routeUnavailableReason}`);
     try {
       const points = await this.weather.getHourlyForecast({
         ...destination!,
@@ -425,6 +432,7 @@ export class WeatherTravelService {
       scheduledStart,
       recommendedDeparture: departure.recommendedDeparture,
       route,
+      routeUnavailableReason,
       forecast: destinationForecast,
       thresholds: thresholds(preferences),
       timezone: preferences.timezone,
@@ -471,6 +479,7 @@ export class WeatherTravelService {
       origin,
       destination,
       route,
+      routeUnavailableReason,
       scheduledTaskTime: scheduledStart.toISOString(),
       recommendedDepartureTime:
         departure.recommendedDeparture?.toISOString() ?? null,
@@ -586,17 +595,24 @@ export class WeatherTravelService {
     return this.savedPlaceByCategory(userId, 'home');
   }
   private async savedPlaceByCategory(userId: string, category: string) {
+    const normalizedCategory = category.trim().toLowerCase();
     const [row] = await this.db
       .select()
       .from(savedLocations)
       .where(
         and(
           eq(savedLocations.userId, userId),
-          eq(savedLocations.category, category),
+          or(
+            sql`lower(trim(${savedLocations.category})) = ${normalizedCategory}`,
+            and(
+              or(isNull(savedLocations.category), sql`trim(${savedLocations.category}) = ''`),
+              sql`lower(trim(${savedLocations.name})) = ${normalizedCategory}`,
+            ),
+          ),
         ),
       )
       .limit(1);
-    return row ? placeDestination(row) : null;
+    return row && isHomeOriginCandidate(row) ? placeDestination(row) : null;
   }
   private async savedPlace(userId: string, id: string) {
     const [row] = await this.db

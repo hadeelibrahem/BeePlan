@@ -1,13 +1,21 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import * as schema from './schema';
+import { describeDatabaseError } from './database-error';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(DatabaseService.name);
   private pool?: Pool;
+  private poolEnding = false;
+  private readonly clientState = new WeakMap<PoolClient, {
+    connectedAt: number;
+    acquiredAt?: number;
+    releasedAt?: number;
+    lastError?: ReturnType<typeof describeDatabaseError>;
+  }>();
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -16,6 +24,7 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
   }
 
   async onModuleDestroy() {
+    this.poolEnding = true;
     await this.pool?.end();
   }
 
@@ -70,27 +79,119 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     }
 
     const dbSsl = this.configService.get<boolean>('DB_SSL') ?? false;
+    const keepAlive = this.configService.get<boolean>('DB_KEEP_ALIVE') ?? true;
+    const keepAliveInitialDelayMillis =
+      this.configService.get<number>('DB_KEEP_ALIVE_INITIAL_DELAY_MS') ?? 10_000;
+    const min = this.configService.get<number>('DB_POOL_MIN') ?? 1;
+    const max = this.configService.get<number>('DB_POOL_MAX') ?? 10;
+    const connectionTimeoutMillis =
+      this.configService.get<number>('DB_CONNECTION_TIMEOUT_MS') ?? 10_000;
+    const idleTimeoutMillis =
+      this.configService.get<number>('DB_IDLE_TIMEOUT_MS') ?? 300_000;
+    const queryTimeoutMillis =
+      this.configService.get<number>('DB_QUERY_TIMEOUT_MS') ?? 15_000;
+    const applicationName =
+      this.configService.get<string>('DB_APPLICATION_NAME') ?? 'beeplan-api';
     this.pool = new Pool({
       connectionString: databaseUrl,
       ssl: dbSsl ? { rejectUnauthorized: false } : undefined,
-      keepAlive: this.configService.get<boolean>('DB_KEEP_ALIVE') ?? true,
-      keepAliveInitialDelayMillis:
-        this.configService.get<number>('DB_KEEP_ALIVE_INITIAL_DELAY_MS') ?? 10_000,
-      max: this.configService.get<number>('DB_POOL_MAX') ?? 10,
-      connectionTimeoutMillis:
-        this.configService.get<number>('DB_CONNECTION_TIMEOUT_MS') ?? 5_000,
-      idleTimeoutMillis:
-        this.configService.get<number>('DB_IDLE_TIMEOUT_MS') ?? 30_000,
-      query_timeout:
-        this.configService.get<number>('DB_QUERY_TIMEOUT_MS') ?? 10_000,
-      statement_timeout:
-        this.configService.get<number>('DB_QUERY_TIMEOUT_MS') ?? 10_000,
+      application_name: applicationName,
+      keepAlive,
+      keepAliveInitialDelayMillis,
+      min,
+      max,
+      connectionTimeoutMillis,
+      idleTimeoutMillis,
+      query_timeout: queryTimeoutMillis,
+      statement_timeout: queryTimeoutMillis,
     });
-    this.pool.on('error', (error) => {
-      this.logger.warn(`PostgreSQL pool error: ${error.message}`);
+    this.logger.log(JSON.stringify({
+      event: 'db_pool_configured',
+      connectionMode: this.connectionMode(databaseUrl),
+      applicationName,
+      min,
+      max,
+      keepAlive,
+      keepAliveInitialDelayMillis,
+      connectionTimeoutMillis,
+      idleTimeoutMillis,
+      queryTimeoutMillis,
+      ssl: dbSsl,
+    }));
+    this.pool.on('connect', (client) => {
+      this.clientState.set(client, { connectedAt: Date.now() });
+    });
+    this.pool.on('acquire', (client) => {
+      const state = this.clientState.get(client);
+      if (state) state.acquiredAt = Date.now();
+    });
+    this.pool.on('release', (error, client) => {
+      const state = this.clientState.get(client);
+      if (!state) return;
+      state.releasedAt = Date.now();
+      if (error) state.lastError = describeDatabaseError(error, 'query');
+    });
+    this.pool.on('error', (error, client) => {
+      const state = this.clientState.get(client);
+      if (state) state.lastError = describeDatabaseError(error, 'unknown');
+      this.logger.warn(JSON.stringify({
+        event: 'db_pool_error',
+        pool: this.poolStats(),
+        ...describeDatabaseError(error, 'unknown'),
+      }));
+    });
+    this.pool.on('remove', (client) => {
+      const now = Date.now();
+      const state = this.clientState.get(client);
+      const idleForMs = state?.releasedAt ? now - state.releasedAt : null;
+      const reason = this.poolEnding
+        ? 'pool_shutdown'
+        : state?.lastError?.category ??
+          (idleForMs !== null && idleForMs >= idleTimeoutMillis - 1_000
+            ? 'local_idle_timeout'
+            : 'remote_or_unknown');
+      const details = JSON.stringify({
+        event: 'db_pool_client_removed',
+        reason,
+        error: state?.lastError ?? null,
+        connectionAgeMs: state ? now - state.connectedAt : null,
+        idleForMs,
+        pool: this.poolStats(),
+        replacementCreatedOnDemand: true,
+      });
+      if (reason === 'local_idle_timeout' || reason === 'pool_shutdown') {
+        this.logger.debug(details);
+      } else {
+        this.logger.warn(details);
+      }
+      this.clientState.delete(client);
     });
 
     return this.pool;
+  }
+
+  private connectionMode(databaseUrl: string) {
+    try {
+      const url = new URL(databaseUrl);
+      if (url.hostname.endsWith('.pooler.supabase.com')) {
+        return url.port === '6543'
+          ? 'supabase_transaction_pooler'
+          : url.port === '5432'
+            ? 'supabase_session_pooler'
+            : 'supabase_pooler_unknown';
+      }
+      if (
+        url.hostname.startsWith('db.') &&
+        url.hostname.endsWith('.supabase.co')
+      ) {
+        return url.port === '6543'
+          ? 'supabase_dedicated_transaction_pooler'
+          : 'supabase_direct';
+      }
+      return 'postgres';
+    } catch {
+      return 'unknown';
+    }
   }
 
   private async ensurePasswordResetCodesTable() {
@@ -1144,6 +1245,8 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
       );
       create index if not exists idx_push_jobs_due
         on push_notification_jobs(status, next_retry_at);
+      create index if not exists idx_push_jobs_receipts
+        on push_notification_jobs(status, updated_at);
     `);
   }
 
@@ -1215,6 +1318,16 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         on users (google_id)
         where google_id is not null
     `);
+  }
+
+  poolStats() {
+    return this.pool
+      ? {
+          totalCount: this.pool.totalCount,
+          idleCount: this.pool.idleCount,
+          waitingCount: this.pool.waitingCount,
+        }
+      : { totalCount: 0, idleCount: 0, waitingCount: 0 };
   }
 
   private async ensureWhiteboardAssetReferencesColumn() {

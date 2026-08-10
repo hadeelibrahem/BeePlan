@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { and, asc, eq, lte } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
+import { describeDatabaseError } from '../db/database-error';
 import {
   plannerPreferences,
   pushNotificationJobs,
@@ -20,10 +21,17 @@ type DeviceRegistration = {
   appVersion?: string;
 };
 
+type PushDatabaseExecutor = Pick<DatabaseService['db'], 'select' | 'insert'>;
+
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
+export const BEEPLAN_DEFAULT_ANDROID_CHANNEL_ID = 'beeplan-default-v2';
 
-function channelFor(type: string) {
+export function channelFor(type: string) {
+  // Android notification channel behavior is immutable after creation. Keep
+  // Task Assistant on the versioned, sound-enabled channel rather than the
+  // legacy generic AI channel used by existing installations.
+  if (type === 'task_assistant') return BEEPLAN_DEFAULT_ANDROID_CHANNEL_ID;
   if (
     type.includes('calendar') ||
     type.includes('deadline') ||
@@ -49,8 +57,29 @@ function channelFor(type: string) {
   return 'tasks';
 }
 
+type ExpoPushJob = Pick<
+  typeof pushNotificationJobs.$inferSelect,
+  'expoPushToken' | 'title' | 'body' | 'priority' | 'payload'
+>;
+
+export function createExpoPushMessage(job: ExpoPushJob) {
+  return {
+    to: job.expoPushToken,
+    title: job.title,
+    body: job.body,
+    sound: 'default' as const,
+    priority: job.priority,
+    channelId:
+      (job.payload as { channelId?: string }).channelId ??
+      BEEPLAN_DEFAULT_ANDROID_CHANNEL_ID,
+    data: job.payload,
+  };
+}
+
 @Injectable()
 export class PushNotificationsService {
+  private readonly logger = new Logger(PushNotificationsService.name);
+  private processing = false;
   constructor(private readonly databaseService: DatabaseService) {}
   private get db() {
     return this.databaseService.db;
@@ -146,20 +175,27 @@ export class PushNotificationsService {
   async enqueueForNotification(
     notificationId: string,
     input: CreateNotificationInput,
+    executor: PushDatabaseExecutor = this.db,
   ) {
     const requestedPriority =
       typeof input.data?.priority === 'string'
         ? (input.data.priority as 'high' | 'normal' | 'low')
         : undefined;
     const priority = requestedPriority ?? pushPriorityFor(input.type);
-    if (!priority || !isPushEligible(input.type, priority)) return;
-    const [preferences] = await this.db
+    if (!priority || !isPushEligible(input.type, priority)) {
+      this.logger.log(JSON.stringify({ event: 'push_job_skipped', notificationId, reason: 'not_push_eligible', type: input.type }));
+      return;
+    }
+    const [preferences] = await executor
       .select({ enabled: userNotificationPreferences.pushNotifications })
       .from(userNotificationPreferences)
       .where(eq(userNotificationPreferences.userId, input.userId))
       .limit(1);
-    if (preferences && !preferences.enabled) return;
-    const devices = await this.db
+    if (preferences && !preferences.enabled) {
+      this.logger.log(JSON.stringify({ event: 'push_job_skipped', notificationId, reason: 'push_preference_disabled' }));
+      return;
+    }
+    const devices = await executor
       .select()
       .from(userPushDevices)
       .where(
@@ -168,12 +204,16 @@ export class PushNotificationsService {
           eq(userPushDevices.enabled, true),
         ),
       );
-    if (!devices.length) return;
+    if (!devices.length) {
+      this.logger.warn(JSON.stringify({ event: 'push_job_skipped', notificationId, reason: 'no_enabled_devices' }));
+      return;
+    }
+    this.logger.log(JSON.stringify({ event: 'push_devices_selected', notificationId, count: devices.length, platforms: [...new Set(devices.map((device) => device.platform))], priority }));
     const quietUntil =
       priority === 'high'
         ? null
-        : await this.quietUntil(input.userId, new Date());
-    await this.db
+        : await this.quietUntil(input.userId, new Date(), executor);
+    const inserted = await executor
       .insert(pushNotificationJobs)
       .values(
         devices.map((device) => ({
@@ -198,11 +238,57 @@ export class PushNotificationsService {
           pushNotificationJobs.notificationId,
           pushNotificationJobs.deviceId,
         ],
-      });
+      })
+      .returning({ id: pushNotificationJobs.id });
+    this.logger.log(JSON.stringify({ event: 'push_jobs_created', notificationId, count: inserted.length, selectedCount: devices.length }));
   }
 
   @Cron('* * * * *')
   async processQueue() {
+    if (this.processing) {
+      this.logger.warn(JSON.stringify({ event: 'push_scheduler_overlap_skipped', retryNextTick: true }));
+      return;
+    }
+    this.processing = true;
+    try {
+      await this.processQueueUnsafe();
+      this.logger.debug(JSON.stringify({
+        event: 'push_scheduler_finished',
+        pool: this.databaseService.poolStats(),
+      }));
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        event: 'push_scheduler_db_failure',
+        retryNextTick: true,
+        pool: this.databaseService.poolStats(),
+        ...describeDatabaseError(error, 'query'),
+      }));
+    } finally {
+      this.processing = false;
+    }
+  }
+
+  private async processQueueUnsafe() {
+    const recovered = await this.db
+      .update(pushNotificationJobs)
+      .set({
+        status: 'pending',
+        nextRetryAt: new Date(),
+        lastError: 'Recovered stale processing claim after worker interruption.',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(pushNotificationJobs.status, 'processing'),
+          lte(pushNotificationJobs.updatedAt, new Date(Date.now() - 10 * 60_000)),
+        ),
+      )
+      .returning({ id: pushNotificationJobs.id });
+    if (recovered.length) this.logger.warn(JSON.stringify({
+      event: 'push_stale_claims_recovered',
+      count: recovered.length,
+      jobIds: recovered.map((job) => job.id),
+    }));
     await this.processReceipts();
     const jobs = await this.db
       .select()
@@ -216,6 +302,7 @@ export class PushNotificationsService {
       .orderBy(asc(pushNotificationJobs.nextRetryAt))
       .limit(100);
     if (!jobs.length) return;
+    this.logger.log(JSON.stringify({ event: 'push_jobs_due', count: jobs.length, jobIds: jobs.map((job) => job.id) }));
     const claimed = [] as typeof jobs;
     for (const job of jobs) {
       const [row] = await this.db
@@ -237,16 +324,7 @@ export class PushNotificationsService {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(
-            batch.map((job) => ({
-              to: job.expoPushToken,
-              title: job.title,
-              body: job.body,
-              sound: 'default',
-              priority: job.priority,
-              channelId:
-                (job.payload as { channelId?: string }).channelId ?? 'tasks',
-              data: job.payload,
-            })),
+            batch.map(createExpoPushMessage),
           ),
         });
         if (!response.ok)
@@ -259,8 +337,10 @@ export class PushNotificationsService {
             details?: { error?: string };
           }>;
         };
-        for (let i = 0; i < batch.length; i += 1)
+        for (let i = 0; i < batch.length; i += 1) {
+          this.logger.log(JSON.stringify({ event: 'expo_ticket', jobId: batch[i].id, status: result.data?.[i]?.status, ticketId: result.data?.[i]?.id ?? null, error: result.data?.[i]?.details?.error ?? null }));
           await this.handleTicket(batch[i], result.data?.[i]);
+        }
       } catch (error) {
         for (const job of batch)
           await this.retry(
@@ -290,7 +370,14 @@ export class PushNotificationsService {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ids: withTickets.map((job) => job.ticketId) }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        this.logger.warn(JSON.stringify({
+          event: 'expo_receipts_request_failed',
+          status: response.status,
+          jobCount: withTickets.length,
+        }));
+        return;
+      }
       const result = (await response.json()) as {
         data?: Record<
           string,
@@ -299,6 +386,7 @@ export class PushNotificationsService {
       };
       for (const job of withTickets) {
         const receipt = job.ticketId ? result.data?.[job.ticketId] : undefined;
+        this.logger.log(JSON.stringify({ event: 'expo_receipt', jobId: job.id, ticketId: job.ticketId, status: receipt?.status ?? 'pending', error: receipt?.details?.error ?? null }));
         if (receipt?.details?.error === 'DeviceNotRegistered') {
           await this.db
             .update(userPushDevices)
@@ -312,9 +400,29 @@ export class PushNotificationsService {
               updatedAt: new Date(),
             })
             .where(eq(pushNotificationJobs.id, job.id));
+        } else if (receipt?.status === 'ok') {
+          await this.db
+            .update(pushNotificationJobs)
+            .set({ status: 'delivered', lastError: null, updatedAt: new Date() })
+            .where(eq(pushNotificationJobs.id, job.id));
+        } else if (receipt?.status === 'error') {
+          await this.db
+            .update(pushNotificationJobs)
+            .set({
+              status: 'failed',
+              lastError: (receipt.details?.error ?? receipt.message ?? 'Expo receipt rejected push').slice(0, 500),
+              updatedAt: new Date(),
+            })
+            .where(eq(pushNotificationJobs.id, job.id));
         }
       }
-    } catch {
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        event: 'expo_receipts_processing_failed',
+        retryNextTick: true,
+        pool: this.databaseService.poolStats(),
+        ...describeDatabaseError(error, 'query'),
+      }));
       /* receipt checks are best effort; the ticket already succeeded */
     }
   }
@@ -330,7 +438,6 @@ export class PushNotificationsService {
   ) {
     const invalid =
       ticket?.details?.error === 'DeviceNotRegistered' ||
-      ticket?.details?.error === 'InvalidCredentials' ||
       /invalid.*token/i.test(ticket?.message ?? '');
     if (invalid) {
       await this.db
@@ -382,8 +489,12 @@ export class PushNotificationsService {
       .where(eq(pushNotificationJobs.id, job.id));
   }
 
-  private async quietUntil(userId: string, now: Date): Promise<Date | null> {
-    const [row] = await this.db
+  private async quietUntil(
+    userId: string,
+    now: Date,
+    executor: PushDatabaseExecutor = this.db,
+  ): Promise<Date | null> {
+    const [row] = await executor
       .select({
         sleepStart: plannerPreferences.sleepStartTime,
         sleepEnd: plannerPreferences.sleepEndTime,

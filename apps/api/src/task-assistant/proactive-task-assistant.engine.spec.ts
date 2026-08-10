@@ -2,6 +2,7 @@ import { ContextTimelineEngine } from './context-timeline.engine';
 import { ContextualNotificationEngine } from './contextual-notification.engine';
 import { DynamicPackingListEngine } from './dynamic-packing-list.engine';
 import { ProactiveTaskAssistantEngine } from './proactive-task-assistant.engine';
+import { zonedDateTime } from '../weather-travel/zoned-time';
 import type {
   ClassifiedTaskContext,
   TaskAssistantPreferences,
@@ -155,5 +156,58 @@ describe('proactive task assistant engines', () => {
         now: new Date('2030-06-01'),
       }).timelineStages.length,
     ).toBeGreaterThan(0);
+  });
+  it('schedules an online meeting notification at 20 minutes before the local start', () => {
+    const localStart = zonedDateTime('2026-08-08', '19:30', 'Asia/Hebron');
+    const stages = new ContextTimelineEngine().generate(
+      context({
+        title: 'Online meeting',
+        text: 'online meeting',
+        primaryContext: 'online_meeting',
+        secondaryContexts: [],
+        scheduledExecution: localStart.toISOString(),
+      }),
+      new Date('2026-08-08T12:00:00.000Z'),
+    );
+    expect(stages[0]?.scheduledAt.toISOString()).toBe(
+      '2026-08-08T16:10:00.000Z',
+    );
+  });
+  it('carries university packing suggestions into the combined evaluation', () => {
+    const engine = new ProactiveTaskAssistantEngine(
+      new DynamicPackingListEngine(),
+      new ContextTimelineEngine(),
+      new ContextualNotificationEngine(),
+    );
+    const result = engine.evaluate({
+      userId: 'user',
+      context: context({
+        title: 'Trip to University',
+        text: 'trip to university bring laptop charger documents',
+        primaryContext: 'university',
+        secondaryContexts: ['travel'],
+      }),
+      preferences,
+      scheduleVersion: 'v1',
+    });
+    expect(result.packingNeeds.map((item) => item.type)).toContain('packing_charger');
+  });
+  it('does not add trip clothes or medication to an interview with a destination', () => {
+    const engine = new ProactiveTaskAssistantEngine(new DynamicPackingListEngine(), new ContextTimelineEngine(), new ContextualNotificationEngine());
+    const result = engine.evaluate({
+      userId: 'user',
+      context: context({
+        title: 'Job interview',
+        text: 'job interview cv laptop charger',
+        primaryContext: 'interview',
+        secondaryContexts: [],
+        travelRequired: true,
+      }),
+      preferences,
+      scheduleVersion: 'v1',
+    });
+    expect(result.packingNeeds.map((item) => item.type)).not.toEqual(expect.arrayContaining(['packing_clothes', 'packing_medication', 'packing_passport']));
+    expect(result.timelineStages.map((stage) => stage.title)).not.toContain('Complete a final document and luggage check');
+    expect(result.packingNeeds.map((item) => item.type)).toContain('packing_charger');
   });
 });

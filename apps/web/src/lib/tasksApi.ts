@@ -285,6 +285,9 @@ export type RandomStartItem = Pick<ApiTask, "id" | "title" | "priority" | "statu
   parentTitle?: string;
   dueDate?: string;
   estimatedTimeMinutes?: number;
+  dependencyCount?: number;
+  incompleteDependencyCount?: number;
+  dependencyTitles?: string[];
 };
 export type RandomStartResponse = { task: RandomStartItem | null; candidates: RandomStartItem[]; eligibleCount: number };
 

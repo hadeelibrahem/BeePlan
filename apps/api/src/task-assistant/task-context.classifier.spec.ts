@@ -30,4 +30,25 @@ describe('TaskContextClassifier', () => {
     expect(result.primaryContext).toBe('travel');
     expect(result.secondaryContexts).toContain('work');
   });
+  it('keeps the exact Trip to University scenario as university', () => {
+    const result = classify('Trip to University', {
+      description: 'I need to travel to University and bring my laptop, charger and documents',
+      destination: {
+        displayName: 'Al Najah University',
+        latitude: 32.2211,
+        longitude: 35.2544,
+      },
+    });
+    expect(result.primaryContext).toBe('university');
+    expect(result.confidence).toBe('high');
+    expect(result.likelyEquipment).toEqual(['laptop', 'charger']);
+  });
+  it('does not turn a destination into a travel secondary context', () => {
+    const result = classify('Job interview', {
+      description: 'Interview for a software developer position. I need my CV, laptop and charger.',
+      destination: { displayName: 'Company office', latitude: 32.2, longitude: 35.2 },
+    });
+    expect(result.primaryContext).toBe('interview');
+    expect(result.secondaryContexts).not.toContain('travel');
+  });
 });

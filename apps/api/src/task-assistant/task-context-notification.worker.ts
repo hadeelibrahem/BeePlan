@@ -1,9 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { and, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
 import {
+  describeDatabaseError,
+  withTransientDatabaseRetry,
+} from '../db/database-error';
+import {
   taskAssistantEvaluations,
+  taskAssistantContexts,
   taskAssistantNotifications,
   tasks,
 } from '../db/schema';
@@ -25,7 +30,9 @@ export class TaskContextNotificationWorker {
     if (this.running) return;
     this.running = true;
     try {
-      await this.database.db.transaction(async (tx) => {
+      this.logger.log(JSON.stringify({ event: 'task_assistant_worker_started', at: new Date().toISOString() }));
+      await withTransientDatabaseRetry(
+        () => this.database.db.transaction(async (tx) => {
       const lock = await tx.execute(
         sql`select pg_try_advisory_xact_lock(${LOCK_ID}) as locked`,
       );
@@ -45,15 +52,42 @@ export class TaskContextNotificationWorker {
         .limit(100);
       for (const evaluation of expired)
         if (evaluation.taskId)
-          await this.assistant
-            .refresh(evaluation.userId, evaluation.taskId)
-            .catch(() => undefined);
+          await this.assistant.refreshWithLogging(
+            evaluation.userId,
+            evaluation.taskId,
+            'evaluation_expired',
+          );
+      const now = new Date();
+      const pendingRows = await tx
+        .select({
+          scheduledAt: taskAssistantNotifications.scheduledAt,
+        })
+        .from(taskAssistantNotifications)
+        .where(
+          inArray(taskAssistantNotifications.status, [
+            'pending',
+            'failed_retryable',
+          ]),
+        );
       const due = await tx
         .select({
           notification: taskAssistantNotifications,
           taskStatus: tasks.status,
         })
         .from(taskAssistantNotifications)
+        .innerJoin(
+          taskAssistantContexts,
+          eq(taskAssistantNotifications.contextId, taskAssistantContexts.id),
+        )
+        .innerJoin(
+          taskAssistantEvaluations,
+          and(
+            sql`${taskAssistantEvaluations.contextVersion} = ${taskAssistantContexts.id}::text`,
+            eq(taskAssistantEvaluations.userId, taskAssistantNotifications.userId),
+            eq(taskAssistantEvaluations.taskId, taskAssistantNotifications.taskId),
+            eq(taskAssistantEvaluations.status, 'current'),
+          ),
+        )
         .innerJoin(tasks, eq(taskAssistantNotifications.taskId, tasks.id))
         .where(
           and(
@@ -61,19 +95,54 @@ export class TaskContextNotificationWorker {
               'pending',
               'failed_retryable',
             ]),
-            lte(taskAssistantNotifications.scheduledAt, new Date()),
+            isNull(taskAssistantNotifications.deliveredAt),
+            lte(taskAssistantNotifications.scheduledAt, now),
           ),
         );
+      let finalDueCount = 0;
+      let excludedAfterChecks = 0;
+      this.logger.log(JSON.stringify({
+        event: 'task_assistant_due_scan',
+        now: now.toISOString(),
+        pendingCount: pendingRows.length,
+        earliestPending: pendingRows
+          .map((row) => row.scheduledAt.getTime())
+          .sort((a, b) => a - b)
+          .map((value) => new Date(value).toISOString())[0] ?? null,
+        timestampDueCount: due.length,
+      }));
+      this.logger.log(JSON.stringify({ event: 'task_assistant_due_checked', count: due.length }));
       for (const row of due) {
-        if (!['todo', 'in_progress', 'blocked'].includes(row.taskStatus)) {
+        this.logger.log(JSON.stringify({
+          event: 'task_assistant_due',
+          notificationId: row.notification.id,
+          taskId: row.notification.taskId,
+          scheduledAt: row.notification.scheduledAt.toISOString(),
+          status: row.notification.status,
+          fingerprint: row.notification.fingerprint,
+        }));
+        const preferences = await this.assistant.getPreferences(
+          row.notification.userId,
+        );
+        if (!preferences.enabled) {
+          excludedAfterChecks += 1;
           await tx
             .update(taskAssistantNotifications)
             .set({ status: 'cancelled', updatedAt: new Date() })
             .where(eq(taskAssistantNotifications.id, row.notification.id));
           continue;
         }
+        if (!['todo', 'in_progress', 'blocked'].includes(row.taskStatus)) {
+          excludedAfterChecks += 1;
+          await tx
+            .update(taskAssistantNotifications)
+            .set({ status: 'cancelled', updatedAt: new Date() })
+            .where(eq(taskAssistantNotifications.id, row.notification.id));
+          continue;
+        }
+        finalDueCount += 1;
         try {
-          await this.notifications.createOnce(
+          const result = await this.notifications.createOnce(
             {
               userId: row.notification.userId,
               taskId: row.notification.taskId,
@@ -95,6 +164,25 @@ export class TaskContextNotificationWorker {
               key: row.notification.fingerprint,
             },
           );
+          this.logger.log(JSON.stringify({
+            event: 'task_assistant_inbox_notification_result',
+            taskAssistantNotificationId: row.notification.id,
+            inserted: result.inserted,
+            skipped: result.skipped,
+            reason: result.reason ?? null,
+          }));
+          if (result.inserted === 0 && result.reason === 'preference') {
+            this.logger.warn(JSON.stringify({
+              event: 'task_assistant_inbox_notification_not_created',
+              taskAssistantNotificationId: row.notification.id,
+              reason: 'notification_preference_suppressed',
+            }));
+            await tx
+              .update(taskAssistantNotifications)
+              .set({ status: 'cancelled', updatedAt: new Date() })
+              .where(eq(taskAssistantNotifications.id, row.notification.id));
+            continue;
+          }
           await tx
             .update(taskAssistantNotifications)
             .set({
@@ -115,15 +203,45 @@ export class TaskContextNotificationWorker {
             })
             .where(eq(taskAssistantNotifications.id, row.notification.id));
           this.logger.warn(
-            `Context notification delivery failed for ${row.notification.id}: ${error instanceof Error ? error.message : 'unknown'}`,
+            JSON.stringify({
+              event: 'task_assistant_notification_delivery_failed',
+              notificationId: row.notification.id,
+              ...describeDatabaseError(error, 'query'),
+            }),
           );
         }
       }
-      });
-    } catch (error) {
-      this.logger.warn(
-        `Task-context notification run skipped; it will retry next run: ${error instanceof Error ? error.message : 'database error'}`,
+      this.logger.log(JSON.stringify({
+        event: 'task_assistant_due_scan_result',
+        now: now.toISOString(),
+        pendingCount: pendingRows.length,
+        earliestPending: pendingRows
+          .map((row) => row.scheduledAt.getTime())
+          .sort((a, b) => a - b)
+          .map((value) => new Date(value).toISOString())[0] ?? null,
+        timestampDueCount: due.length,
+        finalDueCount,
+        excludedAfterChecks,
+      }));
+        }),
+        {
+          attempts: 2,
+          onRetry: (error, attempt, delayMs) => this.logger.warn(JSON.stringify({
+            event: 'task_assistant_worker_database_retry',
+            attempt,
+            delayMs,
+            pool: this.database.poolStats(),
+            ...describeDatabaseError(error, 'query'),
+          })),
+        },
       );
+      this.logger.log(JSON.stringify({ event: 'task_assistant_worker_finished', at: new Date().toISOString() }));
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        event: 'task_assistant_worker_failed',
+        retryNextRun: true,
+        ...describeDatabaseError(error, 'query'),
+      }));
     } finally {
       this.running = false;
     }

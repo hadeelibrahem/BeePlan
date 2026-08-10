@@ -1,4 +1,5 @@
 import type { TaskPayload } from '../lib/tasksApi'
+import { taskScheduleValidationError } from './taskScheduleValidation'
 
 export type CreateTaskFormValues = {
   title: string
@@ -25,8 +26,12 @@ export function validateCreateTask(values: CreateTaskFormValues) {
   if (!values.title.trim()) return 'Task title is required.'
   const estimatedHours = values.estimatedHours.trim() ? Number(values.estimatedHours) : 0
   if (!Number.isFinite(estimatedHours) || estimatedHours < 0) return 'Estimated duration must be a non-negative number.'
-  if ((values.scheduledDate || values.scheduledStartTime || values.scheduledEndTime) && (!values.scheduledDate || !values.scheduledStartTime)) return 'Scheduled date and start time are required together.'
-  return ''
+  return taskScheduleValidationError({
+    scheduledDate: values.scheduledDate,
+    scheduledStartTime: values.scheduledStartTime,
+    scheduledEndTime: values.scheduledEndTime,
+    estimatedTimeMinutes: Math.round(estimatedHours * 60),
+  })
 }
 
 export function createTaskPayload(values: CreateTaskFormValues, recurrence: TaskPayload['recurrence']): TaskPayload {

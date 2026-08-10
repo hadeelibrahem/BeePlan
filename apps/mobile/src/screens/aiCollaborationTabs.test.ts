@@ -4,21 +4,29 @@ import { resolve } from 'node:path'
 import test from 'node:test'
 
 const screenSource = readFileSync(resolve(import.meta.dirname, 'AiCollaborationScreen.tsx'), 'utf8')
+const distributionSource = readFileSync(
+  resolve(import.meta.dirname, '../features/collaboration/components/ai/DistributionPanel.tsx'),
+  'utf8',
+)
+const plannerApiSource = readFileSync(
+  resolve(import.meta.dirname, '../features/collaboration/api/ai-collaboration-planner.api.ts'),
+  'utf8',
+)
 const planViewSource = readFileSync(
   resolve(import.meta.dirname, '../features/collaboration/components/ai/PlanView.tsx'),
   'utf8',
 )
 
-test('AI Collaboration exposes exactly the five consolidated tabs', () => {
+test('AI Collaboration exposes the five dashboard tabs plus Distribution', () => {
   const labels = [...screenSource.matchAll(/label: '([^']+)'/g)].map((m) => m[1])
-  // The screen defines the top-level TABS array before any nested switcher.
-  assert.deepEqual(labels.slice(0, 5), ['Overview', 'Plan', 'Team', 'Health', 'Activity'])
+  assert.deepEqual(labels.slice(0, 6), ['Overview', 'Plan', 'Team', 'Health', 'Activity', 'Distribution'])
 })
 
-test('the seven legacy standalone tabs are gone from the top-level tab type', () => {
+test('the old standalone tabs remain consolidated while Distribution is restored', () => {
   const tabKeyType = screenSource.match(/type TabKey = ([^;]+);/)?.[1] ?? ''
   assert.equal(tabKeyType.includes("'overview'"), true)
-  for (const removed of ['today', 'progress', 'distribution', 'suggestions', 'timeline', 'history']) {
+  assert.equal(tabKeyType.includes("'distribution'"), true)
+  for (const removed of ['today', 'progress', 'suggestions', 'timeline', 'history']) {
     assert.equal(tabKeyType.includes(`'${removed}'`), false, `TabKey should not include '${removed}'`)
   }
 })
@@ -32,6 +40,17 @@ test('each new tab renders its mapped content', () => {
   assert.match(screenSource, /<ProjectHealthPanel taskId=\{task\.id\} onNavigate=\{navigateToTab\} \/>/)
   // Activity keeps the history feed.
   assert.match(screenSource, /<HistoryFeed taskId=\{task\.id\} accessToken=\{accessToken\} \/>/)
+  assert.match(screenSource, /import \{ DistributionPanel \}/)
+  assert.match(screenSource, /tab === 'distribution' \? \(\s*<DistributionPanel task=\{task\} \/>/)
+})
+
+test('Distribution keeps the existing generation and apply planner flow reachable', () => {
+  assert.match(distributionSource, /useGenerateCollaborationPlanMutation/)
+  assert.match(distributionSource, /useApplyCollaborationPlanMutation/)
+  assert.match(distributionSource, /Generate Plan/)
+  assert.match(distributionSource, /applyMutation\.mutate/)
+  assert.match(plannerApiSource, /ai\/collaboration-plan/)
+  assert.match(plannerApiSource, /ai\/collaboration-plan\/apply/)
 })
 
 test('Plan hosts the Timeline | Dependency Graph switcher over the shared project-plan model', () => {

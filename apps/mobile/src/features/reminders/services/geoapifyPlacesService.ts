@@ -210,7 +210,7 @@ export async function reverseGeocode(latitude: number, longitude: number): Promi
 
 /**
  * URL template for Geoapify's raster map tiles, consumable by any slippy-map
- * library (Leaflet, MapLibre, react-native-maps' UrlTile). `{z}`/`{x}`/`{y}`
+ * library (Leaflet or MapLibre). `{z}`/`{x}`/`{y}`
  * are left as literal placeholders for the map library to substitute.
  */
 export function getTileLayerUrl(style: 'osm-bright' | 'osm-carto' = 'osm-bright') {

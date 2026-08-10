@@ -31,6 +31,7 @@ type Props = SidebarNavHandlers & {
   onCreateTaskAi?: () => void;
   onCreateReminder?: () => void;
   onViewTaskDetails?: (taskId: string) => void;
+  onOpenRandomStart?: () => void;
   onSignOut?: () => void;
   onStartFocus: (recommendation: DashboardRecommendation) => Promise<void>;
   onContinueFocus: () => void;
@@ -49,6 +50,7 @@ export default function TasksDashboardScreen({
   accessToken,
   onCreateTask,
   onViewTaskDetails,
+  onOpenRandomStart,
   ...nav
 }: Props) {
   const { t, toggleLanguage } = useLanguage();
@@ -95,7 +97,7 @@ export default function TasksDashboardScreen({
         ) : dashboard ? (
           <main className="space-y-4 pb-6 xl:space-y-5 2xl:space-y-6">
             <Greeting dashboard={dashboard} />
-            {accessToken && onViewTaskDetails ? <RandomStartCard accessToken={accessToken} onOpenTask={onViewTaskDetails} onCreateTask={onCreateTask} /> : null}
+            {accessToken && onOpenRandomStart ? <RandomStartCard onOpen={onOpenRandomStart} /> : null}
             <KpiRow dashboard={dashboard} />
             <Hero
               dashboard={dashboard}

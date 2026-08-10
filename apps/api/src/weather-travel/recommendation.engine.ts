@@ -25,6 +25,7 @@ export class TaskTravelWeatherRecommendationEngine {
     scheduledStart: Date;
     recommendedDeparture: Date | null;
     route: RouteEstimate | null;
+    routeUnavailableReason?: 'origin_unavailable' | 'provider_unavailable';
     forecast: WeatherPoint | null;
     thresholds: Thresholds;
     timezone: string;
@@ -72,7 +73,7 @@ export class TaskTravelWeatherRecommendationEngine {
     const body =
       input.language === 'ar'
         ? arabicBody(input.title, start, departure, routeText, weatherText)
-        : `Your ${input.title} starts at ${start}.${routeText && departure ? ` The trip takes ${routeText}, so leave around ${departure}.` : ' Travel timing is unavailable.'}${weatherText ? ` ${weatherText}` : ''}`;
+        : `Your ${input.title} starts at ${start}.${routeText && departure ? ` The trip takes ${routeText}, so leave around ${departure}.` : ` Travel timing is unavailable${input.routeUnavailableReason === 'origin_unavailable' ? '; configure a Home or saved origin, or provide a fresh current location.' : '.'}`}${weatherText ? ` ${weatherText}` : ''}`;
     return {
       recommendationTypes: unique,
       severity: unique.includes('severe_weather')

@@ -20,6 +20,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service';
 import { googleLoginApprovals, passwordResetCodes, users } from '../db/schema';
+import { isValidIanaTimezone } from '../timezone';
 import { normalizeUsername, validateUsername, usernameSeed } from './username';
 import {
   getGoogleClientId,
@@ -43,6 +44,7 @@ const registerSchema = z.object({
   username: z.string().trim().optional(),
   email: z.string().trim().email('Please enter a valid email address'),
   password: passwordSchema,
+  timezone: z.string().trim().min(1).max(100).refine(isValidIanaTimezone, 'Timezone must be a valid IANA timezone').optional(),
 });
 
 const loginSchema = z.object({
@@ -86,7 +88,13 @@ const updateProfileSchema = z.object({
     .url('Please enter a valid photo URL')
     .nullable()
     .optional(),
-  timezone: z.string().trim().min(1).max(100).optional(),
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .refine(isValidIanaTimezone, 'Timezone must be a valid IANA timezone')
+    .optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -166,6 +174,7 @@ export class AuthService {
         passwordHash,
         authProvider: 'password',
         emailVerified: true,
+        timezone: parsed.data.timezone ?? 'UTC',
       })
       .returning();
 

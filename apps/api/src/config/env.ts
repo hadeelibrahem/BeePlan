@@ -1,15 +1,24 @@
 import { z } from 'zod';
 
+const booleanFromEnvironment = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  if (value.toLowerCase() === 'true') return true;
+  if (value.toLowerCase() === 'false') return false;
+  return value;
+}, z.boolean());
+
 export const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().url().optional(),
-  DB_SSL: z.coerce.boolean().default(false),
-  DB_KEEP_ALIVE: z.coerce.boolean().default(true),
-  DB_KEEP_ALIVE_INITIAL_DELAY_MS: z.coerce.number().int().positive().default(10_000),
+  DB_SSL: booleanFromEnvironment.default(false),
+  DB_KEEP_ALIVE: booleanFromEnvironment.default(true),
+  DB_KEEP_ALIVE_INITIAL_DELAY_MS: z.coerce.number().int().nonnegative().default(10_000),
+  DB_POOL_MIN: z.coerce.number().int().min(0).max(10).default(1),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(30).default(10),
-  DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
-  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
-  DB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
+  DB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  DB_APPLICATION_NAME: z.string().min(1).max(63).default('beeplan-api'),
   NODE_ENV: z.string().optional(),
   JWT_SECRET: z.string().min(16),
   RESEND_API_KEY: z.string().optional(),

@@ -52,6 +52,7 @@ import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard';
 import { SubtaskManagementSection } from '../components/SubtaskManagementSection';
 import { DependencyManagementSection } from '../components/DependencyManagementSection';
 import { TASK_REMINDER_OPTIONS, canScheduleTaskReminder, validateTaskReminder } from './editTaskReminder';
+import { canValidateTaskSchedule, taskScheduleValidationError } from './taskScheduleValidation';
 
 type Props = {
   task: ApiTask | null;
@@ -186,9 +187,11 @@ export default function EditTaskScreen({
     task ? recurrenceToUi(task.recurrence) : null,
   );
   const [isRecurrenceSheetVisible, setIsRecurrenceSheetVisible] = useState(false);
-  const [iosPicker, setIosPicker] = useState<'date' | 'time' | null>(null);
+  const [iosPicker, setIosPicker] = useState<'date' | 'time' | 'scheduledDate' | 'scheduledStart' | 'scheduledEnd' | null>(null);
+  const [moreOptions, setMoreOptions] = useState(false);
   const [focusEnabled, setFocusEnabled] = useState(task?.isFocusTask ?? false);
   const [error, setError] = useState('');
+  const [scheduleError, setScheduleError] = useState('');
   const [lastSuccess, setLastSuccess] = useState<'saved' | undefined>(undefined);
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
@@ -342,6 +345,26 @@ export default function EditTaskScreen({
     setIosPicker('time');
   };
 
+  const openScheduledDatePicker = () => {
+    const value = scheduledDate ? new Date(`${scheduledDate}T12:00:00`) : new Date();
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({ value, mode: 'date', onChange: (event, selected) => { if (event.type === 'set' && selected) setScheduledDate(selected.toISOString().slice(0, 10)); } });
+      return;
+    }
+    setIosPicker('scheduledDate');
+  };
+
+  const openScheduledTimePicker = (which: 'scheduledStart' | 'scheduledEnd') => {
+    const value = new Date();
+    const current = which === 'scheduledStart' ? scheduledStartTime : scheduledEndTime;
+    if (current) { const [hours, minutes] = current.split(':').map(Number); if (!Number.isNaN(hours)) value.setHours(hours, minutes || 0, 0, 0); }
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({ value, mode: 'time', is24Hour: false, onChange: (event, selected) => { if (event.type === 'set' && selected) { const next = `${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`; if (which === 'scheduledStart') setScheduledStartTime(next); else setScheduledEndTime(next); } } });
+      return;
+    }
+    setIosPicker(which);
+  };
+
   async function handleSave() {
     if (!task) return;
     if (!title.trim()) {
@@ -353,8 +376,9 @@ export default function EditTaskScreen({
 
     const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60);
     const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60);
-    if ((scheduledDate || scheduledStartTime || scheduledEndTime) && (!scheduledDate || !scheduledStartTime)) { setError('Scheduled date and start time are required together.'); return; }
-    if (accessToken && scheduledDate) {
+    const scheduleValidationError = taskScheduleValidationError({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes });
+    if (scheduleValidationError) { setScheduleError(scheduleValidationError); setError(scheduleValidationError); return; }
+    if (accessToken && canValidateTaskSchedule({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })) {
       const validation = await validateTaskSchedule(accessToken, { id: task.id, title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate?.toISOString(), estimatedTimeMinutes, scheduledDate, scheduledStartTime, scheduledEndTime: scheduledEndTime || undefined });
       if (validation.commitmentConflicts.length) { setCommitmentConflict(validation.commitmentConflicts[0]); return; }
       if (validation.conflicts.length) { setTimeConflict(validation.conflicts[0]); return; }
@@ -362,6 +386,7 @@ export default function EditTaskScreen({
     }
     setSaving(true);
     setError('');
+    setScheduleError('');
 
     try {
       const updatedTask = await onSave({
@@ -539,29 +564,20 @@ export default function EditTaskScreen({
           ))}
         </View>
 
-        <Label text="Status" />
-        <View className="mb-3 flex-row flex-wrap gap-2">
-          {STATUSES.map((item) => (
-            <Chip key={item} label={item} active={status === item} onPress={() => setStatus(item)} />
-          ))}
-        </View>
+        <Select label={`Status · ${status}`} onPress={() => Alert.alert('Status', 'Choose status', STATUSES.map((item) => ({ text: item, onPress: () => setStatus(item) })))} />
 
-        <View className="flex-row gap-2">
-          <View className="flex-1">
-            <Label text="Due Date" />
-            <Select label={formatDateLabel(dueDate)} onPress={openDatePicker} />
-          </View>
-          <View className="flex-1">
-            <Label text="Due Time" />
-            <Select label={formatTimeLabel(dueTime)} onPress={openTimePicker} />
-          </View>
-        </View>
-        <Label text="Scheduled Date (YYYY-MM-DD)" />
-        <TextInput accessibilityLabel="Scheduled date" value={scheduledDate} onChangeText={setScheduledDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.placeholder} className="mb-2 rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} />
-        <View className="flex-row gap-2"><View className="flex-1"><Label text="Scheduled Start" /><TextInput accessibilityLabel="Scheduled start time" value={scheduledStartTime} onChangeText={setScheduledStartTime} placeholder="HH:mm" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View><View className="flex-1"><Label text="Scheduled End" /><TextInput accessibilityLabel="Scheduled end time" value={scheduledEndTime} onChangeText={setScheduledEndTime} placeholder="HH:mm or derived" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5" style={{ borderColor: colors.border, color: colors.text }} /></View></View>
-        <WeatherTravelTaskFields destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
       </Card>
 
+      <Card title="When & Where">
+        <Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Schedule · when you plan to do this</Text>
+        <View className="flex-row gap-2"><View className="flex-1"><Select label={scheduledDate ? formatDateLabel(new Date(`${scheduledDate}T12:00:00`)) : 'Add date'} onPress={openScheduledDatePicker} /></View><View className="flex-1"><Select label={scheduledStartTime ? `${formatTimeLabel(scheduledStartTime)}${scheduledEndTime ? ` – ${formatTimeLabel(scheduledEndTime)}` : ''}` : 'Add time'} onPress={() => openScheduledTimePicker('scheduledStart')} /></View></View>
+        {scheduledStartTime ? <Pressable accessibilityRole="button" onPress={() => openScheduledTimePicker('scheduledEnd')} className="mt-2"><Text className="text-xs font-bold" style={{ color: colors.accent }}>Set end time</Text></Pressable> : null}
+        {scheduleError ? <Text className="mt-2 text-sm font-bold" style={{ color: colors.error }}>{scheduleError}</Text> : null}
+        <View className="mt-4"><Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Deadline · when this must be finished</Text><View className="flex-row gap-2"><View className="flex-1"><Select label={formatDateLabel(dueDate)} onPress={openDatePicker} /></View><View className="flex-1"><Select label={dueTime ? formatTimeLabel(dueTime) : 'Optional time'} onPress={openTimePicker} /></View></View></View>
+        <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
+      </Card>
+
+      <Pressable accessibilityRole="button" onPress={() => setMoreOptions((value) => !value)} className="mb-3 flex-row items-center justify-between rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>More options</Text><Text style={{ color: colors.secondaryText }}>{moreOptions ? '⌃' : '›'}</Text></Pressable>
       <Card title="Progress & Time Estimation">
         <View className="flex-row gap-2">
           <View className="flex-1">
@@ -738,21 +754,22 @@ export default function EditTaskScreen({
         <Modal visible={iosPicker !== null} transparent animationType="fade" onRequestClose={() => setIosPicker(null)}>
           <View className="flex-1 items-center justify-center bg-black/50 px-6">
             <View className="w-full rounded-3xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
-              {iosPicker === 'date' ? (
+              {iosPicker === 'date' || iosPicker === 'scheduledDate' ? (
                 <DateTimePicker
-                  value={dueDate ?? new Date()}
+                  value={iosPicker === 'date' ? dueDate ?? new Date() : scheduledDate ? new Date(`${scheduledDate}T12:00:00`) : new Date()}
                   mode="date"
                   display="inline"
                   themeVariant={theme.mode}
                   accentColor={colors.accent}
-                  onChange={(_event, selected) => selected && setDueDate(selected)}
+                  onChange={(_event, selected) => { if (!selected) return; if (iosPicker === 'date') setDueDate(selected); else setScheduledDate(selected.toISOString().slice(0, 10)); }}
                 />
               ) : (
                 <DateTimePicker
                   value={(() => {
                     const initial = new Date();
-                    if (dueTime) {
-                      const [h, m] = dueTime.split(':').map(Number);
+                    const selectedTime = iosPicker === 'time' ? dueTime : iosPicker === 'scheduledStart' ? scheduledStartTime : scheduledEndTime;
+                    if (selectedTime) {
+                      const [h, m] = selectedTime.split(':').map(Number);
                       if (!Number.isNaN(h)) initial.setHours(h, m || 0, 0, 0);
                     }
                     return initial;
@@ -763,7 +780,8 @@ export default function EditTaskScreen({
                   accentColor={colors.accent}
                   onChange={(_event, selected) => {
                     if (selected) {
-                      setDueTime(`${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`);
+                      const next = `${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`;
+                      if (iosPicker === 'time') setDueTime(next); else if (iosPicker === 'scheduledStart') setScheduledStartTime(next); else setScheduledEndTime(next);
                     }
                   }}
                 />

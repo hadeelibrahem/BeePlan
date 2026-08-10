@@ -12,6 +12,7 @@ import { AccountPrivacySection } from '../features/settings/AccountPrivacySectio
 import type { AuthUser } from '../lib/api';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { ThemePreference } from '../theme/ThemeContext';
+import { TimezoneSelector } from '../features/settings/TimezoneSelector';
 
 type Props = {
   accessToken: string;
@@ -42,6 +43,7 @@ export default function SettingsScreen({ accessToken, onBack, onSignOut, onOpenP
       <View className="gap-4 px-4">
         <SectionCard><Text className="text-sm font-black" style={{ color: colors.text }}>Appearance</Text><View className="mt-2 flex-row gap-2">{(['system', 'light', 'dark'] as ThemePreference[]).map((option) => <Pressable key={option} accessibilityRole="button" accessibilityState={{ selected: preference === option }} onPress={() => setThemePreference(option)} className="flex-1 rounded-xl border px-2 py-2.5" style={{ borderColor: preference === option ? colors.accent : colors.border, backgroundColor: preference === option ? colors.accentSoft : colors.surface }}><Text className="text-center text-xs font-bold capitalize" style={{ color: colors.text }}>{option}</Text></Pressable>)}</View><Text className="mt-2 text-xs" style={{ color: colors.secondaryText }}>System follows your device appearance.</Text><View className="mt-4 flex-row items-center justify-between"><Text className="text-sm font-bold" style={{ color: colors.text }}>Language</Text><Text className="text-xs font-bold" style={{ color: colors.secondaryText }}>{language === 'ar' ? 'Arabic' : 'English'}</Text></View><View className="mt-2 flex-row gap-2">{(['en', 'ar'] as const).map((option) => <Pressable key={option} accessibilityRole="button" accessibilityState={{ selected: language === option }} onPress={() => setLanguage(option)} className="flex-1 rounded-xl border px-2 py-2.5" style={{ borderColor: language === option ? colors.accent : colors.border, backgroundColor: language === option ? colors.accentSoft : colors.surface }}><Text className="text-center text-xs font-bold" style={{ color: colors.text }}>{option === 'ar' ? 'العربية' : 'English'}</Text></Pressable>)}</View></SectionCard>
         <AccountPrivacySection accessToken={accessToken} user={user} onUpdated={onUserUpdated} />
+        <SectionCard><TimezoneSelector accessToken={accessToken} user={user} onUpdated={onUserUpdated} /></SectionCard>
         <View>
           <Text className="mb-1 text-xs font-black uppercase tracking-wide" style={{ color: colors.secondaryText }}>
             Personal Context

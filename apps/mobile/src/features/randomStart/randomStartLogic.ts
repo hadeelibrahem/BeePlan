@@ -1,0 +1,10 @@
+import type { RandomStartItem } from '../../lib/tasksApi'
+export type WheelMode = 'all' | 'pick' | 'filter'
+export type WheelFilters = { priorities: string[]; due: string[]; durations: string[] }
+export const EMPTY_FILTERS: WheelFilters = { priorities: [], due: [], durations: [] }
+export function matchesFilters(task: RandomStartItem, filters: WheelFilters, now = new Date()) { if (filters.priorities.length && !filters.priorities.includes(task.priority === 'urgent' ? 'high' : task.priority)) return false; if (filters.durations.length) { const m = task.estimatedTimeMinutes ?? 0; if (!filters.durations.some(v => v === 'under30' ? m > 0 && m < 30 : v === '30to60' ? m >= 30 && m <= 60 : m > 60)) return false } if (filters.due.length) { const d = task.dueDate ? new Date(task.dueDate) : null; const s = new Date(now.getFullYear(), now.getMonth(), now.getDate()); const e = new Date(s); e.setDate(e.getDate() + 7); if (!filters.due.some(v => v === 'none' ? !d : v === 'today' ? Boolean(d && d >= s && d < new Date(s.getTime() + 86400000)) : Boolean(d && d >= s && d < e))) return false } return true }
+export function buildWheel(candidates: RandomStartItem[], mode: WheelMode, selected: Set<string>, filters: WheelFilters, excluded: Set<string>) { return candidates.filter(task => !excluded.has(task.candidateKey) && (mode === 'all' || (mode === 'pick' ? selected.has(task.candidateKey) : matchesFilters(task, filters)))) }
+// The native wheel keeps equal visual segments; weighting selects a result and
+// the animation then aligns that exact segment with the stationary pointer.
+export function pickRandom<T extends Pick<RandomStartItem, 'priority'>>(items: T[], weighted: boolean, random = Math.random): T | null { if (!items.length) return null; const w = (x: T) => weighted ? (x.priority === 'urgent' || x.priority === 'high' ? 3 : x.priority === 'medium' ? 2 : 1) : 1; const total = items.reduce((s, x) => s + w(x), 0); let cursor = random() * total; for (const item of items) { cursor -= w(item); if (cursor < 0) return item } return items[items.length - 1] }
+export function isRtlLabel(value: string) { return /[\u0590-\u08FF]/.test(value) }

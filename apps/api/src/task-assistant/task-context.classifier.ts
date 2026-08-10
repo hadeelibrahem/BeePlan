@@ -43,11 +43,6 @@ export class TaskContextClassifier {
     )
       .filter(([, rule]) => rule.test(input.text))
       .map(([context]) => context);
-    if (
-      input.destination &&
-      !matches.some((value) => ['travel', 'flight'].includes(value))
-    )
-      matches.push('travel');
     const primaryContext = choosePrimary(matches);
     if (primaryContext === 'general')
       return {

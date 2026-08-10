@@ -54,4 +54,19 @@ describe('GeoapifyTravelProvider', () => {
       }),
     ).resolves.toBeNull();
   });
+  it('uses the Haversine fallback after a Geoapify request failure', async () => {
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'));
+    const provider = new GeoapifyTravelProvider(
+      new ConfigService({ GEOAPIFY_API_KEY: 'secret' }),
+    );
+    await expect(
+      provider.estimateRoute({
+        origin: { latitude: 32.1, longitude: 35.2 },
+        destination: { latitude: 32.2211, longitude: 35.2544 },
+        mode: 'driving',
+        departureTime: '',
+        allowFallback: true,
+      }),
+    ).resolves.toMatchObject({ provider: 'deterministic_fallback', fallbackUsed: true });
+  });
 });

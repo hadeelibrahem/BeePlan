@@ -32,6 +32,20 @@ describe('WhiteboardGateway', () => {
     expect(joined).toMatchObject({ accepted: true, accessRole: 'editor' });
     expect(result).toMatchObject({ accepted: true, eventId: 'event-1', serverRevision: 1 });
     expect(access.require).toHaveBeenCalledWith('user-1', BOARD_ID, 'edit');
+    expect((socket as unknown as { peer: { emit: jest.Mock } }).peer.emit).toHaveBeenCalledTimes(1);
+    expect((socket as unknown as { emit: jest.Mock }).emit.mock.calls.some(([event]) => event === 'whiteboard:mutation')).toBe(false);
+  });
+
+  it('preserves operationId, excludes the sender, and relays one operation to peers', async () => {
+    const { gateway } = setup('editor');
+    const socket = client('editor');
+    await gateway.join(socket, { boardId: BOARD_ID });
+    const payload = { protocolVersion: 1 as const, operationId: 'operation-stable', boardId: BOARD_ID, clientId: 'client-a', eventId: 'legacy-event', traceId: 'trace-operation', sentAt: new Date().toISOString(), payload: { added: [{ id: 'shape:one', typeName: 'shape' }] } };
+    await expect(gateway.mutation(socket, payload)).resolves.toMatchObject({ accepted: true, operationId: 'operation-stable' });
+    await expect(gateway.mutation(socket, { ...payload, eventId: 'retried-event' })).resolves.toMatchObject({ accepted: true, duplicate: true, operationId: 'operation-stable' });
+    expect((socket as unknown as { peer: { emit: jest.Mock } }).peer.emit).toHaveBeenCalledTimes(1);
+    expect((socket as unknown as { peer: { emit: jest.Mock } }).peer.emit).toHaveBeenCalledWith('whiteboard:mutation', expect.objectContaining({ operationId: 'operation-stable', clientId: 'client-a' }));
+    expect((socket as unknown as { emit: jest.Mock }).emit.mock.calls.some(([event]) => event === 'whiteboard:mutation')).toBe(false);
   });
 
   it('rejects viewer mutations and ignores duplicate event IDs', async () => {
@@ -89,6 +103,16 @@ describe('WhiteboardGateway', () => {
     await expect(gateway.transform(socket, { ...base, eventId: 'transform-2', sequence: 2, final: true })).resolves.toMatchObject({ accepted: true });
     expect((socket as unknown as { peer: { emit: jest.Mock } }).peer.emit).toHaveBeenCalledWith('whiteboard:transform', expect.objectContaining({ final: true, sequence: 2 }));
     await expect(gateway.transform(socket, { ...base, eventId: 'transform-3', sequence: 1, final: false })).resolves.toMatchObject({ accepted: false, reason: 'stale_sequence' });
+  });
+
+  it('deduplicates transform delivery by operationId', async () => {
+    const { gateway } = setup('editor');
+    const socket = client('editor');
+    await gateway.join(socket, { boardId: BOARD_ID });
+    const payload = { protocolVersion: 1 as const, operationId: 'transform-operation', boardId: BOARD_ID, clientId: 'client-transform', eventId: 'transform-event-1', interactionId: 'interaction-dedup', shapeId: 'shape:geo', sequence: 1, final: false, record: { id: 'shape:geo', typeName: 'shape', type: 'geo', parentId: 'page:1', props: {} } };
+    await expect(gateway.transform(socket, payload)).resolves.toMatchObject({ accepted: true });
+    await expect(gateway.transform(socket, { ...payload, eventId: 'transform-event-2' })).resolves.toMatchObject({ accepted: true, duplicate: true });
+    expect((socket as unknown as { peer: { volatile: { emit: jest.Mock } } }).peer.volatile.emit).toHaveBeenCalledTimes(1);
   });
 
   it('answers the authenticated board ping smoke test', async () => {

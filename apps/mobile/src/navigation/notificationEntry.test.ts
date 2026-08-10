@@ -25,6 +25,11 @@ test('read and mark-all state updates the shared unread badge', () => {
   assert.match(appSource, /onUnreadCountChange=\{setUnreadNotificationCount\}/)
 })
 
+test('Notifications stack route remains stable when unread state updates', () => {
+  assert.match(appSource, /const NotificationsStackRoute = useCallback\(/)
+  assert.match(appSource, /onSignOut=\{\(\) => void handleSignOutRef\.current\(\)\}/)
+})
+
 test('notification cold-start handler keeps route and fallback branches', () => {
   assert.match(appSource, /getLastNotificationResponseAsync/)
   assert.match(appSource, /navigate\('Notifications'\)/)

@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import type {
   AssistantPriority,
   ClassifiedTaskContext,
+  TaskAssistantPreferences,
   TimelineStageType,
 } from './task-assistant.types';
 
@@ -24,8 +25,13 @@ export class ContextTimelineEngine {
     context: ClassifiedTaskContext,
     now = new Date(),
     recommendedDeparture?: Date | null,
+    preferences?: Pick<
+      TaskAssistantPreferences,
+      'enabled' | 'travelAdviceEnabled' | 'departureRemindersEnabled'
+    >,
   ): TimelineDraft[] {
     if (
+      preferences?.enabled === false ||
       !context.scheduledExecution ||
       ['low', 'unavailable'].includes(context.confidence)
     )
@@ -54,7 +60,10 @@ export class ContextTimelineEngine {
         priority,
         triggerReason: reason,
       });
-    if (travel.has('travel') || travel.has('flight')) {
+    if (
+      (travel.has('travel') || travel.has('flight')) &&
+      preferences?.travelAdviceEnabled !== false
+    ) {
       add(
         'document_check',
         'Check travel documents and current entry requirements',
@@ -78,7 +87,10 @@ export class ContextTimelineEngine {
         'Final check is scheduled before departure.',
         departure,
       );
-      if (recommendedDeparture)
+      if (
+        recommendedDeparture &&
+        preferences?.departureRemindersEnabled !== false
+      )
         add(
           'departure',
           'Leave now',

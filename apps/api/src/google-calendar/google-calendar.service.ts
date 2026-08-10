@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Cron } from '@nestjs/schedule';
 import { and, asc, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { DatabaseService } from '../db/database.service';
+import { describeDatabaseError } from '../db/database-error';
 import {
   focusSessions,
   googleCalendarConnections,
@@ -168,15 +169,37 @@ export class GoogleCalendarService {
   }
   @Cron('*/5 * * * *')
   async syncConnectedAccounts() {
-    const connections = await this.db
-      .select({ userId: googleCalendarConnections.userId })
-      .from(googleCalendarConnections);
-    for (const connection of connections) {
-      try {
-        await this.syncIncremental(connection.userId);
-      } catch {
-        /* one expired/revoked account must not stop other users syncing */
+    try {
+      const connections = await this.db
+        .select({ userId: googleCalendarConnections.userId })
+        .from(googleCalendarConnections);
+      for (const connection of connections) {
+        try {
+          await this.syncIncremental(connection.userId);
+        } catch (error) {
+          this.logger.warn(JSON.stringify({
+            event: 'google_calendar_background_sync_failed',
+            subsystem: 'google_calendar',
+            userId: connection.userId,
+            retry: true,
+            pool: this.dbService.poolStats(),
+            ...describeDatabaseError(error, 'query'),
+          }));
+        }
       }
+      this.logger.debug(JSON.stringify({
+        event: 'google_calendar_background_sync_finished',
+        connectionCount: connections.length,
+        pool: this.dbService.poolStats(),
+      }));
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        event: 'google_calendar_connections_scan_failed',
+        subsystem: 'google_calendar',
+        retry: true,
+        pool: this.dbService.poolStats(),
+        ...describeDatabaseError(error, 'query'),
+      }));
     }
   }
   /** Called after a BeePlan write. It only persists work; Google is never called in the task transaction. */
@@ -184,6 +207,27 @@ export class GoogleCalendarService {
     userId: string,
     taskId: string,
     operation: 'upsert' | 'delete' = 'upsert',
+  ) {
+    try {
+      await this.enqueueTaskSyncOnce(userId, taskId, operation);
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        event: 'google_calendar_enqueue_failed',
+        subsystem: 'google_calendar',
+        userId,
+        taskId,
+        operation,
+        retry: true,
+        pool: this.dbService.poolStats(),
+        ...describeDatabaseError(error, 'query'),
+      }));
+    }
+  }
+
+  private async enqueueTaskSyncOnce(
+    userId: string,
+    taskId: string,
+    operation: 'upsert' | 'delete',
   ) {
     const [connection] = await this.db
       .select()
@@ -222,6 +266,29 @@ export class GoogleCalendarService {
     entityId: string,
     operation: 'upsert' | 'delete' = 'upsert',
   ) {
+    try {
+      await this.enqueueEntitySyncOnce(userId, entityType, entityId, operation);
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        event: 'google_calendar_enqueue_failed',
+        subsystem: 'google_calendar',
+        userId,
+        entityType,
+        entityId,
+        operation,
+        retry: true,
+        pool: this.dbService.poolStats(),
+        ...describeDatabaseError(error, 'query'),
+      }));
+    }
+  }
+
+  private async enqueueEntitySyncOnce(
+    userId: string,
+    entityType: CalendarSyncEntityType,
+    entityId: string,
+    operation: 'upsert' | 'delete',
+  ) {
     const [connection] = await this.db
       .select()
       .from(googleCalendarConnections)
@@ -254,10 +321,18 @@ export class GoogleCalendarService {
     this.outboundQueueRunning = true;
     try {
       await this.processOutboundQueueOnce();
+      this.logger.debug(JSON.stringify({
+        event: 'google_calendar_outbound_queue_finished',
+        pool: this.dbService.poolStats(),
+      }));
     } catch (error) {
-      this.logger.warn(
-        `Outbound calendar queue skipped; it will retry next run: ${error instanceof Error ? error.message : 'database error'}`,
-      );
+      this.logger.warn(JSON.stringify({
+        event: 'google_calendar_outbound_queue_failed',
+        subsystem: 'google_calendar',
+        retry: true,
+        pool: this.dbService.poolStats(),
+        ...describeDatabaseError(error, 'query'),
+      }));
     } finally {
       this.outboundQueueRunning = false;
     }

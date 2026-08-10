@@ -8,6 +8,16 @@ import { ThemeProvider } from '../theme/ThemeContext'
 import { AuthProvider } from '../providers/AuthProvider'
 import type { ApiTask } from '../lib/tasksApi'
 
+const plannerMocks = vi.hoisted(() => ({
+  generate: vi.fn(),
+  apply: vi.fn(),
+}))
+
+vi.mock('../features/collaboration/api/ai-collaboration-planner.api', () => ({
+  generateCollaborationPlan: (...args: unknown[]) => plannerMocks.generate(...args),
+  applyCollaborationPlan: (...args: unknown[]) => plannerMocks.apply(...args),
+}))
+
 // Keep every AI-collaboration read/mutation deterministic and offline — we are
 // testing the tab structure and permission gating, not data fetching.
 vi.mock('../features/collaboration/api/ai-collaboration.api', () => {
@@ -147,8 +157,8 @@ function renderScreen(task: ApiTask) {
   )
 }
 
-const NEW_TABS = ['Overview', 'Plan', 'Team', 'Health', 'Activity']
-const REMOVED_TABS = ['Today', 'Progress', 'Distribution', 'Suggestions', 'Timeline', 'History']
+const NEW_TABS = ['Overview', 'Plan', 'Team', 'Health', 'Activity', 'Distribution']
+const REMOVED_TABS = ['Today', 'Progress', 'Suggestions', 'Timeline', 'History']
 
 describe('TaskCollaborationScreen tab mapping', () => {
   afterEach(() => vi.clearAllMocks())
@@ -160,11 +170,48 @@ describe('TaskCollaborationScreen tab mapping', () => {
     }
   })
 
-  it('no longer renders any of the seven legacy standalone tabs', () => {
+  it('no longer renders the removed legacy standalone tabs', () => {
     renderScreen(makeTask())
     for (const label of REMOVED_TABS) {
       expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
     }
+  })
+
+  it('opens the existing DistributionPanel from the Distribution tab', async () => {
+    const user = userEvent.setup()
+    renderScreen(makeTask())
+    await user.click(screen.getByRole('button', { name: 'Distribution' }))
+    expect(screen.getByText('Smart fair split')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate plan' })).toBeInTheDocument()
+  })
+
+  it('keeps generation and apply wired to the existing planner endpoints', async () => {
+    plannerMocks.generate.mockResolvedValueOnce({
+      planId: 'plan-1',
+      generatedAt: '2026-08-09T12:00:00.000Z',
+      source: 'fallback',
+      taskCollaborationType: 'divisible',
+      recoveryMode: false,
+      summary: 'Generated split',
+      items: [{
+        proposalId: 'proposal-1', title: 'Draft section', description: 'Draft it', assigneeUserId: 'user-1', assigneeDisplayName: 'Alice',
+        estimatedDurationMinutes: 30, suggestedStart: null, suggestedDue: null, priority: 'medium', order: 0,
+        dependsOnProposalIds: [], canRunInParallel: true, reason: 'Available capacity', assumptions: [], warnings: [], activityType: 'production', sharedSessionId: null,
+      }],
+      workloadByMember: [{ userId: 'user-1', displayName: 'Alice', itemCount: 1, totalEstimatedMinutes: 30 }],
+      totalEstimatedMinutes: 30, deadlineFeasible: true, risks: [], unassignedWork: [], reviewMilestone: null, suggestedBufferMinutes: null, warnings: [], assumptions: [],
+    })
+    plannerMocks.apply.mockResolvedValueOnce({ success: true, created: { subtaskIds: ['subtask-1'], dependencyCount: 0 }, itemErrors: [] })
+
+    const user = userEvent.setup()
+    renderScreen(makeTask())
+    await user.click(screen.getByRole('button', { name: 'Distribution' }))
+    await user.click(screen.getByRole('button', { name: 'Generate plan' }))
+    expect(await screen.findByText('Generated split')).toBeInTheDocument()
+    expect(plannerMocks.generate).toHaveBeenCalledWith('task-1', { selectedMemberIds: [], preferences: { includeOwner: true } }, 'test-token')
+
+    await user.click(screen.getByRole('button', { name: 'Accept plan' }))
+    expect(plannerMocks.apply).toHaveBeenCalledWith('task-1', 'plan-1', expect.any(Array), 'test-token')
   })
 
   it('exposes the Timeline | Dependency Graph switcher inside the Plan tab', async () => {

@@ -1575,6 +1575,7 @@ export const pushNotificationJobs = pgTable(
       table.deviceId,
     ),
     index('idx_push_jobs_due').on(table.status, table.nextRetryAt),
+    index('idx_push_jobs_receipts').on(table.status, table.updatedAt),
   ],
 );
 

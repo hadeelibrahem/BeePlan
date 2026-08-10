@@ -33,6 +33,7 @@ import {
 import { TaskContextClassifier } from './task-context.classifier';
 import { TaskContextExtractor } from './task-context.extractor';
 import { TaskContextValidationService } from './task-context.validation';
+import { describeDatabaseError } from '../db/database-error';
 import { TaskPreparationEngine } from './task-preparation.engine';
 import { ProactiveTaskAssistantEngine } from './proactive-task-assistant.engine';
 
@@ -57,10 +58,59 @@ const DEFAULTS: TaskAssistantPreferences = {
   defaultTravelMode: 'driving',
   language: 'en',
 };
+
+export const REUSABLE_CONTEXT_NOTIFICATION_STATUSES = [
+  'pending',
+  'scheduled',
+  'failed_retryable',
+  'invalidated',
+] as const;
+
+export function upsertContextNotification(
+  db: DatabaseService['db'],
+  values: typeof taskAssistantNotifications.$inferInsert,
+) {
+  return db
+    .insert(taskAssistantNotifications)
+    .values(values)
+    .onConflictDoUpdate({
+      target: taskAssistantNotifications.fingerprint,
+      set: {
+        userId: values.userId,
+        taskId: values.taskId,
+        contextId: values.contextId,
+        notificationType: values.notificationType,
+        title: values.title,
+        body: values.body,
+        scheduledAt: values.scheduledAt,
+        priority: values.priority,
+        status: 'pending',
+        deliveredAt: null,
+        retryCount: 0,
+        lastErrorCode: null,
+        updatedAt: new Date(),
+      },
+      setWhere: inArray(
+        taskAssistantNotifications.status,
+        REUSABLE_CONTEXT_NOTIFICATION_STATUSES,
+      ),
+    });
+}
+
 type EnrichmentPreview = {
   recommendedDepartureTime?: string | null;
+  notificationTime?: string;
+  deterministicMessage?: string;
+  item?: { title?: string };
+  route?: { durationMinutes?: number; fallbackUsed?: boolean } | null;
+  recommendations?: {
+    recommendationTypes?: string[];
+    weatherEvidence?: {
+      feelsLikeC?: number;
+      precipitationProbabilityPercent?: number;
+    } | null;
+  };
   fingerprint?: string;
-  recommendations?: { recommendationTypes?: string[] };
 };
 
 @Injectable()
@@ -77,6 +127,28 @@ export class TaskAssistantService {
   ) {}
   private get db() {
     return this.database.db;
+  }
+
+  async refreshWithLogging(
+    userId: string,
+    taskId: string,
+    triggerSource: string,
+  ) {
+    try {
+      await this.refresh(userId, taskId);
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'task_assistant_refresh_failed',
+          userId,
+          taskId,
+          triggerSource,
+          errorType: error instanceof Error ? error.name : typeof error,
+          message: error instanceof Error ? error.message : String(error),
+          database: describeDatabaseError(error, 'query'),
+        }),
+      );
+    }
   }
 
   async getPreferences(userId: string) {
@@ -117,7 +189,7 @@ export class TaskAssistantService {
         ),
       );
     for (const task of active)
-      void this.refresh(userId, task.id).catch(() => undefined);
+      void this.refreshWithLogging(userId, task.id, 'preferences_updated');
     return this.getPreferences(userId);
   }
 
@@ -128,6 +200,7 @@ export class TaskAssistantService {
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
       .limit(1);
     if (!task) throw new NotFoundException('Task not found.');
+    const preferences = await this.getPreferences(userId);
     let [context] = await this.db
       .select()
       .from(taskAssistantContexts)
@@ -140,6 +213,14 @@ export class TaskAssistantService {
       .limit(1);
     if (!context || context.scheduleVersion !== scheduleVersion(task))
       context = await this.refresh(userId, taskId);
+    if (!preferences.enabled)
+      return {
+        context,
+        suggestions: [],
+        timeline: [],
+        contextualNotifications: [],
+        travelWeather: null,
+      };
     const suggestions = await this.db
       .select()
       .from(taskAssistantSuggestions)
@@ -172,7 +253,7 @@ export class TaskAssistantService {
           inArray(taskAssistantNotifications.status, [
             'pending',
             'scheduled',
-            'delivered',
+            'failed_retryable',
           ]),
         ),
       );
@@ -222,6 +303,7 @@ export class TaskAssistantService {
         .then((rows) => rows[0]),
     ]);
     if (!task) throw new NotFoundException('Task not found.');
+    const preferences = await this.getPreferences(userId);
     const existing = await this.db
       .select()
       .from(taskAssistantContexts)
@@ -247,17 +329,12 @@ export class TaskAssistantService {
         destination: task.destination as Destination | null,
         scheduledDate: task.scheduledDate,
         scheduledStartTime: task.scheduledStartTime,
+        timezone: user?.timezone ?? 'UTC',
         dueDate: task.dueDate,
         travelMode: task.travelMode as TravelMode | null,
         correctedContext: correction ?? null,
       }),
     );
-    if (task.scheduledDate && task.scheduledStartTime)
-      classified.scheduledExecution = zonedDateTime(
-        task.scheduledDate,
-        task.scheduledStartTime.slice(0, 5),
-        user?.timezone ?? 'UTC',
-      ).toISOString();
     const contextValues = {
       userId,
       taskId,
@@ -290,7 +367,27 @@ export class TaskAssistantService {
           eq(taskAssistantSuggestions.lockedByUser, false),
         ),
       );
-    const preferences = await this.getPreferences(userId);
+    if (!preferences.enabled) {
+      await this.db
+        .update(taskAssistantTimelineStages)
+        .set({ status: 'invalidated', invalidatedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(taskAssistantTimelineStages.contextId, context.id),
+            eq(taskAssistantTimelineStages.status, 'pending'),
+          ),
+        );
+      await this.db
+        .update(taskAssistantNotifications)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(
+          and(
+            eq(taskAssistantNotifications.contextId, context.id),
+            inArray(taskAssistantNotifications.status, ['pending', 'scheduled', 'failed_retryable']),
+          ),
+        );
+      return context;
+    }
     let enrichment: EnrichmentPreview | null = null;
     if (task.destination && task.scheduledDate && task.scheduledStartTime) {
       try {
@@ -330,15 +427,18 @@ export class TaskAssistantService {
         : null,
       packingEvidence: {
         tripDays: inferTripDays(classified.text),
-        cold:
-          enrichment?.recommendations?.recommendationTypes?.some((type) =>
-            ['cold_clothing', 'very_cold_clothing'].includes(type),
-          ) ?? false,
         rain:
-          enrichment?.recommendations?.recommendationTypes?.some((type) =>
+          preferences.weatherAdviceEnabled !== false &&
+          (enrichment?.recommendations?.recommendationTypes?.some((type) =>
             ['umbrella', 'rain_protection'].includes(type),
-          ) ?? false,
+          ) ?? false),
+        cold:
+          preferences.weatherAdviceEnabled !== false &&
+          (enrichment?.recommendations?.recommendationTypes?.some((type) =>
+            ['cold_clothing', 'very_cold_clothing'].includes(type),
+          ) ?? false),
       },
+      weatherTravel: enrichment,
     });
     for (const suggestion of [...generated, ...proactive.packingNeeds]) {
       const fingerprint =
@@ -361,29 +461,21 @@ export class TaskAssistantService {
         priority: suggestion.priority ?? 'medium',
         notificationEligible: suggestion.notificationEligible ?? false,
       };
-      const [existingSuggestion] = await this.db
-        .select({
-          id: taskAssistantSuggestions.id,
-          status: taskAssistantSuggestions.status,
-          lockedByUser: taskAssistantSuggestions.lockedByUser,
-        })
-        .from(taskAssistantSuggestions)
-        .where(eq(taskAssistantSuggestions.fingerprint, fingerprint))
-        .limit(1);
-      if (
-        existingSuggestion?.status === 'invalidated' &&
-        !existingSuggestion.lockedByUser
-      )
-        await this.db
-          .update(taskAssistantSuggestions)
-          .set({
+      await this.db
+        .insert(taskAssistantSuggestions)
+        .values(suggestionValues)
+        .onConflictDoUpdate({
+          target: taskAssistantSuggestions.fingerprint,
+          set: {
             ...suggestionValues,
             status: 'pending',
             updatedAt: new Date(),
-          })
-          .where(eq(taskAssistantSuggestions.id, existingSuggestion.id));
-      else if (!existingSuggestion)
-        await this.db.insert(taskAssistantSuggestions).values(suggestionValues);
+          },
+          setWhere: and(
+            eq(taskAssistantSuggestions.status, 'invalidated'),
+            eq(taskAssistantSuggestions.lockedByUser, false),
+          ),
+        });
     }
     await this.db
       .update(taskAssistantTimelineStages)
@@ -412,49 +504,28 @@ export class TaskAssistantService {
         ),
       );
     for (const stage of proactive.timelineStages) {
-      const [existingStage] = await this.db
-        .select({
-          id: taskAssistantTimelineStages.id,
-          status: taskAssistantTimelineStages.status,
-        })
-        .from(taskAssistantTimelineStages)
-        .where(eq(taskAssistantTimelineStages.fingerprint, stage.fingerprint))
-        .limit(1);
-      if (existingStage?.status === 'invalidated')
-        await this.db
-          .update(taskAssistantTimelineStages)
-          .set({
-            ...stage,
+      const stageValues = { userId, contextId: context.id, ...stage };
+      await this.db
+        .insert(taskAssistantTimelineStages)
+        .values(stageValues)
+        .onConflictDoUpdate({
+          target: taskAssistantTimelineStages.fingerprint,
+          set: {
+            ...stageValues,
             status: stage.status,
             invalidatedAt: null,
             updatedAt: new Date(),
-          })
-          .where(eq(taskAssistantTimelineStages.id, existingStage.id));
-      else if (!existingStage)
-        await this.db
-          .insert(taskAssistantTimelineStages)
-          .values({ userId, contextId: context.id, ...stage });
+          },
+          setWhere: eq(taskAssistantTimelineStages.status, 'invalidated'),
+        });
     }
     for (const notification of proactive.notifications) {
-      const [existingNotification] = await this.db
-        .select({
-          id: taskAssistantNotifications.id,
-          status: taskAssistantNotifications.status,
-        })
-        .from(taskAssistantNotifications)
-        .where(
-          eq(taskAssistantNotifications.fingerprint, notification.fingerprint),
-        )
-        .limit(1);
-      if (existingNotification?.status === 'invalidated')
-        await this.db
-          .update(taskAssistantNotifications)
-          .set({ ...notification, status: 'pending', updatedAt: new Date() })
-          .where(eq(taskAssistantNotifications.id, existingNotification.id));
-      else if (!existingNotification)
-        await this.db
-          .insert(taskAssistantNotifications)
-          .values({ userId, taskId, contextId: context.id, ...notification });
+      await upsertContextNotification(this.db, {
+        userId,
+        taskId,
+        contextId: context.id,
+        ...notification,
+      });
     }
     await this.db
       .update(taskAssistantEvaluations)

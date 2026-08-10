@@ -71,7 +71,7 @@ export class SavedPlacesService {
           name: dto.name.trim(),
           icon: normalizeOptional(dto.icon),
           address: normalizeOptional(dto.address),
-          category: normalizeOptional(dto.category),
+          category: normalizeCategory(dto.category, dto.name),
           latitude: String(dto.latitude),
           longitude: String(dto.longitude),
           radiusMeters: dto.radiusMeters ?? 100,
@@ -112,8 +112,8 @@ export class SavedPlacesService {
               : existing.address,
           category:
             dto.category !== undefined
-              ? normalizeOptional(dto.category)
-              : existing.category,
+              ? normalizeCategory(dto.category, dto.name ?? existing.name)
+              : normalizeCategory(existing.category, dto.name ?? existing.name),
           latitude:
             dto.latitude !== undefined ? String(dto.latitude) : existing.latitude,
           longitude:
@@ -258,6 +258,12 @@ function normalizeOptional(value: string | undefined | null): string | null {
   if (value === undefined || value === null) return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function normalizeCategory(value: string | undefined | null, name: string) {
+  const category = normalizeOptional(value);
+  if (category) return category.toLowerCase();
+  return /^home$/i.test(name.trim()) ? 'home' : null;
 }
 
 function groupAliases(aliases: AliasRow[]): Map<string, AliasRow[]> {

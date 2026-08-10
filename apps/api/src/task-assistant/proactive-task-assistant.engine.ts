@@ -26,6 +26,7 @@ export class ProactiveTaskAssistantEngine {
     packingEvidence?: PackingEvidence;
     excludedSuggestionTypes?: Set<string>;
     recommendedDeparture?: Date | null;
+    weatherTravel?: Parameters<ContextualNotificationEngine['generate']>[5];
   }) {
     const now = input.now ?? new Date();
     const packingNeeds = this.packing.generate(
@@ -34,8 +35,14 @@ export class ProactiveTaskAssistantEngine {
       input.packingEvidence,
       input.excludedSuggestionTypes,
     );
-    const timelineStages = input.preferences.contextTimelineEnabled
-      ? this.timeline.generate(input.context, now, input.recommendedDeparture)
+    const timelineStages =
+      input.preferences.enabled !== false && input.preferences.contextTimelineEnabled !== false
+      ? this.timeline.generate(
+          input.context,
+          now,
+          input.recommendedDeparture,
+          input.preferences,
+        )
       : [];
     const notifications = this.notifications.generate(
       input.userId,
@@ -43,6 +50,7 @@ export class ProactiveTaskAssistantEngine {
       input.scheduleVersion,
       timelineStages,
       input.preferences,
+      input.weatherTravel,
     );
     return {
       context: input.context,

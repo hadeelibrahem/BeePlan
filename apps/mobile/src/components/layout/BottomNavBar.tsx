@@ -33,7 +33,7 @@ const MORE_DESTINATIONS: Array<{ label: string; route: MoreTabRoute | MoreStackR
   { label: 'Daily Planner', route: 'AiDailyPlanner', icon: 'planner' },
   { label: 'Notes', route: 'Notes', icon: 'notes' },
   { label: 'Analytics', route: 'Analytics', icon: 'analytics' },
-  { label: 'Achievement Museum', route: 'AchievementMuseum', icon: 'analytics' },
+  { label: 'Achievement Museum', route: 'AchievementMuseum', icon: 'trophy' },
   { label: 'Notifications', route: 'Notifications', icon: 'notifications' },
   { label: 'Whiteboards', route: 'Whiteboards', icon: 'whiteboard' },
 ]

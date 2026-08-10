@@ -56,7 +56,7 @@ export function SavedPlaceEditorModal({ open, initial, saving, onClose, onSubmit
     onSubmit({
       name: name.trim(),
       icon: icon.trim() || null,
-      category: category.trim() || null,
+      category: category.trim().toLowerCase() || (/^home$/i.test(name.trim()) ? 'home' : null),
       address: address.trim() || null,
       latitude: latitude as number,
       longitude: longitude as number,
