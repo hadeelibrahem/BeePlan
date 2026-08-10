@@ -45,6 +45,7 @@ import CreateTaskScreen from './screens/CreateTaskScreen'
 import EditTaskScreen from './screens/EditTaskScreen'
 import FocusScreen from './screens/FocusScreen'
 import FocusSessionScreen from './screens/FocusSessionScreen'
+import FocusRoomsScreen from './screens/FocusRoomsScreen'
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen'
 import NotesScreen from './screens/NotesScreen'
 import ResetPasswordScreen from './screens/ResetPasswordScreen'
@@ -64,6 +65,7 @@ import { useToast } from './components/feedback/ToastProvider'
 import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
 import { queryKeys } from './lib/queryKeys'
 import { pathForScreen, resolveAppRoute, type AppScreen } from './lib/appRoutes'
+import { TimeCapsulesScreen } from './features/time-capsules/TimeCapsulesScreen'
 
 type AuthScreenState = 'auth' | 'forgot' | 'reset'
 function getAuthScreenFromPath(): AuthScreenState {
@@ -480,6 +482,7 @@ function ThemedApp() {
     onNavigateNotes: () => setScreen('notes'),
     onNavigateAnalytics: () => setScreen('analytics'),
     onNavigateSettings: () => setScreen('settings'),
+    onNavigateTimeCapsules: () => setScreen('timeCapsules'),
   }
 
   function renderWithRecurrenceSuggestionModal(content: ReactNode) {
@@ -593,6 +596,14 @@ function ThemedApp() {
     )
   }
 
+  if (screen === 'timeCapsules') {
+    return <TimeCapsulesScreen accessToken={accessToken ?? ''} tasks={tasks} {...sidebarNav} />
+  }
+
+  if (screen === 'focusRooms') {
+    return <FocusRoomsScreen accessToken={accessToken ?? ''} roomId={route.roomId} inviteCode={new URLSearchParams(location.search).get('invite') ?? undefined} onBack={() => navigate(route.roomId ? '/focus/rooms' : '/focus')} onOpenRoom={(id) => navigate(`/focus/rooms/${id}`)} />
+  }
+
   if (screen === 'focus') {
     return (
       <FocusScreen
@@ -603,6 +614,7 @@ function ThemedApp() {
         focus={focus}
         onTaskUpdated={handleTaskUpdated}
         onOpenWorkspace={() => setScreen('focusSession')}
+        onOpenRooms={() => navigate('/focus/rooms')}
         onNavigateTasks={sidebarNav.onNavigateTasks}
         onNavigatePlanner={sidebarNav.onNavigatePlanner}
         onNavigateReminders={sidebarNav.onNavigateReminders}

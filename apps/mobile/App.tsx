@@ -48,6 +48,7 @@ import NotesScreen from './src/screens/NotesScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import AllTasksScreen from './src/screens/AllTasksScreen';
 import FocusScreen from './src/screens/FocusScreen';
+import FocusRoomsScreen from './src/screens/FocusRoomsScreen';
 import FocusSessionScreen from './src/screens/FocusSessionScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
@@ -81,6 +82,7 @@ import { EditTaskRoute } from './src/navigation/EditTaskRoute';
 import { AiCollaborationRoute } from './src/navigation/AiCollaborationRoute';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AppScreen } from './src/navigation/backNavigation';
+import { TimeCapsulesScreen } from './src/features/timeCapsules/TimeCapsulesScreen';
 
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
@@ -802,6 +804,7 @@ function ThemedApp() {
         onTaskUpdated={handleTaskUpdated}
         focus={focus}
         onOpenWorkspace={() => rootNavigation?.navigate('FocusSession')}
+        onOpenRooms={() => rootNavigation?.navigate('FocusRooms')}
       />
     );
   };
@@ -895,6 +898,9 @@ function ThemedApp() {
       else props.navigation.reset({ index: 0, routes: [{ name: 'MainTabs', params: { screen: 'Focus' } }] })
     }} />
   );
+  const FocusRoomsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'FocusRooms'>) => (
+    <FocusRoomsScreen accessToken={accessToken ?? ''} initialRoomId={props.route.params?.roomId} onBack={() => props.navigation.goBack()} />
+  );
   const AiTaskBuilderStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'AiTaskBuilder'>) => (
     <AiTaskBuilderScreen accessToken={accessToken ?? ''} onCancel={() => {
       if (props.navigation.canGoBack()) props.navigation.goBack()
@@ -919,6 +925,7 @@ function ThemedApp() {
       onBack={() => props.navigation.goBack()}
       onSignOut={() => void handleSignOut()}
       onOpenPlanner={() => props.navigation.navigate('AiDailyPlanner')}
+      onOpenTimeCapsules={() => props.navigation.navigate('TimeCapsules')}
     />
   );
   const AnalyticsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'Analytics'>) => (
@@ -970,7 +977,7 @@ function ThemedApp() {
   if (user) {
     return (
       <StrictFocusProvider active={focus.active} remainingMs={focus.remainingMs}>
-        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} settingsRoute={SettingsStackRoute} />
+        <RootNavigator tabScreens={{ Dashboard: DashboardTab, Tasks: TasksTab, Focus: FocusTab, Reminders: RemindersTab, People: PeopleTab }} taskDetailsRoute={TaskDetailsStackRoute} createTaskRoute={CreateTaskStackRoute} editTaskRoute={EditTaskStackRoute} aiTaskBuilderRoute={AiTaskBuilderStackRoute} aiDailyPlannerRoute={AiDailyPlannerStackRoute} calendarRoute={CalendarStackRoute} notesRoute={NotesStackRoute} analyticsRoute={AnalyticsStackRoute} aiCollaborationRoute={AiCollaborationStackRoute} focusSessionRoute={FocusSessionStackRoute} focusRoomsRoute={FocusRoomsStackRoute} reminderDetailsRoute={ReminderDetailsStackRoute} createReminderRoute={CreateReminderStackRoute} editReminderRoute={EditReminderStackRoute} notificationsRoute={NotificationsStackRoute} settingsRoute={SettingsStackRoute} timeCapsulesRoute={TimeCapsulesScreen} />
       </StrictFocusProvider>
     );
   }

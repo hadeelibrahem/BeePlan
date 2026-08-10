@@ -35,6 +35,7 @@ export type SoundPlayerLike = {
 export type SoundVolume = {
   volume: number;
   muted: boolean;
+  loop?: boolean;
 };
 
 /** True only for the native "shared object already released" failure. */
@@ -116,7 +117,8 @@ export function createGuardedSoundPlayer(
     },
 
     /** Load a sound by id and start it. No-ops if the asset is missing. */
-    loadAndPlay(soundId: string, { volume, muted }: SoundVolume): boolean {
+    loadAndPlay(soundId: string, options: SoundVolume): boolean {
+      const { volume, muted } = options;
       if (released()) {
         return false;
       }
@@ -128,7 +130,7 @@ export function createGuardedSoundPlayer(
       fadeToken += 1;
       return run(() => {
         player.replace(asset);
-        player.loop = true;
+        player.loop = options.loop ?? true;
         player.volume = muted ? 0 : volume;
         player.muted = muted;
         player.play();

@@ -35,6 +35,7 @@ type FocusScreenProps = SidebarNavHandlers & {
   focus: UseFocusSession
   onTaskUpdated?: (task: ApiTask) => void
   onOpenWorkspace: () => void
+  onOpenRooms?: () => void
 }
 
 type StartTarget = {
@@ -56,6 +57,7 @@ export default function FocusScreen({
   focus,
   onTaskUpdated,
   onOpenWorkspace,
+  onOpenRooms,
   ...nav
 }: FocusScreenProps) {
   const [search, setSearch] = useState('')
@@ -187,6 +189,8 @@ export default function FocusScreen({
           />
         }
       />
+
+      {onOpenRooms ? <div className="mb-5 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black">Shared Focus Sessions</h2><p className="text-sm opacity-75">Start and finish a synchronized focus session together.</p></div><PrimaryButton onClick={onOpenRooms}>Explore sessions</PrimaryButton></div></div> : null}
 
       {error || focus.error ? (
         <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">

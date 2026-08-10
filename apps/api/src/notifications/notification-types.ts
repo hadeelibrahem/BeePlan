@@ -42,6 +42,7 @@ export const NOTIFICATION_TYPES = [
   'deadline_risk',
   'workload_warning',
   'planner_suggestion',
+  'time_capsule_ready',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

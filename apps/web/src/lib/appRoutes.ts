@@ -3,6 +3,7 @@ export type AppScreen =
   | 'tasks'
   | 'focus'
   | 'focusSession'
+  | 'focusRooms'
   | 'planner'
   | 'createTask'
   | 'aiPlanTask'
@@ -19,9 +20,10 @@ export type AppScreen =
   | 'social'
   | 'notifications'
   | 'settings'
+  | 'timeCapsules'
   | 'notFound'
 
-export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string }
+export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string; roomId?: string }
 
 const STATIC_ROUTES: Record<string, AppScreen> = {
   '/': 'dashboard',
@@ -32,6 +34,7 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/tasks/ai': 'aiPlanTask',
   '/focus': 'focus',
   '/focus/session': 'focusSession',
+  '/focus/rooms': 'focusRooms',
   '/planner': 'planner',
   '/reminders': 'list',
   '/reminders/new': 'create',
@@ -41,12 +44,16 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/people': 'social',
   '/notifications': 'notifications',
   '/settings': 'settings',
+  '/time-capsules': 'timeCapsules',
 }
 
 export function resolveAppRoute(pathname: string): AppRoute {
   const normalized = pathname.replace(/\/+$/, '') || '/'
   const staticScreen = STATIC_ROUTES[normalized]
   if (staticScreen) return { screen: staticScreen }
+
+  const focusRoom = normalized.match(/^\/focus\/rooms\/([^/]+)$/)
+  if (focusRoom) return { screen: 'focusRooms', roomId: decodeURIComponent(focusRoom[1]) }
 
   const task = normalized.match(/^\/tasks\/([^/]+)(?:\/(edit|collaboration))?$/)
   if (task) {
@@ -78,6 +85,7 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'aiCollaboration': return ids.taskId ? `/tasks/${encodeURIComponent(ids.taskId)}/collaboration` : '/tasks'
     case 'focus': return '/focus'
     case 'focusSession': return '/focus/session'
+    case 'focusRooms': return '/focus/rooms'
     case 'planner': return '/planner'
     case 'list': return '/reminders'
     case 'create': return '/reminders/new'
@@ -89,5 +97,6 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'social': return '/people'
     case 'notifications': return '/notifications'
     case 'settings': return '/settings'
+    case 'timeCapsules': return '/time-capsules'
   }
 }

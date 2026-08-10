@@ -19,6 +19,7 @@ import {
 import { TasksService } from '../tasks/tasks.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FocusRoomsService } from '../focus-rooms/focus-rooms.service';
 import { isSubtaskOwnedByUser } from '../tasks/subtask-ownership';
 import {
   selectFocusSubtask,
@@ -97,6 +98,7 @@ export class FocusService {
     private readonly taskAccess: TaskAccessService,
     @Optional() private readonly googleCalendar?: GoogleCalendarService,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly focusRooms?: FocusRoomsService,
   ) {}
 
   private get db() {
@@ -168,7 +170,11 @@ export class FocusService {
       })
       .returning();
 
-    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', row.id);
+    void this.googleCalendar?.enqueueEntitySync(
+      userId,
+      'focus_session',
+      row.id,
+    );
     return this.toEntity(row, taskTitle, subtaskTitle);
   }
 
@@ -178,6 +184,7 @@ export class FocusService {
     dto: FinishFocusSessionDto,
   ): Promise<{ session: FocusSessionEntity; taskUpdated: boolean }> {
     const session = await this.getSessionForUser(userId, sessionId);
+    const commitmentEndedEarly = Boolean(session.commitmentSessionId);
     const endedAt = new Date();
     const actualMinutes = this.resolveActualMinutes(
       dto.actualMinutes,
@@ -197,6 +204,14 @@ export class FocusService {
       .where(eq(focusSessions.id, sessionId))
       .returning();
 
+    if (session.commitmentSessionId) {
+      await this.focusRooms?.terminateFromFocus(
+        userId,
+        session.commitmentSessionId,
+        'participant_left_early',
+      );
+    }
+
     let taskUpdated = false;
     let taskTitle: string | null = null;
     let subtaskTitle: string | null = null;
@@ -211,7 +226,7 @@ export class FocusService {
       if (subtask) {
         subtaskTitle = subtask.title;
         await this.recomputeSubtaskActualMinutes(session.subtaskId);
-        if (dto.taskOutcome === 'done') {
+        if (dto.taskOutcome === 'done' && !commitmentEndedEarly) {
           await this.tasksService.updateSubtask(
             userId,
             session.taskId,
@@ -228,7 +243,7 @@ export class FocusService {
       const task = await this.findTask(userId, session.taskId);
       if (task) {
         taskTitle = task.title;
-        if (dto.taskOutcome === 'done') {
+        if (dto.taskOutcome === 'done' && !commitmentEndedEarly) {
           await this.markTaskDone(userId, task.id);
         }
         taskUpdated = true;
@@ -242,8 +257,32 @@ export class FocusService {
       await this.tasksService.recomputeTaskSpentTime(session.taskId);
     }
 
-    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', updated.id);
-    await this.notifications?.createOnce({ userId, type: 'focus_session_completed', taskId: updated.taskId, title: 'Focus session completed', body: 'You completed a focus session.', data: { entityType: 'focus_session', entityId: updated.id, route: '/focus', event: 'completed' } }, { entityType: 'focus_session_completed', entityId: updated.id, triggerAt: updated.endedAt ?? new Date(), key: `focus_completed:${userId}:${updated.id}` });
+    void this.googleCalendar?.enqueueEntitySync(
+      userId,
+      'focus_session',
+      updated.id,
+    );
+    await this.notifications?.createOnce(
+      {
+        userId,
+        type: 'focus_session_completed',
+        taskId: updated.taskId,
+        title: 'Focus session completed',
+        body: 'You completed a focus session.',
+        data: {
+          entityType: 'focus_session',
+          entityId: updated.id,
+          route: '/focus',
+          event: 'completed',
+        },
+      },
+      {
+        entityType: 'focus_session_completed',
+        entityId: updated.id,
+        triggerAt: updated.endedAt ?? new Date(),
+        key: `focus_completed:${userId}:${updated.id}`,
+      },
+    );
     return {
       session: this.toEntity(updated, taskTitle, subtaskTitle),
       taskUpdated,
@@ -275,6 +314,14 @@ export class FocusService {
       .where(eq(focusSessions.id, sessionId))
       .returning();
 
+    if (session.commitmentSessionId) {
+      await this.focusRooms?.terminateFromFocus(
+        userId,
+        session.commitmentSessionId,
+        'participant_cancelled_focus',
+      );
+    }
+
     const taskTitle = session.taskId
       ? await this.findTaskTitleById(session.taskId)
       : null;
@@ -294,9 +341,37 @@ export class FocusService {
       await this.tasksService.recomputeTaskSpentTime(session.taskId);
     }
 
-    await this.notifications?.createOnce({ userId, type: 'focus_session_cancelled', taskId: updated.taskId, title: 'Focus session interrupted', body: 'Your focus session was interrupted.', data: { entityType: 'focus_session', entityId: updated.id, route: '/focus', event: 'cancelled' } }, { entityType: 'focus_session_cancelled', entityId: updated.id, triggerAt: updated.endedAt ?? new Date(), key: `focus_cancelled:${userId}:${updated.id}` });
-    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', updated.id);
-    void this.googleCalendar?.enqueueEntitySync(userId, 'focus_session', updated.id);
+    await this.notifications?.createOnce(
+      {
+        userId,
+        type: 'focus_session_cancelled',
+        taskId: updated.taskId,
+        title: 'Focus session interrupted',
+        body: 'Your focus session was interrupted.',
+        data: {
+          entityType: 'focus_session',
+          entityId: updated.id,
+          route: '/focus',
+          event: 'cancelled',
+        },
+      },
+      {
+        entityType: 'focus_session_cancelled',
+        entityId: updated.id,
+        triggerAt: updated.endedAt ?? new Date(),
+        key: `focus_cancelled:${userId}:${updated.id}`,
+      },
+    );
+    void this.googleCalendar?.enqueueEntitySync(
+      userId,
+      'focus_session',
+      updated.id,
+    );
+    void this.googleCalendar?.enqueueEntitySync(
+      userId,
+      'focus_session',
+      updated.id,
+    );
     return this.toEntity(updated, taskTitle, subtaskTitle);
   }
 

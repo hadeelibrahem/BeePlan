@@ -23,6 +23,8 @@ import { TasksModule } from './tasks/tasks.module';
 import { WeatherTravelModule } from './weather-travel/weather-travel.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { TaskAssistantModule } from './task-assistant/task-assistant.module';
+import { FocusRoomsModule } from './focus-rooms/focus-rooms.module';
+import { TimeCapsulesModule } from './time-capsules/time-capsules.module';
 
 @Module({
   imports: [
@@ -52,9 +54,11 @@ import { TaskAssistantModule } from './task-assistant/task-assistant.module';
     DashboardModule,
     NotesModule,
     FocusModule,
+    FocusRoomsModule,
     WeatherTravelModule,
     GoogleCalendarModule,
     TaskAssistantModule,
+    TimeCapsulesModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

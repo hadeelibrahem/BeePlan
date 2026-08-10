@@ -49,6 +49,7 @@ const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   deadline_risk: 'ai',
   workload_warning: 'ai',
   planner_suggestion: 'ai',
+  time_capsule_ready: 'system',
 };
 
 export function getNotificationCategory(

@@ -25,6 +25,7 @@ export type SidebarPage =
   | 'notes'
   | 'analytics'
   | 'settings'
+  | 'timeCapsules'
 
 export type SidebarNavHandlers = {
   onNavigateDashboard?: () => void
@@ -38,6 +39,7 @@ export type SidebarNavHandlers = {
   onNavigateNotes?: () => void
   onNavigateAnalytics?: () => void
   onNavigateSettings?: () => void
+  onNavigateTimeCapsules?: () => void
 }
 
 function BellIcon() {
@@ -82,6 +84,7 @@ const NAV_GROUPS = [
       { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
       { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
       { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
+      { page: 'timeCapsules', label: 'Time Capsule', Icon: CalendarIcon, handler: 'onNavigateTimeCapsules' },
       { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
     ]
   },

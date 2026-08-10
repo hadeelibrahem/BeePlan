@@ -21,9 +21,11 @@ export type RootStackParamList = {
   Notes: undefined
   Analytics: undefined
   FocusSession: undefined
+  FocusRooms: { roomId?: string } | undefined
   AiCollaboration: { taskId: string }
   Notifications: undefined
   Settings: undefined
+  TimeCapsules: undefined
   ReminderDetails: { reminderId: string }
   CreateReminder: { initialType?: 'task' | 'person' | 'checklist'; initialFriendId?: string }
   EditReminder: { reminderId: string }

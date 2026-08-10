@@ -1,0 +1,14 @@
+const base = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '')
+export type CapsuleStatus = 'locked' | 'ready' | 'opened' | 'cancelled'
+export type Capsule = { id: string; title: string; message?: string; unlockType: 'date'|'task_completion'|'project_completion'; unlockAt?: string|null; linkedTaskId?: string|null; linkedProjectId?: string|null; status: CapsuleStatus; createdAt: string; updatedAt?:string; openedAt?: string|null; attachmentCount: number; attachments?: Array<{ id:string; type:'image'|'video'|'file'|'audio'; fileName:string; mimeType:string; sizeBytes:number; durationSeconds?:number|null; url:string }> }
+async function request(token:string, path:string, init:RequestInit={}) { const response = await fetch(`${base}${path}`, { ...init, headers: { Authorization:`Bearer ${token}`, ...(init.body instanceof FormData ? {} : {'Content-Type':'application/json'}), ...init.headers } }); const data = response.status === 204 ? null : await response.json().catch(()=>null); if (!response.ok) throw new Error(Array.isArray(data?.message) ? data.message.join(', ') : data?.message ?? 'Time Capsule request failed.'); return data }
+export const listCapsules = (token:string) => request(token, '/time-capsules') as Promise<Capsule[]>
+export const getCapsule = (token:string,id:string) => request(token, `/time-capsules/${id}`) as Promise<Capsule>
+export const createCapsule = (token:string,body:object) => request(token,'/time-capsules',{method:'POST',body:JSON.stringify(body)}) as Promise<Capsule>
+export const updateCapsuleDraft = (token:string,id:string,body:object) => request(token,`/time-capsules/${id}`,{method:'PATCH',body:JSON.stringify(body)}) as Promise<Capsule>
+export const sealCapsule = (token:string,id:string) => request(token,`/time-capsules/${id}/seal`,{method:'POST'})
+export const openCapsule = (token:string,id:string) => request(token,`/time-capsules/${id}/open`,{method:'POST'}) as Promise<Capsule>
+export const deleteCapsule = (token:string,id:string) => request(token,`/time-capsules/${id}`,{method:'DELETE'})
+export const deleteCapsuleAttachment = (token:string,id:string,attachmentId:string) => request(token,`/time-capsules/${id}/attachments/${attachmentId}`,{method:'DELETE'})
+export async function uploadCapsuleAttachment(token:string,id:string,file:File) { const form = new FormData(); form.append('file',file); return request(token,`/time-capsules/${id}/attachments`,{method:'POST',body:form}) }
+export async function authenticatedAttachmentUrl(token:string,capsuleId:string,attachmentId:string) { const response = await fetch(`${base}/time-capsules/${capsuleId}/attachments/${attachmentId}/content`,{headers:{Authorization:`Bearer ${token}`}}); if(!response.ok) throw new Error('Unable to open attachment.'); return URL.createObjectURL(await response.blob()) }

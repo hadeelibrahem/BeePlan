@@ -21,6 +21,8 @@ import {
 import { focusParentLabel, focusPrimaryTitle } from '../lib/focusDisplay'
 import { shouldPlayCompletionBell } from '../lib/completionBell'
 import { FOCUS_SOUND_CATEGORIES, FOCUS_SOUNDS, type FocusSound } from '../lib/focusSounds'
+import { useFocusAmbientAudio } from '../lib/useFocusAmbientAudio'
+import { FocusSoundsPanel as ExtractedFocusSoundsPanel } from '../components/focus/FocusSoundsPanel'
 import type { ApiTask } from '../lib/tasksApi'
 
 type FocusSessionScreenProps = {
@@ -57,7 +59,7 @@ export default function FocusSessionScreen({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [soundsOpen, setSoundsOpen] = useState(false)
   const [toast, setToast] = useState('')
-  const soundPlayer = useFocusSoundPlayer()
+  const soundPlayer = useFocusAmbientAudio()
   const stopSound = soundPlayer.stop
   useFocusCompletionBell(active?.sessionId, active?.completionReason, sessionComplete, remainingMs)
 
@@ -229,7 +231,7 @@ export default function FocusSessionScreen({
       ) : null}
 
       {soundsOpen ? (
-        <FocusSoundsPanel
+        <ExtractedFocusSoundsPanel
           activeSound={soundPlayer.activeSound}
           isPlaying={soundPlayer.isPlaying}
           muted={soundPlayer.muted}
@@ -814,6 +816,7 @@ function useFocusSoundPlayer() {
     toggleMuted: () => setMuted((current) => !current),
   }
 }
+void useFocusSoundPlayer;
 
 function FocusSoundsPanel({
   activeSound,
@@ -946,6 +949,8 @@ function FocusSoundsPanel({
     </div>
   )
 }
+
+void FocusSoundsPanel;
 
 // --- Bottom utilities ------------------------------------------------------
 
