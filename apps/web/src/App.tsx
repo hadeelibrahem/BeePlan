@@ -71,6 +71,7 @@ import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession
 import { queryKeys } from './lib/queryKeys'
 import { pathForScreen, resolveAppRoute, type AppScreen } from './lib/appRoutes'
 import { TimeCapsulesScreen } from './features/time-capsules/TimeCapsulesScreen'
+import { SupervisionScreen } from './features/supervision/SupervisionScreen'
 
 type AuthScreenState = 'auth' | 'forgot' | 'reset'
 function getAuthScreenFromPath(): AuthScreenState {
@@ -504,6 +505,7 @@ function ThemedApp() {
     onNavigateAchievements: () => setScreen('achievements'),
     onNavigateSettings: () => setScreen('settings'),
     onNavigateTimeCapsules: () => setScreen('timeCapsules'),
+    onNavigateSupervision: () => setScreen('supervision'),
   }
 
   function renderWithRecurrenceSuggestionModal(content: ReactNode) {
@@ -651,6 +653,7 @@ function ThemedApp() {
   if (screen === 'timeCapsules') {
     return <TimeCapsulesScreen accessToken={accessToken ?? ''} tasks={tasks} {...sidebarNav} />
   }
+  if (screen === 'supervision') return <SupervisionScreen accessToken={accessToken ?? ''} {...sidebarNav} />
 
   if (screen === 'focusRooms') {
     return <FocusRoomsScreen accessToken={accessToken ?? ''} roomId={route.roomId} inviteCode={new URLSearchParams(location.search).get('invite') ?? undefined} onBack={() => navigate(route.roomId ? '/focus/rooms' : '/focus')} onOpenRoom={(id) => navigate(`/focus/rooms/${id}`)} />
