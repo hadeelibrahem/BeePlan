@@ -8,12 +8,14 @@ import {
   PrimaryButton,
 } from '../components/AuthShared'
 import { useAuth } from '../hooks/useAuth'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export default function ForgotPasswordScreen({
   onBack,
 }: {
   onBack: () => void
 }) {
+  const { t } = useLanguage()
   const { sendPasswordReset } = useAuth()
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
@@ -31,13 +33,13 @@ export default function ForgotPasswordScreen({
     ev.preventDefault()
     setSubmitError('')
     if (!email.trim()) {
-      setError('Email address is required')
+      setError('auth.emailRequired')
       setShakeActive(true)
       setTimeout(() => setShakeActive(false), 500)
       return
     }
     if (!/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email')
+      setError('auth.emailInvalid')
       setShakeActive(true)
       setTimeout(() => setShakeActive(false), 500)
       return
@@ -55,8 +57,8 @@ export default function ForgotPasswordScreen({
       goToResetCode()
     } catch (err) {
       setIsLoading(false)
-      const message = err instanceof Error ? err.message : ''
-      setSubmitError(message || 'Unable to send reset code. Please try again.')
+      console.error('Unable to send password reset code', err)
+      setSubmitError('auth.resetCodeSendFailed')
       setShakeActive(true)
       setTimeout(() => setShakeActive(false), 500)
     }
@@ -66,10 +68,10 @@ export default function ForgotPasswordScreen({
     <AuthShell
       headline={
         <>
-          Reset access, continue <span className="text-[var(--bp-accent-ink)] text-glow">planning smarter</span>.
+          {t('auth.resetAccessHeadline')} <span className="text-[var(--bp-accent-ink)] text-glow">{t('auth.planningSmarter')}</span>.
         </>
       }
-      sub="Secure your BeePlan workspace and get back to your reminders, tasks, and smart plans."
+      sub={t('auth.resetAccessDescription')}
     >
       <AuthCard shake={shakeActive}>
         {sent ? (
@@ -83,9 +85,9 @@ export default function ForgotPasswordScreen({
                 />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-[var(--bp-text)] tracking-tight">Check your email</h3>
+            <h3 className="text-2xl font-bold text-[var(--bp-text)] tracking-tight">{t('auth.checkEmail')}</h3>
             <p className="text-xs text-[var(--bp-muted)] mt-3 leading-relaxed max-w-xs mx-auto">
-              We sent a 6-digit reset code. Enter it to create a new password.
+              {t('auth.resetCodeSent')}
             </p>
 
             <div className="mt-6 space-y-3">
@@ -94,7 +96,7 @@ export default function ForgotPasswordScreen({
                 onClick={goToResetCode}
                 className="w-full h-12 rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
               >
-                Enter Reset Code
+                {t('auth.enterResetCode')}
               </button>
               <button
                 type="button"
@@ -105,11 +107,11 @@ export default function ForgotPasswordScreen({
                 }}
                 className="w-full h-12 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-muted)] text-xs font-semibold hover:bg-[var(--bp-border)] hover:text-[var(--bp-text)] transition-all"
               >
-                Send Another Code
+                {t('auth.sendAnotherCode')}
               </button>
             </div>
 
-            <AuthFooterLink prefix="Remember your password?" label="Back to Sign In" onClick={onBack} />
+            <AuthFooterLink prefix={t('auth.rememberPassword')} label={t('auth.backToSignIn')} onClick={onBack} />
           </div>
         ) : (
           <div className="animate-scale-up">
@@ -125,38 +127,38 @@ export default function ForgotPasswordScreen({
             </div>
 
             <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-[var(--bp-text)]">Forgot Password?</h3>
+              <h3 className="text-xl font-bold text-[var(--bp-text)]">{t('auth.forgotPasswordTitle')}</h3>
               <p className="text-xs text-[var(--bp-muted)] mt-2 leading-relaxed">
-                Enter your email and we'll send you a reset code to get back into your account.
+                {t('auth.forgotPasswordCodeSubtitle')}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <AuthInput
-                label="Email Address"
-                placeholder="name@example.com"
+                label={t('auth.emailAddress')}
+                placeholder={t('auth.emailPlaceholder')}
                 value={email}
                 onChange={(v) => {
                   setEmail(v)
                   setError('')
                   setSubmitError('')
                 }}
-                error={error}
+                error={error ? t(error) : undefined}
               />
 
               <p className="text-[10px] text-[var(--bp-muted)] leading-relaxed pt-0.5">
-                Make sure you enter the email associated with your BeePlan account.
+                {t('auth.emailAccountHint', { brand_name: 'BeePlan' })}
               </p>
 
               <div className="pt-1">
                 <PrimaryButton disabled={isLoading}>
-                  {isLoading ? 'Sending...' : 'Send Reset Code'}
+                  {isLoading ? t('auth.sending') : t('auth.sendResetCode')}
                 </PrimaryButton>
               </div>
-              {submitError && <p className="text-red-400 text-xs ps-1">{submitError}</p>}
+              {submitError && <p className="text-red-400 text-xs ps-1">{t(submitError)}</p>}
             </form>
 
-            <AuthFooterLink prefix="Remember your password?" label="Back to Sign In" onClick={onBack} />
+            <AuthFooterLink prefix={t('auth.rememberPassword')} label={t('auth.backToSignIn')} onClick={onBack} />
           </div>
         )}
       </AuthCard>

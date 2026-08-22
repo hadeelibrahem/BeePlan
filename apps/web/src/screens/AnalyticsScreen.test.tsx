@@ -194,13 +194,13 @@ describe('AnalyticsScreen', () => {
 
     renderAnalytics()
 
-    expect(await screen.findByText('Network down')).toBeInTheDocument()
+    expect(await screen.findByText('Unable to load analytics.')).toBeInTheDocument()
 
     getTasksMock.mockResolvedValueOnce(SAMPLE_TASKS)
     await userEvent.click(screen.getByRole('button', { name: /retry/i }))
 
     await waitFor(() => expect(statValue('Completed Tasks')).toBe('2'))
-    expect(screen.queryByText('Network down')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unable to load analytics.')).not.toBeInTheDocument()
   })
 
   it('renders an empty state and zeroed counts when there are no tasks', async () => {

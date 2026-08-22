@@ -17,7 +17,6 @@ import {
   tasks,
 } from '../db/schema';
 import { TasksService } from '../tasks/tasks.service';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FocusRoomsService } from '../focus-rooms/focus-rooms.service';
 import { isSubtaskOwnedByUser } from '../tasks/subtask-ownership';
@@ -96,7 +95,6 @@ export class FocusService {
     private readonly databaseService: DatabaseService,
     private readonly tasksService: TasksService,
     private readonly taskAccess: TaskAccessService,
-    @Optional() private readonly googleCalendar?: GoogleCalendarService,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly focusRooms?: FocusRoomsService,
   ) {}
@@ -170,11 +168,6 @@ export class FocusService {
       })
       .returning();
 
-    void this.googleCalendar?.enqueueEntitySync(
-      userId,
-      'focus_session',
-      row.id,
-    );
     return this.toEntity(row, taskTitle, subtaskTitle);
   }
 
@@ -257,11 +250,6 @@ export class FocusService {
       await this.tasksService.recomputeTaskSpentTime(session.taskId);
     }
 
-    void this.googleCalendar?.enqueueEntitySync(
-      userId,
-      'focus_session',
-      updated.id,
-    );
     await this.notifications?.createOnce(
       {
         userId,
@@ -361,16 +349,6 @@ export class FocusService {
         triggerAt: updated.endedAt ?? new Date(),
         key: `focus_cancelled:${userId}:${updated.id}`,
       },
-    );
-    void this.googleCalendar?.enqueueEntitySync(
-      userId,
-      'focus_session',
-      updated.id,
-    );
-    void this.googleCalendar?.enqueueEntitySync(
-      userId,
-      'focus_session',
-      updated.id,
     );
     return this.toEntity(updated, taskTitle, subtaskTitle);
   }
@@ -876,7 +854,12 @@ export class FocusService {
   private async markTaskDone(userId: string, taskId: string): Promise<void> {
     await this.db
       .update(tasks)
-      .set({ status: 'done', progress: 100, updatedAt: new Date() })
+      .set({
+        status: 'done',
+        progress: 100,
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(eq(tasks.id, taskId));
     await this.db.insert(taskActivities).values({
       userId,

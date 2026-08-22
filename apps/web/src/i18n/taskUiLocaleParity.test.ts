@@ -9,10 +9,10 @@ function leafKeys(node: TranslationNode, prefix = ''): string[] {
   return Object.entries(node).flatMap(([key, value]) => leafKeys(value, prefix ? `${prefix}.${key}` : key))
 }
 
-describe('task screen locale parity', () => {
-  it('keeps every taskUi translation key available in Arabic', () => {
-    const english = leafKeys(en.taskUi as TranslationNode).sort()
-    const arabic = leafKeys(ar.taskUi as TranslationNode).sort()
+describe('web locale parity', () => {
+  it('keeps every English translation key available in Arabic', () => {
+    const english = leafKeys(en as TranslationNode).sort()
+    const arabic = leafKeys(ar as TranslationNode).sort()
 
     expect(arabic).toEqual(english)
   })

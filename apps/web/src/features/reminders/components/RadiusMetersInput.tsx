@@ -5,6 +5,7 @@ import {
   MIN_RADIUS_METERS,
   validateRadiusMetersText,
 } from '../utils/radiusValidation'
+import { useLanguage } from '../../../i18n/LanguageContext'
 
 type Props = {
   value: number
@@ -12,6 +13,7 @@ type Props = {
 }
 
 export function RadiusMetersInput({ value, onChange }: Props) {
+  const { t } = useLanguage()
   const [text, setText] = useState(String(value))
 
   useEffect(() => {
@@ -19,15 +21,21 @@ export function RadiusMetersInput({ value, onChange }: Props) {
   }, [value])
 
   const error = validateRadiusMetersText(text)
+  const errorText = error
+    ? t(error.includes('between') ? 'reminderUi.radiusRange' : 'reminderUi.radiusWholeNumber', {
+        min: MIN_RADIUS_METERS,
+        max: MAX_RADIUS_METERS,
+      })
+    : null
 
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-widest text-[var(--bp-subtle)]">
-        Radius (meters)
+        {t('reminderUi.radiusMeters')}
       </span>
       <div className="flex items-center gap-2">
         <input
-          aria-label="Radius (meters)"
+          aria-label={t('reminderUi.radiusMeters')}
           type="number"
           inputMode="numeric"
           min={MIN_RADIUS_METERS}
@@ -49,7 +57,7 @@ export function RadiusMetersInput({ value, onChange }: Props) {
       </div>
       {error ? (
         <span id="radius-meters-error" role="alert" className="mt-1.5 block text-xs font-semibold text-red-400">
-          {error}
+          {errorText}
         </span>
       ) : null}
     </label>

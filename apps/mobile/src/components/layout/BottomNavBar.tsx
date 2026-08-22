@@ -4,14 +4,15 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useState } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../theme/useTheme'
+import { useLanguage } from '../../i18n/LanguageContext'
 import { pressTab, TAB_ROUTES } from '../../navigation/tabBarContract'
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types'
 import { MobileIcon, type MobileIconName } from './MobileIcon'
 
 export const TAB_META: Record<typeof TAB_ROUTES[number], { label: string; icon: MobileIconName }> = {
-  Dashboard: { label: 'Dashboard', icon: 'dashboard' },
-  Tasks: { label: 'Tasks', icon: 'tasks' },
-  Focus: { label: 'Focus', icon: 'focus' },
+  Dashboard: { label: 'navigation.dashboard', icon: 'dashboard' },
+  Tasks: { label: 'navigation.tasks', icon: 'tasks' },
+  Focus: { label: 'navigation.focus', icon: 'focus' },
 } as const
 
 export type BottomNavPage = 'dashboard' | 'tasks' | 'focus' | 'reminders' | 'people'
@@ -24,23 +25,27 @@ export type BottomNavHandlers = {
 type LegacyBottomNavProps = BottomNavHandlers & { active: BottomNavPage }
 
 type MoreTabRoute = 'Reminders' | 'People'
-type MoreStackRoute = 'Calendar' | 'AiDailyPlanner' | 'Notes' | 'Analytics' | 'Notifications' | 'Whiteboards' | 'AchievementMuseum'
+type MoreStackRoute = 'Calendar' | 'AiDailyPlanner' | 'Notes' | 'Analytics' | 'Notifications' | 'Whiteboards' | 'AchievementMuseum' | 'TimeCapsules' | 'Feedback' | 'Challenges'
 
-const MORE_DESTINATIONS: Array<{ label: string; route: MoreTabRoute | MoreStackRoute; icon: MobileIconName }> = [
-  { label: 'Reminders', route: 'Reminders', icon: 'reminders' },
-  { label: 'People', route: 'People', icon: 'people' },
-  { label: 'Calendar', route: 'Calendar', icon: 'calendar' },
-  { label: 'Daily Planner', route: 'AiDailyPlanner', icon: 'planner' },
-  { label: 'Notes', route: 'Notes', icon: 'notes' },
-  { label: 'Analytics', route: 'Analytics', icon: 'analytics' },
-  { label: 'Achievement Museum', route: 'AchievementMuseum', icon: 'trophy' },
-  { label: 'Notifications', route: 'Notifications', icon: 'notifications' },
-  { label: 'Whiteboards', route: 'Whiteboards', icon: 'whiteboard' },
+const MORE_DESTINATIONS: Array<{ label: string; labelKey?: string; route: MoreTabRoute | MoreStackRoute; icon: MobileIconName }> = [
+  { label: 'navigation.reminders', route: 'Reminders', icon: 'reminders' },
+  { label: 'navigation.people', route: 'People', icon: 'people' },
+  { label: 'navigation.calendar', route: 'Calendar', icon: 'calendar' },
+  { label: 'navigation.dailyPlanner', route: 'AiDailyPlanner', icon: 'planner' },
+  { label: 'navigation.notes', route: 'Notes', icon: 'notes' },
+  { label: 'navigation.analytics', route: 'Analytics', icon: 'analytics' },
+  { label: 'navigation.achievementMuseum', route: 'AchievementMuseum', icon: 'trophy' },
+  { label: 'navigation.timeCapsule', route: 'TimeCapsules', icon: 'planner' },
+  { label: 'navigation.notifications', route: 'Notifications', icon: 'notifications' },
+  { label: 'navigation.whiteboards', route: 'Whiteboards', icon: 'whiteboard' },
+  { label: 'feedback.title', route: 'Feedback', icon: 'lightbulb' },
+  { label: 'navigation.challenges', route: 'Challenges', icon: 'trophy' },
 ]
 
 /** The single visual tab bar for navigator-backed main screens. */
 export function NavigationBottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme } = useTheme()
+  const { t } = useLanguage()
   const insets = useSafeAreaInsets()
   const [moreOpen, setMoreOpen] = useState(false)
   const moreActive = ['Reminders', 'People'].includes(state.routes[state.index]?.name)
@@ -63,30 +68,30 @@ export function NavigationBottomTabBar({ state, descriptors, navigation }: Botto
           if (!meta) return null
           const active = state.index === index
           const options = descriptors[route.key].options
-          return <Pressable key={route.key} accessibilityRole="tab" accessibilityLabel={options.tabBarAccessibilityLabel ?? meta.label} accessibilityState={{ selected: active }} className="flex-1 items-center py-2" onPress={() => pressTab(active, route.name as keyof typeof TAB_META, route.key, () => navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true }), (name) => navigation.navigate(name))}>
+          return <Pressable key={route.key} accessibilityRole="tab" accessibilityLabel={options.tabBarAccessibilityLabel ?? t(meta.label)} accessibilityState={{ selected: active }} className="flex-1 items-center py-2" onPress={() => pressTab(active, route.name as keyof typeof TAB_META, route.key, () => navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true }), (name) => navigation.navigate(name))}>
             <MobileIcon name={meta.icon} color={active ? theme.colors.accent : theme.colors.secondaryText} size={20} />
-            <Text className="mt-1 text-xs font-bold" style={{ color: active ? theme.colors.accent : theme.colors.secondaryText }}>{meta.label}</Text>
+            <Text className="mt-1 text-xs font-bold" style={{ color: active ? theme.colors.accent : theme.colors.secondaryText }}>{t(meta.label)}</Text>
           </Pressable>
         })}
-          <Pressable accessibilityRole="button" accessibilityLabel="More destinations" accessibilityState={{ selected: moreActive }} className="flex-1 items-center py-2" onPress={() => setMoreOpen(true)}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('navigation.moreDestinations')} accessibilityState={{ selected: moreActive }} className="flex-1 items-center py-2" onPress={() => setMoreOpen(true)}>
             <MobileIcon name="more" color={moreActive ? theme.colors.accent : theme.colors.secondaryText} size={20} />
-            <Text className="mt-1 text-xs font-bold" style={{ color: moreActive ? theme.colors.accent : theme.colors.secondaryText }}>More</Text>
+            <Text className="mt-1 text-xs font-bold" style={{ color: moreActive ? theme.colors.accent : theme.colors.secondaryText }}>{t('navigation.more')}</Text>
           </Pressable>
         </View>
       </View>
       <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={() => setMoreOpen(false)}>
         <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0, 0, 0, 0.32)' }}>
-          <Pressable className="flex-1" accessibilityRole="button" accessibilityLabel="Close more destinations" onPress={() => setMoreOpen(false)} />
+          <Pressable className="flex-1" accessibilityRole="button" accessibilityLabel={t('navigation.closeMore')} onPress={() => setMoreOpen(false)} />
           <View className="rounded-t-3xl px-5 pt-3" style={{ backgroundColor: theme.colors.surfaceElevated, paddingBottom: insets.bottom + 20 }}>
             <View className="mb-4 h-1 self-center rounded-full" style={{ backgroundColor: theme.colors.border, width: 36 }} />
-            <Text className="mb-3 text-lg font-bold" style={{ color: theme.colors.text }}>More</Text>
+            <Text className="mb-3 text-lg font-bold" style={{ color: theme.colors.text }}>{t('navigation.more')}</Text>
             <View className="flex-row flex-wrap">
               {MORE_DESTINATIONS.map((destination) => (
-                <Pressable key={destination.route} accessibilityRole="button" accessibilityLabel={destination.label} className="mb-3 w-1/3 items-center rounded-2xl py-3" onPress={() => openDestination(destination.route)}>
+                <Pressable key={destination.route} accessibilityRole="button" accessibilityLabel={t(destination.labelKey ?? destination.label)} className="mb-3 w-1/3 items-center rounded-2xl py-3" onPress={() => openDestination(destination.route)}>
                   <View className="items-center justify-center rounded-2xl" style={{ backgroundColor: theme.colors.navigation, height: 46, width: 46 }}>
                     <MobileIcon name={destination.icon} color={theme.colors.icon} size={21} />
                   </View>
-                  <Text className="mt-2 text-center text-xs font-bold" style={{ color: theme.colors.text }}>{destination.label}</Text>
+                  <Text className="mt-2 text-center text-xs font-bold" style={{ color: theme.colors.text }}>{t(destination.labelKey ?? destination.label)}</Text>
                 </Pressable>
               ))}
             </View>

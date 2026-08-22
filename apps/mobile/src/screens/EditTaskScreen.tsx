@@ -53,6 +53,7 @@ import { SubtaskManagementSection } from '../components/SubtaskManagementSection
 import { DependencyManagementSection } from '../components/DependencyManagementSection';
 import { TASK_REMINDER_OPTIONS, canScheduleTaskReminder, validateTaskReminder } from './editTaskReminder';
 import { canValidateTaskSchedule, taskScheduleValidationError } from './taskScheduleValidation';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type Props = {
   task: ApiTask | null;
@@ -89,20 +90,18 @@ function toDateInput(value?: string) {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-function formatDateLabel(date: Date | undefined) {
-  if (!date) return 'Select date...';
-  return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+function formatDateLabel(date: Date | undefined, language: 'en' | 'ar', emptyLabel: string) {
+  if (!date) return emptyLabel;
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
 }
 
-function formatTimeLabel(time: string) {
+function formatTimeLabel(time: string, language: 'en' | 'ar') {
   if (!time) return '--:--';
   const [hoursStr, minutesStr] = time.split(':');
   const hours = Number(hoursStr);
   const minutes = Number(minutesStr);
   if (Number.isNaN(hours) || Number.isNaN(minutes)) return time;
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHours = hours % 12 === 0 ? 12 : hours % 12;
-  return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(2000, 0, 1, hours, minutes));
 }
 
 function formatFileSize(size?: number | string) {
@@ -151,6 +150,7 @@ export default function EditTaskScreen({
 }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const { t, language } = useLanguage();
   const onDeleteRef = useRef(onDelete);
   onDeleteRef.current = onDelete;
   const deleteConfirmationRef = useRef<ReturnType<typeof createTaskDeleteConfirmationController> | null>(null);
@@ -458,9 +458,9 @@ export default function EditTaskScreen({
   if (!task) {
     return (
       <AppScreen>
-        <PageHeader title="Edit Task" subtitle="No task selected" onBack={onBack} />
+        <PageHeader title={t('editTask.title')} subtitle={t('editTask.noTaskSelected')} onBack={onBack} />
         <SectionCard className="mb-3">
-          <Text style={{ color: colors.secondaryText }}>This task could not be loaded. Go back and try again.</Text>
+          <Text style={{ color: colors.secondaryText }}>{t('editTask.loadFailed')}</Text>
         </SectionCard>
       </AppScreen>
     );
@@ -483,17 +483,17 @@ export default function EditTaskScreen({
           <View className="flex-1 gap-3">
             <View className="flex-row gap-3">
               <SecondaryButton onPress={confirmLeave} className="flex-1">
-                Cancel Changes
+                {t('editTask.cancelChanges')}
               </SecondaryButton>
             </View>
             <PrimaryButton onPress={() => void handleSave()} fullWidth disabled={saving || uploadingAttachments}>
-              {saving || uploadingAttachments ? 'Saving...' : 'Save Changes'}
+              {saving || uploadingAttachments ? t('createTask.saving') : t('editTask.saveChanges')}
             </PrimaryButton>
           </View>
         </BottomActionBar>
       }
     >
-      <PageHeader title="Edit Task" subtitle="Update existing task" onBack={confirmLeave} />
+      <PageHeader title={t('editTask.title')} subtitle={t('editTask.subtitle')} onBack={confirmLeave} />
 
       {notice ? (
         <View className="mb-3 rounded-xl px-3 py-2" style={{ backgroundColor: `${colors.success}26` }}>
@@ -503,8 +503,8 @@ export default function EditTaskScreen({
         </View>
       ) : null}
 
-      <Card title="Task Information">
-        <Label text="Task Title" />
+      <Card title={t('createTask.information')}>
+        <Label text={t('editTask.taskTitle')} />
         <TextInput
           value={title}
           onChangeText={setTitle}
@@ -513,7 +513,7 @@ export default function EditTaskScreen({
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
 
-        <Label text="Description" />
+        <Label text={t('createTask.description')} />
         <TextInput
           multiline
           value={description}
@@ -524,16 +524,16 @@ export default function EditTaskScreen({
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
 
-        <Label text="Category" />
+        <Label text={t('createTask.category')} />
         <View className="flex-row flex-wrap gap-2">
           {CATEGORIES.map((item) => (
-            <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />
+            <Chip key={item} label={t(`createTask.category${item}`)} active={category === item} onPress={() => setCategory(item)} />
           ))}
         </View>
         {error ? <Text className="mt-2 text-sm font-bold text-red-300">{error}</Text> : null}
       </Card>
 
-      <Card title="Subtasks">
+      <Card title={t('createTask.subtasks')}>
         <SubtaskManagementSection
           task={task}
           accessToken={accessToken ?? ''}
@@ -546,17 +546,17 @@ export default function EditTaskScreen({
         />
       </Card>
 
-      <Card title="Dependencies">
+      <Card title={t('createTask.dependencies')}>
         <DependencyManagementSection task={task} tasks={tasks} accessToken={accessToken ?? ''} canEdit={canEditShared} onError={setError} onTaskUpdated={(updated) => { onDependenciesUpdated?.(updated); onRefresh?.(); }} />
       </Card>
 
-      <Card title="Task Settings">
-        <Label text="Priority" />
+      <Card title={t('createTask.settings')}>
+        <Label text={t('createTask.priority')} />
         <View className="mb-3 flex-row flex-wrap gap-2">
           {PRIORITIES.map((item) => (
             <Segment
               key={item}
-              label={item}
+              label={t(`taskLabels.priority.${item.toLowerCase()}`)}
               active={priority === item}
               color={item === 'Low' ? colors.success : item === 'High' || item === 'Urgent' ? colors.error : colors.warning}
               onPress={() => setPriority(item)}
@@ -564,24 +564,24 @@ export default function EditTaskScreen({
           ))}
         </View>
 
-        <Select label={`Status · ${status}`} onPress={() => Alert.alert('Status', 'Choose status', STATUSES.map((item) => ({ text: item, onPress: () => setStatus(item) })))} />
+        <Select label={t('editTask.statusValue', { status: statusLabel(status, t) })} onPress={() => Alert.alert(t('editTask.status'), t('editTask.chooseStatus'), STATUSES.map((item) => ({ text: statusLabel(item, t), onPress: () => setStatus(item) })))} />
 
       </Card>
 
-      <Card title="When & Where">
-        <Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Schedule · when you plan to do this</Text>
-        <View className="flex-row gap-2"><View className="flex-1"><Select label={scheduledDate ? formatDateLabel(new Date(`${scheduledDate}T12:00:00`)) : 'Add date'} onPress={openScheduledDatePicker} /></View><View className="flex-1"><Select label={scheduledStartTime ? `${formatTimeLabel(scheduledStartTime)}${scheduledEndTime ? ` – ${formatTimeLabel(scheduledEndTime)}` : ''}` : 'Add time'} onPress={() => openScheduledTimePicker('scheduledStart')} /></View></View>
-        {scheduledStartTime ? <Pressable accessibilityRole="button" onPress={() => openScheduledTimePicker('scheduledEnd')} className="mt-2"><Text className="text-xs font-bold" style={{ color: colors.accent }}>Set end time</Text></Pressable> : null}
+      <Card title={t('createTask.whenWhere')}>
+        <Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>{t('createTask.scheduleHelp')}</Text>
+        <View className="flex-row gap-2"><View className="flex-1"><Select label={scheduledDate ? formatDateLabel(new Date(`${scheduledDate}T12:00:00`), language, t('createTask.selectDate')) : t('createTask.addDate')} onPress={openScheduledDatePicker} /></View><View className="flex-1"><Select label={scheduledStartTime ? `${formatTimeLabel(scheduledStartTime, language)}${scheduledEndTime ? ` – ${formatTimeLabel(scheduledEndTime, language)}` : ''}` : t('createTask.addTime')} onPress={() => openScheduledTimePicker('scheduledStart')} /></View></View>
+        {scheduledStartTime ? <Pressable accessibilityRole="button" onPress={() => openScheduledTimePicker('scheduledEnd')} className="mt-2"><Text className="text-xs font-bold" style={{ color: colors.accent }}>{t('createTask.setEndTime')}</Text></Pressable> : null}
         {scheduleError ? <Text className="mt-2 text-sm font-bold" style={{ color: colors.error }}>{scheduleError}</Text> : null}
-        <View className="mt-4"><Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Deadline · when this must be finished</Text><View className="flex-row gap-2"><View className="flex-1"><Select label={formatDateLabel(dueDate)} onPress={openDatePicker} /></View><View className="flex-1"><Select label={dueTime ? formatTimeLabel(dueTime) : 'Optional time'} onPress={openTimePicker} /></View></View></View>
+        <View className="mt-4"><Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>{t('createTask.deadlineHelp')}</Text><View className="flex-row gap-2"><View className="flex-1"><Select label={formatDateLabel(dueDate, language, t('createTask.selectDate'))} onPress={openDatePicker} /></View><View className="flex-1"><Select label={dueTime ? formatTimeLabel(dueTime, language) : t('createTask.optionalTime')} onPress={openTimePicker} /></View></View></View>
         <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
       </Card>
 
-      <Pressable accessibilityRole="button" onPress={() => setMoreOptions((value) => !value)} className="mb-3 flex-row items-center justify-between rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>More options</Text><Text style={{ color: colors.secondaryText }}>{moreOptions ? '⌃' : '›'}</Text></Pressable>
-      <Card title="Progress & Time Estimation">
+      <Pressable accessibilityRole="button" onPress={() => setMoreOptions((value) => !value)} className="mb-3 flex-row items-center justify-between rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>{t('createTask.moreOptions')}</Text><Text style={{ color: colors.secondaryText }}>{moreOptions ? '⌃' : '›'}</Text></Pressable>
+      <Card title={t('editTask.progressTime')}>
         <View className="flex-row gap-2">
           <View className="flex-1">
-            <Label text="Estimated Hours" />
+            <Label text={t('createTask.estimatedHours')} />
             <TextInput
               value={estimatedHours}
               onChangeText={setEstimatedHours}
@@ -592,7 +592,7 @@ export default function EditTaskScreen({
             />
           </View>
           <View className="flex-1">
-            <Label text="Manual Spent Hours" />
+            <Label text={t('editTask.manualSpentHours')} />
             <TextInput
               value={spentHours}
               onChangeText={setSpentHours}
@@ -604,13 +604,11 @@ export default function EditTaskScreen({
           </View>
         </View>
         <Text className="text-xs" style={{ color: colors.secondaryText }}>
-          Manual spent hours is time you log by hand. Focus Sessions are tracked automatically and
-          added on top — the total spent time appears on the task details. Remaining time is
-          recalculated from estimated minus that total.
+          {t('editTask.timeHelp')}
         </Text>
       </Card>
 
-      <Card title="Notes">
+      <Card title={t('editTask.notes')}>
         <TextInput
           multiline
           value={notes}
@@ -622,7 +620,7 @@ export default function EditTaskScreen({
         />
       </Card>
 
-      <Card title="Attachments">
+      <Card title={t('createTask.attachments')}>
         <TaskAttachmentPicker
           files={draftAttachments}
           onChange={setDraftAttachments}
@@ -650,31 +648,31 @@ export default function EditTaskScreen({
                 style={{ backgroundColor: `${colors.error}22` }}
               >
                 <Text className="text-xs font-bold" style={{ color: colors.error }}>
-                  Delete
+                  {t('editTask.delete')}
                 </Text>
               </Pressable>
             </View>
           ))}
           {!attachments.length ? (
             <Text className="text-sm" style={{ color: colors.secondaryText }}>
-              No attachments yet.
+              {t('editTask.noAttachments')}
             </Text>
           ) : null}
         </View>
       </Card>
 
-      <Card title="Recurring Task">
-        <Label text="Repeat" />
+      <Card title={t('createTask.recurringTask')}>
+        <Label text={t('editTask.repeat')} />
         <Select label={recurrenceSummary} onPress={() => setIsRecurrenceSheetVisible(true)} />
       </Card>
 
-      <Card title="Reminder">
+      <Card title={t('createTask.reminder')}>
         <View className="mb-3 flex-row items-center justify-between">
-          <View><Text className="text-sm font-bold" style={{ color: colors.text }}>Enable task reminder</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>{canScheduleTaskReminder(dueDate, dueTime) ? 'Remind before this task is due.' : 'Set a due date and time to enable reminders.'}</Text></View>
-          <Pressable disabled={!canScheduleTaskReminder(dueDate, dueTime)} accessibilityRole="switch" accessibilityState={{ checked: reminderEnabled, disabled: !canScheduleTaskReminder(dueDate, dueTime) }} accessibilityLabel="Enable task reminder" onPress={() => setReminderEnabled((enabled) => !enabled)} className="h-6 w-11 justify-center rounded-full px-1" style={{ backgroundColor: reminderEnabled ? colors.accent : colors.border, opacity: canScheduleTaskReminder(dueDate, dueTime) ? 1 : 0.5 }}><View className={`h-4 w-4 rounded-full bg-white ${reminderEnabled ? 'self-end' : 'self-start'}`} /></Pressable>
+          <View><Text className="text-sm font-bold" style={{ color: colors.text }}>{t('editTask.enableTaskReminder')}</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>{canScheduleTaskReminder(dueDate, dueTime) ? t('editTask.remindBeforeDue') : t('editTask.setDueForReminder')}</Text></View>
+          <Pressable disabled={!canScheduleTaskReminder(dueDate, dueTime)} accessibilityRole="switch" accessibilityState={{ checked: reminderEnabled, disabled: !canScheduleTaskReminder(dueDate, dueTime) }} accessibilityLabel={t('editTask.enableTaskReminder')} onPress={() => setReminderEnabled((enabled) => !enabled)} className="h-6 w-11 justify-center rounded-full px-1" style={{ backgroundColor: reminderEnabled ? colors.accent : colors.border, opacity: canScheduleTaskReminder(dueDate, dueTime) ? 1 : 0.5 }}><View className={`h-4 w-4 rounded-full bg-white ${reminderEnabled ? 'self-end' : 'self-start'}`} /></Pressable>
         </View>
-        <Label text="Reminder lead time" />
-        <Select label={`${TASK_REMINDER_OPTIONS.includes(reminderBeforeMinutes as never) ? reminderBeforeMinutes : 30} minutes before`} onPress={() => reminderEnabled && Alert.alert('Reminder lead time', 'Choose when to be reminded', TASK_REMINDER_OPTIONS.map((value) => ({ text: value === 60 ? '1 hour before' : value === 1440 ? '1 day before' : `${value} minutes before`, onPress: () => setReminderBeforeMinutes(value) })))} />
+        <Label text={t('editTask.reminderLeadTime')} />
+        <Select label={reminderLabel(TASK_REMINDER_OPTIONS.includes(reminderBeforeMinutes as never) ? reminderBeforeMinutes : 30, t)} onPress={() => reminderEnabled && Alert.alert(t('editTask.reminderLeadTime'), t('createTask.chooseReminderTime'), TASK_REMINDER_OPTIONS.map((value) => ({ text: reminderLabel(value, t), onPress: () => setReminderBeforeMinutes(value) })))} />
         <ReminderAudienceSection
           taskId={task.id}
           canEditShared={canEditShared}
@@ -683,7 +681,7 @@ export default function EditTaskScreen({
         />
       </Card>
 
-      <Card title="Focus">
+      <Card title={t('editTask.focus')}>
         <FocusAudienceSection
           taskId={task.id}
           canEditShared={canEditShared}
@@ -703,10 +701,9 @@ export default function EditTaskScreen({
       ) : null}
 
       {currentUserId && task && task.viewerRole === 'owner' && onOpenAiCollaboration ? (
-        <Card title="AI Collaboration">
+        <Card title={t('editTask.aiCollaboration')}>
           <Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>
-            See capacity, today's plan, progress, and AI suggestions for splitting this task fairly — you always
-            approve before anything changes.
+            {t('editTask.aiHelp')}
           </Text>
           <Pressable
             onPress={onOpenAiCollaboration}
@@ -714,15 +711,15 @@ export default function EditTaskScreen({
             style={{ backgroundColor: colors.accent }}
           >
             <Text className="font-black" style={{ color: colors.accentText }}>
-              Open AI Collaboration
+              {t('editTask.openAiCollaboration')}
             </Text>
           </Pressable>
         </Card>
       ) : null}
 
-      <Card title="Danger Zone">
-        <Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>Deleting this task cannot be undone.</Text>
-        <DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>Delete Task</DangerButton>
+      <Card title={t('editTask.dangerZone')}>
+        <Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>{t('editTask.deleteWarning')}</Text>
+        <DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>{t('editTask.deleteTask')}</DangerButton>
       </Card>
 
       <TaskRecurrenceSheet
@@ -877,4 +874,17 @@ function Select({ label, onPress }: { label: string; onPress?: () => void }) {
       <Text className="text-sm" style={{ color: colors.text }}>{label}</Text>
     </Pressable>
   );
+}
+
+function statusLabel(status: string, t: ReturnType<typeof useLanguage>['t']) {
+  if (status === 'To Do') return t('taskLabels.status.todo');
+  if (status === 'In Progress') return t('taskLabels.status.inProgress');
+  if (status === 'Done') return t('taskLabels.status.done');
+  return t('taskLabels.status.missed');
+}
+
+function reminderLabel(minutes: number, t: ReturnType<typeof useLanguage>['t']) {
+  if (minutes === 60) return t('createTask.reminderHourBefore');
+  if (minutes === 1440) return t('createTask.reminderDayBefore');
+  return t('createTask.reminderMinutesBefore', { count: minutes });
 }

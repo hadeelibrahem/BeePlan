@@ -80,6 +80,7 @@ export type NotificationType =
   | 'ownership_transferred'
   | 'task_updated'
   | 'task_completed'
+  | 'challenge_completed'
   | 'due_date_changed'
   | 'priority_changed'
   | 'reminder_updated'

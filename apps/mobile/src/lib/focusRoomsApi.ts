@@ -72,11 +72,13 @@ export const roomDetails = (t: string, id: string) =>
   req<FocusRoom>(t, `/focus-rooms/${id}`);
 export const joinRoom = (t: string, id: string) =>
   req<FocusRoom>(t, `/focus-rooms/${id}/join`, "POST", {});
+export const joinRoomByCode = (t: string, code: string) =>
+  req<FocusRoom>(t, "/focus-rooms/join", "POST", { code: code.trim() });
 export const makeRoom = (t: string, title: string, mode: string) =>
   req<FocusRoom>(t, "/focus-rooms", "POST", {
     title,
     mode,
-    visibility: "public",
+    visibility: "private",
   });
 export const makeCommitment = (t: string, id: string, durationMinutes = 25, goalLabel?: string) =>
   req(t, `/focus-rooms/${id}/commitments`, "POST", {

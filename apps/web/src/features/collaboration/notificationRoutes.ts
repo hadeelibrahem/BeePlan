@@ -10,6 +10,10 @@ const COLLABORATION_NOTIFICATION_TYPES = new Set<AppNotification['type']>([
 ])
 
 export function notificationTarget(notification: AppNotification): string | null {
+  if (notification.type === 'challenge_completed') {
+    const challengeId = notification.data?.challengeId
+    return typeof challengeId === 'string' && challengeId ? `/challenges/${encodeURIComponent(challengeId)}` : '/challenges'
+  }
   const payloadRoute = notification.data?.route
   if (typeof payloadRoute === 'string' && payloadRoute.startsWith('/')) return payloadRoute
   if (!notification.taskId) return null

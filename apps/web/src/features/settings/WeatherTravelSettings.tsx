@@ -5,39 +5,41 @@ import {
   updateTaskAssistantPreferences,
   type TaskAssistantPreferences,
 } from "../../lib/tasksApi";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 const toggles: [keyof TaskAssistantPreferences, string][] = [
-  ["proactiveAssistanceEnabled", "Proactive assistance"],
-  ["dynamicPreparationEnabled", "Dynamic preparation lists"],
-  ["dynamicPackingEnabled", "Dynamic packing lists"],
-  ["contextTimelineEnabled", "Context timeline"],
-  ["contextualNotificationsEnabled", "Contextual notifications"],
-  ["preparationChecklistsEnabled", "Preparation checklists"],
-  ["travelAdviceEnabled", "Travel and departure advice"],
-  ["weatherAdviceEnabled", "Weather advice"],
-  ["documentAdviceEnabled", "Document reminders"],
-  ["clothingAdviceEnabled", "Clothing suggestions"],
-  ["umbrellaAdviceEnabled", "Umbrella reminders"],
-  ["hydrationAdviceEnabled", "Hydration reminders"],
-  ["electronicsAdviceEnabled", "Electronics"],
-  ["medicationAdviceEnabled", "Medication"],
-  ["departureRemindersEnabled", "Departure reminders"],
+  ["proactiveAssistanceEnabled", "proactiveAssistance"],
+  ["dynamicPreparationEnabled", "dynamicPreparation"],
+  ["dynamicPackingEnabled", "dynamicPacking"],
+  ["contextTimelineEnabled", "contextTimeline"],
+  ["contextualNotificationsEnabled", "contextualNotifications"],
+  ["preparationChecklistsEnabled", "preparationChecklists"],
+  ["travelAdviceEnabled", "travelAdvice"],
+  ["weatherAdviceEnabled", "weatherAdvice"],
+  ["documentAdviceEnabled", "documentAdvice"],
+  ["clothingAdviceEnabled", "clothingAdvice"],
+  ["umbrellaAdviceEnabled", "umbrellaAdvice"],
+  ["hydrationAdviceEnabled", "hydrationAdvice"],
+  ["electronicsAdviceEnabled", "electronicsAdvice"],
+  ["medicationAdviceEnabled", "medicationAdvice"],
+  ["departureRemindersEnabled", "departureReminders"],
 ];
 export function WeatherTravelSettings({ token }: { token?: string }) {
+  const { t } = useLanguage();
   const [value, setValue] = useState<TaskAssistantPreferences | null>(null);
   const [status, setStatus] = useState("");
   useEffect(() => {
     if (token)
       void getTaskAssistantPreferences(token)
         .then(setValue)
-        .catch(() => setStatus("Could not load settings."));
+        .catch(() => setStatus("settingsAssistant.loadFailed"));
   }, [token]);
   if (!token || !value)
     return (
       <SectionCard>
-        <h3 className="text-sm font-black">Task Context Assistant</h3>
+        <h3 className="text-sm font-black">{t("settingsAssistant.title")}</h3>
         <p className="mt-1 text-xs text-[var(--bp-muted)]">
-          {status || "Loading settings…"}
+          {status ? t(status) : t("settingsAssistant.loading")}
         </p>
       </SectionCard>
     );
@@ -46,27 +48,27 @@ export function WeatherTravelSettings({ token }: { token?: string }) {
     next: TaskAssistantPreferences[K],
   ) => setValue({ ...value, [key]: next });
   const save = async () => {
-    setStatus("Saving…");
+    setStatus("settingsAssistant.saving");
     try {
       setValue(await updateTaskAssistantPreferences(token, value));
-      setStatus("Saved");
+      setStatus("settingsAssistant.saved");
     } catch {
-      setStatus("Could not save settings.");
+      setStatus("settingsAssistant.saveFailed");
     }
   };
   return (
     <SectionCard>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-black">Task Context Assistant</h3>
+          <h3 className="text-sm font-black">{t("settingsAssistant.title")}</h3>
           <p className="mt-1 text-xs text-[var(--bp-muted)]">
-            Relevant preparation, travel, and weather guidance for each task.
+            {t("settingsAssistant.description")}
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm font-bold">
-          Enabled
+          {t("settingsAssistant.enabled")}
           <input
-            aria-label="Enable Task Context Assistant"
+            aria-label={t("settingsAssistant.enableLabel")}
             type="checkbox"
             checked={value.enabled}
             onChange={(event) => set("enabled", event.target.checked)}
@@ -77,7 +79,7 @@ export function WeatherTravelSettings({ token }: { token?: string }) {
         {toggles.map(([key, label]) => (
           <Toggle
             key={key}
-            label={label}
+            label={t(`settingsAssistant.${label}`)}
             value={Boolean(value[key])}
             onChange={(next) => set(key, next as never)}
           />
@@ -85,22 +87,22 @@ export function WeatherTravelSettings({ token }: { token?: string }) {
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <label className="text-xs font-bold text-[var(--bp-muted)]">
-          Notification timing
+          {t("settingsAssistant.notificationTiming")}
           <select
-            aria-label="Notification timing"
+            aria-label={t("settingsAssistant.notificationTiming")}
             className={input}
             value={value.notificationMode}
             onChange={(event) =>
               set("notificationMode", event.target.value as any)
             }
           >
-            <option value="smart">Smart timing</option>
-            <option value="minimal">Minimal notifications</option>
-            <option value="important_only">Important only</option>
+            <option value="smart">{t("settingsAssistant.smartTiming")}</option>
+            <option value="minimal">{t("settingsAssistant.minimalNotifications")}</option>
+            <option value="important_only">{t("settingsAssistant.importantOnly")}</option>
           </select>
         </label>
         <label className="text-xs font-bold text-[var(--bp-muted)]">
-          Default travel mode
+          {t("settingsAssistant.defaultTravelMode")}
           <select
             className={input}
             value={value.defaultTravelMode}
@@ -108,31 +110,29 @@ export function WeatherTravelSettings({ token }: { token?: string }) {
               set("defaultTravelMode", event.target.value as any)
             }
           >
-            <option value="driving">Driving</option>
-            <option value="walking">Walking</option>
-            <option value="cycling">Cycling</option>
+            <option value="driving">{t("settingsAssistant.driving")}</option>
+            <option value="walking">{t("settingsAssistant.walking")}</option>
+            <option value="cycling">{t("settingsAssistant.cycling")}</option>
           </select>
         </label>
         <label className="text-xs font-bold text-[var(--bp-muted)]">
-          Preferred language
+          {t("settingsAssistant.preferredLanguage")}
           <select
             className={input}
             value={value.language}
             onChange={(event) => set("language", event.target.value as any)}
           >
-            <option value="en">English</option>
-            <option value="ar">العربية</option>
+            <option value="en">{t("settingsAssistant.english")}</option>
+            <option value="ar">{t("settingsAssistant.arabic")}</option>
           </select>
         </label>
       </div>
       <details className="mt-4 rounded-xl border border-[var(--bp-border)] p-3">
         <summary className="cursor-pointer text-xs font-black text-[var(--bp-muted)]">
-          Advanced Settings
+          {t("settingsAssistant.advancedSettings")}
         </summary>
         <p className="mt-2 text-xs text-[var(--bp-muted)]">
-          Weather thresholds, provider caches, routing fallbacks, and location
-          freshness continue to use the existing safe Weather &amp; Travel
-          defaults.
+          {t("settingsAssistant.advancedDescription")}
         </p>
       </details>
       <button
@@ -140,10 +140,10 @@ export function WeatherTravelSettings({ token }: { token?: string }) {
         onClick={() => void save()}
         className="mt-4 rounded-xl bg-[var(--bp-accent)] px-4 py-2 font-black text-[var(--bp-accent-text)]"
       >
-        Save Task Assistant
+        {t("settingsAssistant.save")}
       </button>
       <span aria-live="polite" className="ms-3 text-xs text-[var(--bp-muted)]">
-        {status}
+        {status ? t(status) : null}
       </span>
     </SectionCard>
   );

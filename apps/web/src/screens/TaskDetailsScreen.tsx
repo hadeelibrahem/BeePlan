@@ -86,7 +86,7 @@ export default function TaskDetailsScreen({
   onSignOut,
   ...nav
 }: TaskDetailsScreenProps) {
-  const { t, toggleLanguage } = useLanguage()
+  const { t, toggleLanguage, language } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<TaskStatus>(toTaskStatus(task))
@@ -359,10 +359,10 @@ export default function TaskDetailsScreen({
       >
         <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
           <button type="button" onClick={onBack} className="font-semibold hover:text-[var(--bp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)]">
-            Tasks
+            {t('taskDetailsCore.tasks')}
           </button>
           <span>/</span>
-          <span aria-current="page" className="text-[var(--bp-text)]">Task details</span>
+          <span aria-current="page" className="text-[var(--bp-text)]">{t('taskUi.details.title')}</span>
         </nav>
 
         <PageHeader
@@ -372,7 +372,7 @@ export default function TaskDetailsScreen({
             <TopActionBar pageOnly
               searchValue={search}
               onSearchChange={setSearch}
-              searchPlaceholder="Search tasks..."
+              searchPlaceholder={t('taskDetailsCore.searchTasks')}
               themeMode={mode}
               onToggleTheme={toggleTheme}
               languageLabel={t('common.languageToggle')}
@@ -405,8 +405,8 @@ export default function TaskDetailsScreen({
 
             {isViewer ? null : (
               <div className="flex shrink-0 flex-wrap gap-2">
-                {status === 'Done' && linkedAchievementId && onViewAchievement ? <OutlineButton size="sm" onClick={() => onViewAchievement(linkedAchievementId)}>View Achievement</OutlineButton> : status === 'Done' && onAddToAchievement ? <OutlineButton size="sm" onClick={onAddToAchievement}>Add to Achievement Museum</OutlineButton> : null}
-                <PrimaryButton size="sm" onClick={onEdit}>Edit Task</PrimaryButton>
+                {status === 'Done' && linkedAchievementId && onViewAchievement ? <OutlineButton size="sm" onClick={() => onViewAchievement(linkedAchievementId)}>{t('taskDetailsActions.viewAchievement')}</OutlineButton> : status === 'Done' && onAddToAchievement ? <OutlineButton size="sm" onClick={onAddToAchievement}>{t('taskDetailsActions.addToAchievement')}</OutlineButton> : null}
+                <PrimaryButton size="sm" onClick={onEdit}>{t('taskDetailsCore.editTask')}</PrimaryButton>
                 <OutlineButton
                   size="sm"
                   onClick={() => {
@@ -414,7 +414,7 @@ export default function TaskDetailsScreen({
                     setIsStatusModalOpen(true)
                   }}
                 >
-                  Change status
+                  {t('taskDetailsCore.changeStatus')}
                 </OutlineButton>
               </div>
             )}
@@ -434,11 +434,11 @@ export default function TaskDetailsScreen({
           )}
 
           <div className="mt-3 grid gap-2 border-t border-[var(--bp-border)]/70 pt-3 sm:grid-cols-3">
-            <InfoBox title="Created" value={formatDate(task?.createdAt) || 'Not available'} />
-            <InfoBox title="Updated" value={formatDate(task?.updatedAt) || 'Not available'} />
+            <InfoBox title={t('taskDetailsMeta.created')} value={formatDate(task?.createdAt, language) || t('taskDetailsMeta.notAvailable')} />
+            <InfoBox title={t('taskDetailsMeta.updated')} value={formatDate(task?.updatedAt, language) || t('taskDetailsMeta.notAvailable')} />
             <InfoBox
-              title="Due Date"
-              value={`${formatDate(task?.dueDate) || 'No due date'}${task?.dueTime ? ` - ${task.dueTime}` : ''}`}
+              title={t('taskForm.dueDate')}
+              value={`${formatDate(task?.dueDate, language) || t('taskDetailsMeta.noDueDate')}${task?.dueTime ? ` - ${task.dueTime}` : ''}`}
             />
             <InfoBox title="Scheduled" value={task?.scheduledDate && task.scheduledStartTime ? `${task.scheduledDate} · ${task.scheduledStartTime}–${task.scheduledEndTime ?? 'derived'}` : 'Unscheduled'} />
           </div>
@@ -485,17 +485,17 @@ export default function TaskDetailsScreen({
 
         <div className="mt-4 grid gap-3 xl:grid-cols-[1fr_240px]">
           <section className="space-y-3">
-            <SectionBlock title="Progress">
+            <SectionBlock title={t('taskDetailsCore.progress')}>
               <div className="mb-2.5 flex items-end justify-between gap-3">
                 <div>
                   <p className="text-2xl font-black leading-none text-[var(--bp-text)]">{progress}%</p>
                   <p className="mt-1 text-xs text-[var(--bp-muted)]">
-                  {completedSubtasksCount} of {subtaskItems.length} subtasks completed
+                  {t('taskDetailsCore.subtasksCompleted', { completed: completedSubtasksCount, total: subtaskItems.length })}
                   </p>
                 </div>
-                <span className="rounded-full border border-[var(--bp-accent)]/45 bg-[var(--bp-accent-soft)] px-2.5 py-1 text-xs font-black text-[var(--bp-accent-ink)]">Completion</span>
+                <span className="rounded-full border border-[var(--bp-accent)]/45 bg-[var(--bp-accent-soft)] px-2.5 py-1 text-xs font-black text-[var(--bp-accent-ink)]">{t('taskDetailsCore.completion')}</span>
               </div>
-              <div role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2.5 rounded-full bg-[var(--bp-border)]">
+              <div role="progressbar" aria-label={t('taskDetailsCore.taskProgress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2.5 rounded-full bg-[var(--bp-border)]">
                 <div className="h-2.5 rounded-full bg-[var(--bp-accent)] shadow-[0_0_10px_rgba(253,239,75,0.35)]" style={{ width: `${progress}%` }} />
               </div>
             </SectionBlock>
@@ -581,8 +581,8 @@ export default function TaskDetailsScreen({
               </SectionBlock>
               <SectionBlock tone="grouped" title="Automation">
                 <div className="divide-y divide-[var(--bp-border)]">
-                  <AutomationRow label="Reminder" value={reminderText} />
-                  <AutomationRow label="Focus" value={focusText} />
+                  <AutomationRow label={t('createTask.reminder')} value={reminderText} />
+                  <AutomationRow label={t('taskDetailsMeta.focus')} value={focusText} />
                 </div>
               </SectionBlock>
 
@@ -594,9 +594,9 @@ export default function TaskDetailsScreen({
             <div className="grid gap-2 lg:grid-cols-2">
               <SectionBlock tone="grouped" title="Time Tracking">
                 <div className="divide-y divide-[var(--bp-border)]">
-                  <AutomationRow label="Estimated" value={`${task?.estimatedHours ?? 0}h`} />
-                  <AutomationRow label="Spent" value={`${task?.spentHours ?? 0}h`} />
-                  <AutomationRow label="Remaining" value={`${task?.remainingHours ?? 0}h`} />
+                  <AutomationRow label={t('taskDetailsMeta.estimated')} value={t('taskDetailsMeta.hours', { count: task?.estimatedHours ?? 0 })} />
+                  <AutomationRow label={t('taskDetailsMeta.spent')} value={t('taskDetailsMeta.hours', { count: task?.spentHours ?? 0 })} />
+                  <AutomationRow label={t('taskDetailsMeta.remaining')} value={t('taskDetailsMeta.hours', { count: task?.remainingHours ?? 0 })} />
                 </div>
               </SectionBlock>
 
@@ -616,25 +616,25 @@ export default function TaskDetailsScreen({
           </section>
 
           <aside className="hidden xl:block">
-            <SectionBlock title="Details">
+            <SectionBlock title={t('taskDetailsMeta.details')}>
               <div className="divide-y divide-[var(--bp-border)]">
-                <MetaRow label="Status" value={status} color="blue" />
+                <MetaRow label={t('taskForm.status')} value={t(`taskLabels.status.${status === 'To Do' ? 'todo' : status === 'In Progress' ? 'inProgress' : status.toLowerCase()}`)} color="blue" />
                 <MetaRow
-                  label="Priority"
-                  value={task ? toUiPriority(task.priority) : 'Medium'}
+                  label={t('taskForm.priority')}
+                  value={t(`taskLabels.priority.${(task ? toUiPriority(task.priority) : 'Medium').toLowerCase()}`)}
                   color={priorityMetaColor(task?.priority)}
                 />
-                <MetaRow label="Category" value={task?.category || 'Uncategorized'} color="yellow" />
+                <MetaRow label={t('createTask.category')} value={task?.category || t('taskDetailsMeta.uncategorized')} color="yellow" />
                 <MetaRow
-                  label="Due Date"
-                  value={formatDate(task?.dueDate) || 'No due date'}
-                  secondaryValue={task?.dueTime || 'No due time'}
+                  label={t('taskForm.dueDate')}
+                  value={formatDate(task?.dueDate, language) || t('taskDetailsMeta.noDueDate')}
+                  secondaryValue={task?.dueTime || t('taskDetailsMeta.noDueTime')}
                 />
               </div>
             </SectionBlock>
           </aside>
         </div>
-        {!isViewer ? <section className="mt-6 border-t border-red-500/25 pt-4"><p className="mb-2 text-xs font-black uppercase tracking-wide text-red-400">Danger zone</p><DangerButton size="sm" onClick={openDeleteDialog}>Delete Task</DangerButton></section> : null}
+        {!isViewer ? <section className="mt-6 border-t border-red-500/25 pt-4"><p className="mb-2 text-xs font-black uppercase tracking-wide text-red-400">{t('taskDetailsActions.dangerZone')}</p><DangerButton size="sm" onClick={openDeleteDialog}>{t('taskDetailsActions.deleteTask')}</DangerButton></section> : null}
 
         {error ? (
           <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
@@ -1071,11 +1071,11 @@ function normalizeDependencyPriority(priority: string): DependencyTask['priority
   return 'Medium'
 }
 
-function formatDate(value?: string) {
+function formatDate(value?: string, language: 'en' | 'ar' = 'en') {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('en-CA', {
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en-CA', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

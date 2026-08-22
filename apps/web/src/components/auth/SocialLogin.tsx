@@ -1,5 +1,6 @@
 ﻿import { lazy, memo, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { authService, type SocialAuthProvider } from '../../services/auth.service';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const GoogleIcon = lazy(() =>
   import('./SocialIcons').then((module) => ({ default: module.GoogleIcon })),
@@ -19,21 +20,6 @@ type SocialProviderConfig = {
 type SocialLoginProps = {
   disabled?: boolean;
   onError?: (message: string) => void;
-};
-
-const copy = {
-  google: {
-    label: 'Continue with Google',
-    ariaLabel: 'Continue with Google',
-  },
-  apple: {
-    label: 'Continue with Apple',
-    ariaLabel: 'Continue with Apple',
-    disabledMessage: 'Apple Sign In will be available in the production version.',
-  },
-  errors: {
-    fallback: 'Social login is unavailable. Please try again.',
-  },
 };
 
 function ProviderIcon({ provider }: { provider: SocialAuthProvider }) {
@@ -60,6 +46,7 @@ function LoadingSpinner() {
 }
 
 function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
+  const { t } = useLanguage();
   const requestInFlightRef = useRef(false);
   const [loadingProvider, setLoadingProvider] = useState<SocialAuthProvider | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -68,19 +55,19 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
     () => [
       {
         provider: 'google',
-        label: copy.google.label,
-        ariaLabel: copy.google.ariaLabel,
+        label: t('auth.continueWithGoogle'),
+        ariaLabel: t('auth.continueWithGoogle'),
         enabled: true,
       },
       {
         provider: 'apple',
-        label: copy.apple.label,
-        ariaLabel: copy.apple.ariaLabel,
+        label: t('auth.continueWithApple'),
+        ariaLabel: t('auth.continueWithApple'),
         enabled: false,
-        disabledMessage: copy.apple.disabledMessage,
+        disabledMessage: t('auth.appleComingSoonHelp'),
       },
     ],
-    [],
+    [t],
   );
 
   const handleSocialLogin = useCallback(
@@ -97,7 +84,8 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
 
         if (result.cancelled) return;
       } catch (error) {
-        const message = error instanceof Error ? error.message : copy.errors.fallback;
+        console.error('Social login failed', error);
+        const message = t('auth.socialLoginFailed');
         setErrorMessage(message);
         onError?.(message);
       } finally {
@@ -105,7 +93,7 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
         setLoadingProvider(null);
       }
     },
-    [disabled, onError],
+    [disabled, onError, t],
   );
 
   return (
@@ -129,7 +117,7 @@ function SocialLoginComponent({ disabled = false, onError }: SocialLoginProps) {
             >
               <span className="flex items-center justify-center gap-3 text-sm font-bold">
                 {isLoading ? <LoadingSpinner /> : <ProviderIcon provider={provider} />}
-                <span className="whitespace-nowrap">{enabled ? label : 'Coming Soon'}</span>
+                <span className="whitespace-nowrap">{enabled ? label : t('common.comingSoon')}</span>
               </span>
               {!enabled && <span className="sr-only">{disabledMessage}</span>}
             </button>

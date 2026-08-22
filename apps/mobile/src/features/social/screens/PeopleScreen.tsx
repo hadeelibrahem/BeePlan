@@ -95,14 +95,14 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
     setAddError('');
     const normalized = username.trim().replace(/^@+/, '').toLowerCase();
     if (!/^[a-z0-9](?:[a-z0-9_]{1,18}[a-z0-9])?$/.test(normalized)) {
-      setAddError('Enter a valid username (3–20 letters, numbers, or underscores).');
+      setAddError(t('people.addFriend.invalidUsername'));
       return;
     }
     setAddingFriend(true);
     try {
       if (!usernameMatch) {
         const found = await searchFriendByUsername(normalized);
-        if (!found) { setAddError('No BeePlan user found with that username.'); return; }
+        if (!found) { setAddError(t('people.addFriend.notFound')); return; }
         setUsernameMatch(found);
         return;
       }
@@ -228,6 +228,7 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
         <Text className="text-sm font-black" style={{ color: colors.text }}>{'←'}</Text>
       </Pressable>
 
+      <Text className="mb-1 text-2xl font-black" style={{ color: colors.text }}>{t('people.title')}</Text>
       {/* Friends */}
       <View className="mb-4 rounded-2xl border p-4" style={cardStyle}>
         <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>{t('people.friends.title')}</Text>
@@ -258,7 +259,7 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
 
       {/* Add friend */}
       <View className="mb-4 rounded-2xl border p-4" style={cardStyle}>
-        <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>Add Friend by Username</Text>
+        <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>{t('people.addFriend.title')}</Text>
         <InputField
           value={username}
           onChangeText={(v) => {
@@ -272,9 +273,9 @@ export function PeopleScreen({ onBack, onSignOut }: Props) {
         />
         {!!addError && <Text className="mb-1 text-xs" style={{ color: colors.error }}>{addError}</Text>}
         <PrimaryButton onPress={() => void handleAddFriend()} disabled={!username.trim() || addingFriend} loading={addingFriend} size="sm">
-          {usernameMatch ? 'Send Request' : 'Search'}
+          {usernameMatch ? t('people.addFriend.send') : t('people.addFriend.search')}
         </PrimaryButton>
-        {usernameMatch ? <View className="mt-3 flex-row items-center"><View className="min-w-0 flex-1"><Text className="text-sm font-bold" style={{ color: colors.text }}>{usernameMatch.fullName}</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>@{usernameMatch.username}</Text></View><Pressable onPress={() => setUsernameMatch(null)}><Text className="text-xs font-bold" style={{ color: colors.secondaryText }}>Clear</Text></Pressable></View> : null}
+        {usernameMatch ? <View className="mt-3 flex-row items-center"><View className="min-w-0 flex-1"><Text className="text-sm font-bold" style={{ color: colors.text }}>{usernameMatch.fullName}</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>@{usernameMatch.username}</Text></View><Pressable onPress={() => setUsernameMatch(null)}><Text className="text-xs font-bold" style={{ color: colors.secondaryText }}>{t('people.addFriend.clear')}</Text></Pressable></View> : null}
       </View>
 
       {/* Friend requests */}

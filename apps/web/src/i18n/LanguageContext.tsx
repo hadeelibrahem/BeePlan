@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import ar from './locales/ar.json'
 import en from './locales/en.json'
 
@@ -21,7 +21,32 @@ type LanguageContextValue = {
 }
 
 const dictionaries: Record<Language, TranslationTree> = { en, ar }
-const LanguageContext = createContext<LanguageContextValue | null>(null)
+const LANGUAGE_STORAGE_KEY = 'beeplan.language-preference'
+
+function getInitialLanguage(): Language {
+  try {
+    return window.localStorage.getItem(LANGUAGE_STORAGE_KEY) === 'ar' ? 'ar' : 'en'
+  } catch {
+    return 'en'
+  }
+}
+const fallbackLanguageContext: LanguageContextValue = {
+  language: 'en',
+  isRTL: false,
+  setLanguage: () => undefined,
+  toggleLanguage: () => undefined,
+  t: (key, params) => {
+    const raw = resolveTranslation(en, key)
+    const template = typeof raw === 'string' ? raw : key
+    return Object.entries(params ?? {}).reduce(
+      (text, [paramKey, valueParam]) => text.replaceAll(`{{${paramKey}}}`, String(valueParam)),
+      template,
+    )
+  },
+  formatNumber: (value) => new Intl.NumberFormat('en-US').format(value),
+  formatPercent: (value) => `${new Intl.NumberFormat('en-US').format(value)}%`,
+}
+const LanguageContext = createContext<LanguageContextValue>(fallbackLanguageContext)
 
 function resolveTranslation(dictionary: TranslationTree, key: string) {
   return key.split('.').reduce<TranslationValue | undefined>((current, part) => {
@@ -31,12 +56,21 @@ function resolveTranslation(dictionary: TranslationTree, key: string) {
 }
 
 export function LanguageProvider({ children }: PropsWithChildren) {
-  const [language, setLanguage] = useState<Language>('en')
+  const [language, setLanguageState] = useState<Language>(getInitialLanguage)
+
+  const setLanguage = useCallback((nextLanguage: Language) => {
+    setLanguageState(nextLanguage)
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage)
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser contexts.
+    }
+  }, [])
 
   useEffect(() => {
     document.documentElement.lang = language
     document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr'
-  }, [language])
+  }, [language, setLanguage])
 
   const value = useMemo<LanguageContextValue>(() => {
     const isRTL = language === 'ar'
@@ -46,7 +80,7 @@ export function LanguageProvider({ children }: PropsWithChildren) {
       language,
       isRTL,
       setLanguage,
-      toggleLanguage: () => setLanguage((current) => (current === 'ar' ? 'en' : 'ar')),
+      toggleLanguage: () => setLanguage(language === 'ar' ? 'en' : 'ar'),
       t: (key, params) => {
         const raw = resolveTranslation(dictionaries[language], key)
         const fallback = resolveTranslation(dictionaries.en, key)
@@ -67,8 +101,5 @@ export function LanguageProvider({ children }: PropsWithChildren) {
 
 export function useLanguage() {
   const context = useContext(LanguageContext)
-  if (!context) {
-    throw new Error('useLanguage must be used inside LanguageProvider')
-  }
   return context
 }

@@ -1,4 +1,5 @@
 import { PRIORITY_BADGE_META, STATUS_BADGE_META, type BadgeMeta } from '../lib/subtaskDisplay'
+import { useLanguage } from '../i18n/LanguageContext'
 
 const TONE_CLASS: Record<BadgeMeta['tone'], string> = {
   neutral: 'bg-[var(--bp-border)] text-[var(--bp-muted)]',
@@ -9,7 +10,11 @@ const TONE_CLASS: Record<BadgeMeta['tone'], string> = {
 }
 
 function Badge({ meta }: { meta: BadgeMeta }) {
-  return <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${TONE_CLASS[meta.tone]}`}>{meta.label}</span>
+  const { t } = useLanguage()
+  const statusKey: Record<string, string> = { todo: 'todo', 'To Do': 'todo', in_progress: 'inProgress', 'In Progress': 'inProgress', done: 'done', Done: 'done', blocked: 'blocked', Blocked: 'blocked', missed: 'missed', Missed: 'missed' }
+  const priorityKey: Record<string, string> = { low: 'low', Low: 'low', medium: 'medium', Medium: 'medium', high: 'high', High: 'high', urgent: 'urgent', Urgent: 'urgent' }
+  const key = statusKey[meta.label] ? `taskLabels.status.${statusKey[meta.label]}` : priorityKey[meta.label] ? `taskLabels.priority.${priorityKey[meta.label]}` : undefined
+  return <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${TONE_CLASS[meta.tone]}`}>{key ? t(key) : meta.label}</span>
 }
 
 export function TaskStatusBadge({ status }: { status: string }) {

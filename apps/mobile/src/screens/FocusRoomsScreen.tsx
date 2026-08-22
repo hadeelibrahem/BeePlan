@@ -12,15 +12,16 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle } from "react-native-svg";
 import {
+  DangerButton,
+  OutlineButton,
   PageHeader,
   PrimaryButton,
   SecondaryButton,
 } from "../components/layout";
 import {
   acceptCommitment,
-  joinRoom,
+  joinRoomByCode,
   listRooms,
   listInvitations,
   decideInvitation,
@@ -42,11 +43,11 @@ import {
   type RoomInvitation,
 } from "../lib/focusRoomsApi";
 import { useTheme } from "../theme/useTheme";
+import { useLanguage } from "../i18n/LanguageContext";
 import { useFocusAudio } from "../lib/useFocusAudio";
-import { FOCUS_SOUNDS } from "../lib/focusSounds";
 import { getSharedSessionRemainingMs } from "../lib/sharedSessionTiming";
-const AGREEMENT =
-  "Everyone agrees to stay until the shared session ends. If any participant leaves early, the shared session ends for everyone.";
+import { ActiveTimer, FocusSoundsSheet, UtilityButton } from "./FocusSessionScreen";
+const AGREEMENT_KEY = "sharedFocus.acceptAgreement";
 const commandId = () =>
   "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
     const n = Math.floor(Math.random() * 16);
@@ -69,6 +70,7 @@ export default function FocusRoomsScreen({
   const connectionId = useRef(commandId());
   const { theme } = useTheme(),
     c = theme.colors;
+  const { t, language } = useLanguage();
   const [rooms, setRooms] = useState<FocusRoom[]>([]),
     [room, setRoom] = useState<FocusRoom | null>(null),
     [title, setTitle] = useState(""),
@@ -84,6 +86,7 @@ export default function FocusRoomsScreen({
     [managedInvites, setManagedInvites] = useState<ManagedInvitation[]>([]),
     [notice, setNotice] = useState("");
   const [invitations, setInvitations] = useState<RoomInvitation[]>([]);
+  const [joinOpen, setJoinOpen] = useState(false), [joinCode, setJoinCode] = useState(""), [joinError, setJoinError] = useState(""), [joining, setJoining] = useState(false);
   const [controlBusy, setControlBusy] = useState(false), [controlError, setControlError] = useState(""), [pauseOpen, setPauseOpen] = useState(false), [addTimeOpen, setAddTimeOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [soundsOpen, setSoundsOpen] = useState(false);
@@ -108,7 +111,7 @@ export default function FocusRoomsScreen({
         setInvitationLoadError("");
       } catch {
         setInvitations([]);
-        setInvitationLoadError("Invitations are temporarily unavailable.");
+        setInvitationLoadError(t("sharedFocus.actionFailed"));
       }
     }
   };
@@ -116,7 +119,7 @@ export default function FocusRoomsScreen({
     const normalized = inviteEmail.trim().toLowerCase();
     setInviteError("");
     if (inviteType === "email" && !/^\S+@\S+\.\S+$/.test(normalized)) {
-      setInviteError("Enter a valid email address.");
+      setInviteError(t("sharedFocus.invalidEmail"));
       return;
     }
     setInviteLoading(true);
@@ -133,22 +136,21 @@ export default function FocusRoomsScreen({
       setNotice(
         inviteType === "email"
           ? created.emailDelivery === "failed"
-            ? "Invitation created, but the email could not be sent."
-            : `Invitation sent to ${normalized}.`
-          : "Invite link created.",
+            ? t("sharedFocus.invitationEmailFailed")
+            : t("sharedFocus.invitationSentTo", { email: normalized })
+          : t("sharedFocus.inviteLinkCreated"),
       );
       setInviteOpen(false);
       setInviteEmail("");
       await refresh();
     } catch (cause) {
-      setInviteError(
-        cause instanceof Error ? cause.message : "Could not create invitation.",
-      );
+      console.error("[SharedFocus] invitation creation failed", cause);
+      setInviteError(t("sharedFocus.invitationFailed"));
     } finally {
       setInviteLoading(false);
     }
   };
-  const sharedControl = async (action: () => Promise<FocusRoom>, allowed = true) => { if (!allowed || isTerminalStatus(room?.commitment?.status)) { await refresh().catch(() => undefined); return; } setControlBusy(true); setControlError(""); try { setRoom(await action()); await refresh(); } catch (cause) { if (cause instanceof Error && cause.message.includes("This shared session has ended")) terminalSync.current = true; setControlError(cause instanceof Error ? cause.message : "Unable to update the shared session."); await refresh().catch(() => undefined); } finally { setControlBusy(false); } };
+  const sharedControl = async (action: () => Promise<FocusRoom>, allowed = true) => { if (!allowed || isTerminalStatus(room?.commitment?.status)) { void refresh().catch(() => undefined); return; } setControlBusy(true); setControlError(""); try { setRoom(await action()); } catch (cause) { if (cause instanceof Error && cause.message.includes("This shared session has ended")) terminalSync.current = true; console.error("[SharedFocus] control failed", cause); setControlError(t("sharedFocus.actionFailed")); void refresh().catch(() => undefined); } finally { setControlBusy(false); } };
   useEffect(() => {
     if (room?.commitment?.pausedAt) setNow(new Date(room.commitment.pausedAt).getTime());
     const timer = setInterval(() => { if (!room?.commitment?.pausedAt) setNow(Date.now()); }, 1000);
@@ -202,30 +204,33 @@ export default function FocusRoomsScreen({
     return (
       <View className="flex-1 p-4" style={{ backgroundColor: c.background }}>
         <PageHeader
-          title="Shared Focus Sessions"
-          subtitle="Start together, stay synchronized, finish together"
+          title={t("sharedFocus.sessions")}
+          subtitle={t("sharedFocus.subtitle")}
           onBack={onBack}
         />
         <View className="mb-4 gap-3">
+          <SecondaryButton fullWidth onPress={() => { setJoinOpen(true); setJoinError(""); }}>
+            {t("sharedFocus.joinWithCode")}
+          </SecondaryButton>
           <TextInput
-            accessibilityLabel="Room title"
+            accessibilityLabel={t("sharedFocus.roomTitle")}
             value={title}
             onChangeText={setTitle}
-            placeholder="Room title"
+            placeholder={t("sharedFocus.roomTitle")}
             placeholderTextColor={c.secondaryText}
             className="min-h-12 rounded-xl border px-4"
             style={{ borderColor: c.border, color: c.text }}
           />
-          <Text className="font-bold" style={{ color: c.text }}>Session duration</Text>
+          <Text className="font-bold" style={{ color: c.text }}>{t("sharedFocus.duration")}</Text>
           <View className="flex-row gap-2">
             {[25, 50, 90].map((minutes) => (
               <Pressable key={minutes} accessibilityRole="button" accessibilityState={{ selected: durationMinutes === minutes }} onPress={() => setDurationMinutes(minutes)} className="min-h-12 flex-1 items-center justify-center rounded-xl border" style={{ borderColor: durationMinutes === minutes ? c.accent : c.border, backgroundColor: durationMinutes === minutes ? c.card : "transparent" }}>
-                <Text className="font-bold" style={{ color: c.text }}>{minutes} min</Text>
+                <Text className="font-bold" style={{ color: c.text }}>{t("sharedFocus.minutes", { count: minutes })}</Text>
               </Pressable>
             ))}
           </View>
-          <TextInput accessibilityLabel="Custom duration in minutes" keyboardType="number-pad" value={String(durationMinutes)} onChangeText={(value) => setDurationMinutes(Number(value.replace(/\D/g, "")))} placeholder="Custom duration in minutes" placeholderTextColor={c.secondaryText} className="min-h-12 rounded-xl border px-4" style={{ borderColor: c.border, color: c.text }} />
-          <TextInput accessibilityLabel="Goal label optional" value={goalLabel} onChangeText={setGoalLabel} maxLength={160} placeholder="Goal label (optional)" placeholderTextColor={c.secondaryText} className="min-h-12 rounded-xl border px-4" style={{ borderColor: c.border, color: c.text }} />
+          <TextInput accessibilityLabel={t("sharedFocus.customDuration")} keyboardType="number-pad" value={String(durationMinutes)} onChangeText={(value) => setDurationMinutes(Number(value.replace(/\D/g, "")))} placeholder={t("sharedFocus.customDuration")} placeholderTextColor={c.secondaryText} className="min-h-12 rounded-xl border px-4" style={{ borderColor: c.border, color: c.text }} />
+          <TextInput accessibilityLabel={t("sharedFocus.goalOptional")} value={goalLabel} onChangeText={setGoalLabel} maxLength={160} placeholder={t("sharedFocus.goalOptional")} placeholderTextColor={c.secondaryText} className="min-h-12 rounded-xl border px-4" style={{ borderColor: c.border, color: c.text }} />
           <PrimaryButton
             disabled={!title.trim() || durationMinutes < 1 || durationMinutes > 480}
             onPress={() =>
@@ -238,7 +243,7 @@ export default function FocusRoomsScreen({
                 .then(setRoom)
             }
           >
-            Create Session
+            {t("sharedFocus.createSession")}
           </PrimaryButton>
         </View>
         {invitationLoadError ? (
@@ -260,7 +265,7 @@ export default function FocusRoomsScreen({
               {roomTitle}
             </Text>
             <Text className="mb-3 mt-1" style={{ color: c.secondaryText }}>
-              Shared focus session invitation
+                {t("sharedFocus.sessions")}
             </Text>
             <View className="flex-row gap-2">
               <SecondaryButton
@@ -272,7 +277,7 @@ export default function FocusRoomsScreen({
                   ).then(refresh)
                 }
               >
-                Reject
+                {t("sharedFocus.reject")}
               </SecondaryButton>
               <PrimaryButton
                 onPress={() =>
@@ -281,7 +286,7 @@ export default function FocusRoomsScreen({
                     .then(setRoom)
                 }
               >
-                Accept
+                {t("sharedFocus.accept")}
               </PrimaryButton>
             </View>
           </View>
@@ -300,17 +305,41 @@ export default function FocusRoomsScreen({
                 <Text className="font-black" style={{ color: c.text }}>
                   {item.title}
                 </Text>
-                <Text style={{ color: c.text }}>Shared session</Text>
+                <Text style={{ color: c.text }}>{t("sharedFocus.sharedFocus")}</Text>
               </View>
               <Text className="mt-2" style={{ color: c.secondaryText }}>
-                Leaving early ends the shared session for everyone.
+                {t("sharedFocus.collectiveEndHelp")}
               </Text>
               <Text className="mt-2" style={{ color: c.text }}>
-                {item.members.length} participants
+                {t("sharedFocus.participantsCount", { count: item.members.length })}
               </Text>
             </Pressable>
           )}
         />
+        <Modal visible={joinOpen} transparent animationType="slide" onRequestClose={() => setJoinOpen(false)}>
+          <View className="flex-1 justify-end bg-black/60">
+            <View className="rounded-t-3xl border p-6" style={{ backgroundColor: c.surfaceElevated, borderColor: c.border }}>
+              <Text className="text-xl font-black" style={{ color: c.text }}>{t("sharedFocus.joinTitle")}</Text>
+              <Text className="mt-2" style={{ color: c.secondaryText }}>{t("sharedFocus.joinDescription")}</Text>
+              <TextInput
+                accessibilityLabel={t("sharedFocus.sessionCode")}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                value={joinCode}
+                onChangeText={(value) => setJoinCode(value.toUpperCase().replace(/\s/g, ""))}
+              placeholder="BEE-7K4M"
+                placeholderTextColor={c.secondaryText}
+                className="mt-4 min-h-12 rounded-xl border px-4 font-mono"
+                style={{ borderColor: c.border, color: c.text, writingDirection: "ltr" }}
+              />
+              {joinError ? <Text accessibilityRole="alert" className="mt-3" style={{ color: c.error }}>{joinError}</Text> : null}
+              <View className="mt-5 flex-row gap-3">
+                <View className="flex-1"><SecondaryButton fullWidth disabled={joining} onPress={() => setJoinOpen(false)}>{t('common.cancel')}</SecondaryButton></View>
+                <View className="flex-1"><PrimaryButton fullWidth disabled={joining || !joinCode.trim()} onPress={() => { setJoining(true); setJoinError(""); void joinRoomByCode(accessToken, joinCode).then((joined) => { setJoinOpen(false); setJoinCode(""); setRoom(joined); }).catch(() => setJoinError(t("sharedFocus.joinFailed"))).finally(() => setJoining(false)); }}>{t("sharedFocus.joinSession")}</PrimaryButton></View>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   const active =
@@ -324,15 +353,11 @@ export default function FocusRoomsScreen({
   const totalSeconds = Math.max(1, (room.commitment?.durationMinutes ?? 1) * 60);
   const activeProgress = Math.max(0, Math.min(1, 1 - activeRemainingSeconds / totalSeconds));
   return (
-    <SafeAreaView edges={["top", "bottom", "left", "right"]} className="flex-1" style={{ backgroundColor: active ? "#0f172a" : c.background }}>
+    <SafeAreaView edges={["top", "bottom", "left", "right"]} className="flex-1" style={{ backgroundColor: c.background }}>
       {!active && <View className="border-b p-4" style={{ borderColor: c.border }}>
         <PageHeader
           title={room.title}
-          subtitle={
-            room.mode === "commitment"
-              ? "🔒 Leaving early ends the session for everyone"
-              : "Join or leave at any time"
-          }
+            subtitle={t("sharedFocus.collectiveEndHelp")}
           onBack={() => (active ? setLeaveOpen(true) : setRoom(null))}
         />
       </View>}
@@ -355,47 +380,40 @@ export default function FocusRoomsScreen({
               className="text-center text-xl font-black"
               style={{ color: c.text }}
             >
-              {room.commitment?.status === "completed" ? "Shared Focus Session Complete" : "Session ended early"}
+              {room.commitment?.status === "completed" ? t("sharedFocus.complete") : t("sharedFocus.sessionUnavailable")}
             </Text>
             <Text
               className="mt-3 text-center"
               style={{ color: c.secondaryText }}
             >
-              {room.commitment?.status === "completed"
-                ? "Great work — everyone completed the session."
-                : room.commitment?.endReason === "owner_ended_session"
-                  ? "The session was ended by the owner."
-                  : (() => {
-                      const actor = room.members.find((member) => member.userId === room.commitment?.endedByUserId);
-                      return actor && !actor.anonymous ? `The session ended because ${actor.displayName} left.` : "The session ended because a participant left.";
-                    })()}
+              {room.commitment?.status === "completed" ? t("sharedFocus.complete") : t("sharedFocus.sessionUnavailable")}
             </Text>
-            {room.commitment?.goalLabel ? <Text className="mt-4 text-center font-bold" style={{ color: c.text }}>Goal: {room.commitment.goalLabel}</Text> : null}
+            {room.commitment?.goalLabel ? <Text className="mt-4 text-center font-bold" style={{ color: c.text }}>{t("sharedFocus.goal", { goal: room.commitment.goalLabel })}</Text> : null}
             <View className="mt-5 gap-2">
-              <Text style={{ color: c.text }}>Planned duration: {room.commitment?.durationMinutes} minutes</Text>
-              <Text style={{ color: c.text }}>Actual shared focus: {Math.max(0, Math.floor((new Date(room.commitment?.endedAt ?? Date.now()).getTime() - new Date(room.commitment?.startedAt ?? room.commitment?.endedAt ?? Date.now()).getTime()) / 60000))} minutes</Text>
-              <Text style={{ color: c.text }}>Participants: {room.members.length}</Text>
-              {room.commitment?.startedAt ? <Text style={{ color: c.text }}>Start time: {new Date(room.commitment.startedAt).toLocaleTimeString()}</Text> : null}
-              {room.commitment?.endedAt ? <Text style={{ color: c.text }}>End time: {new Date(room.commitment.endedAt).toLocaleTimeString()}</Text> : null}
-              {room.commitment?.status !== "completed" ? <Text style={{ color: c.text }}>Remaining at termination: {Math.max(0, room.commitment!.durationMinutes - Math.floor((new Date(room.commitment!.endedAt ?? Date.now()).getTime() - new Date(room.commitment!.startedAt ?? room.commitment!.endedAt ?? Date.now()).getTime()) / 60000))} minutes</Text> : null}
-              {room.commitment?.status !== "completed" ? <Text style={{ color: c.text }}>End reason: {(room.commitment!.endReason ?? "cancelled before start").replaceAll("_", " ")}</Text> : null}
+              <Text style={{ color: c.text }}>{t("sharedFocus.plannedDuration")}: {t("sharedFocus.minutes", { count: room.commitment?.durationMinutes ?? 0 })}</Text>
+              <Text style={{ color: c.text }}>{t("sharedFocus.actualFocus")}: {t("sharedFocus.minutes", { count: Math.max(0, Math.floor((new Date(room.commitment?.endedAt ?? Date.now()).getTime() - new Date(room.commitment?.startedAt ?? room.commitment?.endedAt ?? Date.now()).getTime()) / 60000)) })}</Text>
+              <Text style={{ color: c.text }}>{t("sharedFocus.participants")}: {room.members.length}</Text>
+              {room.commitment?.startedAt ? <Text style={{ color: c.text }}>{t("sharedFocus.startTime")}: {new Date(room.commitment.startedAt).toLocaleTimeString()}</Text> : null}
+              {room.commitment?.endedAt ? <Text style={{ color: c.text }}>{t("sharedFocus.endTime")}: {new Date(room.commitment.endedAt).toLocaleTimeString()}</Text> : null}
+              {room.commitment?.status !== "completed" ? <Text style={{ color: c.text }}>{t("sharedFocus.actualFocus")}: {t("sharedFocus.minutes", { count: Math.max(0, room.commitment!.durationMinutes - Math.floor((new Date(room.commitment!.endedAt ?? Date.now()).getTime() - new Date(room.commitment!.startedAt ?? room.commitment!.endedAt ?? Date.now()).getTime()) / 60000)) })}</Text> : null}
+              {room.commitment?.status !== "completed" ? <Text style={{ color: c.text }}>{t("sharedFocus.sessionUnavailable")}</Text> : null}
             </View>
-            <Text className="mt-5 font-black" style={{ color: c.text }}>Participant focus</Text>
-            {room.members.map((member) => <Text key={member.userId} className="mt-2" style={{ color: c.text }}>{member.displayName}: {member.focusedDurationMinutes ?? 0} minutes</Text>)}
-            <View className="mt-6"><PrimaryButton fullWidth onPress={onBack}>Return to Shared Focus Sessions</PrimaryButton></View>
+            <Text className="mt-5 font-black" style={{ color: c.text }}>{t("sharedFocus.participants")}</Text>
+            {room.members.map((member) => <Text key={member.userId} className="mt-2" style={{ color: c.text }}>{member.displayName}: {t("sharedFocus.minutes", { count: member.focusedDurationMinutes ?? 0 })}</Text>)}
+            <View className="mt-6"><PrimaryButton fullWidth onPress={onBack}>{t("sharedFocus.returnToSessions")}</PrimaryButton></View>
           </View>
         ) : active ? (
-          <View testID="shared-focus-active" className="min-h-full flex-1 items-center justify-center px-5 py-8" style={{ backgroundColor: room.commitment?.pausedAt ? "#0f172a" : "#0f172a" }}>
-            <Text className="text-sm font-black tracking-widest" style={{ color: room.commitment?.pausedAt ? "#93c5fd" : "#fde68a" }}>SHARED FOCUS SESSION</Text>
-            {room.commitment?.goalLabel ? <Text className="mt-3 text-center text-2xl font-black" style={{ color: c.text }}>{room.commitment.goalLabel}</Text> : null}
-            <View className="relative mt-8 size-72 items-center justify-center"><View className="absolute size-56 rounded-full" style={{ backgroundColor: room.commitment?.pausedAt ? "#3b82f6" : "#fbbf24", opacity: 0.13, shadowColor: room.commitment?.pausedAt ? "#60a5fa" : "#fbbf24", shadowOpacity: 0.55, shadowRadius: 32 }} /><Svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: "absolute", transform: [{ rotate: "-90deg" }] }}><Circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="2" /><Circle cx="50" cy="50" r="45" fill="none" stroke={room.commitment?.pausedAt ? "#60a5fa" : "#fbbf24"} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${activeProgress * 283} 283`} /></Svg><Text className="text-6xl font-black" style={{ color: "#fff" }}>{`${Math.floor(activeRemainingSeconds / 60).toString().padStart(2, "0")}:${(activeRemainingSeconds % 60).toString().padStart(2, "0")}`}</Text><Text className="mt-2 text-xs font-bold uppercase tracking-widest" style={{ color: room.commitment?.pausedAt ? "#93c5fd" : "#fde68a" }}>{room.commitment?.pausedAt ? "Paused for everyone" : `Focusing together · ${Math.round(activeProgress * 100)}%`}</Text></View>
-            <Text className="mt-3" style={{ color: c.secondaryText }}>{room.commitment?.durationMinutes} minutes · {room.members.length} participants</Text>
-            <View className="mt-6 w-full gap-2">{room.members.map((member) => <View key={member.userId} className="flex-row items-center justify-between rounded-xl border px-4 py-3" style={{ borderColor: c.border }}><Text style={{ color: c.text }}>{member.displayName}</Text><Text style={{ color: c.secondaryText }}>{member.state === "offline" ? "Reconnecting…" : "Focusing"}</Text></View>)}</View>
-            <View className="mt-5 w-full rounded-2xl border p-3" style={{ borderColor: c.border }}><SecondaryButton fullWidth onPress={() => setSoundsOpen(true)}>🔊 {focusAudio.activeSound?.name ?? "Focus sounds"}</SecondaryButton></View>
-            <Text className="mt-5 text-center" style={{ color: c.secondaryText }}>Leaving, finishing, or cancelling ends this shared session for everyone.</Text>
-             <View className="mt-5"><PrimaryButton onPress={() => setLeaveOpen(true)}>Finish for everyone</PrimaryButton></View>
-            {controlError ? <Text className="mt-3 text-center" style={{ color: c.error }}>{controlError}</Text> : null}
-            <View className="mt-3 flex-row gap-2"><SecondaryButton disabled={controlBusy} onPress={() => room.commitment?.pausedAt ? void sharedControl(() => resumeCommitment(accessToken, room.commitment!.id), room.commitment?.status === "active" && Boolean(room.commitment?.pausedAt)) : setPauseOpen(true)}>{room.commitment?.pausedAt ? "Resume" : "Pause"}</SecondaryButton>{room.ownerUserId === room.currentUserId ? <SecondaryButton disabled={controlBusy || Boolean(room.commitment?.pausedAt)} onPress={() => setAddTimeOpen(true)}>Add time</SecondaryButton> : null}</View>
+          <View testID="shared-focus-active" className="min-h-full flex-1 items-center justify-between px-6 pb-8 pt-14" style={{ backgroundColor: c.background }}>
+            <View className="w-full items-center">
+              <ActiveTimer theme={theme} title={room.commitment?.goalLabel ?? room.title} typeLabel={t("sharedFocus.participantsCount", { count: room.members.length })} subtitle={null} priority={null} category={null} center={`${Math.floor(activeRemainingSeconds / 60).toString().padStart(2, "0")}:${(activeRemainingSeconds % 60).toString().padStart(2, "0")}`} fraction={activeProgress} status={room.commitment?.pausedAt ? t("sharedFocus.pausedForEveryone") : t("focusUi.percentComplete", { percent: Math.round(activeProgress * 100) })} />
+              <View className="mt-6 w-full gap-2">
+                {room.commitment?.pausedAt ? <PrimaryButton fullWidth disabled={controlBusy} onPress={() => void sharedControl(() => resumeCommitment(accessToken, room.commitment!.id), room.commitment?.status === "active")}>{t("sharedFocus.resume")}</PrimaryButton> : <SecondaryButton fullWidth disabled={controlBusy} onPress={() => setPauseOpen(true)}>{t("sharedFocus.pause")}</SecondaryButton>}
+                <View className="flex-row gap-2"><View className="flex-1"><PrimaryButton fullWidth disabled={controlBusy} onPress={() => setLeaveOpen(true)}>{t("sharedFocus.finish")}</PrimaryButton></View><View className="flex-1"><DangerButton fullWidth disabled={controlBusy} onPress={() => setLeaveOpen(true)}>{t("common.cancel")}</DangerButton></View></View>
+                {room.ownerUserId === room.currentUserId ? <OutlineButton fullWidth disabled={controlBusy || Boolean(room.commitment?.pausedAt)} onPress={() => setAddTimeOpen(true)}>{t("sharedFocus.addTime")}</OutlineButton> : null}
+              </View>
+              {controlError ? <Text className="mt-3 text-center" style={{ color: c.error }}>{controlError}</Text> : null}
+            </View>
+            <View className="flex-row flex-wrap items-center justify-center gap-1"><UtilityButton theme={theme} label={t("sharedFocus.whiteNoise")} onPress={() => setSoundsOpen(true)} /><UtilityButton theme={theme} label={t("sharedFocus.ambient")} onPress={() => setSoundsOpen(true)} />{focusAudio.activeSound && focusAudio.isPlaying ? <Text className="px-2 text-xs font-bold" style={{ color: c.secondaryText }}>{focusAudio.activeSound.name}</Text> : null}<UtilityButton theme={theme} label={t("sharedFocus.exitFocus")} accent onPress={() => setLeaveOpen(true)} /></View>
           </View>
         ) : (
           <>
@@ -404,7 +422,7 @@ export default function FocusRoomsScreen({
               style={{ borderColor: c.border, backgroundColor: c.card }}
             >
               <Text className="text-5xl font-black" style={{ color: c.text }}>
-                {active ? "In focus" : "Ready"}
+                {active ? t("sharedFocus.sharedFocus") : t("sharedFocus.ready")}
               </Text>
               {room.mode === "commitment" && room.commitment && !active ? (
                 <View
@@ -412,19 +430,18 @@ export default function FocusRoomsScreen({
                   style={{ borderColor: c.accent }}
                 >
                   <Text className="font-black" style={{ color: c.text }}>
-                    Commitment agreement
+                    {t("sharedFocus.commitmentAgreement")}
                   </Text>
                   <Text className="my-3" style={{ color: c.text }}>
-                    {AGREEMENT}
+                    {t(AGREEMENT_KEY)}
                   </Text>
                   <Text style={{ color: c.secondaryText }}>
-                    {room.commitment.durationMinutes} minutes ·{" "}
-                    {room.commitment.reconnectGraceSeconds}s reconnect grace
+                    {t("sharedFocus.minutes", { count: room.commitment.durationMinutes })} · {t("sharedFocus.minutes", { count: room.commitment.reconnectGraceSeconds })}
                   </Text>
                   <View className="my-3 min-h-12 flex-row items-center justify-between">
-                    <Text style={{ color: c.text }}>I explicitly accept</Text>
+                    <Text style={{ color: c.text }}>{t("sharedFocus.acceptAgreement")}</Text>
                     <Switch
-                      accessibilityLabel="Accept commitment agreement"
+                      accessibilityLabel={t("sharedFocus.acceptAgreement")}
                       value={accepted}
                       onValueChange={setAccepted}
                     />
@@ -443,10 +460,10 @@ export default function FocusRoomsScreen({
                     {room.members.find(
                       (member) => member.userId === room.currentUserId,
                     )?.ready
-                      ? "Ready ✓"
-                      : "I'm Ready"}
+                      ? `${t("sharedFocus.ready")} ✓`
+                      : t("sharedFocus.imReady")}
                   </PrimaryButton>
-                  {room.ownerUserId === room.currentUserId ? <PrimaryButton disabled={!allReady} fullWidth onPress={() => void startCommitment(accessToken, room.commitment!.id).then(setRoom).catch((error: unknown) => setControlError(error instanceof Error ? error.message : "Unable to start session."))}>Start Session</PrimaryButton> : null}
+                  {room.ownerUserId === room.currentUserId ? <PrimaryButton disabled={!allReady} fullWidth onPress={() => void startCommitment(accessToken, room.commitment!.id).then(setRoom).catch(() => setControlError(t("sharedFocus.actionFailed")))}>{t("sharedFocus.startSession")}</PrimaryButton> : null}
                 </View>
               ) : room.mode === "commitment" && !room.commitment ? (
                 <View className="mt-4">
@@ -455,7 +472,7 @@ export default function FocusRoomsScreen({
                       void makeCommitment(accessToken, room.id).then(refresh)
                     }
                   >
-                    Set Up Commitment Session
+                    {t("sharedFocus.createSession")}
                   </PrimaryButton>
                 </View>
               ) : null}
@@ -470,7 +487,7 @@ export default function FocusRoomsScreen({
                     className="text-lg font-black"
                     style={{ color: c.text }}
                   >
-                    Pending Invitations
+                    {t("sharedFocus.pendingInvitations")}
                   </Text>
                   <PrimaryButton
                     size="sm"
@@ -479,7 +496,7 @@ export default function FocusRoomsScreen({
                       setInviteError("");
                     }}
                   >
-                    Create invite
+                    {t("sharedFocus.createInvite")}
                   </PrimaryButton>
                 </View>
                 {managedInvites.length ? (
@@ -490,11 +507,11 @@ export default function FocusRoomsScreen({
                       style={{ borderColor: c.border }}
                     >
                       <Text className="font-bold" style={{ color: c.text }}>
-                        {invite.label ?? "Invite link"}
+                        {invite.label ?? t("sharedFocus.createInvite")}
                       </Text>
                       <Text style={{ color: c.secondaryText }}>
-                        {invite.status} · expires{" "}
-                        {new Date(invite.expiresAt).toLocaleString()}
+                        {t("sharedFocus.pendingInvitations")}
+                        {new Date(invite.expiresAt).toLocaleString(language === "ar" ? "ar" : "en")}
                       </Text>
                       {invite.status === "pending" ? (
                         <SecondaryButton
@@ -504,14 +521,14 @@ export default function FocusRoomsScreen({
                             )
                           }
                         >
-                          Revoke
+                          {t("sharedFocus.revoke")}
                         </SecondaryButton>
                       ) : null}
                     </View>
                   ))
                 ) : (
                   <Text className="mt-3" style={{ color: c.secondaryText }}>
-                    No invitations yet.
+                    {t("sharedFocus.noPendingInvitations")}
                   </Text>
                 )}
               </View>
@@ -520,54 +537,37 @@ export default function FocusRoomsScreen({
               className="mb-3 mt-6 text-lg font-black"
               style={{ color: c.text }}
             >
-              Participants
+              {t("sharedFocus.participants")}
             </Text>
             {room.members.map((m) => (
               <View
                 key={m.userId}
-                className="mb-2 min-h-12 flex-row items-center justify-between rounded-xl border px-4"
-                style={{ borderColor: c.border }}
+                className="mb-2 flex-row items-center justify-between rounded-xl border px-3 py-2"
+                style={{ borderColor: c.border, backgroundColor: c.card }}
               >
-                <Text style={{ color: c.text }}>{m.displayName}</Text>
-                <Text style={{ color: c.secondaryText }}>
-                  {m.ready
-                    ? "Ready"
-                    : m.state
-                        .replaceAll("_", " ")
-                        .replace(/^./, (value) => value.toUpperCase())}
-                </Text>
+                <View className="flex-row items-center gap-3"><View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: c.accentSoft }}><Text className="font-black" style={{ color: c.accentInk }}>{m.displayName.trim().slice(0, 1).toUpperCase()}</Text></View><View><Text className="font-bold" style={{ color: c.text }}>{m.displayName}{m.userId === room.currentUserId ? ` · ${t("sharedFocus.you")}` : ""}</Text><Text className="text-xs" style={{ color: c.secondaryText }}>{m.userId === room.ownerUserId ? t("sharedFocus.owner") : t("sharedFocus.participant")}</Text></View></View>
+                <Text className="text-xs font-bold" style={{ color: m.ready ? c.success : c.secondaryText }}>{m.ready ? t("sharedFocus.ready") : t("sharedFocus.preparing")}</Text>
               </View>
             ))}
-            {!room.isCurrentUserMember ? (
-              <View className="mt-4">
-                <SecondaryButton
-                  fullWidth
-                  onPress={() =>
-                    void joinRoom(accessToken, room.id).then(setRoom)
-                  }
-                >
-                  Join Session
-                </SecondaryButton>
-              </View>
-            ) : null}
+            {!room.isCurrentUserMember ? <Text className="mt-4" style={{ color: c.error }}>{t("sharedFocus.sessionUnavailable")}</Text> : null}
           </>
         )}
       </ScrollView>
-      <View className="absolute bottom-4 left-4 right-4">
+      {!terminal && !active ? <View className="absolute bottom-4 left-4 right-4">
         <PrimaryButton
           fullWidth
           onPress={() => (active ? setLeaveOpen(true) : setRoom(null))}
         >
-          Leave session
+          {t("sharedFocus.leave")}
         </PrimaryButton>
-      </View>
+      </View> : null}
       <Modal
         visible={pauseOpen}
         transparent
         animationType="slide"
         onRequestClose={() => setPauseOpen(false)}
       >
-        <View className="flex-1 justify-end bg-black/60"><View className="rounded-t-3xl p-6" style={{ backgroundColor: c.card }}><Text className="text-xl font-black" style={{ color: c.text }}>Pause this shared session for everyone?</Text><View className="mt-5 gap-3"><PrimaryButton disabled={controlBusy} fullWidth onPress={() => { setPauseOpen(false); if (room.commitment) void sharedControl(() => pauseCommitment(accessToken, room.commitment!.id), room.commitment.status === "active" && !room.commitment.pausedAt); }}>Pause for everyone</PrimaryButton><SecondaryButton fullWidth onPress={() => setPauseOpen(false)}>Keep focusing</SecondaryButton></View></View></View>
+        <View className="flex-1 justify-end bg-black/60"><View className="rounded-t-3xl p-6" style={{ backgroundColor: c.card }}><Text className="text-xl font-black" style={{ color: c.text }}>{t("sharedFocus.pauseEveryoneTitle")}</Text><View className="mt-5 gap-3"><PrimaryButton disabled={controlBusy} fullWidth onPress={() => { setPauseOpen(false); if (room.commitment) void sharedControl(() => pauseCommitment(accessToken, room.commitment!.id), room.commitment.status === "active" && !room.commitment.pausedAt); }}>{t("sharedFocus.pauseEveryone")}</PrimaryButton><SecondaryButton fullWidth onPress={() => setPauseOpen(false)}>{t("sharedFocus.keepFocusing")}</SecondaryButton></View></View></View>
       </Modal>
       <Modal
         visible={addTimeOpen}
@@ -575,7 +575,7 @@ export default function FocusRoomsScreen({
         animationType="slide"
         onRequestClose={() => setAddTimeOpen(false)}
       >
-        <View className="flex-1 justify-end bg-black/60"><View className="rounded-t-3xl p-6" style={{ backgroundColor: c.card }}><Text className="text-xl font-black" style={{ color: c.text }}>Add time to this session for everyone?</Text><View className="mt-5 gap-3">{[5, 10, 15].map((minutes) => <PrimaryButton key={minutes} disabled={controlBusy} fullWidth onPress={() => { setAddTimeOpen(false); if (room.commitment) void sharedControl(() => extendCommitment(accessToken, room.commitment!.id, minutes)); }}>+{minutes} minutes</PrimaryButton>)}<SecondaryButton fullWidth onPress={() => setAddTimeOpen(false)}>Cancel</SecondaryButton></View></View></View>
+        <View className="flex-1 justify-end bg-black/60"><View className="rounded-t-3xl p-6" style={{ backgroundColor: c.card }}><Text className="text-xl font-black" style={{ color: c.text }}>{t("sharedFocus.addTimeTitle")}</Text><View className="mt-5 gap-3">{[5, 10, 15].map((minutes) => <PrimaryButton key={minutes} disabled={controlBusy} fullWidth onPress={() => { setAddTimeOpen(false); if (room.commitment) void sharedControl(() => extendCommitment(accessToken, room.commitment!.id, minutes)); }}>+{t("sharedFocus.minutes", { count: minutes })}</PrimaryButton>)}<SecondaryButton fullWidth onPress={() => setAddTimeOpen(false)}>{t("common.cancel")}</SecondaryButton></View></View></View>
       </Modal>
       <Modal
         visible={inviteOpen}
@@ -593,25 +593,25 @@ export default function FocusRoomsScreen({
               className="text-2xl font-black"
               style={{ color: c.text }}
             >
-              Invite someone to this Shared Focus Session
+              {t("sharedFocus.sessions")}
             </Text>
             <View className="mt-4 flex-row gap-2">
               <SecondaryButton onPress={() => setInviteType("email")}>
-                Invite by email
+                {t("sharedFocus.joinWithCode")}
               </SecondaryButton>
               <SecondaryButton onPress={() => setInviteType("link")}>
-                Create invite link
+                {t("sharedFocus.createInvite")}
               </SecondaryButton>
             </View>
             {inviteType === "email" ? (
               <TextInput
                 autoFocus
-                accessibilityLabel="Email address"
+                accessibilityLabel={t("auth.emailAddress")}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={inviteEmail}
                 onChangeText={setInviteEmail}
-                placeholder="name@example.com"
+                placeholder={t("auth.emailPlaceholder")}
                 placeholderTextColor={c.secondaryText}
                 className="mt-4 min-h-12 rounded-xl border px-4"
                 style={{ color: c.text, borderColor: c.border }}
@@ -624,7 +624,7 @@ export default function FocusRoomsScreen({
                   backgroundColor: c.background,
                 }}
               >
-                Create a separate secure link. Empty email never creates a link.
+                {t("sharedFocus.subtitle")}
               </Text>
             )}
             {inviteError ? (
@@ -646,14 +646,13 @@ export default function FocusRoomsScreen({
                 onPress={() => void sendInvite()}
               >
                 {inviteLoading
-                  ? "Sending…"
+                  ? t("sharedFocus.createInvite")
                   : inviteType === "email"
-                    ? "Send Invite"
-                    : "Create Invite Link"}
+                    ? t("sharedFocus.createInvite")
+                    : t("sharedFocus.createInvite")}
               </PrimaryButton>
               <SecondaryButton fullWidth onPress={() => setInviteOpen(false)}>
-                Cancel
-              </SecondaryButton>
+                {t('common.cancel')}</SecondaryButton>
             </View>
           </View>
         </View>
@@ -674,18 +673,17 @@ export default function FocusRoomsScreen({
               className="text-2xl font-black"
               style={{ color: c.text }}
             >
-              End the session for everyone?
+              {t("sharedFocus.endEveryoneTitle")}
             </Text>
             <Text className="my-4" style={{ color: c.text }}>
-              You agreed to stay until the shared session ends. Leaving now will
-              end the Commitment Session for all participants.
+              {t("sharedFocus.collectiveEndHelp")}
             </Text>
             <Text style={{ color: c.secondaryText }}>
-              Affected participants: {room.members.length}
+              {t("sharedFocus.affectedParticipants", { count: room.members.length })}
             </Text>
             <View className="mt-5 gap-3">
               <SecondaryButton fullWidth onPress={() => setLeaveOpen(false)}>
-                Stay in Session
+                {t("sharedFocus.stayInSession")}
               </SecondaryButton>
               <PrimaryButton
                 fullWidth
@@ -696,22 +694,19 @@ export default function FocusRoomsScreen({
                       setLeaveOpen(false);
                       onBack();
                     })
-                    .catch((e) =>
-                      setNotice(
-                        e instanceof Error
-                          ? e.message
-                          : "Could not end session.",
-                      ),
-                    );
+                    .catch((e) => {
+                      console.error("[SharedFocus] termination failed", e);
+                      setNotice(t("sharedFocus.actionFailed"));
+                    });
                 }}
               >
-                End for Everyone
+                {t("sharedFocus.endForEveryone")}
               </PrimaryButton>
             </View>
           </View>
         </View>
       </Modal>
-      <Modal visible={soundsOpen} animationType="slide" onRequestClose={() => setSoundsOpen(false)}><View className="flex-1 p-5" style={{ backgroundColor: c.background }}><PageHeader title="FOCUS SOUNDS" subtitle={focusAudio.activeSound?.name ?? "Choose an ambient sound"} onBack={() => setSoundsOpen(false)} /><ScrollView contentContainerStyle={{ paddingBottom: 100 }}>{FOCUS_SOUNDS.map(sound => <Pressable key={sound.id} onPress={() => focusAudio.isPlaying && focusAudio.activeSound?.id === sound.id ? focusAudio.pause() : void focusAudio.play(sound)} className="mt-3 rounded-2xl border p-4" style={{ borderColor: focusAudio.activeSound?.id === sound.id ? c.accent : c.border }}><Text className="font-black" style={{ color: c.text }}>{sound.icon} {sound.name}</Text><Text style={{ color: c.secondaryText }}>{sound.category}</Text></Pressable>)}</ScrollView><View className="absolute bottom-0 left-0 right-0 flex-row gap-2 border-t p-4" style={{ borderColor: c.border, backgroundColor: c.background }}><SecondaryButton onPress={focusAudio.toggleMuted}>{focusAudio.muted ? "Unmute" : "Mute"}</SecondaryButton><SecondaryButton onPress={focusAudio.stop}>Stop</SecondaryButton><PrimaryButton onPress={() => setSoundsOpen(false)}>Close</PrimaryButton></View></View></Modal>
+      <FocusSoundsSheet visible={soundsOpen} theme={theme} activeSound={focusAudio.activeSound} isPlaying={focusAudio.isPlaying} muted={focusAudio.muted} volume={focusAudio.volume} onClose={() => setSoundsOpen(false)} onMuteToggle={focusAudio.toggleMuted} onPause={focusAudio.pause} onPlay={focusAudio.play} onStop={focusAudio.stop} onVolumeChange={focusAudio.setVolume} />
     </SafeAreaView>
   );
 }

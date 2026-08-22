@@ -34,6 +34,7 @@ export type FocusRoom = {
   visibility: string;
   mode: "casual" | "commitment";
   ownerUserId: string;
+  joinCode: string;
   maxMembers: number | null;
   members: RoomMember[];
   commitment: Commitment | null;
@@ -87,6 +88,8 @@ export const joinFocusRoom = (t: string, id: string, inviteCode?: string) =>
     "POST",
     inviteCode ? { inviteCode } : {},
   );
+export const joinFocusRoomByCode = (t: string, code: string) =>
+  request<FocusRoom>(t, "/focus-rooms/join", "POST", { code });
 export const leaveFocusRoom = (t: string, id: string, body?: unknown) =>
   request<FocusRoom | { collectiveEnd: false }>(
     t,

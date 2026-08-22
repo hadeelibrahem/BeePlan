@@ -1,47 +1,13 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from 'react'
+import { DangerButton, OutlineButton, PrimaryButton, SecondaryButton } from '../layout/Buttons'
+import { useLanguage } from '../../i18n/LanguageContext'
 
-export type FocusExperienceViewProps = {
-  title: string;
-  goal?: string | null;
-  durationMinutes: number;
-  remainingSeconds: number;
-  progress: number;
-  isPaused: boolean;
-  participants?: ReactNode;
-  soundControl?: ReactNode;
-  onPause?: () => void;
-  onResume?: () => void;
-  onAddTime?: () => void;
-  onFinish?: () => void;
-  onCancel?: () => void;
-  children?: ReactNode;
-  state?: 'active' | 'paused' | 'break' | 'completion';
-  priority?: string | null;
-  category?: string | null;
-  busy?: boolean;
-  error?: string | null;
-  fullscreenControl?: ReactNode;
-  insights?: ReactNode;
-  breakContent?: ReactNode;
-  completionContent?: ReactNode;
-};
+export type FocusExperienceViewProps = { title: string; goal?: string | null; durationMinutes: number; remainingSeconds: number; progress: number; isPaused: boolean; participants?: ReactNode; onOpenSounds?: () => void; fullscreenSupported?: boolean; isFullscreen?: boolean; onToggleFullscreen?: () => void; onExit?: () => void; onPause?: () => void; onResume?: () => void; onAddTime?: () => void; onFinish?: () => void; onCancel?: () => void; children?: ReactNode; state?: 'active' | 'paused' | 'break' | 'completion'; priority?: string | null; category?: string | null; busy?: boolean; error?: string | null; fullscreenControl?: ReactNode; insights?: ReactNode; breakContent?: ReactNode; completionContent?: ReactNode }
 
-export function FocusExperienceView({ title, goal, durationMinutes, remainingSeconds, progress, isPaused, participants, soundControl, onPause, onResume, onAddTime, onFinish, onCancel, children, state = 'active', priority, category, busy = false, error, fullscreenControl, insights, breakContent, completionContent }: FocusExperienceViewProps) {
-  const minutes = Math.floor(remainingSeconds / 60).toString().padStart(2, '0');
-  const seconds = (remainingSeconds % 60).toString().padStart(2, '0');
-  const circumference = 283;
-  return <section data-testid="focus-experience" className={`relative flex min-h-screen w-screen flex-col items-center justify-center overflow-x-hidden px-4 py-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] text-center ${isPaused ? 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,.28),_rgba(15,23,42,.98)_62%)]' : 'bg-[radial-gradient(circle_at_center,_rgba(251,191,36,.3),_rgba(15,23,42,.98)_62%)]'}`}>
-    <div className="flex items-center justify-center gap-3"><p className="text-xs font-black uppercase tracking-[.25em] text-amber-200">BeePlan Focus · {title}</p>{fullscreenControl}</div>
-    {goal ? <h1 className="mt-3 text-2xl font-black text-white">{goal}</h1> : null}
-    {(priority || category) ? <p className="mt-2 text-xs font-bold uppercase tracking-widest text-slate-300">{[priority, category].filter(Boolean).join(' · ')}</p> : null}
-    <p className="mt-2 text-sm text-slate-300">{durationMinutes} minute session</p>
-    {state === 'break' && breakContent ? breakContent : state === 'completion' && completionContent ? completionContent : <div className="relative mx-auto mt-8 grid size-72 place-items-center sm:size-96"><svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="2"/><circle cx="50" cy="50" r="45" fill="none" stroke={isPaused ? '#60a5fa' : '#fbbf24'} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${Math.max(0, Math.min(circumference, progress * circumference))} ${circumference}`} /></svg><p className="relative text-7xl font-black tabular-nums tracking-tight text-white">{minutes}:{seconds}</p></div>}
-    <p className={`mt-2 text-sm font-black uppercase tracking-widest ${isPaused ? 'text-blue-300' : 'text-amber-200'}`}>{isPaused ? 'Paused for everyone' : 'Focusing together'} · {Math.round(progress * 100)}%</p>
-    {participants ? <div className="mt-6">{participants}</div> : null}
-    {soundControl ? <div className="mt-5">{soundControl}</div> : null}
-    {state === 'active' || state === 'paused' ? <div className="mt-6 flex flex-wrap justify-center gap-3">{isPaused ? <button disabled={busy} className="min-h-11 rounded-xl bg-amber-400 px-4 font-bold text-slate-950 disabled:opacity-50" onClick={onResume}>Resume</button> : <button disabled={busy} className="min-h-11 rounded-xl border px-4 font-bold text-white disabled:opacity-50" onClick={onPause}>Pause</button>}{onAddTime ? <button disabled={busy} className="min-h-11 rounded-xl border px-4 font-bold text-white disabled:opacity-50" onClick={onAddTime}>Add time</button> : null}{onFinish ? <button disabled={busy} className="min-h-11 rounded-xl border border-red-300/40 px-4 font-bold text-red-200 disabled:opacity-50" onClick={onFinish}>Finish</button> : null}{onCancel ? <button disabled={busy} className="min-h-11 rounded-xl border px-4 font-bold text-white disabled:opacity-50" onClick={onCancel}>Cancel</button> : null}</div> : null}
-    {error ? <p className="mt-4 text-sm font-bold text-red-300">{error}</p> : null}
-    {insights ? <div className="mt-6">{insights}</div> : null}
-    {children}
-  </section>;
+export function FocusExperienceView(props: FocusExperienceViewProps) {
+  const { t } = useLanguage(); const { title, goal, durationMinutes, remainingSeconds, progress, isPaused, participants, onOpenSounds, fullscreenSupported = false, isFullscreen = false, onToggleFullscreen, onExit, onPause, onResume, onAddTime, onFinish, onCancel, children, state = 'active', priority, category, busy = false, error, fullscreenControl, insights, breakContent, completionContent } = props
+  const minutes = Math.floor(remainingSeconds / 60).toString().padStart(2, '0'), seconds = (remainingSeconds % 60).toString().padStart(2, '0'), radius = 130, circumference = 2 * Math.PI * radius, offset = circumference * (1 - Math.min(1, Math.max(0, progress)))
+  return <section data-testid="focus-experience" className="fixed inset-0 z-50 overflow-hidden bg-[var(--bp-bg)] text-[var(--bp-text)]"><FocusBackdrop /><div className="relative z-10 flex h-full w-full"><main className="flex h-full flex-1 flex-col items-center justify-between px-6 py-8"><header className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-sm font-black text-[var(--bp-accent-text)]">B</span><span className="text-sm font-black uppercase tracking-[0.2em] text-[var(--bp-muted)]">{t('focusUi.brand')}</span>{fullscreenControl}</header><section className="flex flex-col items-center text-center">{state === 'break' && breakContent ? breakContent : state === 'completion' && completionContent ? completionContent : <><p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--bp-accent-ink)]">{title} · {t('focusUi.minutes', { count: durationMinutes })}</p>{goal ? <h1 className="mt-2 max-w-xl truncate text-center text-2xl font-black text-[var(--bp-text)]">{goal}</h1> : null}{(priority || category) ? <p className="mt-2 text-xs font-bold uppercase tracking-widest text-[var(--bp-muted)]">{[priority, category].filter(Boolean).join(' · ')}</p> : null}<div className="relative mt-6 h-72 w-72"><div className="focus-ring-glow absolute inset-6 rounded-full bg-[var(--bp-accent)] blur-[40px] opacity-25" /><svg viewBox="0 0 300 300" className="h-full w-full -rotate-90" aria-hidden><circle cx="150" cy="150" r={radius} fill="none" stroke="var(--bp-border)" strokeWidth="14" /><circle cx="150" cy="150" r={radius} fill="none" stroke="var(--bp-accent)" strokeWidth="14" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} style={{ transition: 'stroke-dashoffset 0.9s linear' }} /></svg><div className="absolute inset-0 flex items-center justify-center"><span dir="ltr" className="text-6xl font-black tabular-nums text-[var(--bp-text)]">{minutes}:{seconds}</span></div></div><p className="mt-4 text-sm font-semibold text-[var(--bp-muted)]">{isPaused ? t('focusUi.pausedForEveryone') : t('focusUi.percentComplete', { percent: Math.round(progress * 100) })}</p></>}{participants ? <div className="mt-4">{participants}</div> : null}{state === 'active' || state === 'paused' ? <div className="mt-8 flex flex-wrap items-center justify-center gap-3">{isPaused ? <PrimaryButton disabled={busy} onClick={onResume}>{t('focusUi.resume')}</PrimaryButton> : <SecondaryButton disabled={busy} onClick={onPause}>{t('focusUi.pause')}</SecondaryButton>}{onAddTime ? <OutlineButton disabled={busy} onClick={onAddTime}>{t('focusUi.addTime')}</OutlineButton> : null}{onFinish ? <PrimaryButton disabled={busy} onClick={onFinish}>{t('focusUi.finish')}</PrimaryButton> : null}{onCancel ? <DangerButton disabled={busy} onClick={onCancel}>{t('focusUi.cancel')}</DangerButton> : null}</div> : null}{error ? <p className="mt-4 text-sm font-bold text-red-500">{error}</p> : null}{insights ? <div className="mt-6">{insights}</div> : null}{children}</section><FocusUtilities onOpenSounds={onOpenSounds} fullscreenSupported={fullscreenSupported} isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} onExit={onExit} /></main></div></section>
 }
+function FocusBackdrop() { return <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden><div className="focus-blob focus-blob-a" style={{ top: '-10%', left: '-5%', width: '46vw', height: '46vw', background: 'var(--bp-accent)', opacity: 0.14 }} /><div className="focus-blob focus-blob-b" style={{ bottom: '-15%', right: '-8%', width: '52vw', height: '52vw', background: 'var(--bp-accent)', opacity: 0.08 }} /><div className="focus-blob focus-blob-a" style={{ top: '30%', right: '20%', width: '28vw', height: '28vw', background: 'var(--bp-text)', opacity: 0.04 }} /></div> }
+function FocusUtilities({ onOpenSounds, fullscreenSupported, isFullscreen, onToggleFullscreen, onExit }: Pick<FocusExperienceViewProps, 'onOpenSounds' | 'fullscreenSupported' | 'isFullscreen' | 'onToggleFullscreen' | 'onExit'>) { const { t } = useLanguage(); const button = 'rounded-xl px-3 py-2 text-xs font-bold text-[var(--bp-muted)] transition hover:bg-[var(--bp-bg)]'; return <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/70 px-3 py-2 backdrop-blur"><button type="button" className={button} onClick={onOpenSounds}>{t('focusUi.whiteNoise')}</button><button type="button" className={button} onClick={onOpenSounds}>{t('focusUi.ambientSounds')}</button>{fullscreenSupported ? <button type="button" className={button} onClick={onToggleFullscreen}>{isFullscreen ? t('focusUi.exitFullscreen') : t('focusUi.fullscreen')}</button> : null}<button type="button" className="rounded-xl px-3 py-2 text-xs font-bold text-[var(--bp-accent-ink)] transition hover:bg-[var(--bp-bg)]" onClick={onExit}>{t('focusUi.exitFocus')}</button></div> }

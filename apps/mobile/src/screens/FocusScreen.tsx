@@ -56,6 +56,9 @@ import { focusParentLabel, focusPrimaryTitle } from "../lib/focusDisplay";
 import type { UseFocusSession } from "../lib/useFocusSession";
 import type { AppTheme } from "../theme/colors";
 import { useTheme } from "../theme/useTheme";
+import { useLanguage } from '../i18n/LanguageContext';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 type StartTarget = {
   id: string; // taskId
@@ -90,6 +93,7 @@ export default function FocusScreen({
   onOpenWorkspace,
   onOpenRooms,
 }: Props) {
+  const { t, language } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -223,12 +227,12 @@ export default function FocusScreen({
         void beginSession(type, minutes);
       } else {
         setPermissionMsg(
-          "Usage Access still not granted. Strict Mode needs it to block apps.",
+          t("focusUi.usageAccessRequired"),
         );
       }
     });
     return () => sub.remove();
-  }, [pendingStart, strict.blocker, beginSession]);
+  }, [pendingStart, strict.blocker, beginSession, t]);
 
   const openStartModal = useCallback((task: ApiTask) => {
     setStartModalTask({
@@ -236,11 +240,11 @@ export default function FocusScreen({
       title: task.title,
       taskTitle: task.title,
       priority: toUiPriority(task.priority),
-      category: task.category || "General",
+      category: task.category || t("focusHome.general"),
       subtaskId: null,
       subtaskTitle: null,
     });
-  }, []);
+  }, [t]);
 
   // Start from the recommendation: focuses the recommended subtask when present,
   // otherwise the task itself (falls back to today's behaviour).
@@ -252,12 +256,12 @@ export default function FocusScreen({
         title: focusPrimaryTitle(rec),
         taskTitle: rec.taskTitle,
         priority: task ? toUiPriority(task.priority) : "Medium",
-        category: task?.category || "General",
+        category: task?.category || t("focusHome.general"),
         subtaskId: rec.subtaskId ?? null,
         subtaskTitle: rec.subtaskTitle ?? null,
       });
     },
-    [tasks],
+    [tasks, t],
   );
 
   const handleRemoveFocus = useCallback(
@@ -292,10 +296,10 @@ export default function FocusScreen({
         />
       }
     >
-      <PageHeader title="Focus Mode" subtitle="Your deep-work control center" />
-      {onOpenRooms ? <View className="mb-4 rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>Shared Focus Sessions</Text><Text className="mb-3 mt-1" style={{ color: colors.secondaryText }}>Start and finish a synchronized focus session together.</Text><PrimaryButton fullWidth onPress={onOpenRooms}>Explore sessions</PrimaryButton></View> : null}
+      <PageHeader title={t("focusUi.brand")} subtitle={t("focusHome.deepWork")} />
+      {onOpenRooms ? <View className="mb-4 rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>{t("focusHome.sharedSessions")}</Text><Text className="mb-3 mt-1" style={{ color: colors.secondaryText }}>{t("focusHome.sharedDescription")}</Text><PrimaryButton fullWidth onPress={onOpenRooms}>{t("focusHome.exploreSessions")}</PrimaryButton></View> : null}
 
-      <StatsRow stats={stats} theme={theme} />
+      <StatsRow stats={stats} theme={theme} t={t} />
 
       {focus.active ? (
         <InProgressCard
@@ -305,12 +309,14 @@ export default function FocusScreen({
           remaining={formatFocusClock(focus.remainingMs)}
           complete={focus.sessionComplete}
           onResume={onOpenWorkspace}
+          t={t}
         />
       ) : (
         <RecommendationCard
           theme={theme}
           recommendation={recommendation}
           onStart={startRecommendation}
+          t={t}
         />
       )}
 
@@ -318,7 +324,7 @@ export default function FocusScreen({
         className="mb-2 mt-2 text-sm font-black"
         style={{ color: colors.text }}
       >
-        Focus Queue · {focusQueue.length} items
+        {t("focusHome.queue")} · {t("focusHome.items", { count: focusQueue.length })}
       </Text>
 
       {focusQueue.length ? (
@@ -329,8 +335,10 @@ export default function FocusScreen({
             theme={theme}
             disabled={Boolean(focus.active)}
             onView={() => { const task = tasks.find((entry) => entry.id === item.taskId); if (task) onViewTaskDetails(task); }}
-            onStart={() => setStartModalTask({ id: item.taskId, title: focusPrimaryTitle(item), taskTitle: item.taskTitle, priority: item.priority, category: 'General', subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle })}
+            onStart={() => setStartModalTask({ id: item.taskId, title: focusPrimaryTitle(item), taskTitle: item.taskTitle, priority: item.priority, category: t("focusHome.general"), subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle })}
             onRemove={item.subtaskId ? undefined : () => void handleRemoveFocus(item.taskId)}
+            t={t}
+            language={language}
           />
         ))
       ) : (
@@ -342,13 +350,13 @@ export default function FocusScreen({
             className="text-center text-sm font-black"
             style={{ color: colors.text }}
           >
-            No focus tasks yet
+            {t("focusHome.noFocusTasks")}
           </Text>
           <Text
             className="mt-1 text-center text-xs"
             style={{ color: colors.secondaryText }}
           >
-            Turn on Focus Task from Task Details to add it here.
+            {t("focusHome.focusTaskHint")}
           </Text>
         </View>
       )}
@@ -357,9 +365,9 @@ export default function FocusScreen({
         className="mb-2 mt-4 text-sm font-black"
         style={{ color: colors.text }}
       >
-        Today's Sessions
+        {t("focusHome.todaySessions")}
       </Text>
-      <TodaySessions sessions={todaySessions} theme={theme} />
+      <TodaySessions sessions={todaySessions} theme={theme} t={t} language={language} />
 
       <StartSessionModal
         visible={layerVisibility.startModalVisible}
@@ -376,6 +384,7 @@ export default function FocusScreen({
           setPermissionMsg(null);
         }}
         onStart={handleStart}
+        t={t}
       />
 
       <StrictModeSetupSheet
@@ -398,6 +407,7 @@ function InProgressCard({
   remaining,
   complete,
   onResume,
+  t,
 }: {
   theme: AppTheme;
   title: string;
@@ -405,6 +415,7 @@ function InProgressCard({
   remaining: string;
   complete: boolean;
   onResume: () => void;
+  t: Translate;
 }) {
   const { colors } = theme;
   return (
@@ -416,7 +427,7 @@ function InProgressCard({
         className="text-[10px] font-black uppercase"
         style={{ color: colors.accentInk }}
       >
-        Focus session in progress
+        {t("focusHome.sessionInProgressLabel")}
       </Text>
       <Text
         numberOfLines={1}
@@ -438,11 +449,11 @@ function InProgressCard({
         className="mt-0.5 text-sm font-semibold"
         style={{ color: colors.secondaryText }}
       >
-        {complete ? "Session complete" : `${remaining} remaining`}
+        {complete ? t("focusHome.sessionComplete") : t("focusHome.remaining", { time: remaining })}
       </Text>
       <View className="mt-3">
         <PrimaryButton fullWidth onPress={onResume}>
-          Resume Session
+          {t("focusHome.resumeSession")}
         </PrimaryButton>
       </View>
     </View>
@@ -454,26 +465,28 @@ function InProgressCard({
 function StatsRow({
   stats,
   theme,
+  t,
 }: {
   stats: FocusStats | null;
   theme: AppTheme;
+  t: Translate;
 }) {
   const tiles = [
     {
-      label: "Focus today",
-      value: stats ? formatFocusMinutes(stats.focusMinutesToday) : "—",
+      label: t("focusHome.focusToday"),
+      value: stats ? t("focusUi.minutes", { count: stats.focusMinutesToday }) : "—",
     },
-    { label: "Sessions", value: stats ? String(stats.sessionsToday) : "—" },
+    { label: t("focusHome.sessionsToday"), value: stats ? String(stats.sessionsToday) : "—" },
     {
-      label: "Completed",
+      label: t("focusHome.completed"),
       value: stats ? String(stats.completedSessionsToday) : "—",
     },
-    { label: "Streak", value: stats ? `${stats.currentStreak}d` : "—" },
+    { label: t("focusHome.currentStreak"), value: stats ? t("focusSession.days", { count: stats.currentStreak }) : "—" },
     {
-      label: "This week",
-      value: stats ? formatFocusMinutes(stats.totalFocusMinutesThisWeek) : "—",
+      label: t("focusHome.thisWeek"),
+      value: stats ? t("focusUi.minutes", { count: stats.totalFocusMinutesThisWeek }) : "—",
     },
-    { label: "Top task", value: stats?.topFocusTask?.title ?? "None" },
+    { label: t("focusHome.topTask"), value: stats?.topFocusTask?.title ?? t("focusHome.noneYet") },
   ];
 
   return (
@@ -513,10 +526,12 @@ function RecommendationCard({
   recommendation,
   theme,
   onStart,
+  t,
 }: {
   recommendation: FocusRecommendation | null;
   theme: AppTheme;
   onStart: (rec: FocusRecommendation) => void;
+  t: Translate;
 }) {
   const { colors } = theme;
   if (!recommendation) {
@@ -529,11 +544,10 @@ function RecommendationCard({
           className="text-[10px] font-black uppercase"
           style={{ color: colors.secondaryText }}
         >
-          Recommended now
+          {t("focusHome.recommendedNow")}
         </Text>
         <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
-          No suggestion yet — mark a task as a focus task to get a
-          recommendation.
+          {t("focusHome.noSuggestion")}
         </Text>
       </View>
     );
@@ -552,7 +566,7 @@ function RecommendationCard({
         className="text-[10px] font-black uppercase"
         style={{ color: colors.accentInk }}
       >
-        {isSubtask ? "Do this now" : "Recommended now"}
+        {isSubtask ? t("focusHome.doThisNow") : t("focusHome.recommendedNow")}
       </Text>
       <Text className="mt-1 text-lg font-black" style={{ color: colors.text }}>
         {primary}
@@ -567,15 +581,15 @@ function RecommendationCard({
       ) : null}
       {recommendation.estimatedMinutes ? (
         <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
-          Estimated: {formatFocusMinutes(recommendation.estimatedMinutes)}
+          {t("focusHome.estimated", { duration: t("focusUi.minutes", { count: recommendation.estimatedMinutes }) })}
         </Text>
       ) : null}
       <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
-        Reason: {recommendation.reason}
+        {t("focusHome.reason", { reason: recommendation.reason })}
       </Text>
       <View className="mt-3">
         <PrimaryButton size="sm" onPress={() => onStart(recommendation)}>
-          Start Focus
+          {t("focusHome.startFocus")}
         </PrimaryButton>
       </View>
     </View>
@@ -584,10 +598,10 @@ function RecommendationCard({
 
 // --- Focus card ------------------------------------------------------------
 
-function QueueFocusCard({ item, theme, disabled, onView, onStart, onRemove }: { item: FocusQueueItem; theme: AppTheme; disabled: boolean; onView: () => void; onStart: () => void; onRemove?: () => void }) {
+function QueueFocusCard({ item, theme, disabled, onView, onStart, onRemove, t, language }: { item: FocusQueueItem; theme: AppTheme; disabled: boolean; onView: () => void; onStart: () => void; onRemove?: () => void; t: Translate; language: string }) {
   const { colors } = theme;
   const parent = focusParentLabel(item);
-  return <View className="mb-2 rounded-2xl border p-3" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Pressable onPress={onView}><View className="flex-row flex-wrap gap-2"><PriorityBadge label={toUiPriority(item.priority as ApiTask['priority'])} theme={theme} /><StatusBadge label={toUiStatus(item.status as ApiTask['status'])} theme={theme} /></View><Text numberOfLines={1} className="mt-2 text-sm font-black" style={{ color: colors.text }}>{focusPrimaryTitle(item)}</Text>{parent ? <Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.secondaryText }}>{parent}</Text> : null}</Pressable><View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1"><Meta label="Due" value={formatDue(item.dueDate ?? undefined, '')} theme={theme} /><Meta label="Est." value={item.estimatedMinutes ? formatFocusMinutes(item.estimatedMinutes) : '—'} theme={theme} /><Meta label="Ready" value={item.hasOpenDependencies ? 'Waiting' : 'Ready'} theme={theme} /></View><View className="mt-3 flex-row gap-2"><View className="flex-1"><PrimaryButton size="sm" fullWidth disabled={disabled} onPress={onStart}>Start Focus</PrimaryButton></View>{onRemove ? <OutlineButton size="sm" onPress={onRemove}>Remove</OutlineButton> : null}</View></View>;
+  return <View className="mb-2 rounded-2xl border p-3" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Pressable onPress={onView}><View className="flex-row flex-wrap gap-2"><PriorityBadge label={localizedPriority(item.priority, t)} theme={theme} /><StatusBadge label={localizedStatus(item.status, t)} theme={theme} /></View><Text numberOfLines={1} className="mt-2 text-sm font-black" style={{ color: colors.text }}>{focusPrimaryTitle(item)}</Text>{parent ? <Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.secondaryText }}>{parent}</Text> : null}</Pressable><View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1"><Meta label={t("focusHome.due")} value={formatDue(item.dueDate ?? undefined, '', language, t)} theme={theme} /><Meta label={t("focusHome.estimatedShort")} value={item.estimatedMinutes ? t("focusUi.minutes", { count: item.estimatedMinutes }) : "—"} theme={theme} /><Meta label={t("focusHome.ready")} value={item.hasOpenDependencies ? t("focusHome.waiting") : t("focusHome.ready")} theme={theme} /></View><View className="mt-3 flex-row gap-2"><View className="flex-1"><PrimaryButton size="sm" fullWidth disabled={disabled} onPress={onStart}>{t("focusHome.startFocus")}</PrimaryButton></View>{onRemove ? <OutlineButton size="sm" onPress={onRemove}>{t("focusHome.remove")}</OutlineButton> : null}</View></View>;
 }
 
 function FocusCard({
@@ -605,6 +619,7 @@ function FocusCard({
   onStart: () => void;
   onRemove: () => void;
 }) {
+  const { t, language } = useLanguage();
   const { colors } = theme;
   const completed = task.subtasks.filter((subtask) => subtask.isDone).length;
   const priority = toUiPriority(task.priority);
@@ -639,12 +654,12 @@ function FocusCard({
 
       <View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1">
         <Meta
-          label="Due"
-          value={formatDue(task.dueDate, task.dueTime)}
+          label={t("focusHome.due")}
+          value={formatDue(task.dueDate, task.dueTime, language, t)}
           theme={theme}
         />
         <Meta
-          label="Est."
+          label={t("focusHome.estimatedShort")}
           value={
             task.estimatedTimeMinutes
               ? formatFocusMinutes(task.estimatedTimeMinutes)
@@ -653,15 +668,15 @@ function FocusCard({
           theme={theme}
         />
         <Meta
-          label="Subtasks"
+          label={t("focusHome.subtasks")}
           value={
             task.subtasks.length
               ? `${completed}/${task.subtasks.length}`
-              : "None"
+              : t("focusHome.none")
           }
           theme={theme}
         />
-        <Meta label="Progress" value={`${task.progress}%`} theme={theme} />
+        <Meta label={t("focusHome.progress")} value={`${task.progress}%`} theme={theme} />
       </View>
 
       <View
@@ -690,11 +705,11 @@ function FocusCard({
             disabled={disabled}
             onPress={onStart}
           >
-            Start Focus
+            {t("focusHome.startFocus")}
           </PrimaryButton>
         </View>
         <OutlineButton size="sm" onPress={onRemove}>
-          Remove
+          {t("focusHome.remove")}
         </OutlineButton>
       </View>
     </View>
@@ -733,9 +748,13 @@ function Meta({
 function TodaySessions({
   sessions,
   theme,
+  t,
+  language,
 }: {
   sessions: FocusSession[];
   theme: AppTheme;
+  t: Translate;
+  language: string;
 }) {
   const { colors } = theme;
   if (!sessions.length) {
@@ -745,7 +764,7 @@ function TodaySessions({
         style={{ borderColor: colors.border, backgroundColor: colors.card }}
       >
         <Text className="text-sm" style={{ color: colors.secondaryText }}>
-          No sessions yet today. Start one from the queue above.
+          {t("focusHome.noSessions")}
         </Text>
       </View>
     );
@@ -771,8 +790,8 @@ function TodaySessions({
             </Text>
             {focusParentLabel(session) ? <Text className="text-xs" style={{ color: colors.secondaryText }}>{focusParentLabel(session)}</Text> : null}
             <Text className="text-xs" style={{ color: colors.secondaryText }}>
-              {labelForFocusType(session.sessionType)} ·{" "}
-              {formatTime(session.startedAt)}
+              {focusTypeLabel(session.sessionType, t)} ·{" "}
+              {formatTime(session.startedAt, language)}
             </Text>
           </View>
           <View className="flex-row items-center gap-2">
@@ -780,9 +799,9 @@ function TodaySessions({
               className="text-xs font-semibold"
               style={{ color: colors.secondaryText }}
             >
-              {formatFocusMinutes(session.actualMinutes ?? 0)}
+              {t("focusUi.minutes", { count: session.actualMinutes ?? 0 })}
             </Text>
-            <SessionStatusBadge status={session.status} theme={theme} />
+            <SessionStatusBadge status={session.status} theme={theme} t={t} />
           </View>
         </View>
       ))}
@@ -801,6 +820,7 @@ function StartSessionModal({
   strictSection,
   onClose,
   onStart,
+  t,
 }: {
   visible: boolean;
   taskTitle: string;
@@ -810,6 +830,7 @@ function StartSessionModal({
   strictSection?: ReactNode;
   onClose: () => void;
   onStart: (type: FocusSessionType, minutes: number) => void;
+  t: Translate;
 }) {
   const { colors } = theme;
   const [selected, setSelected] = useState<FocusSessionType>("pomodoro");
@@ -843,7 +864,7 @@ function StartSessionModal({
             className="text-center text-xl font-black"
             style={{ color: colors.text }}
           >
-            Start Focus Session
+            {t("focusHome.startSession")}
           </Text>
           <Text
             numberOfLines={1}
@@ -873,14 +894,14 @@ function StartSessionModal({
                     className="text-sm font-black"
                     style={{ color: colors.text }}
                   >
-                    {item.label}
-                    {item.type !== "custom" ? ` · ${item.minutes}m` : ""}
+                    {focusTypeLabel(item.type, t)}
+                    {item.type !== "custom" ? ` · ${t("focusUi.minutes", { count: item.minutes })}` : ""}
                   </Text>
                   <Text
                     className="mt-0.5 text-xs"
                     style={{ color: colors.secondaryText }}
                   >
-                    {item.description}
+                    {focusTypeDescription(item.type, t)}
                   </Text>
                 </Pressable>
               );
@@ -892,7 +913,7 @@ function StartSessionModal({
                   className="mb-1 text-[10px] font-black uppercase"
                   style={{ color: colors.secondaryText }}
                 >
-                  Minutes
+                  {t("focusHome.minutes")}
                 </Text>
                 <TextInput
                   keyboardType="number-pad"
@@ -932,7 +953,7 @@ function StartSessionModal({
           <View className="mt-3 flex-row gap-2">
             <View className="flex-1">
               <SecondaryButton fullWidth onPress={onClose}>
-                Cancel
+                {t("common.cancel")}
               </SecondaryButton>
             </View>
             <View className="flex-1">
@@ -941,7 +962,7 @@ function StartSessionModal({
                 disabled={busy}
                 onPress={() => onStart(selected, minutes)}
               >
-                Start {minutes} min
+                {t("focusHome.startWithDuration", { duration: t("focusUi.minutes", { count: minutes }) })}
               </PrimaryButton>
             </View>
           </View>
@@ -998,9 +1019,11 @@ function StatusBadge({ label, theme }: { label: string; theme: AppTheme }) {
 function SessionStatusBadge({
   status,
   theme,
+  t,
 }: {
   status: string;
   theme: AppTheme;
+  t: Translate;
 }) {
   const { colors } = theme;
   const color =
@@ -1015,7 +1038,7 @@ function SessionStatusBadge({
       style={{ backgroundColor: `${color}33` }}
     >
       <Text className="text-[11px] font-bold" style={{ color }}>
-        {status}
+        {status === "completed" ? t("focusHome.statusCompleted") : status === "cancelled" ? t("focusHome.statusCancelled") : t("focusHome.statusActive")}
       </Text>
     </View>
   );
@@ -1026,21 +1049,39 @@ function clampMinutes(value: number): number {
   return Math.min(Math.max(Math.round(value), 1), 600);
 }
 
-function formatDue(value?: string, dueTime?: string): string {
-  if (!value) return "No due date";
+function focusTypeLabel(type: FocusSessionType, t: Translate): string {
+  return t(`focusHome.${type === "pomodoro" ? "pomodoro" : type === "deep" ? "deep" : type === "long" ? "long" : "custom"}`);
+}
+
+function localizedPriority(priority: string, t: Translate): string {
+  const key = priority.toLowerCase();
+  return t(`taskLabels.priority.${key === "medium" ? "medium" : key === "high" ? "high" : key === "urgent" ? "urgent" : "low"}`);
+}
+
+function localizedStatus(status: string, t: Translate): string {
+  const key = status === "in_progress" ? "inProgress" : status;
+  return t(`taskLabels.status.${key === "todo" ? "todo" : key === "inProgress" ? "inProgress" : key === "done" ? "done" : key === "blocked" ? "blocked" : "missed"}`);
+}
+
+function focusTypeDescription(type: FocusSessionType, t: Translate): string {
+  return t(`focusHome.${type === "pomodoro" ? "pomodoroDescription" : type === "deep" ? "deepDescription" : type === "long" ? "longDescription" : "customDescription"}`);
+}
+
+function formatDue(value: string | undefined, dueTime: string | undefined, language: string, t: Translate): string {
+  if (!value) return t("focusHome.noDueDate");
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  const datePart = new Intl.DateTimeFormat("en", {
+  const datePart = new Intl.DateTimeFormat(language === "ar" ? "ar" : "en", {
     month: "short",
     day: "numeric",
   }).format(date);
   return dueTime ? `${datePart} · ${dueTime}` : datePart;
 }
 
-function formatTime(value: string): string {
+function formatTime(value: string, language: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat(language === "ar" ? "ar" : "en", {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);

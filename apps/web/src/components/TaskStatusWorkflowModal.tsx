@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PrimaryButton, SecondaryButton } from './layout'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Missed'
 
@@ -23,41 +24,39 @@ type TaskStatusWorkflowModalProps = {
   }) => void
 }
 
-const SUBTASKS_INCOMPLETE_MESSAGE = 'Complete all subtasks before marking this task as Done.'
-
 const statusOptions: {
   value: TaskStatus
   icon: string
-  title: string
-  description: string
+  statusKey: string
+  descriptionKey: string
   tone: string
 }[] = [
   {
     value: 'To Do',
     icon: 'TD',
-    title: 'To Do',
-    description: 'Task has not been started yet.',
+    statusKey: 'todo',
+    descriptionKey: 'taskStatusWorkflow.todoDescription',
     tone: 'text-[var(--bp-subtle)]',
   },
   {
     value: 'In Progress',
     icon: 'IP',
-    title: 'In Progress',
-    description: 'Task is currently being worked on.',
+    statusKey: 'inProgress',
+    descriptionKey: 'taskStatusWorkflow.inProgressDescription',
     tone: 'text-blue-300',
   },
   {
     value: 'Done',
     icon: 'DN',
-    title: 'Done',
-    description: 'Task has been completed successfully.',
+    statusKey: 'done',
+    descriptionKey: 'taskStatusWorkflow.doneDescription',
     tone: 'text-green-300',
   },
   {
     value: 'Missed',
     icon: 'MS',
-    title: 'Missed',
-    description: 'Task was not completed before its due date.',
+    statusKey: 'missed',
+    descriptionKey: 'taskStatusWorkflow.missedDescription',
     tone: 'text-red-300',
   },
 ]
@@ -75,6 +74,7 @@ export function TaskStatusWorkflowModal({
   onClose,
   onSave,
 }: TaskStatusWorkflowModalProps) {
+  const { t } = useLanguage()
   const [selectedStatus, setSelectedStatus] = useState<TaskStatus>(initialStatus ?? status)
   const [progressValue, setProgressValue] = useState(progress)
   const [completionDate, setCompletionDate] = useState('')
@@ -94,12 +94,12 @@ export function TaskStatusWorkflowModal({
 
   const helperText = useMemo(() => {
     if (hasSubtasks) {
-      return `Calculated automatically from ${completedSubtasksCount} of ${totalSubtasksCount} subtasks completed.`
+      return t('taskStatusWorkflow.calculatedFromSubtasks', { completed: completedSubtasksCount, total: totalSubtasksCount })
     }
-    if (selectedStatus === 'Done') return 'Completion details will be saved with this status.'
-    if (selectedStatus === 'Missed') return 'Add a short reason so the timeline stays useful.'
-    return 'Adjust progress before saving if the task moved forward.'
-  }, [completedSubtasksCount, hasSubtasks, selectedStatus, totalSubtasksCount])
+    if (selectedStatus === 'Done') return t('taskStatusWorkflow.doneHelper')
+    if (selectedStatus === 'Missed') return t('taskStatusWorkflow.missedHelper')
+    return t('taskStatusWorkflow.progressHelper')
+  }, [completedSubtasksCount, hasSubtasks, selectedStatus, totalSubtasksCount, t])
 
   if (!open) return null
 
@@ -109,8 +109,8 @@ export function TaskStatusWorkflowModal({
         <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--bp-border)]" />
 
         <header className="mb-5 text-center">
-          <h2 className="text-2xl font-black text-[var(--bp-text)]">Change Status</h2>
-          <p className="mt-2 text-sm text-[var(--bp-muted)]">Select the current status of this task</p>
+          <h2 className="text-2xl font-black text-[var(--bp-text)]">{t('taskDetailsCore.changeStatus')}</h2>
+          <p className="mt-2 text-sm text-[var(--bp-muted)]">{t('taskStatusWorkflow.selectStatus')}</p>
         </header>
 
         <div className="space-y-3">
@@ -147,8 +147,8 @@ export function TaskStatusWorkflowModal({
                     {option.icon}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block font-black text-[var(--bp-text)]">{option.title}</span>
-                    <span className="mt-1 block text-sm leading-5 text-[var(--bp-muted)]">{option.description}</span>
+                    <span className="block font-black text-[var(--bp-text)]">{t(`taskLabels.status.${option.statusKey}`)}</span>
+                    <span className="mt-1 block text-sm leading-5 text-[var(--bp-muted)]">{t(option.descriptionKey)}</span>
                   </span>
                   <span
                     className={`h-5 w-5 rounded-full border transition ${
@@ -157,7 +157,7 @@ export function TaskStatusWorkflowModal({
                   />
                 </button>
                 {isDisabled ? (
-                  <p className="mt-2 px-1 text-xs font-semibold text-red-400">{SUBTASKS_INCOMPLETE_MESSAGE}</p>
+                  <p className="mt-2 px-1 text-xs font-semibold text-red-400">{t('editTaskFeedback.completeSubtasks')}</p>
                 ) : null}
               </div>
             )
@@ -167,14 +167,14 @@ export function TaskStatusWorkflowModal({
         <section className="mt-5 rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-bg)] p-4">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-black text-[var(--bp-text)]">Progress Percentage</p>
+              <p className="text-sm font-black text-[var(--bp-text)]">{t('taskStatusWorkflow.progressPercentage')}</p>
               <p className="mt-1 text-xs text-[var(--bp-muted)]">{helperText}</p>
             </div>
             <span className="text-2xl font-black text-[var(--bp-accent-ink)]">{hasSubtasks ? subtaskProgress : progressValue}%</span>
           </div>
 
           {hasSubtasks ? (
-            <div className="h-2 rounded-full bg-[var(--bp-border)]" aria-label="Progress calculated from subtasks">
+            <div className="h-2 rounded-full bg-[var(--bp-border)]" aria-label={t('taskStatusWorkflow.progressFromSubtasks')}>
               <div
                 className="h-2 rounded-full bg-[var(--bp-accent)] transition-all"
                 style={{ width: `${subtaskProgress}%` }}
@@ -182,7 +182,7 @@ export function TaskStatusWorkflowModal({
             </div>
           ) : (
             <input
-              aria-label="Progress percentage"
+              aria-label={t('taskStatusWorkflow.progressPercentage')}
               type="range"
               min="0"
               max="100"
@@ -194,7 +194,7 @@ export function TaskStatusWorkflowModal({
 
           {selectedStatus === 'Done' ? (
             <label className="mt-4 block">
-              <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Completion Date</span>
+              <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('taskStatusWorkflow.completionDate')}</span>
               <input
                 type="date"
                 value={completionDate}
@@ -206,11 +206,11 @@ export function TaskStatusWorkflowModal({
 
           {selectedStatus === 'Missed' ? (
             <label className="mt-4 block">
-              <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Missed Reason</span>
+              <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('taskStatusWorkflow.missedReason')}</span>
               <textarea
                 value={missedReason}
                 onChange={(event) => setMissedReason(event.target.value)}
-                placeholder="Add a short reason..."
+                placeholder={t('taskStatusWorkflow.missedReasonPlaceholder')}
                 rows={3}
                 className="mt-2 w-full resize-none rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-3 text-sm font-semibold text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
               />
@@ -220,7 +220,7 @@ export function TaskStatusWorkflowModal({
 
         <footer className="mt-5 grid grid-cols-2 gap-3">
           <SecondaryButton onClick={onClose} className="w-full">
-            Cancel
+            {t('taskForm.cancel')}
           </SecondaryButton>
           <PrimaryButton
             onClick={() =>
@@ -234,7 +234,7 @@ export function TaskStatusWorkflowModal({
             disabled={saveDisabled}
             className="w-full"
           >
-            Save Status
+            {t('taskStatusWorkflow.saveStatus')}
           </PrimaryButton>
         </footer>
       </div>

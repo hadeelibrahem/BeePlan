@@ -69,13 +69,6 @@ type TaskFilter = 'all' | 'todo' | 'inProgress' | 'done' | 'missed'
 type SortField = 'due' | 'priority' | 'created' | 'title'
 type SortDirection = 'asc' | 'desc'
 
-const FILTERS: { value: TaskFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'todo', label: 'To Do' },
-  { value: 'inProgress', label: 'In Progress' },
-  { value: 'done', label: 'Done' },
-  { value: 'missed', label: 'Missed' },
-]
 
 function mapTabToApiStatus(tab: TaskFilter): ApiTaskStatus | undefined {
   if (tab === 'todo') return 'todo'
@@ -85,11 +78,6 @@ function mapTabToApiStatus(tab: TaskFilter): ApiTaskStatus | undefined {
   return undefined
 }
 
-const DUE_FILTER_LABELS: Record<TaskDueFilter, string> = {
-  today: 'Today',
-  upcoming: 'Upcoming',
-  overdue: 'Overdue',
-}
 const SORT_STORAGE_KEY = 'beeplan-task-sort'
 const PRIORITY_RANK: Record<Task['priority'], number> = { Low: 1, Medium: 2, High: 3, Urgent: 4 }
 
@@ -129,6 +117,14 @@ export default function AllTasksScreen({
     } catch { return { field: 'due', direction: 'asc' } }
   })
   const { t, toggleLanguage } = useLanguage()
+  const filterTabs: { value: TaskFilter; label: string }[] = [
+    { value: 'all', label: t('filters.all') },
+    { value: 'todo', label: t('taskLabels.status.todo') },
+    { value: 'inProgress', label: t('taskLabels.status.inProgress') },
+    { value: 'done', label: t('taskLabels.status.done') },
+    { value: 'missed', label: t('taskLabels.status.missed') },
+  ]
+  const dueFilterLabels: Record<TaskDueFilter, string> = { today: t('taskLabels.due.today'), upcoming: t('taskLabels.due.upcoming'), overdue: t('taskLabels.due.overdue') }
   const { mode, toggleTheme } = useTheme()
 
   const filters: TaskFilters = useMemo(() => {
@@ -185,7 +181,7 @@ export default function AllTasksScreen({
     if (goingDone && task.isBlocked) {
       setCompletionErrors((current) => ({
         ...current,
-        [task.id]: 'Complete this task’s dependencies before marking it done.',
+        [task.id]: 'allTasksUi.completeDependenciesFirst',
       }))
       return
     }
@@ -214,14 +210,15 @@ export default function AllTasksScreen({
       // Reconcile every task cache (including stat-card source data) so server
       // truth replaces the optimistic filtered-list value.
       onTaskUpdated?.(updated)
-      showToast({ tone: 'success', message: goingDone ? 'Task completed.' : 'Task reopened.' })
+      showToast({ tone: 'success', message: goingDone ? t('allTasksUi.taskCompleted') : t('allTasksUi.taskReopened') })
     } catch (mutationError) {
       if (previous) queryClient.setQueryData(listKey, previous)
       setCompletionErrors((current) => ({
         ...current,
-        [task.id]: mutationError instanceof Error ? mutationError.message : 'Unable to update this task.',
+        [task.id]: 'allTasksUi.updateFailed',
       }))
-      showToast({ tone: 'error', message: mutationError instanceof Error ? mutationError.message : 'Unable to update this task.' })
+      console.error('Unable to update task', mutationError)
+      showToast({ tone: 'error', message: t('allTasksUi.updateFailed') })
     } finally {
       setPendingTaskIds((current) => {
         const next = new Set(current)
@@ -237,7 +234,7 @@ export default function AllTasksScreen({
     if (nextStatus === 'In Progress' && task.isBlocked) {
       setCompletionErrors((current) => ({
         ...current,
-        [task.id]: 'Complete this task\'s dependencies before starting it.',
+        [task.id]: 'allTasksUi.startDependenciesFirst',
       }))
       return
     }
@@ -260,15 +257,16 @@ export default function AllTasksScreen({
     try {
       const updated = await changeTaskStatus(accessToken, task.id, { status: apiStatus, progress: task.progress })
       onTaskUpdated?.(updated)
-      setStatusSuccesses((current) => ({ ...current, [task.id]: `Status updated to ${nextStatus}.` }))
-      showToast({ tone: 'success', message: `Status updated to ${nextStatus}.` })
+      setStatusSuccesses((current) => ({ ...current, [task.id]: 'allTasksUi.statusUpdated' }))
+      showToast({ tone: 'success', message: t('allTasksUi.statusUpdated', { status: statusDisplay(nextStatus, t) }) })
     } catch (mutationError) {
       if (previous) queryClient.setQueryData(listKey, previous)
       setCompletionErrors((current) => ({
         ...current,
-        [task.id]: mutationError instanceof Error ? mutationError.message : 'Unable to update this task.',
+        [task.id]: 'allTasksUi.updateFailed',
       }))
-      showToast({ tone: 'error', message: mutationError instanceof Error ? mutationError.message : 'Unable to update this task.' })
+      console.error('Unable to update task status', mutationError)
+      showToast({ tone: 'error', message: t('allTasksUi.updateFailed') })
     } finally {
       setPendingTaskIds((current) => {
         const next = new Set(current)
@@ -339,21 +337,21 @@ export default function AllTasksScreen({
   if (statusFilter !== 'all') {
     activeChips.push({
       key: 'status',
-      label: FILTERS.find((filter) => filter.value === statusFilter)?.label ?? statusFilter,
+      label: filterTabs.find((filter) => filter.value === statusFilter)?.label ?? statusFilter,
       onRemove: () => setStatusFilter('all'),
     })
   }
   if (dueFilter) {
-    activeChips.push({ key: 'due', label: DUE_FILTER_LABELS[dueFilter], onRemove: () => setDueFilter(null) })
+    activeChips.push({ key: 'due', label: dueFilterLabels[dueFilter], onRemove: () => setDueFilter(null) })
   }
   if (focusActive) {
-    activeChips.push({ key: 'focus', label: 'Focus Tasks', onRemove: () => setFocusActive(false) })
+    activeChips.push({ key: 'focus', label: t('allTasksUi.focusTasks'), onRemove: () => setFocusActive(false) })
   }
   if (completedActive) {
-    activeChips.push({ key: 'completed', label: 'Completed', onRemove: () => setCompletedActive(false) })
+    activeChips.push({ key: 'completed', label: t('taskLabels.due.completed'), onRemove: () => setCompletedActive(false) })
   }
   if (highPriorityActive) {
-    activeChips.push({ key: 'highPriority', label: 'High Priority', onRemove: () => setHighPriorityActive(false) })
+    activeChips.push({ key: 'highPriority', label: t('allTasksUi.highPriority'), onRemove: () => setHighPriorityActive(false) })
   }
   if (categoryFilter) {
     activeChips.push({ key: 'category', label: categoryFilter, onRemove: () => setCategoryFilter(null) })
@@ -368,7 +366,7 @@ export default function AllTasksScreen({
       active="tasks"
       {...nav}
       onNavigateDashboard={onBackDashboard}
-      fab={<FloatingActionButton onClick={() => setAddTaskChooserOpen(true)} />}
+      fab={<FloatingActionButton ariaLabel={t('taskUi.allTasks.addTask')} onClick={() => setAddTaskChooserOpen(true)} />}
     >
       {addTaskChooserOpen ? (
         <AddTaskModeChooser
@@ -390,7 +388,7 @@ export default function AllTasksScreen({
           <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search tasks..."
+            searchPlaceholder={t('allTasksUi.searchPlaceholder')}
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
@@ -399,7 +397,7 @@ export default function AllTasksScreen({
             onSignOut={onSignOut}
           />
         }
-        pageActions={<div className="flex items-center gap-2"><label htmlFor="task-sort" className="text-xs font-bold text-[var(--bp-muted)]">Sort</label><select id="task-sort" value={sort.field} onChange={(event) => updateSort(event.target.value as SortField)} className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-2 py-1.5 text-sm text-[var(--bp-text)]"><option value="due">Due date</option><option value="priority">Priority</option><option value="created">Created date</option><option value="title">Title</option></select><SecondaryButton onClick={() => updateSort(sort.field)}>{sort.direction === 'asc' ? 'Ascending' : 'Descending'}</SecondaryButton></div>}
+        pageActions={<div className="flex items-center gap-2"><label htmlFor="task-sort" className="text-xs font-bold text-[var(--bp-muted)]">{t('allTasksUi.sort')}</label><select id="task-sort" value={sort.field} onChange={(event) => updateSort(event.target.value as SortField)} className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-2 py-1.5 text-sm text-[var(--bp-text)]"><option value="due">{t('allTasksUi.dueDate')}</option><option value="priority">{t('taskForm.priority')}</option><option value="created">{t('allTasksUi.createdDate')}</option><option value="title">{t('allTasksUi.title')}</option></select><SecondaryButton onClick={() => updateSort(sort.field)}>{sort.direction === 'asc' ? t('allTasksUi.ascending') : t('allTasksUi.descending')}</SecondaryButton></div>}
       />
 
       {recurrenceSuggestions.length ? (
@@ -416,19 +414,19 @@ export default function AllTasksScreen({
       ) : null}
 
       <div className="mb-4">
-        <FilterTabs tabs={FILTERS} active={statusFilter} onChange={setStatusFilter} />
+        <FilterTabs tabs={filterTabs} active={statusFilter} onChange={setStatusFilter} />
       </div>
 
       <section className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-        <StatsCard icon="ALL" value={String(allCount)} title="All Tasks" desc="Every task you've created" />
-        <StatsCard icon="To Do" value={String(todoCount)} title="To Do" desc="Not started yet" />
-        <StatsCard icon="MOVE" value={String(inProgressCount)} title="In Progress" desc="Currently working on" />
-        <StatsCard icon="DONE" value={String(doneCount)} title="Done" desc="Completed tasks" />
-        <StatsCard icon="LATE" value={String(missedCount)} title="Missed" desc="Past their due date" />
+        <StatsCard icon="◎" value={String(allCount)} title={t('taskUi.allTasks.title')} desc={t('allTasksUi.everyTask')} />
+        <StatsCard icon="○" value={String(todoCount)} title={t('taskLabels.status.todo')} desc={t('allTasksUi.notStarted')} />
+        <StatsCard icon="↗" value={String(inProgressCount)} title={t('taskLabels.status.inProgress')} desc={t('allTasksUi.currentlyWorking')} />
+        <StatsCard icon="✓" value={String(doneCount)} title={t('taskLabels.status.done')} desc={t('allTasksUi.completedTasks')} />
+        <StatsCard icon="!" value={String(missedCount)} title={t('taskLabels.status.missed')} desc={t('allTasksUi.pastDue')} />
       </section>
 
-      {listError ? <p className="mb-3 text-sm font-semibold text-red-300">{listError}</p> : null}
-      {listLoading && !showListSkeleton ? <p className="mb-3 text-sm text-[var(--bp-muted)]">Loading tasks...</p> : null}
+      {listError ? <p className="mb-3 text-sm font-semibold text-red-300">{t('allTasksUi.loadFailed')}</p> : null}
+      {listLoading && !showListSkeleton ? <p className="mb-3 text-sm text-[var(--bp-muted)]">{t('allTasksUi.loading')}</p> : null}
 
       {activeChips.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -448,7 +446,7 @@ export default function AllTasksScreen({
             onClick={clearFilters}
             className="rounded-full border border-[var(--bp-border)] px-3 py-1 text-xs font-semibold text-[var(--bp-muted)] transition hover:border-[var(--bp-accent)]/40 hover:text-[var(--bp-text)]"
           >
-            Clear Filters
+            {t('allTasksUi.clearFilters')}
           </button>
         </div>
       )}
@@ -462,14 +460,14 @@ export default function AllTasksScreen({
               title={t('taskUi.allTasks.emptyTitle')}
               description={
                 hasActiveFilters || search
-                  ? 'Try clearing a filter or adjusting your search.'
-                  : "You don't have any tasks yet — create one to get started."
+                  ? t('allTasksUi.filteredEmpty')
+                  : t('allTasksUi.empty')
               }
             />
           ) : (
             <TaskGroup
-              title="Tasks"
-              count={`${filteredTasks.length} tasks`}
+              title={t('allTasksUi.tasks')}
+              count={t('allTasksUi.taskCount', { count: filteredTasks.length })}
               tasks={filteredTasks}
               sharedTaskIds={sharedTaskIds}
               onViewTaskDetails={onViewTaskDetails}
@@ -483,44 +481,44 @@ export default function AllTasksScreen({
         </section>
 
         <aside className="space-y-3">
-          <Panel title="Quick Filters">
+          <Panel title={t('allTasksUi.quickFilters')}>
             <FilterRow
-              label="Overdue"
+              label={t('taskLabels.due.overdue')}
               count={counts?.overdue ?? 0}
               color="bg-red-400"
               active={dueFilter === 'overdue'}
               onClick={() => toggleDueFilter('overdue')}
             />
             <FilterRow
-              label="Due Today"
+              label={t('taskLabels.due.dueToday')}
               count={counts?.today ?? 0}
               color="bg-[var(--bp-accent)]"
               active={dueFilter === 'today'}
               onClick={() => toggleDueFilter('today')}
             />
             <FilterRow
-              label="Upcoming"
+              label={t('taskLabels.due.upcoming')}
               count={counts?.upcoming ?? 0}
               color="bg-blue-400"
               active={dueFilter === 'upcoming'}
               onClick={() => toggleDueFilter('upcoming')}
             />
             <FilterRow
-              label="Focus Tasks"
+              label={t('allTasksUi.focusTasks')}
               count={counts?.focus ?? 0}
               color="bg-purple-400"
               active={focusActive}
               onClick={() => setFocusActive((value) => !value)}
             />
             <FilterRow
-              label="Completed"
+              label={t('taskLabels.due.completed')}
               count={counts?.completed ?? 0}
               color="bg-green-400"
               active={completedActive}
               onClick={() => setCompletedActive((value) => !value)}
             />
             <FilterRow
-              label="High Priority"
+              label={t('allTasksUi.highPriority')}
               count={counts?.highPriority ?? 0}
               color="bg-orange-400"
               active={highPriorityActive}
@@ -528,9 +526,9 @@ export default function AllTasksScreen({
             />
           </Panel>
 
-          <Panel title="Categories">
+          <Panel title={t('allTasksUi.categories')}>
             {categories.length === 0 ? (
-              <p className="text-xs text-[var(--bp-muted)]">No categories yet.</p>
+              <p className="text-xs text-[var(--bp-muted)]">{t('allTasksUi.noCategories')}</p>
             ) : (
               categories.map((category, index) => (
                 <FilterRow
@@ -619,12 +617,12 @@ function TaskRow({
   completionError?: string
   statusSuccess?: string
 }) {
-  const { isRTL } = useLanguage()
+  const { isRTL, language, t } = useLanguage()
   const checkboxLabel = pending
-    ? 'Updating task…'
+    ? t('allTasksUi.updating')
     : task.done
-      ? `Reopen task ${task.title}`
-      : `Mark task ${task.title} as complete`
+      ? t('allTasksUi.reopenTask', { title: task.title })
+      : t('allTasksUi.markComplete', { title: task.title })
 
   return (
     <div className="grid grid-cols-[24px_1fr] items-start gap-3 border-b border-[var(--bp-border)] px-3 py-2.5 transition last:border-b-0 hover:bg-[var(--bp-bg)]">
@@ -658,19 +656,19 @@ function TaskRow({
             <span className="truncate">{task.title}</span>
             {isShared ? <SharedBadge /> : null}
           </p>
-          <p className="truncate text-xs text-[var(--bp-muted)]">{task.category} - {task.due}</p>
-          {completionError ? <p className="mt-1 text-xs font-semibold text-red-300">{completionError}</p> : null}
-          {statusSuccess ? <p className="mt-1 text-xs font-semibold text-green-400">{statusSuccess}</p> : null}
+          <p className="truncate text-xs text-[var(--bp-muted)]">{task.category || t('allTasksUi.general')} - {formatDue(task.dueDate, language, t)}</p>
+          {completionError ? <p className="mt-1 text-xs font-semibold text-red-300">{t(completionError)}</p> : null}
+          {statusSuccess ? <p className="mt-1 text-xs font-semibold text-green-400">{t(statusSuccess)}</p> : null}
         </div>
 
         {/* On narrow widths these collapse into a wrapping row beneath the title;
             from `sm` up, `sm:contents` promotes them back into the dense grid columns. */}
         <div className="flex flex-wrap items-center gap-2 sm:contents">
-          <Badge label={task.priority} type={task.priority} />
-          <Badge label={task.status} type={task.status} />
+          <Badge label={priorityDisplay(task.priority, t)} type={task.priority} />
+          <Badge label={statusDisplay(task.status, t)} type={task.status} />
 
           <div className="w-full min-w-[120px] sm:w-auto">
-            <div role="progressbar" aria-label={`Progress for ${task.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress} className="h-1.5 rounded-full bg-[var(--bp-bg)]">
+            <div role="progressbar" aria-label={t('allTasksUi.progressFor', { title: task.title })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress} className="h-1.5 rounded-full bg-[var(--bp-bg)]">
               <div
                 className={`h-1.5 rounded-full ${
                   task.progress === 100 ? 'bg-green-400' : task.progress === 0 ? 'bg-slate-600' : 'bg-[var(--bp-accent)]'
@@ -689,16 +687,16 @@ function TaskRow({
         </div>
       </button>
       <label className="col-start-2 flex w-fit items-center gap-2 text-xs font-semibold text-[var(--bp-muted)]">
-        <span>Status</span>
+        <span>{t('taskForm.status')}</span>
         <select
-          aria-label={`Change status for ${task.title}`}
+          aria-label={t('allTasksUi.changeStatusFor', { title: task.title })}
           value={task.status === 'In Progress' ? 'In Progress' : 'To Do'}
           disabled={pending || task.status === 'Done' || task.status === 'Missed'}
           onChange={(event) => onChangeSimpleStatus?.(task, event.target.value as 'To Do' | 'In Progress')}
           className="rounded-md border border-[var(--bp-border)] bg-[var(--bp-surface)] px-2 py-1 text-xs font-semibold text-[var(--bp-text)] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <option value="To Do">To Do</option>
-          <option value="In Progress">In Progress</option>
+          <option value="To Do">{t('taskLabels.status.todo')}</option>
+          <option value="In Progress">{t('taskLabels.status.inProgress')}</option>
         </select>
       </label>
     </div>
@@ -709,8 +707,8 @@ function fromApiTask(task: ApiTask): Task {
   return {
     id: task.id,
     title: task.title,
-    category: task.category || 'General',
-    due: formatDue(task.dueDate),
+    category: task.category || '',
+    due: task.dueDate ?? '',
     dueDate: task.dueDate,
     createdAt: task.createdAt,
     priority: toUiPriority(task.priority) as Task['priority'],
@@ -721,9 +719,21 @@ function fromApiTask(task: ApiTask): Task {
   }
 }
 
-function formatDue(value?: string) {
-  if (!value) return 'No due date'
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
+function formatDue(value: string | undefined, language: 'en' | 'ar', t: ReturnType<typeof useLanguage>['t']) {
+  if (!value) return t('taskDetailsMeta.noDueDate')
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en-US', { month: 'short', day: 'numeric' }).format(new Date(value))
+}
+
+function statusDisplay(value: Task['status'] | 'To Do' | 'In Progress', t: ReturnType<typeof useLanguage>['t']) {
+  if (value === 'To Do') return t('taskLabels.status.todo')
+  if (value === 'In Progress') return t('taskLabels.status.inProgress')
+  if (value === 'Done') return t('taskLabels.status.done')
+  return t('taskLabels.status.missed')
+}
+
+function priorityDisplay(value: Task['priority'], t: ReturnType<typeof useLanguage>['t']) {
+  const key = value === 'High' ? 'high' : value === 'Medium' ? 'medium' : value === 'Low' ? 'low' : 'urgent'
+  return t(`taskLabels.priority.${key}`)
 }
 
 function Badge({ label, type }: { label: string; type: string }) {

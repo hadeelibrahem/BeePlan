@@ -20,6 +20,7 @@ import { MobileIcon } from '../components/layout';
 import { useStrictFocus } from '../features/focus/StrictFocusContext';
 import { StrictStatsSheet } from '../features/focus/StrictStatsSheet';
 import { loadFocusCompletionSoundEnabled, subscribeFocusCompletionSound } from '../lib/focusCompletionPreferences';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const FOCUS_COMPLETION_ASSET = require('../../assets/focus-complete.mp3') as number;
 
@@ -51,6 +52,7 @@ type Props = {
 };
 
 export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props) {
+  const { t } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
   const {
@@ -151,7 +153,7 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
             </Text>
           </View>
           <Text className="text-xs font-black uppercase" style={{ color: colors.secondaryText, letterSpacing: 3 }}>
-            BeePlan Focus
+            {t('focusUi.brand')}
           </Text>
         </View>
 
@@ -192,28 +194,23 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
             <View className="mt-6 w-full gap-2">
               {active.pausedSinceMs !== null ? (
                 <PrimaryButton fullWidth onPress={focus.resume}>
-                  Resume
-                </PrimaryButton>
+                  {t('focusUi.resume')}</PrimaryButton>
               ) : (
                 <SecondaryButton fullWidth onPress={focus.pause}>
-                  Pause
-                </SecondaryButton>
+                  {t('focusUi.pause')}</SecondaryButton>
               )}
               <View className="flex-row gap-2">
                 <View className="flex-1">
                   <PrimaryButton fullWidth onPress={focus.requestFinish}>
-                    Finish
-                  </PrimaryButton>
+                    {t('focusUi.finish')}</PrimaryButton>
                 </View>
                 <View className="flex-1">
                   <DangerButton fullWidth onPress={handleCancelPress}>
-                    Cancel
-                  </DangerButton>
+                    {t('common.cancel')}</DangerButton>
                 </View>
               </View>
               <OutlineButton fullWidth onPress={() => setShowAddTime(true)}>
-                Add Time
-              </OutlineButton>
+                {t('focusUi.addTime')}</OutlineButton>
             </View>
           ) : null}
 
@@ -232,16 +229,16 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
         </View>
 
         <View className="flex-row flex-wrap items-center justify-center gap-1">
-          <UtilityButton theme={theme} label="White Noise" onPress={() => setSoundsOpen(true)} />
-          <UtilityButton theme={theme} label="Ambient" onPress={() => setSoundsOpen(true)} />
+          <UtilityButton theme={theme} label={t('focusUi.whiteNoise')} onPress={() => setSoundsOpen(true)} />
+          <UtilityButton theme={theme} label={t('sharedFocus.ambient')} onPress={() => setSoundsOpen(true)} />
           {soundPlayer.activeSound && soundPlayer.isPlaying ? (
             <View className="rounded-xl px-3 py-2" style={{ backgroundColor: colors.card }}>
               <Text className="text-xs font-bold" style={{ color: colors.secondaryText }}>
-                🎧 Playing: <Text style={{ color: colors.text }}>{soundPlayer.activeSound.name}</Text>
+                {t('focusUi.ambientSounds')}: <Text style={{ color: colors.text }}>{t(`focusUi.sound.${soundPlayer.activeSound.name}`)}</Text>
               </Text>
             </View>
           ) : null}
-          <UtilityButton theme={theme} label="Exit Focus" accent onPress={handleExitFocus} />
+          <UtilityButton theme={theme} label={t('focusUi.exitFocus')} accent onPress={handleExitFocus} />
         </View>
       </View>
 
@@ -486,7 +483,7 @@ function fadeOutPlayer(controller: GuardedSoundPlayer, token: number, durationMs
   });
 }
 
-function FocusSoundsSheet({
+export function FocusSoundsSheet({
   visible,
   theme,
   activeSound,
@@ -513,6 +510,7 @@ function FocusSoundsSheet({
   onStop: () => void;
   onVolumeChange: (volume: number) => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -521,15 +519,15 @@ function FocusSoundsSheet({
           <View className="mb-4 flex-row items-start justify-between gap-3">
             <View>
               <Text className="text-[10px] font-black uppercase" style={{ color: colors.accentInk, letterSpacing: 2 }}>
-                Focus sounds
+                {t('focusUi.focusSounds')}
               </Text>
               <Text className="mt-1 text-xl font-black" style={{ color: colors.text }}>
-                White Noise
+                {t('focusUi.whiteNoise')}
               </Text>
             </View>
             <Pressable onPress={onClose} accessibilityRole="button" className="rounded-xl px-3 py-2 active:opacity-70">
               <Text className="text-xs font-black" style={{ color: colors.secondaryText }}>
-                Close
+                {t('focusUi.close')}
               </Text>
             </Pressable>
           </View>
@@ -538,7 +536,7 @@ function FocusSoundsSheet({
             {FOCUS_SOUND_CATEGORIES.map((category) => (
               <View key={category} className="mb-5">
                 <Text className="mb-2 text-xs font-black uppercase" style={{ color: colors.secondaryText }}>
-                  {category}
+                  {t(`focusUi.sound.${category}`)}
                 </Text>
                 <View className="gap-2">
                   {FOCUS_SOUNDS.filter((sound) => sound.category === category).map((sound) => {
@@ -556,15 +554,15 @@ function FocusSoundsSheet({
                         <View className="flex-row items-center justify-between gap-3">
                           <View className="flex-1">
                             <View className="flex-row items-center gap-2">
-                              <MobileIcon name={sound.icon} color={colors.accent} size={20} accessibilityLabel={`${sound.name} sound`} />
+                               <MobileIcon name={sound.icon} color={colors.accent} size={20} accessibilityLabel={`${t(`focusUi.sound.${sound.name}`)} ${t('focusUi.focusSounds')}`} />
                               <Text numberOfLines={1} className="text-sm font-black" style={{ color: colors.text }}>
-                                {sound.name}
+                                {t(`focusUi.sound.${sound.name}`)}
                               </Text>
                             </View>
                             {active ? (
                               <View className="mt-2 self-start rounded-full px-2 py-0.5" style={{ backgroundColor: colors.accent }}>
                                 <Text className="text-[10px] font-black" style={{ color: colors.accentText }}>
-                                  Currently Playing
+                                   {t('focusUi.ambientSounds')}
                                 </Text>
                               </View>
                             ) : null}
@@ -591,7 +589,7 @@ function FocusSoundsSheet({
           <View className="mt-2 border-t pt-4" style={{ borderColor: colors.border }}>
             <View className="mb-3 flex-row items-center justify-between">
               <Text className="text-xs font-black uppercase" style={{ color: colors.secondaryText }}>
-                Volume
+                {t('focusUi.volume')}
               </Text>
               <Text className="text-xs font-bold" style={{ color: colors.secondaryText }}>
                 {Math.round(volume * 100)}%
@@ -601,12 +599,12 @@ function FocusSoundsSheet({
             <View className="mt-4 flex-row gap-2">
               <View className="flex-1">
                 <SecondaryButton fullWidth onPress={onMuteToggle}>
-                  {muted ? 'Unmute' : 'Mute'}
+                  {muted ? t('focusUi.unmute') : t('focusUi.mute')}
                 </SecondaryButton>
               </View>
               <View className="flex-1">
                 <OutlineButton fullWidth onPress={onStop}>
-                  Stop
+                  {t('focusUi.stop')}
                 </OutlineButton>
               </View>
             </View>
@@ -649,7 +647,7 @@ function MobileVolumeSlider({
 
 // --- Timers ----------------------------------------------------------------
 
-function ActiveTimer({
+export function ActiveTimer({
   theme,
   title,
   subtitle,
@@ -670,6 +668,7 @@ function ActiveTimer({
   fraction: number;
   status: string;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   return (
     <View className="w-full items-center">
@@ -716,22 +715,23 @@ function BreakTimer({
   fraction: number;
   onEnd: () => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   return (
     <View className="w-full items-center">
       <Text className="text-xs font-black uppercase" style={{ color: colors.success, letterSpacing: 2 }}>
-        Break
+        {t('focusSession.break')}
       </Text>
       <Text className="mt-2 text-xl font-black" style={{ color: colors.text }}>
         {label}
       </Text>
       <TimerDisc theme={theme} center={center} fraction={fraction} />
       <Text className="mt-4 text-sm font-semibold" style={{ color: colors.secondaryText }}>
-        Relax — no task prompt after this.
+        {t('focusSession.breakHelper')}
       </Text>
       <View className="mt-5 w-40">
         <OutlineButton fullWidth onPress={onEnd}>
-          End break
+          {t('focusSession.endBreak')}
         </OutlineButton>
       </View>
     </View>
@@ -771,20 +771,21 @@ function BreakOffer({
   onPick: (minutes: number, label: string) => void;
   onSkip: () => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   return (
     <View className="w-full items-center rounded-3xl border p-6" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
       <Text className="text-xl font-black" style={{ color: colors.text }}>
-        Nice work — take a break?
+        {t('focusSession.niceWork')}
       </Text>
       <View className="mt-5 w-full gap-2">
         {BREAK_PRESETS.map((preset) => (
           <PrimaryButton key={preset.label} fullWidth onPress={() => onPick(preset.minutes, preset.label)}>
-            {preset.label} • {preset.minutes} min
+            {t('focusSession.break')} · {t('focusUi.minutes', { count: preset.minutes })}
           </PrimaryButton>
         ))}
         <SecondaryButton fullWidth onPress={onSkip}>
-          Skip break
+          {t('focusSession.skipBreak')}
         </SecondaryButton>
       </View>
     </View>
@@ -792,18 +793,19 @@ function BreakOffer({
 }
 
 function BreakFinished({ theme, onDone }: { theme: AppTheme; onDone: () => void }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   return (
     <View className="w-full items-center rounded-3xl border p-6" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
       <Text className="text-xl font-black" style={{ color: colors.text }}>
-        Break finished
+        {t('focusSession.breakFinished')}
       </Text>
       <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
-        Ready for another focus session?
+        {t('focusSession.anotherSession')}
       </Text>
       <View className="mt-5 w-full">
         <PrimaryButton fullWidth onPress={onDone}>
-          Back to Focus
+          {t('focusUi.brand')}
         </PrimaryButton>
       </View>
     </View>
@@ -829,41 +831,42 @@ function CompletionModal({
   onOutcome: (outcome: FocusTaskOutcome) => void;
   onAddTime: () => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   return (
     <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: '#00000099' }}>
       <View className="w-full rounded-3xl border p-6" style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}>
         <Text className="text-center text-2xl font-black" style={{ color: colors.text }}>
-          Great job!
+          {t('focusSession.greatJob')}
         </Text>
         <Text className="mt-1 text-center text-sm" style={{ color: colors.secondaryText }}>
-          You completed {minutes} {minutes === 1 ? 'minute' : 'minutes'} of focus.
+          {t('focusSession.completedFocus', { minutes })}
         </Text>
         <Text className="mt-4 text-center text-sm font-black" style={{ color: colors.text }}>
-          Did you finish this {isSubtask ? 'subtask' : 'task'}?
+          {t('focusSession.finishTask', { item: t(`focusSession.${isSubtask ? 'subtask' : 'task'}`) })}
         </Text>
         {isSubtask ? (
           <View className="mt-4 gap-2">
             <PrimaryButton fullWidth disabled={busy || alreadyDone} onPress={() => onOutcome('done')}>
-              Mark Complete
+              {t('taskLabels.status.done')}
             </PrimaryButton>
             <SecondaryButton fullWidth disabled={busy} onPress={() => onOutcome('keep')}>
-              Continue Later
+              {t('focusSession.stay')}
             </SecondaryButton>
             <OutlineButton fullWidth disabled={busy} onPress={onAddTime}>
-              Add More Time
+              {t('focusSession.addMoreTime')}
             </OutlineButton>
           </View>
         ) : (
           <View className="mt-4 gap-2">
             <PrimaryButton fullWidth disabled={busy || alreadyDone} onPress={() => onOutcome('done')}>
-              Yes, mark task done
+              {t('taskLabels.status.done')}
             </PrimaryButton>
             <SecondaryButton fullWidth disabled={busy} onPress={() => onOutcome('partial')}>
-              Partially completed
+              {t('taskLabels.status.inProgress')}
             </SecondaryButton>
             <OutlineButton fullWidth disabled={busy} onPress={() => onOutcome('keep')}>
-              Not yet
+              {t('taskLabels.status.todo')}
             </OutlineButton>
           </View>
         )}
@@ -873,25 +876,26 @@ function CompletionModal({
 }
 
 function ExitConfirm({ theme, onStay, onLeave }: { theme: AppTheme; onStay: () => void; onLeave: () => void }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   return (
     <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: '#00000099' }}>
       <View className="w-full rounded-3xl border p-6" style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}>
         <Text className="text-center text-lg font-black" style={{ color: colors.text }}>
-          Leave focus?
+          {t('focusSession.leaveFocus')}
         </Text>
         <Text className="mt-1 text-center text-sm" style={{ color: colors.secondaryText }}>
-          A focus session is still active. Leave anyway?
+          {t('focusSession.leaveWarning')}
         </Text>
         <View className="mt-5 flex-row gap-2">
           <View className="flex-1">
             <SecondaryButton fullWidth onPress={onStay}>
-              Stay
+              {t('focusSession.stay')}
             </SecondaryButton>
           </View>
           <View className="flex-1">
             <DangerButton fullWidth onPress={onLeave}>
-              Leave
+              {t('focusSession.leave')}
             </DangerButton>
           </View>
         </View>
@@ -913,6 +917,7 @@ function AddTimeSheet({
   onCancel: () => void;
   onConfirm: (minutes: number) => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   const [selected, setSelected] = useState<number | 'custom'>(10);
   const [customValue, setCustomValue] = useState('');
@@ -938,10 +943,10 @@ function AddTimeSheet({
         style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}
       >
         <Text className="text-xl font-black" style={{ color: colors.text }}>
-          Add more time
+          {t('focusSession.addMoreTime')}
         </Text>
         <Text className="mt-1 text-sm" style={{ color: colors.secondaryText }}>
-          Extend your focus session.
+          {t('focusSession.extendSession')}
         </Text>
 
         <View className="mt-4 flex-row flex-wrap gap-2">
@@ -974,7 +979,7 @@ function AddTimeSheet({
             }}
           >
             <Text className="text-sm font-black" style={{ color: colors.text }}>
-              Custom
+              {t('focusSession.custom')}
             </Text>
           </Pressable>
         </View>
@@ -982,7 +987,7 @@ function AddTimeSheet({
         {selected === 'custom' ? (
           <View className="mt-4">
             <Text className="text-xs font-black uppercase" style={{ color: colors.secondaryText }}>
-              Minutes ({FOCUS_EXTENSION_MIN_MINUTES}–{FOCUS_EXTENSION_MAX_MINUTES})
+              {t('focusSession.minutes')} ({FOCUS_EXTENSION_MIN_MINUTES}–{FOCUS_EXTENSION_MAX_MINUTES})
             </Text>
             <TextInput
               value={customValue}
@@ -1006,16 +1011,16 @@ function AddTimeSheet({
         <View className="mt-5 flex-row gap-2">
           <View className="flex-1">
             <SecondaryButton fullWidth disabled={busy} onPress={onCancel}>
-              Cancel
+              {t('common.cancel')}
             </SecondaryButton>
           </View>
           <View className="flex-1">
             <PrimaryButton fullWidth disabled={!canSubmit} onPress={handleConfirm}>
               {busy
-                ? 'Adding…'
+                ? t('focusSession.adding')
                 : validation.error === null
                   ? `Add ${validation.minutes} min`
-                  : 'Add Time'}
+                  : t('focusSession.addMoreTime')}
             </PrimaryButton>
           </View>
         </View>
@@ -1026,7 +1031,7 @@ function AddTimeSheet({
 
 // --- Small pieces ----------------------------------------------------------
 
-function UtilityButton({
+export function UtilityButton({
   theme,
   label,
   accent,
@@ -1081,16 +1086,17 @@ function StrictStatusCard({
   attempts: number;
   onViewAttempts: () => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
 
   if (error) {
     return (
       <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.error, backgroundColor: `${colors.error}18` }}>
         <Text className="text-xs font-black uppercase" style={{ color: colors.error, letterSpacing: 1 }}>
-          App blocking did not activate
+          {t('focusUi.strictMode')}
         </Text>
         <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
-          {error} Your focus timer is still running normally.
+          {error} {t('focusSession.startSession')}
         </Text>
       </View>
     );
@@ -1100,7 +1106,7 @@ function StrictStatusCard({
     return (
       <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}>
         <Text className="text-xs font-semibold" style={{ color: colors.secondaryText }}>
-          Activating app blocking…
+          {t('focusUi.blockingApps', { count: blockedCount })}
         </Text>
       </View>
     );
@@ -1112,27 +1118,27 @@ function StrictStatusCard({
         <View className="flex-row items-center gap-2">
           <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.accent }}>
             <Text className="text-[10px] font-black uppercase" style={{ color: colors.accentText, letterSpacing: 1 }}>
-              Strict Mode active
+              {t('focusUi.strictMode')}
             </Text>
           </View>
         </View>
         <Text className="text-xs font-semibold" style={{ color: usageAccess ? colors.success : colors.warning }}>
-          {usageAccess ? 'Usage Access ✓' : 'Permission lost'}
+          {usageAccess ? t('focusUi.usageAccessRequired') : t('focusUi.noAppsChosen')}
         </Text>
       </View>
 
       <View className="mt-3 flex-row items-center justify-between">
         <View>
           <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
-            Blocking
+            {t('focusUi.blockingApps', { count: blockedCount })}
           </Text>
           <Text className="text-sm font-black" style={{ color: colors.text }}>
-            {blockedCount} app{blockedCount === 1 ? '' : 's'}
+            {t('focusUi.blockingApps', { count: blockedCount })}
           </Text>
         </View>
         <View>
           <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
-            Blocked attempts
+            {t('focusUi.strictDescription')}
           </Text>
           <Text className="text-sm font-black" style={{ color: colors.text }}>
             {attempts}
@@ -1140,14 +1146,14 @@ function StrictStatusCard({
         </View>
         <Pressable onPress={onViewAttempts} accessibilityRole="button" className="rounded-xl px-3 py-2 active:opacity-70" style={{ backgroundColor: colors.surface }}>
           <Text className="text-xs font-black" style={{ color: colors.primary }}>
-            View details
+            {t('focusUi.focusSounds')}
           </Text>
         </Pressable>
       </View>
 
       {!usageAccess ? (
         <Text className="mt-2 text-[11px]" style={{ color: colors.warning }}>
-          Usage Access was revoked — blocking can't enforce until it's re-granted.
+          {t('focusUi.usageAccessRequired')}
         </Text>
       ) : null}
     </View>
@@ -1163,21 +1169,22 @@ function StrictExitConfirm({
   onStay: () => void;
   onExit: (reason: string) => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = theme;
   const reasons = [
-    { key: 'emergency', label: 'Real emergency' },
-    { key: 'need-app', label: 'I need a blocked app' },
-    { key: 'done-early', label: 'Finished early' },
-    { key: 'other', label: 'Other reason' },
+    { key: 'emergency', label: t('focusUi.chooseApps') },
+    { key: 'need-app', label: t('focusUi.blockingApps', { count: 1 }) },
+    { key: 'done-early', label: t('taskLabels.status.done') },
+    { key: 'other', label: t('common.somethingWentWrong') },
   ];
   return (
     <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: '#00000099' }}>
       <View className="w-full rounded-3xl border p-6" style={{ backgroundColor: colors.surfaceElevated, borderColor: colors.border }}>
         <Text className="text-center text-lg font-black" style={{ color: colors.text }}>
-          End strict session early?
+          {t('focusSession.leaveFocus')}
         </Text>
         <Text className="mt-1 text-center text-sm" style={{ color: colors.secondaryText }}>
-          This stops app blocking and ends your focus session. Pick a reason — it's saved to your stats.
+          {t('focusUi.strictDescription')}
         </Text>
         <View className="mt-4 gap-2">
           {reasons.map((reason) => (
@@ -1186,7 +1193,7 @@ function StrictExitConfirm({
             </DangerButton>
           ))}
           <SecondaryButton fullWidth onPress={onStay}>
-            Keep focusing
+            {t('focusSession.stay')}
           </SecondaryButton>
         </View>
       </View>

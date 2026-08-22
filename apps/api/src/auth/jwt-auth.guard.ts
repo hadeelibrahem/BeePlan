@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -14,6 +15,7 @@ export type AuthenticatedRequest = Request & {
   user: {
     id: string;
     email?: string;
+    role?: 'user' | 'admin' | 'super_admin';
   };
 };
 
@@ -64,6 +66,8 @@ export class JwtAuthGuard implements CanActivate {
     const currentUser = await this.databaseService.db.query.users.findFirst({
       columns: {
         tokenVersion: true,
+        role: true,
+        accountStatus: true,
       },
       where: eq(users.id, userId),
     });
@@ -74,9 +78,14 @@ export class JwtAuthGuard implements CanActivate {
       );
     }
 
+    if (currentUser.accountStatus === 'suspended') {
+      throw new ForbiddenException('This account is unavailable.');
+    }
+
     request.user = {
       id: userId,
       email: payload.email,
+      role: currentUser.role === 'super_admin' ? 'super_admin' : currentUser.role === 'admin' ? 'admin' : 'user',
     };
 
     return true;

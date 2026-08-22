@@ -35,6 +35,23 @@ describe('Settings sidebar navigation', () => {
     expect(onNavigateNotes).toHaveBeenCalledOnce()
   })
 
+  it('keeps the pre-merge Whiteboards and Achievement Museum navigation reachable', () => {
+    const onNavigateWhiteboard = vi.fn()
+    const onNavigateAchievements = vi.fn()
+
+    const { container } = render(<LanguageProvider><Sidebar
+      active="dashboard"
+      onNavigateWhiteboard={onNavigateWhiteboard}
+      onNavigateAchievements={onNavigateAchievements}
+    /></LanguageProvider>)
+
+    fireEvent.click(container.querySelector('[data-sidebar-page="whiteboard"]')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Achievement Museum' }))
+
+    expect(onNavigateWhiteboard).toHaveBeenCalledOnce()
+    expect(onNavigateAchievements).toHaveBeenCalledOnce()
+  })
+
   it('renders a desktop sidebar plus an isolated mobile drawer tree when open', () => {
     const { container } = render(
       <LanguageProvider>

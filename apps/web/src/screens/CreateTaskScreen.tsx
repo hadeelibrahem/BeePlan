@@ -125,14 +125,14 @@ export default function CreateTaskScreen({
 
   async function handleSave() {
     if (!title.trim()) {
-      setError('Task title is required.')
+      setError('createTask.titleRequired')
       return
     }
 
     const estimatedTimeMinutes = Math.round((Number(estimatedHours) || 0) * 60)
     const scheduleValidationError = taskScheduleValidationError({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })
     if (scheduleValidationError) {
-      setError(scheduleValidationError)
+      setError(scheduleValidationError.includes('required together') ? 'createTask.scheduleFieldsRequired' : 'createTask.scheduleDurationRequired')
       return
     }
     const schedulePayload = { title: title.trim(), priority: toApiPriority(priority), dueDate: dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : undefined, estimatedTimeMinutes, scheduledDate: scheduledDate || undefined, scheduledStartTime: scheduledStartTime || undefined, scheduledEndTime: scheduledEndTime || undefined }
@@ -186,7 +186,8 @@ export default function CreateTaskScreen({
       markSaved()
       onCreated?.(createdTask)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save task.')
+      console.error('Unable to save task', err)
+      setError('createTask.saveFailed')
     } finally {
       setUploadingAttachments(false)
       setSaving(false)
@@ -197,10 +198,10 @@ export default function CreateTaskScreen({
     if (!timeConflict || !accessToken) return
     const target = which === 'existing' ? timeConflict.existingTask : timeConflict.proposedTask
     const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule
-    if (!schedule) { setError('No available slot was found.'); return }
+    if (!schedule) { setError('createTask.noAvailableSlot'); return }
     const validation = await validateTaskSchedule(accessToken, { ...target, ...schedule })
     if (validation.conflicts.some((item) => item.existingTask.id !== (which === 'existing' ? timeConflict.proposedTask.id : timeConflict.existingTask.id))) {
-      setError('The selected slot conflicts with another task.'); return
+      setError('createTask.slotConflict'); return
     }
     if (!window.confirm(`Current schedule → Proposed schedule\n${target.title}: ${target.scheduledDate} ${target.scheduledStartTime}–${target.scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
     if (which === 'existing') {
@@ -233,17 +234,17 @@ export default function CreateTaskScreen({
         active="tasks"
         {...nav}
         onNavigateTasks={onCancel}
-        panelTitle="Keep going!"
-        panelCaption="You're doing great today."
+        panelTitle={t('createTask.keepGoing')}
+        panelCaption={t('createTask.doingGreat')}
         panelPercent={0}
       >
           <div className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
             <button type="button" onClick={onCancel} className="hover:text-[var(--bp-text)]">
-              Back
+              {t('taskForm.back')}
             </button>
-            <span>Tasks</span>
+            <span>{t('createTask.tasks')}</span>
             <span>/</span>
-            <span className="text-[var(--bp-text)]">Create new task</span>
+            <span className="text-[var(--bp-text)]">{t('createTask.createNew')}</span>
           </div>
 
           <PageHeader
@@ -253,7 +254,7 @@ export default function CreateTaskScreen({
               <TopActionBar pageOnly
                 searchValue={search}
                 onSearchChange={setSearch}
-                searchPlaceholder="Search tasks..."
+                searchPlaceholder={t('allTasksUi.searchPlaceholder')}
                 themeMode={mode}
                 onToggleTheme={toggleTheme}
                 languageLabel={t('common.languageToggle')}
@@ -266,9 +267,9 @@ export default function CreateTaskScreen({
 
           <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
             <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 shadow-2xl">
-              <SectionTitle icon="INFO" title="Task Information" />
+              <SectionTitle icon="INFO" title={t('createTask.information')} />
 
-              <FieldLabel label="Task Title" required htmlFor="create-task-title" />
+              <FieldLabel label={t('taskForm.taskTitle')} required htmlFor="create-task-title" />
               <input
                 id="create-task-title"
                 required
@@ -278,28 +279,28 @@ export default function CreateTaskScreen({
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 className="mb-4 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
-                placeholder="Enter task title..."
+                placeholder={t('taskForm.taskTitlePlaceholder')}
               />
 
-              <FieldLabel label="Description" htmlFor="create-task-description" />
+              <FieldLabel label={t('taskForm.description')} htmlFor="create-task-description" />
               <textarea
                 id="create-task-description"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 className="mb-1.5 min-h-28 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
-                placeholder="Describe your task..."
+                placeholder={t('createTask.descriptionPlaceholder')}
               />
               <p className="mb-4 text-end text-xs text-[var(--bp-muted)]">{description.length}/500</p>
 
               <div className="mb-4 border-t border-[var(--bp-border)] pt-4">
-                <FieldLabel label="Subtasks" />
-                <p className="mb-3 text-sm text-[var(--bp-muted)]">Break down your task into smaller steps</p>
+                <FieldLabel label={t('createTask.subtasks')} />
+                <p className="mb-3 text-sm text-[var(--bp-muted)]">{t('createTask.subtasksHelp')}</p>
                 <button
                   type="button"
                   onClick={() => setIsSubtaskModalOpen(true)}
                   className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)]/60"
                 >
-                  + Add Subtask
+                  + {t('createTask.addSubtask')}
                 </button>
                 {subtasks.length ? (
                   <div className="mt-3 space-y-2">
@@ -311,7 +312,7 @@ export default function CreateTaskScreen({
                           onClick={() => setSubtasks((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                           className="text-xs font-black text-red-300"
                         >
-                          Remove
+                          {t('createTask.remove')}
                         </button>
                       </div>
                     ))}
@@ -319,16 +320,16 @@ export default function CreateTaskScreen({
                 ) : null}
               </div>
 
-              {!showNotes ? <button type="button" onClick={() => setShowNotes(true)} className="mb-4 w-full rounded-xl border border-dashed border-[var(--bp-border)] px-3 py-2.5 text-start text-sm font-bold text-[var(--bp-accent-ink)]">+ Add notes</button> : <div className="mb-4 border-t border-[var(--bp-border)] pt-4"><FieldLabel label="Notes" htmlFor="create-task-notes" /><textarea
+              {!showNotes ? <button type="button" onClick={() => setShowNotes(true)} className="mb-4 w-full rounded-xl border border-dashed border-[var(--bp-border)] px-3 py-2.5 text-start text-sm font-bold text-[var(--bp-accent-ink)]">+ {t('createTask.addNotes')}</button> : <div className="mb-4 border-t border-[var(--bp-border)] pt-4"><FieldLabel label={t('taskForm.notes')} htmlFor="create-task-notes" /><textarea
                   id="create-task-notes"
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                   className="min-h-20 w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
-                  placeholder="Additional notes (optional)..."
+                  placeholder={t('taskForm.notesPlaceholder')}
                 /></div>}
 
               {moreOptions ? <div className="border-t border-[var(--bp-border)] pt-4">
-                <FieldLabel label="Attachments" />
+                <FieldLabel label={t('createTask.attachments')} />
                 <TaskAttachmentPicker
                   files={attachments}
                   onChange={setAttachments}
@@ -340,27 +341,27 @@ export default function CreateTaskScreen({
 
             <section className="space-y-3">
               <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
-                <SectionTitle icon="SET" title="Task Settings" />
+                <SectionTitle icon="SET" title={t('createTask.settings')} />
 
-                <FieldLabel label="Priority" />
+                <FieldLabel label={t('taskForm.priority')} />
                 <div className="mb-4 grid grid-cols-3 gap-2">
-                  {['Low', 'Medium', 'High'].map((item) => (
-                    <Segment key={item} active={priority === item} label={item} color={item === 'Low' ? 'text-green-400' : item === 'High' ? 'text-red-400' : 'text-orange-400'} onClick={() => setPriority(item)} />
+                  {(['Low', 'Medium', 'High'] as const).map((item) => (
+                    <Segment key={item} active={priority === item} label={t(`taskLabels.priority.${item.toLowerCase()}`)} color={item === 'Low' ? 'text-green-400' : item === 'High' ? 'text-red-400' : 'text-orange-400'} onClick={() => setPriority(item)} />
                   ))}
                 </div>
 
-                <FieldLabel label="Category" htmlFor="create-task-category" />
+                <FieldLabel label={t('createTask.category')} htmlFor="create-task-category" />
                 <select id="create-task-category" value={category} onChange={(event) => setCategory(event.target.value)} className="mb-4 w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]">
-                  <option>Select category...</option>
-                  <option>Work</option>
-                  <option>Personal</option>
-                  <option>Study</option>
-                  <option>Health</option>
+                  <option value="">{t('createTask.selectCategory')}</option>
+                  <option value="Work">{t('createTask.work')}</option>
+                  <option value="Personal">{t('createTask.personal')}</option>
+                  <option value="Study">{t('createTask.study')}</option>
+                  <option value="Health">{t('createTask.health')}</option>
                 </select>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <FieldLabel label="Deadline · when this must be finished" htmlFor="create-task-due-date" />
+                    <FieldLabel label={`${t('createTask.deadline')} · ${t('createTask.deadlineHelp')}`} htmlFor="create-task-due-date" />
                     <input
                       id="create-task-due-date"
                       type="date"
@@ -370,7 +371,7 @@ export default function CreateTaskScreen({
                     />
                   </div>
                   <div>
-                    <FieldLabel label="Deadline time" htmlFor="create-task-due-time" />
+                    <FieldLabel label={t('createTask.deadlineTime')} htmlFor="create-task-due-time" />
                     <input
                       id="create-task-due-time"
                       type="time"
@@ -381,19 +382,19 @@ export default function CreateTaskScreen({
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div><FieldLabel label="Schedule · when you plan to do this" htmlFor="create-task-scheduled-date" /><input id="create-task-scheduled-date" aria-label="Schedule date" type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
-                  <div><FieldLabel label="Start time" htmlFor="create-task-scheduled-start" /><input id="create-task-scheduled-start" aria-label="Schedule start time" type="time" value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
-                  <div><FieldLabel label="End time" htmlFor="create-task-scheduled-end" /><input id="create-task-scheduled-end" aria-label="Schedule end time" type="time" value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label={`${t('createTask.schedule')} · ${t('createTask.scheduleHelp')}`} htmlFor="create-task-scheduled-date" /><input id="create-task-scheduled-date" aria-label={t('createTask.schedule')} type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label={t('createTask.startTime')} htmlFor="create-task-scheduled-start" /><input id="create-task-scheduled-start" aria-label={t('createTask.startTime')} type="time" value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                  <div><FieldLabel label={t('createTask.endTime')} htmlFor="create-task-scheduled-end" /><input id="create-task-scheduled-end" aria-label={t('createTask.endTime')} type="time" value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
                 </div>
                 <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
               </div>
 
-              <button type="button" onClick={() => setMoreOptions((value) => !value)} className="flex w-full items-center justify-between rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 text-start font-black text-[var(--bp-text)]">More options <span className="text-[var(--bp-muted)]">{moreOptions ? '⌃' : '›'}</span></button>
+              <button type="button" onClick={() => setMoreOptions((value) => !value)} className="flex w-full items-center justify-between rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4 text-start font-black text-[var(--bp-text)]">{t('createTask.moreOptions')} <span className="text-[var(--bp-muted)]">{moreOptions ? '⌃' : '›'}</span></button>
               {moreOptions ? <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4"><FieldLabel label="Estimated duration" htmlFor="create-task-estimated-hours" /><input id="create-task-estimated-hours" type="number" min="0" step="0.25" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} placeholder="Hours" className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
-                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4"><FieldLabel label="Labels" htmlFor="create-task-labels" /><input id="create-task-labels" value={labelsText} onChange={(event) => setLabelsText(event.target.value)} placeholder="Comma-separated labels" className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4"><FieldLabel label={t('createTask.estimatedDuration')} htmlFor="create-task-estimated-hours" /><input id="create-task-estimated-hours" type="number" min="0" step="0.25" value={estimatedHours} onChange={(event) => setEstimatedHours(event.target.value)} placeholder={t('createTask.hours')} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
+                <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4"><FieldLabel label={t('createTask.labels')} htmlFor="create-task-labels" /><input id="create-task-labels" value={labelsText} onChange={(event) => setLabelsText(event.target.value)} placeholder={t('createTask.labelsPlaceholder')} className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)]" /></div>
                 <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
-                  <FieldLabel label="Recurring Task" />
+                  <FieldLabel label={t('createTask.recurring')} />
                   <button
                     type="button"
                     onClick={() => setIsRecurrenceModalOpen(true)}
@@ -404,15 +405,15 @@ export default function CreateTaskScreen({
                 </div>
 
                 <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
-                  <FieldLabel label="Dependencies" />
-                  <p className="mb-3 text-sm text-[var(--bp-muted)]">Task depends on another task</p>
+                  <FieldLabel label={t('createTask.dependencies')} />
+                  <p className="mb-3 text-sm text-[var(--bp-muted)]">{t('createTask.dependenciesHelp')}</p>
                   <button
                     type="button"
                     onClick={() => setDependencyModalOpen(true)}
                     className="w-full rounded-xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2.5 font-bold text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)]/60 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={!availableDependencies.length}
                   >
-                    + Add Dependency
+                    + {t('createTask.addDependency')}
                   </button>
                   {dependencies.length ? (
                     <div className="mt-4 space-y-2">
@@ -427,7 +428,7 @@ export default function CreateTaskScreen({
                     </div>
                   ) : (
                     <p className="mt-3 text-xs text-[var(--bp-muted)]">
-                      {availableDependencies.length ? 'No dependencies selected yet.' : 'Create another task first to add dependencies.'}
+                      {availableDependencies.length ? t('createTask.noDependencies') : t('createTask.createDependencyFirst')}
                     </p>
                   )}
                 </div>
@@ -437,9 +438,9 @@ export default function CreateTaskScreen({
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     <label htmlFor="create-task-reminder-toggle" className="mb-2 block text-xs font-black uppercase tracking-wide text-[var(--bp-subtle)]">
-                      Reminder
+                      {t('createTask.reminder')}
                     </label>
-                    <p className="text-sm text-[var(--bp-muted)]">BeePlan will remind you before the due date.</p>
+                    <p className="text-sm text-[var(--bp-muted)]">{t('createTask.reminderHelp')}</p>
                   </div>
                   <button
                     id="create-task-reminder-toggle"
@@ -455,39 +456,39 @@ export default function CreateTaskScreen({
                   </button>
                 </div>
 
-                <FieldLabel label="Reminder Time" htmlFor="create-task-reminder-time" />
+                <FieldLabel label={t('createTask.reminderTime')} htmlFor="create-task-reminder-time" />
                 <select
                   id="create-task-reminder-time"
-                  aria-label="Reminder Time"
+                  aria-label={t('createTask.reminderTime')}
                   value={reminderBeforeMinutes}
                   disabled={!reminderEnabled}
                   onChange={(event) => setReminderBeforeMinutes(Number(event.target.value))}
                   className="w-full rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value={30}>30 minutes before</option>
-                  <option value={10}>10 minutes before</option>
-                  <option value={60}>1 hour before</option>
-                  <option value={1440}>1 day before</option>
+                  <option value={30}>{t('createTask.reminderMinutesBefore', { count: 30 })}</option>
+                  <option value={10}>{t('createTask.reminderMinutesBefore', { count: 10 })}</option>
+                  <option value={60}>{t('createTask.reminderHourBefore')}</option>
+                  <option value={1440}>{t('createTask.reminderDayBefore')}</option>
                 </select>
               </div>
 
               <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/50 p-4">
-                <FieldLabel label="Quick Tip" />
+                <FieldLabel label={t('createTask.quickTip')} />
                 <p className="text-sm leading-6 text-[var(--bp-muted)]">
-                  Break large tasks into subtasks to make them easier to manage.
+                  {t('createTask.quickTipText')}
                 </p>
               </div>
             </section>
           </div>
 
           <div className="mt-6 flex justify-end gap-3 border-t border-[var(--bp-border)] pt-4">
-          {error ? <p id="create-task-error" role="alert" aria-live="assertive" className="me-auto self-center text-sm font-semibold text-red-300">{error}</p> : null}
+          {error ? <p id="create-task-error" role="alert" aria-live="assertive" className="me-auto self-center text-sm font-semibold text-red-300">{error.startsWith('createTask.') ? t(error) : error}</p> : null}
             <button
               type="button"
               onClick={onCancel}
               className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-6 py-2.5 font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
             >
-              Cancel
+              {t('taskForm.cancel')}
             </button>
 
             <button
@@ -496,7 +497,7 @@ export default function CreateTaskScreen({
               disabled={saving || uploadingAttachments}
               className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-6 py-2.5 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-60"
             >
-              {saving || uploadingAttachments ? 'Saving...' : 'Save Task'}
+              {saving || uploadingAttachments ? t('taskForm.saving') : t('taskForm.saveTask')}
             </button>
           </div>
         <TaskTimeConflictModal

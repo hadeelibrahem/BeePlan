@@ -10,6 +10,8 @@
     "mobile:web": "npm --prefix apps/mobile run web --",
     "web": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
+    "i18n:audit": "node scripts/audit-hardcoded-ui.mjs",
+    "i18n:migrate": "node scripts/migrate-hardcoded-ui.mjs",
     "api": "npm --prefix apps/api run start:dev",
     "api:build": "npm --prefix apps/api run build",
     "api:test": "npm --prefix apps/api run test",

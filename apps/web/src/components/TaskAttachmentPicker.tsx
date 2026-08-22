@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useLanguage } from '../i18n/LanguageContext'
 
 const ACCEPTED_EXTENSIONS = '.png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.json,.log,.html,.htm,.mp3,.m4a,.ogg,.oga,.wav,.mp4,.webm,.ogv'
 const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024
@@ -42,6 +43,7 @@ export default function TaskAttachmentPicker({
   disabled,
   onValidationError,
 }: TaskAttachmentPickerProps) {
+  const { t } = useLanguage()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const fileKeySet = useMemo(
@@ -104,14 +106,15 @@ export default function TaskAttachmentPicker({
         multiple
         onChange={handleInputChange}
         disabled={disabled}
+        aria-label={t('editTaskForm.chooseFiles')}
       />
       <div className="text-center">
-        <div className="text-sm font-black text-[var(--bp-accent-ink)]">UPLOAD</div>
-        <p className="mt-2 text-sm text-[var(--bp-subtle)]">Drag & drop files here, or browse from your device</p>
+        <div className="text-sm font-black text-[var(--bp-accent-ink)]">{t('editTaskForm.upload')}</div>
+        <p className="mt-2 text-sm text-[var(--bp-subtle)]">{t('editTaskForm.attachmentHelp')}</p>
         <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="mt-3 rounded-lg border border-[var(--bp-accent)]/60 px-3 py-1.5 text-sm font-bold text-[var(--bp-accent-ink)] hover:bg-[var(--bp-accent)]/10 disabled:cursor-not-allowed disabled:opacity-60">
-          Browse files
+          {t('editTaskForm.chooseFiles')}
         </button>
-        <p className="mt-1 text-xs text-[var(--bp-muted)]">Supports images, PDF, Word, Excel, PowerPoint, and text files</p>
+        <p className="mt-1 text-xs text-[var(--bp-muted)]">{t('editTaskForm.supportedFiles')}</p>
       </div>
 
       {files.length ? (
@@ -130,6 +133,7 @@ export default function TaskAttachmentPicker({
 }
 
 function AttachmentDraftRow({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const { t } = useLanguage()
   return (
     <div className="flex items-center gap-3 rounded-xl bg-[var(--bp-surface)] p-3 text-left">
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[9px] font-black text-white ${attachmentColor(file.type, file.name)}`}>
@@ -149,7 +153,7 @@ function AttachmentDraftRow({ file, onRemove }: { file: File; onRemove: () => vo
         }}
         className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-300"
       >
-        Remove
+        {t('editTaskForm.remove')}
       </button>
     </div>
   )

@@ -67,10 +67,15 @@ import { RouteFallback } from './components/RouteFallback'
 import { AppLayout, type SidebarNavHandlers, type SidebarPage } from './components/layout'
 import { BeeCompanion } from './components/BeeCompanion'
 import { useToast } from './components/feedback/ToastProvider'
+import { useLanguage } from './i18n/LanguageContext'
 import { hasPersistedFocusSession, useFocusSession } from './lib/useFocusSession'
 import { queryKeys } from './lib/queryKeys'
 import { pathForScreen, resolveAppRoute, type AppScreen } from './lib/appRoutes'
 import { TimeCapsulesScreen } from './features/time-capsules/TimeCapsulesScreen'
+import { AdminRouteGate } from './features/admin/AdminArea'
+import { FeedbackScreen } from './features/feedback/FeedbackScreen'
+import { FeedbackDetailScreen } from './features/feedback/FeedbackDetailScreen'
+import { ChallengesScreen } from './features/challenges/ChallengesScreen'
 
 type AuthScreenState = 'auth' | 'forgot' | 'reset'
 function getAuthScreenFromPath(): AuthScreenState {
@@ -120,6 +125,7 @@ function ThemedApp() {
   const selectedTaskId = route.taskId ?? selectedTaskIdState
   const { accessToken, loading, user, signOut, mobileAuthWaiting, mobileAuthError, retryMobileAuth } = useAuth()
   const { showToast } = useToast()
+  const { t } = useLanguage()
   const queryClient = useQueryClient()
   // The base task list is the single task source for the app shell. Filtered
   // screens use their own query keys, and mutations update/invalidate all task
@@ -496,6 +502,8 @@ function ThemedApp() {
     onNavigatePlanner: () => setScreen('planner'),
     onNavigateReminders: () => setScreen('list'),
     onNavigatePeople: () => setScreen('social'),
+    onNavigateFeedback: () => setScreen('feedback'),
+    onNavigateChallenges: () => setScreen('challenges'),
     onNavigateNotifications: () => setScreen('notifications'),
     onNavigateCalendar: () => setScreen('calendar'),
     onNavigateNotes: () => setScreen('notes'),
@@ -552,6 +560,12 @@ function ThemedApp() {
     }
 
     return <AuthScreen onForgot={() => navigateAuth('forgot')} />
+  }
+
+  // The AdminArea verifies /admin/me itself. This branch deliberately does not
+  // use the browser-stored user object as an authorization decision.
+  if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
+    return <AdminRouteGate />
   }
 
   if (screen === 'notFound') {
@@ -698,6 +712,7 @@ function ThemedApp() {
           invalidateTaskFilters()
           refreshPlanner()
         }}
+        onPlanAccepted={refreshSummary}
         onSignOut={() => void handleSignOut()}
         {...sidebarNav}
       />
@@ -772,6 +787,18 @@ function ThemedApp() {
 
   if (screen === 'social') {
     return renderAuthenticatedPage(<SocialScreen {...sidebarNav} accessToken={accessToken ?? ''} onSignOut={() => void handleSignOut()} />, 'people')
+  }
+
+  if (screen === 'challenges') {
+    const challengeId = location.pathname.startsWith('/challenges/') ? location.pathname.split('/').pop() : undefined
+    return renderAuthenticatedPage(<ChallengesScreen token={accessToken ?? ''} key={challengeId} />, 'challenges')
+  }
+
+  if (screen === 'feedback' && route.feedbackId) {
+    return renderAuthenticatedPage(<FeedbackDetailScreen {...sidebarNav} accessToken={accessToken ?? ''} id={route.feedbackId} onBack={() => navigate('/feedback')} />, 'feedback')
+  }
+  if (screen === 'feedback') {
+    return renderAuthenticatedPage(<FeedbackScreen {...sidebarNav} accessToken={accessToken ?? ''} />, 'feedback')
   }
 
   if (screen === 'notifications') {
@@ -934,7 +961,7 @@ function ThemedApp() {
   }
 
   if ((screen === 'taskDetails' || screen === 'editTask' || screen === 'aiCollaboration') && selectedTaskId && !selectedTask) {
-    return <RouteFallback title="Opening task" message="Loading the task from this link..." actionLabel="Back to tasks" onBack={() => setScreen('tasks')} />
+    return <RouteFallback title={t('taskDetailsState.opening')} message={t('taskDetailsState.loadingFromLink')} actionLabel={t('taskDetailsState.backToTasks')} onBack={() => setScreen('tasks')} />
   }
 
   if (screen === 'editTask' && selectedTask) {

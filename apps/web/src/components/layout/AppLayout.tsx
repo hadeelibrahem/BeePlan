@@ -30,7 +30,9 @@ export function AppLayout({ active, panelTitle, panelCaption, panelPercent, fab,
     return () => parentShell.setSidebarMeta(undefined)
   }, [panelCaption, panelPercent, panelTitle, parentShell])
 
-  if (parentShell) return <>{children}</>
+  // Nested authenticated screens reuse the outer shell, but page-level floating
+  // actions must still render (they portal themselves to the document body).
+  if (parentShell) return <>{children}{fab}</>
 
   const sidebarMeta = nestedSidebarMeta ?? { panelTitle, panelCaption, panelPercent }
   const shellContextValue = useMemo(() => ({ setSidebarMeta: setNestedSidebarMeta }), [])

@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import FocusRoomsScreen from "./FocusRoomsScreen";
 import { renderWithProviders } from "../test/renderWithProviders";
-import { listInvitations, roomDetails } from "../lib/focusRoomsApi";
+import { joinRoomByCode, listInvitations, roomDetails } from "../lib/focusRoomsApi";
 jest.mock("expo-audio", () => ({
   setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
   useAudioPlayer: () => ({ replace: jest.fn(), play: jest.fn(), pause: jest.fn(), seekTo: jest.fn(), volume: 1, muted: false, loop: false }),
@@ -23,7 +23,7 @@ jest.mock("../lib/focusRoomsApi", () => ({
   listInvitations: jest.fn().mockResolvedValue([]),
   roomDetails: jest.fn(),
   roomPresence: jest.fn().mockResolvedValue(undefined),
-  joinRoom: jest.fn(),
+  joinRoomByCode: jest.fn(),
   makeRoom: jest.fn(),
   makeCommitment: jest.fn(),
   acceptCommitment: jest.fn(),
@@ -62,6 +62,24 @@ describe("mobile Focus Rooms", () => {
     expect(screen.getByText("Create Session")).toBeTruthy();
   });
 
+  it("joins a private room by code from the landing screen", async () => {
+    const joined = {
+      id: "room-joined", title: "Private Bees", mode: "commitment", visibility: "private",
+      ownerUserId: "u2", members: [{ userId: "u1", displayName: "Saleh", anonymous: false, state: "preparing", ready: false }],
+      commitment: null, currentUserId: "u1", isCurrentUserMember: true, canManageInvitations: false,
+    };
+    jest.mocked(joinRoomByCode).mockResolvedValue(joined);
+    jest.mocked(roomDetails).mockResolvedValue(joined);
+    await renderWithProviders(<FocusRoomsScreen accessToken="token" onBack={() => undefined} />);
+    fireEvent.press(await screen.findByText("Join with code"));
+    const codeInput = await screen.findByLabelText("Shared Focus session code");
+    fireEvent.changeText(codeInput, "bee-7k4m");
+    await waitFor(() => expect(codeInput.props.value).toBe("BEE-7K4M"));
+    fireEvent.press(screen.getByText("Join Session"));
+    await waitFor(() => expect(joinRoomByCode).toHaveBeenCalledWith("token", "BEE-7K4M"));
+    expect(await screen.findByText("Private Bees")).toBeTruthy();
+  });
+
   it("shows the synchronized summary and returns on the primary action", async () => {
     const onBack = jest.fn();
     jest.mocked(roomDetails).mockResolvedValue({
@@ -96,8 +114,13 @@ describe("mobile Focus Rooms", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Shared Focus Session Complete")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Shared Focus Complete")).toBeTruthy());
     expect(screen.getByText("Goal: Finish Chapter 3")).toBeTruthy();
+    expect(screen.queryByText("Leave session")).toBeNull();
+    expect(screen.queryByText("Exit Focus")).toBeNull();
+    expect(screen.queryByText("Pause")).toBeNull();
+    expect(screen.queryByText("Add Time")).toBeNull();
+    expect(screen.queryByText("Start Session")).toBeNull();
     expect(onBack).not.toHaveBeenCalled();
     fireEvent.press(screen.getByText("Return to Shared Focus Sessions"));
     expect(onBack).toHaveBeenCalled();
@@ -112,9 +135,9 @@ describe("mobile Focus Rooms", () => {
     });
     await renderWithProviders(<FocusRoomsScreen accessToken="token" initialRoomId="room-1" onBack={() => undefined} />);
     await waitFor(() => expect(screen.getByTestId("shared-focus-active")).toBeTruthy());
-    expect(screen.getByText("SHARED FOCUS SESSION")).toBeTruthy();
-    expect(screen.getByText(/Focusing together/)).toBeTruthy();
-    expect(screen.getByText(/Focus sounds/i)).toBeTruthy();
+    expect(screen.getByText(/Shared Focus.*Participants/)).toBeTruthy();
+    expect(screen.getByText(/complete/)).toBeTruthy();
+    expect(screen.getByText("White Noise")).toBeTruthy();
     expect(screen.getByText("Pause")).toBeTruthy();
   });
 });

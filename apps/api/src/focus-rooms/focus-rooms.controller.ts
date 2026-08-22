@@ -20,6 +20,7 @@ import {
   CreateCommitmentDto,
   CreateFocusRoomDto,
   JoinFocusRoomDto,
+  JoinFocusRoomByCodeDto,
   PresenceDto,
   PrepareCommitmentParticipantDto,
   CreateRoomInviteDto,
@@ -42,6 +43,12 @@ export class FocusRoomsController {
     @Body() dto: CreateFocusRoomDto,
   ) {
     return this.rooms.create(req.user.id, dto);
+  }
+  @Post('join') joinByCode(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: JoinFocusRoomByCodeDto,
+  ) {
+    return this.rooms.joinByCode(req.user.id, dto.code);
   }
   @Get(':roomId') get(
     @Req() req: AuthenticatedRequest,

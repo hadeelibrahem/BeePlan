@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Pressable, Text } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '../../theme/useTheme'
+import { useLanguage } from '../../i18n/LanguageContext'
 
 type FloatingActionButtonProps = {
   onPress?: () => void
@@ -19,13 +20,14 @@ export const FloatingActionButton = memo(function FloatingActionButton({
 }: FloatingActionButtonProps) {
   const insets = useSafeAreaInsets()
   const { theme } = useTheme()
+  const { t } = useLanguage()
   const resolvedBottom = bottom ?? insets.bottom + (aboveNavBar ? 88 : 16)
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel="Primary action"
+      accessibilityLabel={t('shell.primaryAction')}
       className="absolute right-5 h-14 w-14 items-center justify-center rounded-2xl shadow-2xl active:scale-95"
       style={{
         bottom: resolvedBottom,

@@ -21,6 +21,8 @@ export type RootStackParamList = {
   Notes: undefined
   Analytics: undefined
   AchievementMuseum: { taskId?: string; title?: string; achievementDate?: string; achievementId?: string } | undefined
+  YearInReview: { year: number }
+  RandomStart: undefined
   Whiteboards: undefined
   Whiteboard: { boardId: string }
   WhiteboardShare: { boardId: string }
@@ -30,6 +32,10 @@ export type RootStackParamList = {
   Notifications: undefined
   Settings: undefined
   TimeCapsules: undefined
+  Feedback: undefined
+  FeedbackDetail: { feedbackId: string }
+  Challenges: undefined
+  ChallengeDetail: { challengeId: string }
   ReminderDetails: { reminderId: string }
   CreateReminder: { initialType?: 'task' | 'person' | 'checklist'; initialFriendId?: string }
   EditReminder: { reminderId: string }

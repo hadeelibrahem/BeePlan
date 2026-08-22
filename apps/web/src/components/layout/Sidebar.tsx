@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Trophy } from 'lucide-react'
 import { BeePlanLogo } from '../BeePlanLogo'
 import {
   AnalyticsIcon,
@@ -11,7 +12,9 @@ import {
   PlannerIcon,
   RemindersIcon,
   TasksIcon,
+  WhiteboardIcon,
 } from './icons'
+import { useLanguage } from '../../i18n/LanguageContext'
 
 export type SidebarPage =
   | 'dashboard'
@@ -20,6 +23,8 @@ export type SidebarPage =
   | 'planner'
   | 'reminders'
   | 'people'
+  | 'feedback'
+  | 'challenges'
   | 'notifications'
   | 'calendar'
   | 'notes'
@@ -37,12 +42,16 @@ export type SidebarNavHandlers = {
   onNavigatePlanner?: () => void
   onNavigateReminders?: () => void
   onNavigatePeople?: () => void
+  onNavigateFeedback?: () => void
+  onNavigateChallenges?: () => void
   onNavigateNotifications?: () => void
   onNavigateCalendar?: () => void
   onNavigateNotes?: () => void
+  onNavigateWhiteboard?: () => void
   onNavigateAnalytics?: () => void
   onNavigateSettings?: () => void
   onNavigateTimeCapsules?: () => void
+  onNavigateAchievements?: () => void
 }
 
 function BellIcon() {
@@ -62,6 +71,10 @@ function SettingsIcon() {
   )
 }
 
+function AchievementIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return <Trophy className={className} strokeWidth={1.8} aria-hidden="true" />
+}
+
 type SidebarProps = SidebarNavHandlers & {
   active: SidebarPage
   panelTitle?: string
@@ -73,30 +86,34 @@ type SidebarProps = SidebarNavHandlers & {
 
 const NAV_GROUPS = [
   {
-    title: 'MAIN',
+    title: 'navigation.main',
     items: [
-      { page: 'dashboard', label: 'Dashboard', Icon: DashboardIcon, handler: 'onNavigateDashboard' },
-      { page: 'tasks', label: 'Tasks', Icon: TasksIcon, handler: 'onNavigateTasks' },
-      { page: 'focus', label: 'Focus', Icon: FocusIcon, handler: 'onNavigateFocus' },
-      { page: 'planner', label: 'AI Planner', Icon: PlannerIcon, handler: 'onNavigatePlanner' },
+      { page: 'dashboard', labelKey: 'navigation.dashboard', Icon: DashboardIcon, handler: 'onNavigateDashboard' },
+      { page: 'tasks', labelKey: 'navigation.tasks', Icon: TasksIcon, handler: 'onNavigateTasks' },
+      { page: 'focus', labelKey: 'navigation.focus', Icon: FocusIcon, handler: 'onNavigateFocus' },
+      { page: 'planner', labelKey: 'navigation.dailyPlanner', Icon: PlannerIcon, handler: 'onNavigatePlanner' },
     ]
   },
   {
-    title: 'WORKSPACE',
+    title: 'navigation.workspace',
     items: [
-      { page: 'reminders', label: 'Reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
-      { page: 'calendar', label: 'Calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
-      { page: 'notes', label: 'Notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
-      { page: 'timeCapsules', label: 'Time Capsule', Icon: CalendarIcon, handler: 'onNavigateTimeCapsules' },
-      { page: 'people', label: 'People', Icon: PeopleIcon, handler: 'onNavigatePeople' },
+      { page: 'reminders', labelKey: 'navigation.reminders', Icon: RemindersIcon, handler: 'onNavigateReminders' },
+      { page: 'calendar', labelKey: 'navigation.calendar', Icon: CalendarIcon, handler: 'onNavigateCalendar' },
+      { page: 'notes', labelKey: 'navigation.notes', Icon: NotesIcon, handler: 'onNavigateNotes' },
+      { page: 'whiteboard', labelKey: 'navigation.whiteboard', Icon: WhiteboardIcon, handler: 'onNavigateWhiteboard' },
+      { page: 'timeCapsules', labelKey: 'navigation.timeCapsule', Icon: CalendarIcon, handler: 'onNavigateTimeCapsules' },
+      { page: 'people', labelKey: 'navigation.people', Icon: PeopleIcon, handler: 'onNavigatePeople' },
+      { page: 'feedback', labelKey: 'navigation.feedback', Icon: PlannerIcon, handler: 'onNavigateFeedback' },
+      { page: 'challenges', labelKey: 'navigation.challenges', Icon: AchievementIcon, handler: 'onNavigateChallenges' },
     ]
   },
   {
-    title: 'SYSTEM',
+    title: 'navigation.system',
     items: [
-      { page: 'notifications', label: 'Notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
-      { page: 'analytics', label: 'Analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
-      { page: 'settings', label: 'Settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
+      { page: 'notifications', labelKey: 'navigation.notifications', Icon: BellIcon, handler: 'onNavigateNotifications' },
+      { page: 'analytics', labelKey: 'navigation.analytics', Icon: AnalyticsIcon, handler: 'onNavigateAnalytics' },
+      { page: 'achievements', labelKey: 'navigation.achievementMuseum', Icon: AchievementIcon, handler: 'onNavigateAchievements' },
+      { page: 'settings', labelKey: 'navigation.settings', Icon: SettingsIcon, handler: 'onNavigateSettings' },
     ]
   }
 ] as const
@@ -144,6 +161,8 @@ function SidebarContent({
   nav: SidebarNavHandlers
   onNavigate?: () => void
 }) {
+  const { t } = useLanguage()
+
   return (
     <div className="relative flex h-full min-h-0 flex-col py-0">
       {/* Logo container section - aligns perfectly with the h-16 main header bar */}
@@ -171,19 +190,19 @@ function SidebarContent({
         {NAV_GROUPS.map((group) => (
           <div key={group.title} className="space-y-1">
             <div className="bp-sidebar-group px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500/60">
-              {group.title}
+              {t(group.title)}
             </div>
             <div className="space-y-1.5">
-              {group.items.map(({ page, label, Icon, handler }) => (
+              {group.items.map((item) => (
                 <SidebarNavItem
-                  key={page}
-                  page={page}
+                  key={item.page}
+                  page={item.page}
                   beeTarget
-                  active={active === page}
-                  icon={<Icon />}
-                  label={label}
+                  active={active === item.page}
+                  icon={<item.Icon />}
+                  label={t(item.labelKey)}
                   onClick={() => {
-                    nav[handler]?.()
+                    nav[item.handler]?.()
                     onNavigate?.()
                   }}
                 />

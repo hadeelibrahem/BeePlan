@@ -30,28 +30,22 @@ import { useTheme } from '../theme/useTheme'
 import { useUnsavedBackGuard } from '../navigation/useUnsavedBackGuard'
 import { createTaskPayload, isCreateTaskDirty, validateCreateTask } from './createTaskForm'
 import { canValidateTaskSchedule } from './taskScheduleValidation'
+import { useLanguage } from '../i18n/LanguageContext'
 
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'] as const
 const STATUSES = ['To Do', 'In Progress', 'Done', 'Missed'] as const
 const CATEGORIES = ['Work', 'Personal', 'Study', 'Health', 'Finance', 'General'] as const
-const REMINDER_OPTIONS = [
-  { label: '10 minutes before', value: 10 },
-  { label: '30 minutes before', value: 30 },
-  { label: '1 hour before', value: 60 },
-  { label: '1 day before', value: 1440 },
-] as const
-
-function formatDateLabel(date: Date | undefined) {
-  if (!date) return 'dd/mm/yyyy'
-  return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' }).format(date)
+function formatDateLabel(date: Date | undefined, language: 'en' | 'ar', emptyLabel: string) {
+  if (!date) return emptyLabel
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(date)
 }
 
-function formatTimeLabel(time: string) {
+function formatTimeLabel(time: string, language: 'en' | 'ar') {
   if (!time) return '--:--'
   const [hours, minutes] = time.split(':').map(Number)
   if (Number.isNaN(hours) || Number.isNaN(minutes)) return time
-  const period = hours >= 12 ? 'PM' : 'AM'
-  return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${period}`
+  const date = new Date(2000, 0, 1, hours, minutes)
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en-US', { hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
 type Props = {
@@ -73,6 +67,13 @@ export type CreateTaskLifecycleState = {
 export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDate, onCancel, onSave, onCreated, onLifecycleChange }: Props) {
   const { theme } = useTheme()
   const { colors } = theme
+  const { t, language } = useLanguage()
+  const reminderOptions = [
+    { label: t('createTask.reminderMinutesBefore', { count: 10 }), value: 10 },
+    { label: t('createTask.reminderMinutesBefore', { count: 30 }), value: 30 },
+    { label: t('createTask.reminderHourBefore'), value: 60 },
+    { label: t('createTask.reminderDayBefore'), value: 1440 },
+  ]
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [notes, setNotes] = useState('')
@@ -263,20 +264,20 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
       footer={
         <BottomActionBar>
           <SecondaryButton onPress={confirmLeave} className="flex-1">
-            Cancel
+            {t('common.cancel')}
           </SecondaryButton>
           <PrimaryButton onPress={() => void handleSave()} className="flex-1" disabled={saving || uploadingAttachments}>
-            {saving || uploadingAttachments ? 'Saving...' : 'Save Task'}
+            {saving || uploadingAttachments ? t('createTask.saving') : t('createTask.saveTask')}
           </PrimaryButton>
         </BottomActionBar>
       }
     >
-      <PageHeader title="Create Task" subtitle="Organize your work" onBack={confirmLeave} />
+      <PageHeader title={t('createTask.title')} subtitle={t('createTask.subtitle')} onBack={confirmLeave} />
 
-      <Card title="Task Information" icon="📋">
-        <Label text="Task Title *" />
+      <Card title={t('createTask.information')} icon="📋">
+        <Label text={t('createTask.taskTitleRequired')} />
         <TextInput
-          placeholder="Enter task title..."
+          placeholder={t('createTask.taskTitlePlaceholder')}
           value={title}
           onChangeText={setTitle}
           placeholderTextColor={colors.placeholder}
@@ -284,10 +285,10 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
 
-        <Label text="Description" />
+        <Label text={t('createTask.description')} />
         <TextInput
           multiline
-          placeholder="Describe your task..."
+          placeholder={t('createTask.descriptionPlaceholder')}
           value={description}
           onChangeText={setDescription}
           placeholderTextColor={colors.placeholder}
@@ -296,12 +297,12 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
           style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }}
         />
 
-        <Label text="Subtasks" />
+        <Label text={t('createTask.subtasks')} />
         <DraftSubtasksSection items={draftSubtasks} onChange={setDraftSubtasks} disabled={saving || uploadingAttachments || Boolean(createdParent)} />
 
-        {!showNotes ? <Pressable accessibilityRole="button" onPress={() => setShowNotes(true)} className="mb-2 rounded-xl border border-dashed p-3" style={{ borderColor: colors.border }}><Text className="text-sm font-bold" style={{ color: colors.accent }}>+ Add notes</Text></Pressable> : <TextInput
+        {!showNotes ? <Pressable accessibilityRole="button" onPress={() => setShowNotes(true)} className="mb-2 rounded-xl border border-dashed p-3" style={{ borderColor: colors.border }}><Text className="text-sm font-bold" style={{ color: colors.accent }}>+ {t('createTask.addNotes')}</Text></Pressable> : <TextInput
           multiline
-          placeholder="Additional notes..."
+          placeholder={t('createTask.notesPlaceholder')}
           value={notes}
           onChangeText={setNotes}
           placeholderTextColor={colors.placeholder}
@@ -312,62 +313,62 @@ export default function CreateTaskScreen({ accessToken, tasks = [], initialDueDa
         {error ? <Text className="mt-2 text-sm font-bold text-red-300">{error}</Text> : null}
       </Card>
 
-      <Card title="Task Settings" icon="⚙️">
-        <Label text="Priority" />
+      <Card title={t('createTask.settings')} icon="⚙️">
+        <Label text={t('createTask.priority')} />
         <View className="mb-3 flex-row gap-2">
-          {PRIORITIES.map((item) => <Segment key={item} label={item} active={priority === item} color={item === 'Low' ? colors.success : item === 'High' || item === 'Urgent' ? colors.error : colors.accent} onPress={() => setPriority(item)} />)}
+          {PRIORITIES.map((item) => <Segment key={item} label={t(`taskLabels.priority.${item.toLowerCase()}`)} active={priority === item} color={item === 'Low' ? colors.success : item === 'High' || item === 'Urgent' ? colors.error : colors.accent} onPress={() => setPriority(item)} />)}
         </View>
 
-        <Label text="Category" />
-        <Select label={category || 'Select category...'} onPress={() => Alert.alert('Category', 'Choose a category', CATEGORIES.map((item) => ({ text: item, onPress: () => setCategory(item) })))} />
+        <Label text={t('createTask.category')} />
+        <Select label={category ? t(`createTask.category${category}`) : t('createTask.selectCategory')} onPress={() => Alert.alert(t('createTask.category'), t('createTask.chooseCategory'), CATEGORIES.map((item) => ({ text: t(`createTask.category${item}`), onPress: () => setCategory(item) })))} />
 
       </Card>
 
-      <Card title="When & Where" icon="📅">
-        <Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Schedule · when you plan to do this</Text>
-        <View className="flex-row gap-2"><View className="flex-1"><Select label={scheduledDate ? formatDateLabel(new Date(`${scheduledDate}T12:00:00`)) : 'Add date'} onPress={openScheduledDatePicker} /></View><View className="flex-1"><Select label={scheduledStartTime ? `${formatTimeLabel(scheduledStartTime)}${scheduledEndTime ? ` – ${formatTimeLabel(scheduledEndTime)}` : ''}` : 'Add time'} onPress={() => openScheduledTimePicker('scheduledStart')} /></View></View>
-        {scheduledStartTime ? <Pressable accessibilityRole="button" onPress={() => openScheduledTimePicker('scheduledEnd')} className="mt-2"><Text className="text-xs font-bold" style={{ color: colors.accent }}>Set end time</Text></Pressable> : null}
+      <Card title={t('createTask.whenWhere')} icon="📅">
+        <Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>{t('createTask.scheduleHelp')}</Text>
+        <View className="flex-row gap-2"><View className="flex-1"><Select label={scheduledDate ? formatDateLabel(new Date(`${scheduledDate}T12:00:00`), language, t('createTask.selectDate')) : t('createTask.addDate')} onPress={openScheduledDatePicker} /></View><View className="flex-1"><Select label={scheduledStartTime ? `${formatTimeLabel(scheduledStartTime, language)}${scheduledEndTime ? ` – ${formatTimeLabel(scheduledEndTime, language)}` : ''}` : t('createTask.addTime')} onPress={() => openScheduledTimePicker('scheduledStart')} /></View></View>
+        {scheduledStartTime ? <Pressable accessibilityRole="button" onPress={() => openScheduledTimePicker('scheduledEnd')} className="mt-2"><Text className="text-xs font-bold" style={{ color: colors.accent }}>{t('createTask.setEndTime')}</Text></Pressable> : null}
         {scheduleError ? <Text className="mt-2 text-sm font-bold" style={{ color: colors.error }}>{scheduleError}</Text> : null}
-        <View className="mt-4"><Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>Deadline · when this must be finished</Text><View className="flex-row gap-2"><View className="flex-1"><Select label={formatDateLabel(dueDate)} onPress={openDatePicker} /></View><View className="flex-1"><Select label={dueTime ? formatTimeLabel(dueTime) : 'Optional time'} onPress={openTimePicker} /></View></View></View>
+        <View className="mt-4"><Text className="mb-2 text-xs" style={{ color: colors.secondaryText }}>{t('createTask.deadlineHelp')}</Text><View className="flex-row gap-2"><View className="flex-1"><Select label={formatDateLabel(dueDate, language, t('createTask.selectDate'))} onPress={openDatePicker} /></View><View className="flex-1"><Select label={dueTime ? formatTimeLabel(dueTime, language) : t('createTask.optionalTime')} onPress={openTimePicker} /></View></View></View>
         <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
       </Card>
 
-      <Card title="Reminder" icon="🔔">
+      <Card title={t('createTask.reminder')} icon="🔔">
         <View className="mb-3 flex-row items-center justify-between">
           <View>
-            <Text className="text-sm font-bold" style={{ color: colors.text }}>Enable Reminder</Text>
-            <Text className="text-xs" style={{ color: colors.secondaryText }}>Remind before due date</Text>
+            <Text className="text-sm font-bold" style={{ color: colors.text }}>{t('createTask.enableReminder')}</Text>
+            <Text className="text-xs" style={{ color: colors.secondaryText }}>{t('createTask.reminderHelp')}</Text>
           </View>
 
-          <Pressable accessibilityRole="switch" accessibilityState={{ checked: reminderEnabled }} accessibilityLabel="Enable reminder" onPress={() => setReminderEnabled((enabled) => !enabled)} className={`h-6 w-11 justify-center rounded-full px-1 ${reminderEnabled ? 'items-end' : 'items-start'}`} style={{ backgroundColor: reminderEnabled ? colors.accent : colors.border }}><View className="h-4 w-4 rounded-full bg-white" /></Pressable>
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: reminderEnabled }} accessibilityLabel={t('createTask.enableReminder')} onPress={() => setReminderEnabled((enabled) => !enabled)} className={`h-6 w-11 justify-center rounded-full px-1 ${reminderEnabled ? 'items-end' : 'items-start'}`} style={{ backgroundColor: reminderEnabled ? colors.accent : colors.border }}><View className="h-4 w-4 rounded-full bg-white" /></Pressable>
         </View>
 
-        {reminderEnabled ? <><Label text="Reminder Time" /><Select label={REMINDER_OPTIONS.find((option) => option.value === reminderBeforeMinutes)?.label ?? '30 minutes before'} onPress={() => Alert.alert('Reminder time', 'Choose when to be reminded', REMINDER_OPTIONS.map((option) => ({ text: option.label, onPress: () => setReminderBeforeMinutes(option.value) })))} /></> : null}
+        {reminderEnabled ? <><Label text={t('createTask.reminderTime')} /><Select label={reminderOptions.find((option) => option.value === reminderBeforeMinutes)?.label ?? t('createTask.reminderMinutesBefore', { count: 30 })} onPress={() => Alert.alert(t('createTask.reminderTime'), t('createTask.chooseReminderTime'), reminderOptions.map((option) => ({ text: option.label, onPress: () => setReminderBeforeMinutes(option.value) })))} /></> : null}
       </Card>
 
-      <Pressable accessibilityRole="button" onPress={() => setMoreOptions((value) => !value)} className="mb-3 flex-row items-center justify-between rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>More options</Text><Text style={{ color: colors.secondaryText }}>{moreOptions ? '⌃' : '›'}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => setMoreOptions((value) => !value)} className="mb-3 flex-row items-center justify-between rounded-2xl border p-4" style={{ borderColor: colors.border, backgroundColor: colors.card }}><Text className="font-black" style={{ color: colors.text }}>{t('createTask.moreOptions')}</Text><Text style={{ color: colors.secondaryText }}>{moreOptions ? '⌃' : '›'}</Text></Pressable>
 
-      <Card title="Time & Labels" icon="â±ï¸">
+      <Card title={t('createTask.timeLabels')} icon="⏱️">
         {moreOptions ? <>
-        <Label text="Estimated Hours" />
+        <Label text={t('createTask.estimatedHours')} />
         <TextInput value={estimatedHours} onChangeText={setEstimatedHours} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.placeholder} className="mb-3 rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }} />
-        <Label text="Labels" />
-        <TextInput value={labelsText} onChangeText={setLabelsText} placeholder="Comma-separated labels" placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }} />
-        </> : <Text className="text-sm" style={{ color: colors.secondaryText }}>Estimated duration and labels are in More options.</Text>}
+        <Label text={t('createTask.labels')} />
+        <TextInput value={labelsText} onChangeText={setLabelsText} placeholder={t('createTask.labelsPlaceholder')} placeholderTextColor={colors.placeholder} className="rounded-xl border px-3 py-2.5 text-sm" style={{ borderColor: colors.border, backgroundColor: colors.input, color: colors.text }} />
+        </> : <Text className="text-sm" style={{ color: colors.secondaryText }}>{t('createTask.moreOptionsHelp')}</Text>}
       </Card>
 
-      {moreOptions ? <Card title="Recurring & Dependencies" icon="🔁">
-        <Label text="Recurring Task" />
+      {moreOptions ? <Card title={t('createTask.recurringDependencies')} icon="🔁">
+        <Label text={t('createTask.recurringTask')} />
         <Select label={recurrenceSummary} onPress={() => setIsRecurrenceSheetVisible(true)} />
 
         <View className="mt-3">
-          <Label text="Dependencies" />
+          <Label text={t('createTask.dependencies')} />
           {draftDependencies.map((dependency) => <View key={dependency.id} className="mb-2 rounded-xl p-3" style={{ backgroundColor: colors.background }}><Text className="font-bold" style={{ color: colors.text }}>{dependency.title}</Text><Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{dependency.category} · {dependency.status}</Text></View>)}
-          <Pressable disabled={saving || uploadingAttachments || Boolean(createdParent)} accessibilityRole="button" accessibilityLabel="Add dependency" onPress={() => setDependenciesSheetVisible(true)} className="rounded-xl border border-dashed py-3 active:opacity-70" style={{ borderColor: colors.border, backgroundColor: colors.background, opacity: createdParent ? 0.5 : 1 }}><Text className="text-center text-sm font-bold" style={{ color: colors.accentInk }}>+ Add Dependency</Text></Pressable>
+          <Pressable disabled={saving || uploadingAttachments || Boolean(createdParent)} accessibilityRole="button" accessibilityLabel={t('createTask.addDependency')} onPress={() => setDependenciesSheetVisible(true)} className="rounded-xl border border-dashed py-3 active:opacity-70" style={{ borderColor: colors.border, backgroundColor: colors.background, opacity: createdParent ? 0.5 : 1 }}><Text className="text-center text-sm font-bold" style={{ color: colors.accentInk }}>+ {t('createTask.addDependency')}</Text></Pressable>
         </View>
       </Card> : null}
 
-      {moreOptions ? <Card title="Attachments" icon="📎">
+      {moreOptions ? <Card title={t('createTask.attachments')} icon="📎">
       <TaskAttachmentPicker
           files={attachments}
           onChange={setAttachments}

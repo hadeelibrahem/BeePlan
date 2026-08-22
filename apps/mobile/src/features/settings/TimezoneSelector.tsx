@@ -1,11 +1,167 @@
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
-import type { AuthUser } from '../../lib/api';
-import { updateProfile } from './settingsApi';
-import { useTheme } from '../../theme/useTheme';
+import { useMemo, useState } from "react";
+import { Modal, Pressable, Text, TextInput, View } from "react-native";
+import type { AuthUser } from "../../lib/api";
+import { updateProfile } from "./settingsApi";
+import { useTheme } from "../../theme/useTheme";
+import { useLanguage } from "../../i18n/LanguageContext";
 
-const COMMON: Array<[string, string]> = [['Asia/Hebron', 'Palestine'], ['Asia/Amman', 'Amman'], ['Europe/London', 'London'], ['America/New_York', 'New York'], ['America/Los_Angeles', 'Los Angeles'], ['UTC', 'UTC']];
-function allZones() { const supported = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []; const map = new Map(COMMON); for (const id of supported) if (!map.has(id)) map.set(id, id.split('/').at(-1)?.replaceAll('_', ' ') ?? id); return [...map].map(([id, city]) => ({ id, city })); }
-function zoneLabel(id: string, city: string) { const offset = new Intl.DateTimeFormat('en', { timeZone: id, timeZoneName: 'longOffset' }).formatToParts(new Date()).find((part) => part.type === 'timeZoneName')?.value?.replace('GMT', 'UTC') ?? 'UTC'; return `${city} (${id}) · ${offset}`; }
+const COMMON: Array<[string, string]> = [
+  ["Asia/Hebron", "Palestine"],
+  ["Asia/Amman", "Amman"],
+  ["Europe/London", "London"],
+  ["America/New_York", "New York"],
+  ["America/Los_Angeles", "Los Angeles"],
+  ["UTC", "UTC"],
+];
+function allZones() {
+  const supported =
+    typeof Intl.supportedValuesOf === "function"
+      ? Intl.supportedValuesOf("timeZone")
+      : [];
+  const map = new Map(COMMON);
+  for (const id of supported)
+    if (!map.has(id))
+      map.set(id, id.split("/").at(-1)?.replaceAll("_", " ") ?? id);
+  return [...map].map(([id, city]) => ({ id, city }));
+}
+function zoneLabel(id: string, city: string) {
+  const offset =
+    new Intl.DateTimeFormat("en", { timeZone: id, timeZoneName: "longOffset" })
+      .formatToParts(new Date())
+      .find((part) => part.type === "timeZoneName")
+      ?.value?.replace("GMT", "UTC") ?? "UTC";
+  return `${city} (${id}) · ${offset}`;
+}
 
-export function TimezoneSelector({ accessToken, user, onUpdated }: { accessToken: string; user: AuthUser; onUpdated: (user: AuthUser) => void }) { const { theme: { colors } } = useTheme(); const zones = useMemo(allZones, []); const [open, setOpen] = useState(false); const [query, setQuery] = useState(''); const [status, setStatus] = useState<string | null>(null); const filtered = zones.filter((item) => `${item.city} ${item.id}`.toLowerCase().includes(query.toLowerCase())).slice(0, 80); const save = async (timezone: string) => { setOpen(false); setQuery(''); setStatus('Saving…'); try { const updated = await updateProfile(accessToken, { fullName: user.fullName, username: user.username, email: user.email, avatarUrl: user.avatarUrl, timezone }); onUpdated(updated); setStatus('Saved'); } catch (error) { setStatus(error instanceof Error ? error.message : 'Unable to save timezone.'); } }; const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; return <View className="mt-2"><Text className="mb-1 text-xs font-bold" style={{ color: colors.secondaryText }}>Timezone</Text><Pressable onPress={() => setOpen(true)} className="rounded-xl border px-3 py-3" style={{ borderColor: colors.border, backgroundColor: colors.input }}><Text style={{ color: colors.text }}>{zoneLabel(user.timezone, user.timezone)}</Text></Pressable>{user.timezone === 'UTC' && detected !== 'UTC' ? <Pressable onPress={() => void save(detected)}><Text className="mt-2 text-xs font-bold" style={{ color: colors.accentInk }}>Use device timezone ({detected})</Text></Pressable> : null}{status ? <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{status}</Text> : null}<Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}><View className="flex-1 p-4" style={{ backgroundColor: colors.background }}><Text className="mb-3 text-lg font-black" style={{ color: colors.text }}>Choose timezone</Text><TextInput autoFocus placeholder="Search city or timezone" placeholderTextColor={colors.placeholder} value={query} onChangeText={setQuery} className="mb-3 rounded-xl border px-3 py-3" style={{ borderColor: colors.border, color: colors.text, backgroundColor: colors.input }} />{filtered.map((item) => <Pressable key={item.id} onPress={() => void save(item.id)} className="border-b py-3" style={{ borderColor: colors.border }}><Text style={{ color: colors.text }}>{zoneLabel(item.id, item.city)}</Text></Pressable>)}<Pressable onPress={() => setOpen(false)} className="mt-4 rounded-xl p-3" style={{ backgroundColor: colors.accent }}><Text className="text-center font-black" style={{ color: colors.accentText }}>Cancel</Text></Pressable></View></Modal></View>; }
+export function TimezoneSelector({
+  accessToken,
+  user,
+  onUpdated,
+}: {
+  accessToken: string;
+  user: AuthUser;
+  onUpdated: (user: AuthUser) => void;
+}) {
+  const { t } = useLanguage();
+  const {
+    theme: { colors },
+  } = useTheme();
+  const zones = useMemo(allZones, []);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const filtered = zones
+    .filter((item) =>
+      `${item.city} ${item.id}`.toLowerCase().includes(query.toLowerCase()),
+    )
+    .slice(0, 80);
+  const save = async (timezone: string) => {
+    setOpen(false);
+    setQuery("");
+    setStatus("Saving…");
+    try {
+      const updated = await updateProfile(accessToken, {
+        fullName: user.fullName,
+        username: user.username,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        timezone,
+      });
+      onUpdated(updated);
+      setStatus("Saved");
+    } catch (error) {
+      setStatus(
+        error instanceof Error ? error.message : "Unable to save timezone.",
+      );
+    }
+  };
+  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  return (
+    <View className="mt-2">
+      <Text
+        className="mb-1 text-xs font-bold"
+        style={{ color: colors.secondaryText }}
+      >
+        {t('mobileSettings.timezone')}
+      </Text>
+      <Pressable
+        onPress={() => setOpen(true)}
+        className="rounded-xl border px-3 py-3"
+        style={{ borderColor: colors.border, backgroundColor: colors.input }}
+      >
+        <Text style={{ color: colors.text }}>
+          {zoneLabel(user.timezone, user.timezone)}
+        </Text>
+      </Pressable>
+      {user.timezone === "UTC" && detected !== "UTC" ? (
+        <Pressable onPress={() => void save(detected)}>
+          <Text
+            className="mt-2 text-xs font-bold"
+            style={{ color: colors.accentInk }}
+          >
+            {t('mobileSettings.deviceTimezone')} ({detected})
+          </Text>
+        </Pressable>
+      ) : null}
+      {status ? (
+        <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>
+          {status}
+        </Text>
+      ) : null}
+      <Modal
+        visible={open}
+        animationType="slide"
+        onRequestClose={() => setOpen(false)}
+      >
+        <View
+          className="flex-1 p-4"
+          style={{ backgroundColor: colors.background }}
+        >
+          <Text
+            className="mb-3 text-lg font-black"
+            style={{ color: colors.text }}
+          >
+            {t('mobileSettings.chooseTimezone')}
+          </Text>
+          <TextInput
+            autoFocus
+            placeholder={t('mobileSettings.searchTimezone')}
+            placeholderTextColor={colors.placeholder}
+            value={query}
+            onChangeText={setQuery}
+            className="mb-3 rounded-xl border px-3 py-3"
+            style={{
+              borderColor: colors.border,
+              color: colors.text,
+              backgroundColor: colors.input,
+            }}
+          />
+          {filtered.map((item) => (
+            <Pressable
+              key={item.id}
+              onPress={() => void save(item.id)}
+              className="border-b py-3"
+              style={{ borderColor: colors.border }}
+            >
+              <Text style={{ color: colors.text }}>
+                {zoneLabel(item.id, item.city)}
+              </Text>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => setOpen(false)}
+            className="mt-4 rounded-xl p-3"
+            style={{ backgroundColor: colors.accent }}
+          >
+            <Text
+              className="text-center font-black"
+              style={{ color: colors.accentText }}
+            >
+              {t('mobileSettings.cancel')}
+            </Text>
+          </Pressable>
+        </View>
+      </Modal>
+    </View>
+  );
+}

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Platform, Pressable, Switch, Text, View } from "react-native";
 
 import { useTheme } from "../../theme/useTheme";
+import { useLanguage } from "../../i18n/LanguageContext";
 import { useStrictFocus } from "./StrictFocusContext";
 import { isStrictModeToggleInteractive } from "./strictModeRules";
 
@@ -17,6 +18,7 @@ import { isStrictModeToggleInteractive } from "./strictModeRules";
  * section is hidden.
  */
 export function StrictModeSection({ onEditApps }: { onEditApps: () => void }) {
+  const { t } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
   const { blocker, prefs, setPrefs } = useStrictFocus();
@@ -72,12 +74,12 @@ export function StrictModeSection({ onEditApps }: { onEditApps: () => void }) {
       >
         <View style={{ flex: 1, paddingRight: 12 }}>
           <Text style={{ fontSize: 14, fontWeight: "800", color: colors.text }}>
-            Strict Mode
+            {t("focusUi.strictMode")}
           </Text>
           <Text
             style={{ fontSize: 12, color: colors.secondaryText, marginTop: 2 }}
           >
-            Block distracting apps until the session ends.
+            {t("focusUi.strictDescription")}
           </Text>
         </View>
         {/* Always interactive on Android — configuring a preference never needs the native module. */}
@@ -116,19 +118,19 @@ export function StrictModeSection({ onEditApps }: { onEditApps: () => void }) {
           >
             <Text style={{ fontSize: 13, color: colors.text }}>
               {appCount > 0
-                ? `Blocking ${appCount} app${appCount === 1 ? "" : "s"}`
-                : "No apps chosen yet"}
+                ? t("focusUi.blockingApps", { count: appCount })
+                : t("focusUi.noAppsChosen")}
             </Text>
             <Text
               style={{ fontSize: 13, fontWeight: "800", color: colors.primary }}
             >
-              Choose apps
+              {t("focusUi.chooseApps")}
             </Text>
           </Pressable>
 
           {appCount === 0 ? (
             <Text style={{ fontSize: 12, color: colors.warning }}>
-              Pick at least one app to start a strict session.
+              {t("focusUi.chooseOneApp")}
             </Text>
           ) : null}
 

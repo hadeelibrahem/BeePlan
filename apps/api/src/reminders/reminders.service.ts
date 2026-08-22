@@ -13,7 +13,6 @@ import type {
 } from './dto/reminder-shared.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { Reminder } from './entities/reminder.entity';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 type ReminderRow = typeof remindersTable.$inferSelect;
 
@@ -38,7 +37,6 @@ export class RemindersService {
     private readonly databaseService: DatabaseService,
     private readonly locationSharingService: LocationSharingService,
     private readonly savedPlacesService: SavedPlacesService,
-    @Optional() private readonly googleCalendar?: GoogleCalendarService,
   ) {}
 
   private get db() {
@@ -135,7 +133,6 @@ export class RemindersService {
       })
       .returning();
 
-    void this.googleCalendar?.enqueueEntitySync(userId, 'reminder', row.id);
     return this.toEntity(row);
   }
 
@@ -222,7 +219,6 @@ export class RemindersService {
       throw new NotFoundException(`Reminder with id ${id} not found`);
     }
 
-    void this.googleCalendar?.enqueueEntitySync(userId, 'reminder', row.id);
     return this.toEntity(row);
   }
 
@@ -239,6 +235,5 @@ export class RemindersService {
     await this.db
       .delete(remindersTable)
       .where(and(eq(remindersTable.id, id), eq(remindersTable.userId, userId)));
-    void this.googleCalendar?.enqueueEntitySync(userId, 'reminder', id, 'delete');
   }
 }

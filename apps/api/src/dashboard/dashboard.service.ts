@@ -17,6 +17,12 @@ import {
   greetingForHour,
   progressForToday,
 } from './dashboard-today.logic';
+import {
+  dueUnitsForCalendarDate,
+  estimatedMinutesForTomorrowWork,
+  highPriorityDueUnitCount,
+  unitsForCalendarDate,
+} from './dashboard-tomorrow.logic';
 import { getDashboardDayBoundaries } from './dashboard-timezone';
 
 export type DashboardSummary = {
@@ -107,7 +113,6 @@ export class DashboardService {
       tomorrowDate: tomorrowKey,
       startOfToday,
       startOfTomorrow,
-      startOfDayAfterTomorrow,
       localHour,
     } = getDashboardDayBoundaries(user?.timezone, now);
 
@@ -125,10 +130,9 @@ export class DashboardService {
             ),
           ),
         this.focusService.recommendation(userId),
-        this.getAcceptedPlans(userId, [todayKey, tomorrowKey]),
+        this.getAcceptedPlans(userId, [todayKey]),
       ]);
     const acceptedToday = acceptedPlans.get(todayKey) ?? null;
-    const acceptedTomorrow = acceptedPlans.get(tomorrowKey) ?? null;
     const taskIds = taskRows.map((task) => task.id);
     const subtaskRows = taskIds.length
       ? await this.db
@@ -145,12 +149,8 @@ export class DashboardService {
         (total, session) => total + Math.max(0, session.actualMinutes ?? 0),
         0,
       );
-    const todayTasks = taskRows.filter((task) =>
-      isInRange(task.dueDate, startOfToday, startOfTomorrow),
-    );
-    const todaySubtasks = subtaskRows.filter((subtask) =>
-      isInRange(subtask.dueDate, startOfToday, startOfTomorrow),
-    );
+    const todayTasks = unitsForCalendarDate(taskRows, todayKey);
+    const todaySubtasks = unitsForCalendarDate(subtaskRows, todayKey);
     const progress = progressForToday(
       [
         ...todayTasks.map((task) => ({
@@ -212,22 +212,30 @@ export class DashboardService {
     const whyNow = primary
       ? this.whyNow(primary, taskRows, subtaskRows, now)
       : [];
-    const dueTomorrowTasks = taskRows.filter((task) =>
-      isInRange(task.dueDate, startOfTomorrow, startOfDayAfterTomorrow),
-    );
-    const dueTomorrowSubtasks = subtaskRows.filter((subtask) =>
-      isInRange(subtask.dueDate, startOfTomorrow, startOfDayAfterTomorrow),
+    const dueTomorrowTasks = dueUnitsForCalendarDate(taskRows, tomorrowKey);
+    const dueTomorrowSubtasks = dueUnitsForCalendarDate(
+      subtaskRows,
+      tomorrowKey,
     );
     const tomorrowUnits = [...dueTomorrowTasks, ...dueTomorrowSubtasks];
-    const tomorrowEstimatedMinutes =
-      dueTomorrowTasks.reduce(
-        (sum, item) => sum + Math.max(0, item.estimatedTimeMinutes),
-        0,
-      ) +
-      dueTomorrowSubtasks.reduce(
-        (sum, item) => sum + Math.max(0, item.estimatedDurationMinutes ?? 0),
-        0,
-      );
+    const tomorrowEstimatedMinutes = estimatedMinutesForTomorrowWork(
+      taskRows.map((task) => ({
+        id: task.id,
+        dueDate: task.dueDate,
+        priority: task.priority,
+        status: task.status,
+        estimatedMinutes: task.estimatedTimeMinutes,
+      })),
+      subtaskRows.map((subtask) => ({
+        taskId: subtask.taskId,
+        dueDate: subtask.dueDate,
+        priority: subtask.priority,
+        status: subtask.status,
+        isDone: subtask.isDone,
+        estimatedMinutes: subtask.estimatedDurationMinutes,
+      })),
+      tomorrowKey,
+    );
 
     return {
       generatedAt: now.toISOString(),
@@ -256,16 +264,9 @@ export class DashboardService {
         calendarEvents: [],
         dueWorkUnits: tomorrowUnits.length,
         estimatedWorkMinutes: tomorrowEstimatedMinutes,
-        highPriorityItems: tomorrowUnits.filter(
-          (item) => item.priority === 'high' || item.priority === 'urgent',
-        ).length,
-        capacityMinutes: acceptedTomorrow?.capacity?.availableMinutes ?? null,
-        overloadStatus: acceptedTomorrow?.capacity
-          ? tomorrowEstimatedMinutes >
-            acceptedTomorrow.capacity.availableMinutes
-            ? 'overloaded'
-            : 'within_capacity'
-          : 'unavailable',
+        highPriorityItems: highPriorityDueUnitCount(tomorrowUnits),
+        capacityMinutes: null,
+        overloadStatus: 'unavailable',
       },
     };
   }
@@ -424,8 +425,4 @@ export class DashboardService {
     }
     return blocks.sort((a, b) => a.startTime.localeCompare(b.startTime));
   }
-}
-
-function isInRange(value: Date | null, start: Date, end: Date) {
-  return Boolean(value && value >= start && value < end);
 }

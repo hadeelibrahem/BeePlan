@@ -5,9 +5,12 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text, View } from "react-native";
 import { NavigationBottomTabBar } from "../components/layout/BottomNavBar";
 import AchievementMuseumScreen from '../screens/AchievementMuseumScreen'
+import YearInReviewScreen from '../screens/YearInReviewScreen'
 import WhiteboardsDashboardScreen from '../features/whiteboard/screens/WhiteboardsDashboardScreen'
 import WhiteboardEditorScreen from '../features/whiteboard/screens/WhiteboardEditorScreen'
 import WhiteboardShareScreen from '../features/whiteboard/screens/WhiteboardShareScreen'
+import ChallengesScreen from '../screens/ChallengesScreen'
+import ChallengeDetailScreen from '../screens/ChallengeDetailScreen'
 import {
   type MainTabParamList,
   MAIN_TAB_ROUTES,
@@ -65,6 +68,7 @@ export function RootNavigator({
   analyticsRoute: AnalyticsRoute,
   aiCollaborationRoute: AiCollaborationRoute,
   focusSessionRoute: FocusSessionRoute,
+  randomStartRoute: RandomStartRoute,
   focusRoomsRoute: FocusRoomsRoute,
   reminderDetailsRoute: ReminderDetailsRoute,
   createReminderRoute: CreateReminderRoute,
@@ -72,6 +76,8 @@ export function RootNavigator({
   notificationsRoute: NotificationsRoute,
   settingsRoute: SettingsRoute,
   timeCapsulesRoute: TimeCapsulesRoute,
+  feedbackRoute: FeedbackRoute,
+  feedbackDetailRoute: FeedbackDetailRoute,
 }: {
   tabScreens?: TabScreens;
   taskDetailsRoute?: ComponentType<
@@ -104,6 +110,9 @@ export function RootNavigator({
   focusSessionRoute?: ComponentType<
     NativeStackScreenProps<RootStackParamList, "FocusSession">
   >;
+  randomStartRoute?: ComponentType<
+    NativeStackScreenProps<RootStackParamList, "RandomStart">
+  >;
   focusRoomsRoute?: ComponentType<
     NativeStackScreenProps<RootStackParamList, "FocusRooms">
   >;
@@ -123,6 +132,8 @@ export function RootNavigator({
     NativeStackScreenProps<RootStackParamList, "Settings">
   >;
   timeCapsulesRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, "TimeCapsules">>;
+  feedbackRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, "Feedback">>;
+  feedbackDetailRoute?: ComponentType<NativeStackScreenProps<RootStackParamList, "FeedbackDetail">>;
 }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -157,6 +168,9 @@ export function RootNavigator({
       {FocusSessionRoute ? (
         <Stack.Screen name="FocusSession" component={FocusSessionRoute} />
       ) : null}
+      {RandomStartRoute ? (
+        <Stack.Screen name="RandomStart" component={RandomStartRoute} />
+      ) : null}
       {FocusRoomsRoute ? (
         <Stack.Screen name="FocusRooms" component={FocusRoomsRoute} />
       ) : null}
@@ -176,7 +190,12 @@ export function RootNavigator({
         <Stack.Screen name="Settings" component={SettingsRoute} />
       ) : null}
       {TimeCapsulesRoute ? <Stack.Screen name="TimeCapsules" component={TimeCapsulesRoute} /> : null}
+      {FeedbackRoute ? <Stack.Screen name="Feedback" component={FeedbackRoute} /> : null}
+      {FeedbackDetailRoute ? <Stack.Screen name="FeedbackDetail" component={FeedbackDetailRoute} /> : null}
+      <Stack.Screen name="Challenges" component={ChallengesScreen} />
+      <Stack.Screen name="ChallengeDetail" component={ChallengeDetailScreen} />
       <Stack.Screen name="AchievementMuseum" component={AchievementMuseumScreen} />
+      <Stack.Screen name="YearInReview" component={YearInReviewScreen} />
       <Stack.Screen name="Whiteboards" component={WhiteboardsDashboardScreen} />
       <Stack.Screen name="Whiteboard" component={WhiteboardEditorScreen} />
       <Stack.Screen name="WhiteboardShare" component={WhiteboardShareScreen} />

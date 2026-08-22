@@ -6,6 +6,7 @@ import {
   type TaskAssistantPreferences,
 } from "../../lib/tasksApi";
 import { useTheme } from "../../theme/useTheme";
+import { useLanguage } from "../../i18n/LanguageContext";
 const toggles: [keyof TaskAssistantPreferences, string][] = [
   ["proactiveAssistanceEnabled", "Proactive assistance"],
   ["dynamicPreparationEnabled", "Dynamic preparation lists"],
@@ -24,6 +25,7 @@ const toggles: [keyof TaskAssistantPreferences, string][] = [
   ["departureRemindersEnabled", "Departure reminders"],
 ];
 export function WeatherTravelSettings({ token }: { token: string }) {
+  const { t } = useLanguage();
   const {
     theme: { colors },
   } = useTheme();
@@ -52,17 +54,17 @@ export function WeatherTravelSettings({ token }: { token: string }) {
       <View className="flex-row items-center justify-between">
         <View className="flex-1">
           <Text className="font-black" style={{ color: colors.text }}>
-            Task Context Assistant
+            {t('mobileSettings.assistant')}
           </Text>
           <Text
             className="mt-1 text-xs"
             style={{ color: colors.secondaryText }}
           >
-            Relevant preparation, travel, and weather guidance.
+            {t('mobileSettings.assistantHelp')}
           </Text>
         </View>
         <Switch
-          accessibilityLabel="Enable Task Context Assistant"
+          accessibilityLabel={t('mobileSettings.enableAssistant')}
           value={value.enabled}
           onValueChange={(next) => set("enabled", next)}
         />
@@ -81,7 +83,7 @@ export function WeatherTravelSettings({ token }: { token: string }) {
         className="mt-4 text-xs font-bold"
         style={{ color: colors.secondaryText }}
       >
-        Notification timing: {value.notificationMode.replaceAll("_", " ")}
+        {t('mobileSettings.timing')}: {value.notificationMode.replaceAll("_", " ")}
       </Text>
       <View className="mt-2 flex-row gap-2">
         {(["smart", "minimal", "important_only"] as const).map((mode) => (
@@ -115,7 +117,7 @@ export function WeatherTravelSettings({ token }: { token: string }) {
           className="text-center font-black"
           style={{ color: colors.accentText }}
         >
-          Save Task Assistant
+          {t('mobileSettings.saveAssistant')}
         </Text>
       </Pressable>
       <Text

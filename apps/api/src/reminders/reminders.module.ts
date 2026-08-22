@@ -5,14 +5,13 @@ import { ContextModule } from '../context/context.module';
 import { SocialModule } from '../social/social.module';
 import { RemindersController } from './reminders.controller';
 import { RemindersService } from './reminders.service';
-import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 @Module({
   // JwtModule is registered `global: true` in AuthModule, so JwtService is available
   // here without re-registering it — see auth.module.ts.
   // SocialModule provides LocationSharingService, used to enrich person
   // reminders in the list with their live location-sharing permission status.
-  imports: [DatabaseModule, SocialModule, ContextModule, GoogleCalendarModule],
+  imports: [DatabaseModule, SocialModule, ContextModule],
   controllers: [RemindersController],
   providers: [RemindersService, JwtAuthGuard],
 })

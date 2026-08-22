@@ -8,12 +8,12 @@ import {
   describeDatabaseError,
   withTransientDatabaseRetry,
 } from '../db/database-error';
-import {
-  subtasks,
-  tasks,
-  weatherTravelPreferences,
-} from '../db/schema';
+import { subtasks, tasks, weatherTravelPreferences } from '../db/schema';
 import { WeatherTravelService } from './weather-travel.service';
+import {
+  RuntimeTelemetryRegistry,
+  runtimeTelemetry,
+} from '../admin/system-health/runtime-telemetry.registry';
 
 const LOCK_ID = 742_019_331;
 @Injectable()
@@ -25,6 +25,7 @@ export class WeatherTravelWorker {
     private readonly database: DatabaseService,
     private readonly config: ConfigService,
     private readonly service: WeatherTravelService,
+    private readonly telemetry: RuntimeTelemetryRegistry = runtimeTelemetry,
   ) {}
   @Cron(CronExpression.EVERY_MINUTE)
   async tick() {
@@ -34,40 +35,59 @@ export class WeatherTravelWorker {
       60_000;
     if (Date.now() - this.lastRun < interval) return;
     this.running = true;
+    const telemetryStartedAt = Date.now();
+    this.telemetry.workerStarted('weather-travel-worker');
     try {
       await withTransientDatabaseRetry(
-        () => this.database.db.transaction(async (transaction) => {
-          const locked = await transaction.execute(
-            sql`select pg_try_advisory_xact_lock(${LOCK_ID}) as locked`,
-          );
-          if (!(locked.rows[0] as any)?.locked) return;
-        // Weather/travel remains a provider precomputation pass. Task Assistant
-        // owns contextual notification decisions and delivery.
-          await this.prepare();
-        }),
+        () =>
+          this.database.db.transaction(async (transaction) => {
+            const locked = await transaction.execute(
+              sql`select pg_try_advisory_xact_lock(${LOCK_ID}) as locked`,
+            );
+            if (!(locked.rows[0] as any)?.locked) return;
+            // Weather/travel remains a provider precomputation pass. Task Assistant
+            // owns contextual notification decisions and delivery.
+            await this.prepare();
+          }),
         {
           attempts: 2,
-          onRetry: (error, attempt, delayMs) => this.logger.warn(JSON.stringify({
-            event: 'weather_travel_worker_database_retry',
-            attempt,
-            delayMs,
-            pool: this.database.poolStats(),
-            ...describeDatabaseError(error, 'query'),
-          })),
+          onRetry: (error, attempt, delayMs) =>
+            this.logger.warn(
+              JSON.stringify({
+                event: 'weather_travel_worker_database_retry',
+                attempt,
+                delayMs,
+                pool: this.database.poolStats(),
+                ...describeDatabaseError(error, 'query'),
+              }),
+            ),
         },
       );
       this.lastRun = Date.now();
-      this.logger.debug(JSON.stringify({
-        event: 'weather_travel_worker_finished',
-        pool: this.database.poolStats(),
-      }));
+      this.telemetry.workerSucceeded(
+        'weather-travel-worker',
+        Date.now() - telemetryStartedAt,
+      );
+      this.logger.debug(
+        JSON.stringify({
+          event: 'weather_travel_worker_finished',
+          pool: this.database.poolStats(),
+        }),
+      );
     } catch (error) {
-      this.logger.warn(JSON.stringify({
-        event: 'weather_travel_worker_failed',
-        retryNextTick: true,
-        pool: this.database.poolStats(),
-        ...describeDatabaseError(error, 'query'),
-      }));
+      this.telemetry.workerFailed(
+        'weather-travel-worker',
+        'database_or_provider_failure',
+        Date.now() - telemetryStartedAt,
+      );
+      this.logger.warn(
+        JSON.stringify({
+          event: 'weather_travel_worker_failed',
+          retryNextTick: true,
+          pool: this.database.poolStats(),
+          ...describeDatabaseError(error, 'query'),
+        }),
+      );
     } finally {
       this.running = false;
     }

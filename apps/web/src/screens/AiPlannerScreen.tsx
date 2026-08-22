@@ -33,17 +33,20 @@ type AiPlannerScreenProps = SidebarNavHandlers & {
   refreshKey?: number
   completedTaskIds?: Set<string>
   onCompleteTask?: (taskId: string) => Promise<void> | void
+  onPlanAccepted?: () => Promise<void> | void
   onSignOut?: () => void
 }
 
 type SectionKey = 'morning' | 'afternoon' | 'evening' | 'night'
 type ViewMode = 'simple' | 'detailed'
+type Translate = ReturnType<typeof useLanguage>['t']
+type NumberFormatter = ReturnType<typeof useLanguage>['formatNumber']
 
-const SECTION_META: Record<SectionKey, { title: string; emoji: string; tint: string; accent: string }> = {
-  morning: { title: 'Morning', emoji: '🌅', tint: 'bg-amber-400/[0.06]', accent: 'text-amber-300' },
-  afternoon: { title: 'Afternoon', emoji: '☀️', tint: 'bg-sky-400/[0.06]', accent: 'text-sky-300' },
-  evening: { title: 'Evening', emoji: '🌇', tint: 'bg-orange-400/[0.06]', accent: 'text-orange-300' },
-  night: { title: 'Night', emoji: '🌙', tint: 'bg-indigo-400/[0.06]', accent: 'text-indigo-300' },
+const SECTION_META: Record<SectionKey, { titleKey: `aiPlannerSchedule.${SectionKey}`; emoji: string; tint: string; accent: string }> = {
+  morning: { titleKey: 'aiPlannerSchedule.morning', emoji: '🌅', tint: 'bg-amber-400/[0.06]', accent: 'text-amber-300' },
+  afternoon: { titleKey: 'aiPlannerSchedule.afternoon', emoji: '☀️', tint: 'bg-sky-400/[0.06]', accent: 'text-sky-300' },
+  evening: { titleKey: 'aiPlannerSchedule.evening', emoji: '🌇', tint: 'bg-orange-400/[0.06]', accent: 'text-orange-300' },
+  night: { titleKey: 'aiPlannerSchedule.night', emoji: '🌙', tint: 'bg-indigo-400/[0.06]', accent: 'text-indigo-300' },
 }
 
 const planCache = new Map<string, { plan: DailyPlan; accepted: boolean }>()
@@ -116,10 +119,11 @@ export default function AiPlannerScreen({
   refreshKey = 0,
   completedTaskIds = new Set(),
   onCompleteTask,
+  onPlanAccepted,
   onSignOut,
   ...nav
 }: AiPlannerScreenProps) {
-  const { t, toggleLanguage } = useLanguage()
+  const { t, toggleLanguage, formatNumber } = useLanguage()
   const { mode, toggleTheme } = useTheme()
   const [search, setSearch] = useState('')
   const [plan, setPlan] = useState<DailyPlan | null>(null)
@@ -197,9 +201,10 @@ export default function AiPlannerScreen({
     try {
       const saved = await updatePlannerPreferences(accessToken, next)
       setPreferences(saved)
-      return { ok: true, message: 'Preferences saved — click Generate Smart Plan to apply them.' }
+      return { ok: true, message: t('aiPlannerPreferences.saved') }
     } catch (saveError) {
-      return { ok: false, message: saveError instanceof Error ? saveError.message : 'Failed to save preferences.' }
+      console.error('[AI Planner] preference save failed', saveError)
+      return { ok: false, message: t('aiPlannerPreferences.saveFailed') }
     }
   }
 
@@ -284,6 +289,7 @@ export default function AiPlannerScreen({
       setPlan(saved.plan)
       setAccepted(true)
       planCache.set(planCacheKey(accessToken, saved.date), { plan: saved.plan, accepted: true })
+      void onPlanAccepted?.()
     } catch (acceptErr) {
       setAcceptError(acceptErr instanceof Error ? acceptErr.message : 'Unable to accept plan.')
     } finally {
@@ -477,7 +483,7 @@ export default function AiPlannerScreen({
           <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search plan..."
+            searchPlaceholder={t('taskUi.planner.search')}
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
@@ -489,7 +495,7 @@ export default function AiPlannerScreen({
       />
 
       {/* HERO — today's plan summary + key stats -------------------------- */}
-      {dismissedConflict ? <div role="alert" className="mb-4 rounded-xl border border-amber-400/50 bg-amber-400/10 p-3 text-sm text-[var(--bp-text)]"><strong>Unresolved Schedule Conflict:</strong> {dismissedConflict.task.title} overlaps {dismissedConflict.commitment.title} by {dismissedConflict.conflictMinutes} minutes. <button type="button" className="underline" onClick={() => { if (plan) setPendingConflict({ conflict: dismissedConflict, proposedPlan: plan }); setDismissedConflict(null) }}>Resolve now</button></div> : null}
+      {dismissedConflict ? <div role="alert" className="mb-4 rounded-xl border border-amber-400/50 bg-amber-400/10 p-3 text-sm text-[var(--bp-text)]"><strong>{t('taskUi.planner.conflict')}:</strong> {dismissedConflict.task.title} · {dismissedConflict.commitment.title} · {t('aiPlannerSchedule.durationMinutes', { count: dismissedConflict.conflictMinutes })} <button type="button" className="underline" onClick={() => { if (plan) setPendingConflict({ conflict: dismissedConflict, proposedPlan: plan }); setDismissedConflict(null) }}>{t('taskUi.planner.resolve')}</button></div> : null}
       <ExistingTaskTimeConflict accessToken={accessToken} date={planDate} plan={plan} />
       <section className="mb-4 rounded-2xl border border-[var(--bp-border)] bg-gradient-to-r from-[var(--bp-accent)]/[0.08] via-[var(--bp-surface)] to-[var(--bp-surface)] p-5">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -498,18 +504,18 @@ export default function AiPlannerScreen({
               <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]">
                 <SparkleGlyph />
               </span>
-              <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Today&apos;s Plan</p>
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('taskUi.planner.todayPlan')}</p>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
                   plan?.source === 'ai' ? 'bg-[var(--bp-accent)]/15 text-[var(--bp-accent-ink)]' : 'bg-slate-500/15 text-[var(--bp-subtle)]'
                 }`}
               >
-                {plan?.source === 'ai' ? 'AI-assisted' : 'Standard plan'}
+                {plan?.source === 'ai' ? t('taskUi.planner.aiAssisted') : t('taskUi.planner.standardPlan')}
               </span>
             </div>
             <h2 className="mt-2 text-2xl font-black text-[var(--bp-text)]">{formatLongDate(planDate)}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--bp-muted)]">
-              {plan?.summary ?? 'Generate a schedule when you are ready. Your current plan stays here while you move around BeePlan.'}
+              {plan?.summary ?? t('taskUi.planner.generateHint')}
             </p>
           </div>
 
@@ -518,28 +524,28 @@ export default function AiPlannerScreen({
 
         {/* Key stats — planned work / tasks / breaks */}
         <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--bp-border)] bg-[var(--bp-border)] sm:grid-cols-4">
-          <SummaryMetric label="Progress" value={`${progressPercent}%`} detail={`${completedCount} complete`} />
-          <StatTile emoji="⏱️" label="Planned work" value={formatDuration(plannedMinutes)} />
-          <StatTile emoji="✅" label="Tasks" value={String(taskCount)} />
-          <StatTile emoji="☕" label="Breaks" value={String(insights?.breaks ?? 0)} />
+          <SummaryMetric label={t('taskUi.planner.progress')} value={`${progressPercent}%`} detail={`${completedCount}/${taskCount}`} />
+          <StatTile emoji="⏱️" label={t('taskUi.planner.plannedWork')} value={formatDuration(plannedMinutes)} />
+          <StatTile emoji="✅" label={t('taskUi.planner.tasks')} value={String(taskCount)} />
+          <StatTile emoji="☕" label={t('taskUi.planner.breaks')} value={String(insights?.breaks ?? 0)} />
         </div>
       </section>
 
       {/* ACTION BAR + VIEW TOGGLE ---------------------------------------- */}
       <section className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-3 shadow-xl">
         <SecondaryButton size="md" onClick={() => void openCandidatePicker()} loading={candidatePickerOpen && !candidates}>
-          Choose what to schedule today
+          {t('taskUi.planner.choose')}
         </SecondaryButton>
         <PrimaryButton size="md" onClick={() => void loadPlan()} loading={loading}>
-          <span className="inline-flex items-center gap-1.5"><SparkleGlyph className="h-4 w-4" /> {plan ? 'Regenerate plan' : 'Generate plan'}</span>
+          <span className="inline-flex items-center gap-1.5"><SparkleGlyph className="h-4 w-4" /> {plan ? t('taskUi.planner.regenerate') : t('taskUi.planner.generate')}</span>
         </PrimaryButton>
         <SecondaryButton size="md" onClick={() => void acceptPlan()} disabled={!plan || loading || accepting || accepted}>
           <span className="inline-flex items-center gap-1.5">
-            <CheckGlyph /> {accepted ? 'Accepted' : accepting ? 'Accepting...' : 'Accept Plan'}
+            <CheckGlyph /> {accepted ? t('taskUi.planner.accepted') : accepting ? t('taskUi.planner.accepting') : t('taskUi.planner.accept')}
           </span>
         </SecondaryButton>
         <OutlineButton size="md" onClick={resetPlan} disabled={loading}>
-          <span className="inline-flex items-center gap-1.5"><RefreshGlyph /> Reset</span>
+          <span className="inline-flex items-center gap-1.5"><RefreshGlyph /> {t('taskUi.planner.reset')}</span>
         </OutlineButton>
         <ViewToggle mode={viewMode} onChange={setViewMode} />
       </section>
@@ -547,15 +553,15 @@ export default function AiPlannerScreen({
       {candidatePickerOpen ? (
         <section className="mb-4 rounded-2xl border border-[var(--bp-accent)]/30 bg-[var(--bp-surface)] p-4 shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h3 className="text-base font-black text-[var(--bp-text)]">Choose what to schedule today</h3><p className="text-sm text-[var(--bp-muted)]">Selected work is revalidated by the API before it is scheduled.</p></div>
-            <div className="flex gap-2"><button className="text-xs font-bold underline" onClick={() => setSelectedKeys(new Set(candidates?.items.map((item) => `${item.taskId}:${item.subtaskId ?? ''}`) ?? []))}>Select all</button><button className="text-xs font-bold underline" onClick={() => setSelectedKeys(new Set())}>Clear all</button></div>
+            <div><h3 className="text-base font-black text-[var(--bp-text)]">{t('taskUi.planner.choose')}</h3><p className="text-sm text-[var(--bp-muted)]">{t('aiPlannerPicker.selectedRevalidated')}</p></div>
+            <div className="flex gap-2"><button className="text-xs font-bold underline" onClick={() => setSelectedKeys(new Set(candidates?.items.map((item) => `${item.taskId}:${item.subtaskId ?? ''}`) ?? []))}>{t('taskUi.planner.selectAll')}</button><button className="text-xs font-bold underline" onClick={() => setSelectedKeys(new Set())}>{t('taskUi.planner.clearAll')}</button></div>
           </div>
           {candidates ? <>
-            <div className="mt-3 rounded-xl bg-[var(--bp-bg)] p-3 text-sm"><strong>Selected: {formatDuration((candidates.items.filter((item) => selectedKeys.has(`${item.taskId}:${item.subtaskId ?? ''}`)).reduce((sum, item) => sum + item.estimatedMinutes, 0)))}</strong><span className="ms-3 text-[var(--bp-muted)]">Available today: {formatDuration(candidates.availableMinutes)}</span></div>
-            <div className="mt-3 flex flex-wrap gap-2"><input value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder="Search tasks and subtasks" className="min-w-48 flex-1 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2 text-sm" />{(['all', 'today', 'overdue', 'upcoming', 'unscheduled'] as const).map((filter) => <button key={filter} onClick={() => setCandidateFilter(filter)} className="rounded-lg px-2.5 py-1.5 text-xs font-bold">{filter}</button>)}</div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">{visibleCandidateItems.map((item) => { const key = `${item.taskId}:${item.subtaskId ?? ''}`; const checked = selectedKeys.has(key); return <label key={key} className={`flex cursor-pointer gap-3 rounded-xl border border-[var(--bp-border)] p-3 ${item.isManuallySelectable === false ? 'opacity-60' : ''}`}><input type="checkbox" disabled={item.isManuallySelectable === false} checked={checked} onChange={() => setSelectedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })} /><span className="min-w-0 flex-1"><span className="block text-sm font-bold text-[var(--bp-text)]">{item.title}</span><span className="block text-xs capitalize text-[var(--bp-muted)]">{item.scheduleCategory ?? 'unscheduled'} · {item.priority} · {item.estimatedMinutes} min{item.dueDate ? ` · due ${item.dueDate.slice(0, 10)}` : ''}{item.blockedReason ? ` · ${item.blockedReason}` : ''}</span></span></label> })}</div>
-            <div className="mt-4 flex flex-wrap items-center gap-3"><label className="text-sm font-bold text-[var(--bp-text)]">Mode <select value={selectionMode} onChange={(event) => setSelectionMode(event.target.value as typeof selectionMode)} className="ms-2 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-2 py-1"><option value="selectedOnly">Selected only</option><option value="selectedPlusAutoFill">Selected + backlog fill</option></select></label><PrimaryButton size="sm" onClick={() => void generateFromSelection()} loading={loading}>Plan selected work</PrimaryButton><button className="text-sm font-bold underline" onClick={() => setCandidatePickerOpen(false)}>Cancel</button></div>
-          </> : <p className="mt-4 text-sm text-[var(--bp-muted)]">Loading eligible work…</p>}
+            <div className="mt-3 rounded-xl bg-[var(--bp-bg)] p-3 text-sm"><strong>{t('taskUi.planner.selected')}: {formatDuration((candidates.items.filter((item) => selectedKeys.has(`${item.taskId}:${item.subtaskId ?? ''}`)).reduce((sum, item) => sum + item.estimatedMinutes, 0)))}</strong><span className="ms-3 text-[var(--bp-muted)]">{t('taskUi.planner.available')}: {formatDuration(candidates.availableMinutes)}</span></div>
+            <div className="mt-3 flex flex-wrap gap-2"><input value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} placeholder={t('aiPlannerPicker.searchTasks')} className="min-w-48 flex-1 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2 text-sm" />{(['all', 'today', 'overdue', 'upcoming', 'unscheduled'] as const).map((filter) => <button key={filter} onClick={() => setCandidateFilter(filter)} className="rounded-lg px-2.5 py-1.5 text-xs font-bold">{t(`aiPlannerPicker.filters.${filter}`)}</button>)}</div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">{visibleCandidateItems.map((item) => { const key = `${item.taskId}:${item.subtaskId ?? ''}`; const checked = selectedKeys.has(key); return <label key={key} className={`flex cursor-pointer gap-3 rounded-xl border border-[var(--bp-border)] p-3 ${item.isManuallySelectable === false ? 'opacity-60' : ''}`}><input type="checkbox" disabled={item.isManuallySelectable === false} checked={checked} onChange={() => setSelectedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })} /><span className="min-w-0 flex-1"><span className="block text-sm font-bold text-[var(--bp-text)]">{item.title}</span><span className="block text-xs capitalize text-[var(--bp-muted)]">{item.scheduleCategory ?? 'unscheduled'} · {item.priority} · {t('aiPlannerSchedule.durationMinutes', { count: item.estimatedMinutes })}{item.dueDate ? ` · ${item.dueDate.slice(0, 10)}` : ''}{item.blockedReason ? ` · ${item.blockedReason}` : ''}</span></span></label> })}</div>
+            <div className="mt-4 flex flex-wrap items-center gap-3"><label className="text-sm font-bold text-[var(--bp-text)]">{t('taskUi.planner.mode')} <select value={selectionMode} onChange={(event) => setSelectionMode(event.target.value as typeof selectionMode)} className="ms-2 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-2 py-1"><option value="selectedOnly">{t('taskUi.planner.selectedOnly')}</option><option value="selectedPlusAutoFill">{t('taskUi.planner.selectedPlusAutoFill')}</option></select></label><PrimaryButton size="sm" onClick={() => void generateFromSelection()} loading={loading}>{t('taskUi.planner.planSelected')}</PrimaryButton><button className="text-sm font-bold underline" onClick={() => setCandidatePickerOpen(false)}>{t('taskUi.planner.cancel')}</button></div>
+          </> : <p className="mt-4 text-sm text-[var(--bp-muted)]">{t('taskUi.planner.loadingEligible')}</p>}
         </section>
       ) : null}
 
@@ -580,14 +586,14 @@ export default function AiPlannerScreen({
 
       {loading && !plan ? (
         <div className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-8 text-center text-sm font-bold text-[var(--bp-muted)] shadow-xl">
-          Loading your saved plan...
+          {t('taskUi.planner.loading')}
         </div>
       ) : null}
 
       {!loading && !error && !plan ? (
         <div className="rounded-2xl border border-dashed border-[var(--bp-border)] bg-[var(--bp-surface)] p-8 text-center shadow-xl">
-          <h2 className="text-base font-black text-[var(--bp-text)]">No plan for today yet</h2>
-          <p className="mt-2 text-sm text-[var(--bp-muted)]">Generate a plan when you want help organizing the rest of your day.</p>
+          <h2 className="text-base font-black text-[var(--bp-text)]">{t('taskUi.planner.noPlan')}</h2>
+          <p className="mt-2 text-sm text-[var(--bp-muted)]">{t('taskUi.planner.generateHint')}</p>
         </div>
       ) : null}
 
@@ -614,10 +620,10 @@ export default function AiPlannerScreen({
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="flex items-center gap-2 text-base font-black text-[var(--bp-text)]">
                     <span className="text-lg">{meta.emoji}</span>
-                    <span className={meta.accent}>{meta.title}</span>
+                    <span className={meta.accent}>{t(meta.titleKey)}</span>
                   </h3>
                   <span className="text-xs font-bold text-[var(--bp-muted)]">
-                    {stats.tasks} {stats.tasks === 1 ? 'task' : 'tasks'} · {formatDuration(stats.minutes)}
+                    {t(stats.tasks === 1 ? 'aiPlannerSchedule.taskCountOne' : stats.tasks === 2 ? 'aiPlannerSchedule.taskCountTwo' : 'aiPlannerSchedule.taskCount', { count: formatNumber(stats.tasks) })} · {formatScheduleDuration(stats.minutes, t, formatNumber)}
                   </span>
                 </div>
 
@@ -648,7 +654,7 @@ export default function AiPlannerScreen({
                     })}
                   </div>
                 ) : (
-                  <p className="py-2 text-sm text-[var(--bp-muted)]">Nothing planned here.</p>
+                  <p className="py-2 text-sm text-[var(--bp-muted)]">{t('aiPlannerSchedule.nothingPlanned')}</p>
                 )}
               </section>
             )
@@ -667,42 +673,42 @@ export default function AiPlannerScreen({
 
               {validation ? <PlanValidationCard validation={validation} /> : null}
 
-              <CollapsibleSection title="AI Insights" emoji="🧠" defaultOpen={false}>
+              <CollapsibleSection title={t('aiPlannerExplain.aiInsights')} emoji="🧠" defaultOpen={false}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <InsightCard
                     emoji="🎯"
-                    title="Today's Focus"
-                    body={insights?.focus?.title ?? 'No focus task scheduled.'}
-                    hint={insights?.focus ? `${formatDuration(insights.focus.durationMinutes)} · ${insights.focus.priority} priority` : undefined}
+                    title={t('aiPlannerExplain.todaysFocus')}
+                    body={insights?.focus?.title ?? t('aiPlannerExplain.noFocus')}
+                    hint={insights?.focus ? `${formatDuration(insights.focus.durationMinutes)} · ${insights.focus.priority}` : undefined}
                   />
                   <InsightCard
                     emoji="🧗"
-                    title="Most Difficult Task"
-                    body={insights?.hardest?.title ?? 'Nothing scheduled yet.'}
-                    hint={insights?.hardest ? `${formatDuration(insights.hardest.durationMinutes)} of effort` : undefined}
+                    title={t('aiPlannerExplain.mostDifficult')}
+                    body={insights?.hardest?.title ?? t('aiPlannerExplain.nothingScheduled')}
+                    hint={insights?.hardest ? t('aiPlannerExplain.effort', { duration: formatDuration(insights.hardest.durationMinutes) }) : undefined}
                   />
                   <InsightCard
                     emoji="⏰"
-                    title="Upcoming Deadline"
-                    body={insights?.nextFixed?.title ?? 'No fixed deadlines today.'}
-                    hint={insights?.nextFixed ? `at ${formatClock(insights.nextFixed.startTime)}` : undefined}
+                    title={t('aiPlannerExplain.upcomingDeadline')}
+                    body={insights?.nextFixed?.title ?? t('aiPlannerExplain.noDeadlines')}
+                    hint={insights?.nextFixed ? t('aiPlannerExplain.at', { time: formatClock(insights.nextFixed.startTime) }) : undefined}
                   />
                   <InsightCard
                     emoji="🕓"
-                    title="Available Free Time"
+                    title={t('aiPlannerExplain.availableFreeTime')}
                     body={
                       insights?.biggestGap
-                        ? `${formatDuration(insights.biggestGap.minutes)} free`
+                        ? t('aiPlannerExplain.free', { duration: formatDuration(insights.biggestGap.minutes) })
                         : insights?.freeMinutes != null
-                          ? `${formatDuration(insights.freeMinutes)} across the day`
-                          : 'Fully scheduled.'
+                          ? t('aiPlannerExplain.acrossDay', { duration: formatDuration(insights.freeMinutes) })
+                          : t('aiPlannerExplain.fullyScheduled')
                     }
                     hint={insights?.biggestGap ? `${formatClock(insights.biggestGap.start)} – ${formatClock(insights.biggestGap.end)}` : undefined}
                   />
                   <div className="rounded-xl bg-[var(--bp-bg)] p-3 sm:col-span-2">
                     <div className="flex items-center justify-between">
                       <p className="flex items-center gap-1.5 text-xs font-black uppercase text-[var(--bp-muted)]">
-                        <span>📈</span> Productivity Score
+                        <span>📈</span> {t('aiPlannerExplain.productivityScore')}
                       </p>
                       <span className="text-lg font-black text-[var(--bp-accent-ink)]">{insights?.productivityScore ?? 0}</span>
                     </div>
@@ -717,7 +723,7 @@ export default function AiPlannerScreen({
               </CollapsibleSection>
 
               {insights?.recommendations.length ? (
-                <CollapsibleSection title="AI Recommendations" emoji="💡" defaultOpen={false}>
+                <CollapsibleSection title={t('aiPlannerExplain.recommendations')} emoji="💡" defaultOpen={false}>
                   <div className="space-y-2">
                     {insights.recommendations.map((rec, index) => (
                       <div key={index} className="flex items-start gap-2.5 rounded-xl bg-[var(--bp-bg)] p-3 text-sm text-[var(--bp-subtle)]">
@@ -733,7 +739,7 @@ export default function AiPlannerScreen({
             </div>
           ) : (
             <p className="pt-1 text-center text-xs text-[var(--bp-muted)]">
-              Switch to <span className="font-bold text-[var(--bp-text)]">Detailed View</span> to see reasons, validation, and how the AI built this plan.
+              {t('aiPlannerExplain.switchDetailed', { view: t('aiPlannerExplain.detailedView') })}
             </p>
           )}
         </div>
@@ -785,13 +791,14 @@ function PlanningPreferencesCard({
   preferences: PlannerPreferences
   onSave: (next: PlannerPreferences) => Promise<{ ok: boolean; message: string }>
 }) {
+  const { t, formatNumber } = useLanguage()
   const [draft, setDraft] = useState<PlannerPreferences>(preferences)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   type AvailabilityWindow = PlannerPreferences['unavailableHours'][number] & { label?: string }
   const [availability, setAvailability] = useState<AvailabilityWindow[]>([
-    { ...preferences.lunch, label: 'Lunch' },
+    { ...preferences.lunch, label: '__lunch__' },
     ...preferences.unavailableHours,
   ])
   const [focusStyle, setFocusStyle] = useState(() => preferences.workBlockMinutes === 25 && preferences.breakMinutes === 5 ? 'Pomodoro' : preferences.workBlockMinutes === 90 && preferences.breakMinutes === 15 ? 'Deep Work' : preferences.workBlockMinutes === 50 && preferences.breakMinutes === 10 ? 'Standard' : 'Custom')
@@ -838,11 +845,11 @@ function PlanningPreferencesCard({
 
   async function handleSave() {
     if (invalidFocus) {
-      setMessage({ ok: false, text: 'Focus start time must be before focus end time.' })
+      setMessage({ ok: false, text: t('aiPlannerPreferences.startBeforeEnd') })
       return
     }
     if (invalidAvailability) {
-      setMessage({ ok: false, text: 'Each unavailable block must start before it ends.' })
+      setMessage({ ok: false, text: t('aiPlannerPreferences.unavailableStartBeforeEnd') })
       return
     }
     setSaving(true)
@@ -857,82 +864,81 @@ function PlanningPreferencesCard({
   }
 
   return (
-    <CollapsibleSection title="AI Planning Preferences" emoji="⚙️" defaultOpen={true}>
+    <CollapsibleSection title={t('aiPlannerPreferences.title')} emoji="⚙️" defaultOpen={true}>
       <p className="mb-3 text-xs text-[var(--bp-muted)]">
-        Teach BeePlan how you like your day planned. Saved preferences apply the next time you generate a plan — they never
-        override deadlines, reminders, dependencies, or locked tasks.
+        {t('aiPlannerPreferences.description')}
       </p>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <PrefGroup title="Focus Hours" hint="When you prefer to do your best work.">
+        <PrefGroup title={t('aiPlannerPreferences.focusHours')} hint={t('aiPlannerPreferences.focusHoursHint')}>
           <div className="flex items-end gap-2">
-            <PrefTime label="From" value={draft.focusStartTime} onChange={(value) => update('focusStartTime', value)} />
-            <PrefTime label="To" value={draft.focusEndTime} onChange={(value) => update('focusEndTime', value)} />
+            <PrefTime label={t('aiPlannerPreferences.from')} value={draft.focusStartTime} onChange={(value) => update('focusStartTime', value)} />
+            <PrefTime label={t('aiPlannerPreferences.to')} value={draft.focusEndTime} onChange={(value) => update('focusEndTime', value)} />
           </div>
-          {invalidFocus ? <p className="mt-1 text-[11px] font-bold text-red-300">Start must be before end.</p> : null}
+          {invalidFocus ? <p className="mt-1 text-[11px] font-bold text-red-300">{t('aiPlannerPreferences.startBeforeEnd')}</p> : null}
         </PrefGroup>
 
-        <PrefGroup title="Focus Style" hint="Choose a rhythm that feels natural.">
-          <PrefChoice value={focusStyle} onChange={chooseFocusStyle} options={['Pomodoro', 'Standard', 'Deep Work', 'Custom']} descriptions={['25 / 5', '50 / 10', '90 / 15', 'Set your own']} />
-          {focusStyle === 'Custom' ? <div className="mt-3 flex items-end gap-2"><PrefNumber label="Work block (min)" value={draft.workBlockMinutes} min={15} max={120} onChange={(value) => update('workBlockMinutes', value)} /><PrefNumber label="Break (min)" value={draft.breakMinutes} min={5} max={30} onChange={(value) => update('breakMinutes', value)} /></div> : null}
+        <PrefGroup title={t('aiPlannerPreferences.focusStyle')} hint={t('aiPlannerPreferences.focusStyleHint')}>
+          <PrefChoice value={focusStyle} onChange={chooseFocusStyle} options={['Pomodoro', 'Standard', 'Deep Work', 'Custom']} descriptions={['25 / 5', '50 / 10', '90 / 15', t('aiPlannerPreferences.setOwn')]} t={t} />
+          {focusStyle === 'Custom' ? <div className="mt-3 flex items-end gap-2"><PrefNumber label={t('aiPlannerPreferences.workBlock')} value={draft.workBlockMinutes} min={15} max={120} onChange={(value) => update('workBlockMinutes', value)} /><PrefNumber label={t('aiPlannerPreferences.break')} value={draft.breakMinutes} min={5} max={30} onChange={(value) => update('breakMinutes', value)} /></div> : null}
         </PrefGroup>
 
-        <PrefGroup title="Daily Work Capacity" hint="BeePlan automatically keeps a reasonable buffer for the unexpected.">
-          <div className="grid grid-cols-5 gap-1.5">{['2h', '4h', '6h', '8h', 'Custom'].map((value) => <button key={value} type="button" onClick={() => value === 'Custom' ? setAdvancedOpen(true) : update('maxDailyWorkMinutes', Number(value.replace('h', '')) * 60)} className={`rounded-lg border px-2 py-2 text-xs font-black transition ${value === `${draft.maxDailyWorkMinutes / 60}h` ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'border-[var(--bp-border)] text-[var(--bp-muted)] hover:border-[var(--bp-accent)]/50'}`}>{value}</button>)}</div>
+        <PrefGroup title={t('aiPlannerPreferences.dailyCapacity')} hint={t('aiPlannerPreferences.dailyCapacityHint')}>
+          <div className="grid grid-cols-5 gap-1.5">{['2h', '4h', '6h', '8h', 'Custom'].map((value) => <button key={value} type="button" onClick={() => value === 'Custom' ? setAdvancedOpen(true) : update('maxDailyWorkMinutes', Number(value.replace('h', '')) * 60)} className={`rounded-lg border px-2 py-2 text-xs font-black transition ${value === `${draft.maxDailyWorkMinutes / 60}h` ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'border-[var(--bp-border)] text-[var(--bp-muted)] hover:border-[var(--bp-accent)]/50'}`}>{value === 'Custom' ? t('aiPlannerPreferences.capacityCustom') : t('aiPlannerPreferences.capacityHours', { count: formatNumber(Number(value.replace('h', ''))) })}</button>)}</div>
         </PrefGroup>
 
-        <PrefGroup title="Sleep Hours" hint="Protected rest time the planner always keeps clear.">
+        <PrefGroup title={t('aiPlannerPreferences.sleepHours')} hint={t('aiPlannerPreferences.sleepHoursHint')}>
           <div className="space-y-2">
             <div>
-              <p className="mb-1 text-[11px] font-bold text-[var(--bp-muted)]">Sleep (can cross midnight)</p>
+              <p className="mb-1 text-[11px] font-bold text-[var(--bp-muted)]">{t('aiPlannerPreferences.sleepCrossMidnight')}</p>
               <div className="flex items-end gap-2">
-                <PrefTime label="From" value={draft.sleep.start} onChange={(value) => updateWindow('sleep', 'start', value)} />
-                <PrefTime label="To" value={draft.sleep.end} onChange={(value) => updateWindow('sleep', 'end', value)} />
+                <PrefTime label={t('aiPlannerPreferences.from')} value={draft.sleep.start} onChange={(value) => updateWindow('sleep', 'start', value)} />
+                <PrefTime label={t('aiPlannerPreferences.to')} value={draft.sleep.end} onChange={(value) => updateWindow('sleep', 'end', value)} />
               </div>
             </div>
           </div>
         </PrefGroup>
 
-        <PrefGroup title="Availability" hint="Add lunch, commute, gym, prayer, family, or any other protected time." className="md:col-span-2">
+        <PrefGroup title={t('aiPlannerPreferences.availability')} hint={t('aiPlannerPreferences.availabilityHint')} className="md:col-span-2">
           {availability.length ? (
             <div className="space-y-2">
               {availability.map((window, index) => (
                 <div key={index} className="flex flex-wrap items-end gap-2">
-                  <PrefTime label="From" value={window.start} onChange={(value) => updateUnavailable(index, 'start', value)} />
-                  <PrefTime label="To" value={window.end} onChange={(value) => updateUnavailable(index, 'end', value)} />
-                  <label className="min-w-[130px] flex-1"><span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">Label (optional)</span><input value={window.label ?? ''} placeholder="Lunch, Gym..." onChange={(event) => updateUnavailable(index, 'label', event.target.value)} className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1.5 text-xs font-bold text-[var(--bp-text)]" /></label>
+                  <PrefTime label={t('aiPlannerPreferences.from')} value={window.start} onChange={(value) => updateUnavailable(index, 'start', value)} />
+                  <PrefTime label={t('aiPlannerPreferences.to')} value={window.end} onChange={(value) => updateUnavailable(index, 'end', value)} />
+                  <label className="min-w-[130px] flex-1"><span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">{t('aiPlannerPreferences.labelOptional')}</span><input value={window.label === '__lunch__' ? t('aiPlannerPreferencesExtra.lunch') : window.label ?? ''} placeholder={t('aiPlannerPreferences.labelPlaceholder')} onChange={(event) => updateUnavailable(index, 'label', event.target.value)} className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1.5 text-xs font-bold text-[var(--bp-text)]" /></label>
                   <button
                     type="button"
                     onClick={() => removeUnavailable(index)}
                     className="mb-0.5 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-black text-red-300 transition hover:bg-red-500/25"
                   >
-                    Remove
+                    {t('aiPlannerPreferences.remove')}
                   </button>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-[var(--bp-muted)]">No unavailable blocks yet.</p>
+            <p className="text-[11px] text-[var(--bp-muted)]">{t('aiPlannerPreferences.noUnavailable')}</p>
           )}
           <button
             type="button"
             onClick={addUnavailable}
             className="mt-2 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-bg)] px-2.5 py-1.5 text-xs font-black text-[var(--bp-text)] transition hover:border-[var(--bp-accent)]/40"
           >
-            + Add time block
+            {t('aiPlannerPreferences.addTimeBlock')}
           </button>
         </PrefGroup>
 
         <div className="md:col-span-2 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)]/30">
-          <button type="button" onClick={() => setAdvancedOpen((value) => !value)} aria-expanded={advancedOpen} className="flex w-full items-center justify-between px-3 py-3 text-left"><span><span className="block text-sm font-black text-[var(--bp-text)]">Advanced Preferences</span><span className="text-xs text-[var(--bp-muted)]">Add personal context the AI cannot infer automatically.</span></span><ChevronGlyph className={`h-4 w-4 text-[var(--bp-muted)] transition-transform ${advancedOpen ? 'rotate-180' : ''}`} /></button>
+          <button type="button" onClick={() => setAdvancedOpen((value) => !value)} aria-expanded={advancedOpen} className="flex w-full items-center justify-between px-3 py-3 text-left"><span><span className="block text-sm font-black text-[var(--bp-text)]">{t('aiPlannerPreferences.advanced')}</span><span className="text-xs text-[var(--bp-muted)]">{t('aiPlannerPreferences.advancedHint')}</span></span><ChevronGlyph className={`h-4 w-4 text-[var(--bp-muted)] transition-transform ${advancedOpen ? 'rotate-180' : ''}`} /></button>
           {advancedOpen ? <div className="grid gap-3 border-t border-[var(--bp-border)] p-3">
-            <PrefGroup title="Personal Notes" hint="Tell the AI anything about your day that it cannot infer automatically.">
+            <PrefGroup title={t('aiPlannerPreferences.personalNotes')} hint={t('aiPlannerPreferences.personalNotesHint')}>
           <textarea
             value={draft.note}
             maxLength={1000}
             rows={3}
             onChange={(event) => update('note', event.target.value)}
-            placeholder="Tell BeePlan how you like your day planned..."
+            placeholder={t('aiPlannerPreferences.notesPlaceholder')}
             className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-sm text-[var(--bp-text)] placeholder:text-[var(--bp-muted)]"
           />
           <p className="mt-0.5 text-right text-[11px] text-[var(--bp-muted)]">{draft.note.length}/1000</p>
@@ -943,7 +949,7 @@ function PlanningPreferencesCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <PrimaryButton size="sm" onClick={handleSave} loading={saving} disabled={invalidFocus || invalidAvailability}>
-          Save Preferences
+          {t('aiPlannerPreferences.save')}
         </PrimaryButton>
         {message ? (
           <span className={`text-xs font-bold ${message.ok ? 'text-green-300' : 'text-red-300'}`}>{message.text}</span>
@@ -954,6 +960,7 @@ function PlanningPreferencesCard({
 }
 
 function CapacitySummaryCard({ capacity }: { capacity: CapacitySummary }) {
+  const { t, formatNumber } = useLanguage()
   const requested = Math.max(1, capacity.requestedMinutes)
   const scheduledPct = Math.min(100, Math.round((capacity.scheduledMinutes / requested) * 100))
   const usedPct = Math.min(100, Math.round((capacity.scheduledMinutes / Math.max(1, capacity.availableMinutes)) * 100))
@@ -962,10 +969,10 @@ function CapacitySummaryCard({ capacity }: { capacity: CapacitySummary }) {
     <section className="overflow-hidden rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4 shadow-xl">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
-          <span>📊</span> Today&apos;s capacity
+          <span>📊</span> {t('aiPlannerValidation.capacity')}
         </h3>
-        <span className="text-[11px] font-bold text-[var(--bp-muted)]">
-          {usedPct}% of {formatDuration(capacity.availableMinutes)} budget used
+          <span className="text-[11px] font-bold text-[var(--bp-muted)]">
+          {t('aiPlannerValidation.budgetUsed', { percent: formatNumber(usedPct), duration: formatScheduleDuration(capacity.availableMinutes, t, formatNumber) })}
         </span>
       </div>
 
@@ -978,16 +985,15 @@ function CapacitySummaryCard({ capacity }: { capacity: CapacitySummary }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <CapacityStat label="Available" value={formatDuration(capacity.availableMinutes)} tone="text-sky-300" />
-        <CapacityStat label="Requested" value={formatDuration(capacity.requestedMinutes)} tone="text-[var(--bp-text)]" />
-        <CapacityStat label="Scheduled" value={formatDuration(capacity.scheduledMinutes)} tone="text-green-300" />
-        <CapacityStat label="Postponed" value={formatDuration(capacity.postponedMinutes)} tone="text-amber-300" />
-        <CapacityStat label="Tasks scheduled" value={String(capacity.scheduledTaskCount)} tone="text-green-300" />
-        <CapacityStat label="Tasks postponed" value={String(capacity.postponedTaskCount)} tone="text-amber-300" />
+        <CapacityStat label={t('aiPlannerValidation.available')} value={formatScheduleDuration(capacity.availableMinutes, t, formatNumber)} tone="text-sky-300" />
+        <CapacityStat label={t('aiPlannerValidation.requested')} value={formatScheduleDuration(capacity.requestedMinutes, t, formatNumber)} tone="text-[var(--bp-text)]" />
+        <CapacityStat label={t('aiPlannerValidation.scheduled')} value={formatScheduleDuration(capacity.scheduledMinutes, t, formatNumber)} tone="text-green-300" />
+        <CapacityStat label={t('aiPlannerValidation.postponed')} value={formatScheduleDuration(capacity.postponedMinutes, t, formatNumber)} tone="text-amber-300" />
+        <CapacityStat label={t('aiPlannerValidation.tasksScheduled')} value={formatNumber(capacity.scheduledTaskCount)} tone="text-green-300" />
+        <CapacityStat label={t('aiPlannerValidation.tasksPostponed')} value={formatNumber(capacity.postponedTaskCount)} tone="text-amber-300" />
       </div>
       <p className="mt-3 text-[11px] text-[var(--bp-muted)]">
-        Keeps a {formatDuration(capacity.emergencyBufferMinutes)} emergency buffer free and never plans past your max daily work of{' '}
-        {formatDuration(capacity.maxDailyWorkMinutes)}.
+        {t('aiPlannerValidation.capacityHelper', { buffer: formatScheduleDuration(capacity.emergencyBufferMinutes, t, formatNumber), maximum: formatScheduleDuration(capacity.maxDailyWorkMinutes, t, formatNumber) })}
       </p>
     </section>
   )
@@ -1003,13 +1009,14 @@ function CapacityStat({ label, value, tone }: { label: string; value: string; to
 }
 
 function PostponedList({ items }: { items: UnscheduledItem[] }) {
+  const { t, language, formatNumber } = useLanguage()
   return (
     <section className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-4 shadow-xl">
       <h3 className="flex items-center gap-2 text-sm font-black text-[var(--bp-text)]">
-        <span>📥</span> Not scheduled today
+        <span>📥</span> {t('aiPlannerSchedule.notScheduledToday')}
       </h3>
       <p className="mb-3 mt-1 text-xs text-[var(--bp-muted)]">
-        {items.length} task{items.length > 1 ? 's' : ''} moved out of today — nothing is silently dropped.
+        {t('aiPlannerSchedule.postponedCount', { count: formatNumber(items.length) })}
       </p>
       <div className="space-y-2">
         {items.map((item, index) => {
@@ -1022,16 +1029,16 @@ function PostponedList({ items }: { items: UnscheduledItem[] }) {
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-bold text-[var(--bp-text)]">{item.title}</p>
                 <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase ${meta.tone}`}>
-                  <span>{meta.emoji}</span> {meta.label}
+                  <span>{meta.emoji}</span> {t(meta.labelKey)}
                 </span>
-                {item.priority ? <Badge tone={priorityTone(item.priority)}>{item.priority}</Badge> : null}
+                {item.priority ? <Badge tone={priorityTone(item.priority)}>{t(`taskLabels.priority.${item.priority}`)}</Badge> : null}
               </div>
               <p className="mt-1 text-xs text-[var(--bp-muted)]">{item.reason}</p>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--bp-muted)]">
-                {item.estimatedMinutes ? <span>⏱️ {formatDuration(item.estimatedMinutes)}</span> : null}
-                {item.deadline ? <span>📅 Due {formatShortDate(item.deadline)}</span> : null}
+                {item.estimatedMinutes ? <span>⏱️ {formatScheduleDuration(item.estimatedMinutes, t, formatNumber)}</span> : null}
+                {item.deadline ? <span>📅 {t('aiPlannerSchedule.due', { date: formatShortDate(item.deadline, language) })}</span> : null}
                 {item.suggestedDate ? (
-                  <span className="font-bold text-[var(--bp-accent-ink)]">➡️ Suggested: {formatShortDate(item.suggestedDate)}</span>
+                  <span className="font-bold text-[var(--bp-accent-ink)]">➡️ {t('aiPlannerSchedule.suggested', { date: formatShortDate(item.suggestedDate, language) })}</span>
                 ) : null}
               </div>
             </div>
@@ -1068,6 +1075,7 @@ function PrefTime({ label, value, onChange }: { label: string; value: string; on
       <span className="mb-1 block text-[11px] font-bold text-[var(--bp-muted)]">{label}</span>
       <input
         type="time"
+        dir="ltr"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1.5 text-xs font-bold text-[var(--bp-text)]"
@@ -1107,8 +1115,9 @@ function PrefNumber({
   )
 }
 
-function PrefChoice({ value, onChange, options, descriptions = [] }: { value: string; onChange: (value: string) => void; options: string[]; descriptions?: string[] }) {
-  return <div className="grid gap-2 sm:grid-cols-2">{options.map((option, index) => <label key={option} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition ${value === option ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)]' : 'border-[var(--bp-border)] hover:border-[var(--bp-accent)]/50'}`}><input type="radio" name="planner-choice" checked={value === option} onChange={() => onChange(option)} className="accent-[var(--bp-accent)]" /><span><span className="block text-xs font-black text-[var(--bp-text)]">{option}</span>{descriptions[index] ? <span className="text-[11px] text-[var(--bp-muted)]">{descriptions[index]}</span> : null}</span></label>)}</div>
+function PrefChoice({ value, onChange, options, descriptions = [], t }: { value: string; onChange: (value: string) => void; options: string[]; descriptions?: string[]; t: Translate }) {
+  const labels: Record<string, string> = { Pomodoro: t('aiPlannerPreferences.pomodoro'), Standard: t('aiPlannerPreferences.standard'), 'Deep Work': t('aiPlannerPreferences.deepWork'), Custom: t('aiPlannerPreferences.custom') }
+  return <div className="grid gap-2 sm:grid-cols-2">{options.map((option, index) => <label key={option} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition ${value === option ? 'border-[var(--bp-accent)] bg-[var(--bp-accent-soft)]' : 'border-[var(--bp-border)] hover:border-[var(--bp-accent)]/50'}`}><input type="radio" name="planner-choice" checked={value === option} onChange={() => onChange(option)} className="accent-[var(--bp-accent)]" /><span><span className="block text-xs font-black text-[var(--bp-text)]">{labels[option] ?? option}</span>{descriptions[index] ? <span className="text-[11px] text-[var(--bp-muted)]">{descriptions[index]}</span> : null}</span></label>)}</div>
 }
 
 function SummaryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
@@ -1184,26 +1193,29 @@ function TimelineRow({ status, isLast, children }: { status: NodeStatus; isLast:
 }
 
 function TimelineNode({ status }: { status: NodeStatus }) {
+  const { t } = useLanguage()
+  const statusLabel = t(`aiPlannerSchedule.badges.${status}`)
   if (status === 'completed') {
     return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 text-green-300">
+      <span role="img" aria-label={statusLabel} className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 text-green-300">
         <CheckGlyph className="h-3 w-3" />
       </span>
     )
   }
   if (status === 'current') {
     return (
-      <span className="relative flex h-5 w-5 items-center justify-center">
+      <span role="img" aria-label={statusLabel} className="relative flex h-5 w-5 items-center justify-center">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--bp-accent)]/40" />
         <span className="relative h-3 w-3 rounded-full bg-[var(--bp-accent)]" />
       </span>
     )
   }
-  return <span className="h-5 w-5 rounded-full border-2 border-[var(--bp-border)] bg-transparent" />
+  return <span role="img" aria-label={statusLabel} className="h-5 w-5 rounded-full border-2 border-[var(--bp-border)] bg-transparent" />
 }
 
 /** Subtle free-time separator — a thin muted line, not a highlighted card. */
 function FreeBlock({ start, end, minutes, isLast }: { start: string; end: string; minutes: number; isLast: boolean }) {
+  const { t, language, formatNumber } = useLanguage()
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center pt-3">
@@ -1212,7 +1224,8 @@ function FreeBlock({ start, end, minutes, isLast }: { start: string; end: string
       </div>
       <div className="min-w-0 flex-1 pb-2">
         <p className="text-[11px] font-semibold text-[var(--bp-muted)]">
-          {formatDuration(minutes)} free · {formatClock(start)} – {formatClock(end)}
+          {t('aiPlannerSchedule.freeDuration', { duration: formatScheduleDuration(minutes, t, formatNumber) })} ·{' '}
+          <bdi dir="ltr">{formatScheduleClock(start, language)}</bdi> {t('aiPlannerSchedule.to')} <bdi dir="ltr">{formatScheduleClock(end, language)}</bdi>
         </p>
       </div>
     </div>
@@ -1238,12 +1251,14 @@ function PlanCard({
   onDropItem: (item: DailyPlanItem, startTime: string) => void
   onComplete?: () => Promise<void> | void
 }) {
+  const { t, language, formatNumber } = useLanguage()
   const [editing, setEditing] = useState(false)
   const [showWhy, setShowWhy] = useState(false)
   const isTask = item.type === 'task'
   const rationale = item.rationale?.toLowerCase() ?? ''
   const overdue = rationale.includes('overdue')
   const dueToday = !overdue && (rationale.includes('due today') || (rationale.includes('due') && rationale.includes('today')))
+  const typeLabel = t(`aiPlannerSchedule.types.${item.type}`)
 
   return (
     <div
@@ -1264,7 +1279,7 @@ function PlanCard({
           // Ignore malformed external drag data.
         }
       }}
-      aria-label={`${item.title}, ${item.startTime} to ${item.endTime}${isTask ? ', draggable' : ''}`}
+      aria-label={t('aiPlannerSchedule.cardLabel', { title: item.title, type: typeLabel, start: formatScheduleClock(item.startTime, language), end: formatScheduleClock(item.endTime, language), dragState: isTask ? t('aiPlannerSchedule.draggable') : '' })}
       className={`group rounded-xl border p-3 shadow-sm transition-colors duration-200 ${
         locked
           ? 'border-[var(--bp-accent)]/40 bg-[var(--bp-accent)]/[0.06]'
@@ -1280,7 +1295,7 @@ function PlanCard({
             checked={completed}
             onChange={() => void onComplete?.()}
             className="mt-1 h-4 w-4 shrink-0 accent-[var(--bp-accent)]"
-            aria-label={`Complete ${item.title}`}
+            aria-label={t('aiPlannerSchedule.completeTask', { title: item.title })}
           />
         ) : (
           <span className="mt-0.5 text-sm" aria-hidden>
@@ -1291,15 +1306,17 @@ function PlanCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className={`truncate text-sm font-black text-[var(--bp-text)] ${completed ? 'line-through' : ''}`}>{item.title}</p>
-            <Badge tone={priorityTone(item.priority)}>{item.priority}</Badge>
-            {overdue ? <Badge tone="red">Overdue</Badge> : null}
-            {dueToday ? <Badge tone="yellow">Due Today</Badge> : null}
-            {item.isFocusTask ? <Badge tone="focus">Focus</Badge> : null}
-            {item.selectionSource === 'user' ? <Badge tone="plain">Chosen by you</Badge> : item.selectionSource === 'autoFill' ? <Badge tone="yellow">Auto-filled</Badge> : item.selectionSource === 'scheduled' ? <Badge tone="plain">Scheduled for today</Badge> : null}
+            <Badge tone={priorityTone(item.priority)}>{t(`taskLabels.priority.${item.priority}`)}</Badge>
+            {!isTask ? <Badge tone="plain">{typeLabel}</Badge> : null}
+            {completed ? <Badge tone="green">{t('aiPlannerSchedule.badges.completed')}</Badge> : null}
+            {overdue ? <Badge tone="red">{t('aiPlannerSchedule.badges.overdue')}</Badge> : null}
+            {dueToday ? <Badge tone="yellow">{t('aiPlannerSchedule.badges.dueToday')}</Badge> : null}
+            {item.isFocusTask ? <Badge tone="focus">{t('aiPlannerSchedule.badges.focus')}</Badge> : null}
+            {item.selectionSource === 'user' ? <Badge tone="plain">{t('aiPlannerSchedule.badges.chosen')}</Badge> : item.selectionSource === 'autoFill' ? <Badge tone="yellow">{t('aiPlannerSchedule.badges.autoFilled')}</Badge> : item.selectionSource === 'scheduled' ? <Badge tone="plain">{t('aiPlannerSchedule.badges.scheduledToday')}</Badge> : null}
             {item.category ? <Badge tone="plain">{item.category}</Badge> : null}
             {locked ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-[var(--bp-accent)]/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-[var(--bp-accent-ink)]">
-                <LockGlyph /> Locked
+                <LockGlyph /> {t('aiPlannerSchedule.badges.locked')}
               </span>
             ) : null}
           </div>
@@ -1310,13 +1327,15 @@ function PlanCard({
               <>
                 <input
                   type="time"
+                  dir="ltr"
                   value={item.startTime}
                   onChange={(event) => onMove('startTime', event.target.value)}
                   className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1 text-xs font-bold text-[var(--bp-text)]"
                 />
-                <span className="text-[var(--bp-muted)]">to</span>
+                <span className="text-[var(--bp-muted)]">{t('aiPlannerSchedule.to')}</span>
                 <input
                   type="time"
+                  dir="ltr"
                   value={item.endTime}
                   onChange={(event) => onMove('endTime', event.target.value)}
                   className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-2 py-1 text-xs font-bold text-[var(--bp-text)]"
@@ -1325,10 +1344,10 @@ function PlanCard({
             ) : (
               <span className="inline-flex items-center gap-1.5 font-bold text-[var(--bp-subtle)]">
                 <ClockGlyph />
-                {formatClock(item.startTime)} – {formatClock(item.endTime)}
+                <bdi dir="ltr">{formatScheduleClock(item.startTime, language)}</bdi> {t('aiPlannerSchedule.to')} <bdi dir="ltr">{formatScheduleClock(item.endTime, language)}</bdi>
               </span>
             )}
-            <span className="rounded-md bg-[var(--bp-bg)] px-1.5 py-0.5 font-bold text-[var(--bp-muted)]">{formatDuration(item.durationMinutes)}</span>
+            <span className="rounded-md bg-[var(--bp-bg)] px-1.5 py-0.5 font-bold text-[var(--bp-muted)]">{formatScheduleDuration(item.durationMinutes, t, formatNumber)}</span>
             {item.rationale ? (
               <button
                 type="button"
@@ -1336,7 +1355,7 @@ function PlanCard({
                 aria-expanded={showWhy}
                 className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-[var(--bp-accent-ink)] transition hover:bg-[var(--bp-accent)]/10"
               >
-                {showWhy ? 'Hide' : 'Why?'}
+                {showWhy ? t('aiPlannerSchedule.hideReason') : t('aiPlannerSchedule.showReason')}
                 <ChevronGlyph className={`h-3 w-3 transition-transform duration-200 ${showWhy ? 'rotate-180' : ''}`} />
               </button>
             ) : null}
@@ -1346,7 +1365,7 @@ function PlanCard({
           {showWhy && item.rationale ? (
             <div className="mt-2 rounded-lg border border-[var(--bp-accent)]/20 bg-[var(--bp-accent)]/[0.05] px-2.5 py-2">
               <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">
-                <SparkleGlyph className="h-3 w-3" /> Scheduled here because
+                <SparkleGlyph className="h-3 w-3" /> {t('aiPlannerSchedule.scheduledBecause')}
               </p>
               <p className="mt-0.5 text-xs leading-snug text-[var(--bp-subtle)]">{item.rationale}</p>
             </div>
@@ -1362,14 +1381,14 @@ function PlanCard({
               locked ? 'border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)]' : 'bg-[var(--bp-border)] text-[var(--bp-text)] hover:brightness-110'
             }`}
           >
-            <LockGlyph /> {locked ? 'Locked' : 'Lock'}
+            <LockGlyph /> {locked ? t('aiPlannerSchedule.unlock') : t('aiPlannerSchedule.lock')}
           </button>
           <button
             type="button"
             onClick={() => setEditing((value) => !value)}
             className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-[var(--bp-subtle)] transition hover:bg-[var(--bp-border)]/50 hover:text-[var(--bp-text)]"
           >
-            <EditGlyph /> {editing ? 'Done' : 'Edit Time'}
+            <EditGlyph /> {editing ? t('aiPlannerSchedule.done') : t('aiPlannerSchedule.editTime')}
           </button>
         </div>
       </div>
@@ -1429,42 +1448,36 @@ function PlanSourceBanner({ source }: { source: DailyPlan['source'] }) {
 }
 
 function HowItWasBuilt({ source }: { source: DailyPlan['source'] }) {
+  const { t } = useLanguage()
   return (
-    <CollapsibleSection title="How this plan was built" emoji="🛠️" defaultOpen={false}>
+    <CollapsibleSection title={t('aiPlannerExplain.howBuilt')} emoji="🛠️" defaultOpen={false}>
       <div className="grid gap-3 md:grid-cols-3">
         <StepCard
           step={1}
           emoji="📏"
-          title="Your schedule"
+          title={t('aiPlannerExplain.yourSchedule')}
           accent="text-sky-300"
           items={[
-            'Checked task dependencies',
-            'Blocked completed tasks',
-            'Protected locked tasks',
-            'Avoided reminders & time overlaps',
+            t('aiPlannerExplain.checkedDependencies'), t('aiPlannerExplain.blockedCompleted'), t('aiPlannerExplain.protectedLocked'), t('aiPlannerExplain.avoidedOverlaps'),
           ]}
         />
         <StepCard
           step={2}
           emoji="🧠"
-          title="Priority suggestions"
+          title={t('aiPlannerExplain.prioritySuggestions')}
           accent="text-[var(--bp-accent-ink)]"
           active={source === 'ai'}
           items={[
-            'Ranked tasks by urgency, priority, focus, progress & due dates',
-            'Added a human explanation for each task',
+            t('aiPlannerExplain.rankedTasks'), t('aiPlannerExplain.humanExplanation'),
           ]}
         />
         <StepCard
           step={3}
           emoji="🗓️"
-          title="Time plan"
+          title={t('aiPlannerExplain.timePlan')}
           accent="text-emerald-300"
           items={[
-            'Assigned start & end times',
-            'Inserted recovery breaks',
-            'Split work into Morning / Afternoon / Evening / Night',
-            'Marked tasks that do not fit as unscheduled',
+            t('aiPlannerExplain.assignedTimes'), t('aiPlannerExplain.insertedBreaks'), t('aiPlannerExplain.splitDay'), t('aiPlannerExplain.unscheduled'),
           ]}
         />
       </div>
@@ -1513,31 +1526,32 @@ function StepCard({
 }
 
 function PlanValidationCard({ validation }: { validation: PlanValidation }) {
+  const { t, formatNumber } = useLanguage()
   return (
-    <CollapsibleSection title="Plan Validation" emoji="🛡️" defaultOpen={false}>
+    <CollapsibleSection title={t('aiPlannerValidation.title')} emoji="🛡️" defaultOpen={false}>
       <div className="space-y-2">
-        <ValidationRow ok={validation.noOverlaps} label="No time overlaps" />
+        <ValidationRow ok={validation.noOverlaps} label={t('aiPlannerValidation.noOverlaps')} />
         <ValidationRow
           ok
-          label="Dependencies respected"
+          label={t('aiPlannerValidation.dependencies')}
           detail={
             validation.dependencyBlocked
-              ? `${validation.dependencyBlocked} blocked task${validation.dependencyBlocked > 1 ? 's' : ''} moved to unscheduled`
+              ? t('aiPlannerValidation.blockedDetail', { count: formatNumber(validation.dependencyBlocked) })
               : undefined
           }
         />
         <ValidationRow
           ok={validation.lockedCount > 0}
           neutral={validation.lockedCount === 0}
-          label="Locked tasks preserved"
-          detail={validation.lockedCount > 0 ? `${validation.lockedCount} locked in place` : 'No locked tasks'}
+          label={t('aiPlannerValidation.lockedPreserved')}
+          detail={validation.lockedCount > 0 ? t('aiPlannerValidation.lockedDetail', { count: formatNumber(validation.lockedCount) }) : t('aiPlannerValidation.noLocked')}
         />
-        <ValidationRow ok label="Completed tasks excluded" />
+        <ValidationRow ok label={t('aiPlannerValidation.completedExcluded')} />
         <ValidationRow
           ok={validation.breaksInserted}
           neutral={!validation.breaksInserted}
-          label="Breaks inserted"
-          detail={validation.breaks ? `${validation.breaks} break${validation.breaks > 1 ? 's' : ''}` : undefined}
+          label={t('aiPlannerValidation.breaksInserted')}
+          detail={validation.breaks ? t('aiPlannerValidation.breakDetail', { count: formatNumber(validation.breaks) }) : undefined}
         />
       </div>
     </CollapsibleSection>
@@ -1580,16 +1594,14 @@ function ValidationRow({
 }
 
 function WhyThisOrder() {
+  const { t } = useLanguage()
   const factors = [
-    { emoji: '🔴', text: 'Overdue tasks first' },
-    { emoji: '📅', text: 'Due-today tasks next' },
-    { emoji: '🧠', text: 'Focus work in the morning' },
-    { emoji: '▶️', text: 'Started tasks prioritized' },
-    { emoji: '🗂️', text: 'Similar categories grouped' },
-    { emoji: '🪶', text: 'Light tasks placed later' },
+    { emoji: '🔴', text: t('aiPlannerExplain.overdueFirst') }, { emoji: '📅', text: t('aiPlannerExplain.dueTodayNext') },
+    { emoji: '🧠', text: t('aiPlannerExplain.focusMorning') }, { emoji: '▶️', text: t('aiPlannerExplain.startedPrioritized') },
+    { emoji: '🗂️', text: t('aiPlannerExplain.categoriesGrouped') }, { emoji: '🪶', text: t('aiPlannerExplain.lightLater') },
   ]
   return (
-    <CollapsibleSection title="Why this order?" emoji="🔢" defaultOpen={false}>
+    <CollapsibleSection title={t('aiPlannerExplain.whyOrder')} emoji="🔢" defaultOpen={false}>
       <ol className="grid gap-2 sm:grid-cols-2">
         {factors.map((factor, index) => (
           <li key={index} className="flex items-center gap-2.5 rounded-xl bg-[var(--bp-bg)] p-2.5">
@@ -1845,18 +1857,18 @@ function buildValidation(plan: DailyPlan | null, lockedItems: Record<string, Dai
   return { noOverlaps, breaksInserted: breaks > 0, breaks, lockedCount, dependencyBlocked }
 }
 
-function postponeMeta(status: PostponeStatus): { label: string; emoji: string; tone: string } {
+function postponeMeta(status: PostponeStatus): { labelKey: string; emoji: string; tone: string } {
   switch (status) {
     case 'POSTPONED_CAPACITY':
-      return { label: 'Postponed — day full', emoji: '⌛', tone: 'bg-amber-500/15 text-amber-300' }
+      return { labelKey: 'aiPlannerSchedule.postponedCapacity', emoji: '⌛', tone: 'bg-amber-500/15 text-amber-300' }
     case 'BLOCKED_DEPENDENCY':
-      return { label: 'Blocked by dependency', emoji: '🔗', tone: 'bg-purple-500/15 text-purple-300' }
+      return { labelKey: 'aiPlannerSchedule.blockedDependency', emoji: '🔗', tone: 'bg-purple-500/15 text-purple-300' }
     case 'NO_VALID_TIME_SLOT':
-      return { label: 'No free slot today', emoji: '🕘', tone: 'bg-sky-500/15 text-sky-300' }
+      return { labelKey: 'aiPlannerSchedule.noSlot', emoji: '🕘', tone: 'bg-sky-500/15 text-sky-300' }
     case 'INVALID_TASK_DATA':
-      return { label: 'Needs a duration', emoji: '⚠️', tone: 'bg-red-500/15 text-red-300' }
+      return { labelKey: 'aiPlannerSchedule.needsDuration', emoji: '⚠️', tone: 'bg-red-500/15 text-red-300' }
     default:
-      return { label: 'Not scheduled', emoji: '📥', tone: 'bg-slate-500/15 text-[var(--bp-subtle)]' }
+      return { labelKey: 'aiPlannerSchedule.notScheduled', emoji: '📥', tone: 'bg-slate-500/15 text-[var(--bp-subtle)]' }
   }
 }
 
@@ -1939,15 +1951,31 @@ function formatDuration(minutes: number): string {
   return rest ? `${hours}h ${rest}m` : `${hours}h`
 }
 
+function formatScheduleDuration(minutes: number, t: Translate, formatNumber: NumberFormatter): string {
+  if (minutes < 60) return t('aiPlannerSchedule.durationMinutes', { count: formatNumber(minutes) })
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest
+    ? t('aiPlannerSchedule.durationHoursMinutes', { hours: formatNumber(hours), minutes: formatNumber(rest) })
+    : t('aiPlannerSchedule.durationHours', { count: formatNumber(hours) })
+}
+
+function formatScheduleClock(hhmm: string, language: 'en' | 'ar'): string {
+  const total = toMinutes(hhmm)
+  if (total == null) return hhmm
+  const date = new Date(2000, 0, 1, Math.floor(total / 60), total % 60)
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en', { hour: 'numeric', minute: '2-digit' }).format(date)
+}
+
 function formatLongDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`)
   if (Number.isNaN(date.getTime())) return iso
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
-function formatShortDate(iso: string): string {
+function formatShortDate(iso: string, language?: 'en' | 'ar'): string {
   // Accepts either YYYY-MM-DD or a full ISO timestamp (deadlines are ISO).
   const date = new Date(iso.length <= 10 ? `${iso}T00:00:00` : iso)
   if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(language === 'ar' ? 'ar' : language === 'en' ? 'en' : undefined, { month: 'short', day: 'numeric' })
 }

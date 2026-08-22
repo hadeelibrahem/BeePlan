@@ -8,7 +8,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { and, desc, eq, gt, inArray, isNull, isNotNull, or, sql } from 'drizzle-orm';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { TaskAccessService } from '../collaboration/task-access.service';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../db/database.service';
@@ -35,6 +35,13 @@ import {
 } from './focus-room-policy';
 
 const ACTIVE = ['active', 'break'];
+const JOIN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const normalizeJoinCode = (value: string) => {
+  const compact = value.trim().toUpperCase().replace(/[\s-]/g, '');
+  return /^BEE[A-HJ-NP-Z2-9]{4}$/.test(compact)
+    ? `BEE-${compact.slice(3)}`
+    : null;
+};
 @Injectable()
 export class FocusRoomsService implements OnModuleDestroy {
   private readonly logger = new Logger(FocusRoomsService.name);
@@ -66,22 +73,17 @@ export class FocusRoomsService implements OnModuleDestroy {
   }
 
   async discover(userId: string) {
-    const now = new Date();
     const rooms = await this.db
       .select()
       .from(focusRooms)
       .where(
         and(
-          or(
-            eq(focusRooms.visibility, 'public'),
-            eq(focusRooms.ownerUserId, userId),
-          ),
-          or(isNull(focusRooms.expiresAt), gt(focusRooms.expiresAt, now)),
-          sql`not exists (
-            select 1 from focus_room_commitment_sessions session
-            where session.room_id = ${focusRooms.id}
-              and session.status in ('active', 'break', 'completed', 'ended_early')
-          )`,
+          or(eq(focusRooms.ownerUserId, userId), sql`exists (
+            select 1 from focus_room_members member
+            where member.room_id = ${focusRooms.id}
+              and member.user_id = ${userId}
+              and member.left_at is null
+          )`),
         ),
       )
       .orderBy(desc(focusRooms.createdAt))
@@ -303,23 +305,36 @@ export class FocusRoomsService implements OnModuleDestroy {
     return this.snapshot(roomId, userId);
   }
   async create(userId: string, dto: CreateFocusRoomDto) {
-    const [room] = await this.db
-      .insert(focusRooms)
-      .values({ ...dto, mode: 'commitment', ownerUserId: userId })
-      .returning();
-    await this.db.insert(focusRoomMembers).values({
-      roomId: room.id,
-      userId,
-      role: 'owner',
-      showTaskTitle: room.taskTitleVisibilityDefault,
-    });
+    let room: typeof focusRooms.$inferSelect | undefined;
+    for (let attempt = 0; attempt < 5 && !room; attempt++) {
+      const joinCode = `BEE-${Array.from(randomBytes(4), byte => JOIN_ALPHABET[byte % JOIN_ALPHABET.length]).join('')}`;
+      try {
+        await this.db.transaction(async (tx) => {
+          [room] = await tx.insert(focusRooms).values({ ...dto, visibility: 'private', mode: 'commitment', ownerUserId: userId, joinCode }).returning();
+          await tx.insert(focusRoomMembers).values({
+            roomId: room!.id,
+            userId,
+            role: 'owner',
+            showTaskTitle: room!.taskTitleVisibilityDefault,
+          });
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || !/unique|23505/i.test(error.message)) throw error;
+      }
+    }
+    if (!room) throw new ConflictException('Could not create a unique session code.');
     await this.record(room.id, userId, 'member_joined', {});
     return this.snapshot(room.id, userId);
   }
-  async join(userId: string, roomId: string, dto: JoinFocusRoomDto) {
+  async join(
+    userId: string,
+    roomId: string,
+    dto: JoinFocusRoomDto,
+    codeAuthorized = false,
+  ) {
     const room = await this.room(roomId);
     await this.requireOpenLobby(roomId);
-    if (room.visibility !== 'public' && room.ownerUserId !== userId) {
+    if (!codeAuthorized && room.visibility !== 'public' && room.ownerUserId !== userId) {
       const invite = await this.db.query.focusRoomInvitations.findFirst({
         where: and(
           eq(focusRoomInvitations.roomId, roomId),
@@ -377,6 +392,23 @@ export class FocusRoomsService implements OnModuleDestroy {
         .onConflictDoNothing();
     await this.record(roomId, userId, 'member_joined', {});
     return this.snapshot(roomId, userId);
+  }
+  async joinByCode(userId: string, code: string) {
+    const joinCode = normalizeJoinCode(code);
+    if (!joinCode) throw new BadRequestException('Invalid session code.');
+    const room = await this.db.query.focusRooms.findFirst({
+      where: eq(focusRooms.joinCode, joinCode),
+    });
+    if (!room) throw new BadRequestException('Invalid session code.');
+    try {
+      await this.requireOpenLobby(room.id);
+      if (room.expiresAt && room.expiresAt <= new Date())
+        throw new BadRequestException('This session is no longer available.');
+      return this.join(userId, room.id, {}, true);
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('This session is no longer available.');
+    }
   }
   async leave(
     userId: string,
@@ -560,12 +592,16 @@ export class FocusRoomsService implements OnModuleDestroy {
       throw new ForbiddenException();
     if (ACTIVE.includes(session.status)) return this.snapshot(session.roomId, userId);
     if (isSharedSessionTerminal(session.status)) throw new ConflictException('This commitment has already ended.');
+    const activeMembers = await this.db
+      .select({ userId: focusRoomMembers.userId })
+      .from(focusRoomMembers)
+      .where(and(eq(focusRoomMembers.roomId, session.roomId), isNull(focusRoomMembers.leftAt)));
     const participants = await this.db
       .select()
       .from(focusRoomCommitmentParticipants)
-      .where(eq(focusRoomCommitmentParticipants.sessionId, sessionId));
+      .where(and(eq(focusRoomCommitmentParticipants.sessionId, sessionId), inArray(focusRoomCommitmentParticipants.userId, activeMembers.map((member) => member.userId))));
     if (
-      !participants.length ||
+      participants.length !== activeMembers.length ||
       participants.some((p) => !p.acceptedAgreementAt || !p.readyAt)
     )
       throw new BadRequestException(
@@ -1203,8 +1239,9 @@ export class FocusRoomsService implements OnModuleDestroy {
     };
   }
   async snapshot(roomId: string, userId: string) {
-    await this.authorizeView(roomId, userId);
     const room = await this.room(roomId);
+    await this.ensureOwnerLobbyMembership(room, userId);
+    await this.authorizeView(roomId, userId);
     const members = await this.db
       .select({
         userId: focusRoomMembers.userId,
@@ -1358,8 +1395,27 @@ export class FocusRoomsService implements OnModuleDestroy {
   }
   private async authorizeView(roomId: string, userId: string) {
     const room = await this.room(roomId);
-    if (room.visibility === 'public' || room.ownerUserId === userId) return;
+    if (room.ownerUserId === userId) return;
     await this.requireMember(roomId, userId);
+  }
+  private async ensureOwnerLobbyMembership(
+    room: typeof focusRooms.$inferSelect,
+    userId: string,
+  ) {
+    if (room.ownerUserId !== userId) return;
+    const commitment = await this.activeOrLatestCommitment(room.id);
+    if (commitment && commitment.status !== 'lobby') return;
+    await this.db
+      .insert(focusRoomMembers)
+      .values({ roomId: room.id, userId, role: 'owner', showTaskTitle: room.taskTitleVisibilityDefault })
+      .onConflictDoUpdate({
+        target: [focusRoomMembers.roomId, focusRoomMembers.userId],
+        set: { role: 'owner', leftAt: null, state: 'preparing' },
+      });
+    if (commitment)
+      await this.db.insert(focusRoomCommitmentParticipants)
+        .values({ sessionId: commitment.id, userId })
+        .onConflictDoNothing();
   }
   private async displayName(roomId: string, userId: string) {
     const row = await this.db

@@ -11,6 +11,7 @@ const focus: NotificationMeta = { icon: 'focus', category: 'focus', priority: 'n
 const ai: NotificationMeta = { icon: 'planner', category: 'ai', priority: 'normal' };
 
 export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
+  challenge_completed: { icon: 'trophy', category: 'planning', priority: 'high' },
   reminder: { icon: 'reminders', category: 'reminders', priority: 'high' }, task_invite: collaboration, invite_accepted: collaboration, invite_declined: collaboration, member_joined: collaboration, member_removed: collaboration, member_role_changed: collaboration, ownership_transferred: collaboration,
   task_updated: task, task_completed: { ...task, priority: 'high' }, due_date_changed: calendar, priority_changed: task, reminder_updated: { icon: 'reminders', category: 'reminders', priority: 'normal' }, subtask_completed: task, attachment_added: { ...collaboration, icon: 'folder' }, comment_added: collaboration, mention: { ...collaboration, priority: 'high' },
   ai_plan_applied: ai, ai_recommendation_ready: ai, weather_travel: { icon: 'calendar', category: 'planning', priority: 'normal' }, task_overdue: { ...task, priority: 'high' }, task_created: task, task_reopened: task, task_assigned: { ...task, icon: 'people' }, task_status_changed: task,

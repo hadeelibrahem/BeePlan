@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { parseRecurrenceWithAi, toApiDate, type AiRecurrenceParseResponse } from '../lib/tasksApi'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export type RecurrenceFrequency = 'Never' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly' | 'Custom'
 export type RecurrenceEndType = 'never' | 'onDate' | 'after'
@@ -43,34 +44,35 @@ export const defaultRecurrenceSettings: RecurrenceSettings = {
   occurrences: 1,
 }
 
-export function createRecurrenceSummary(recurrence: RecurrenceSettings | null) {
-  if (!recurrence || recurrence.frequency === 'Never') return 'No repeat'
+type Translate = (key: string, params?: Record<string, string | number>) => string
+
+export function createRecurrenceSummary(recurrence: RecurrenceSettings | null, t?: Translate) {
+  const translate = t ?? ((key: string) => key)
+  if (!recurrence || recurrence.frequency === 'Never') return translate('recurrenceSummary.none')
 
   let summary = ''
-  const weekdayText = formatList(recurrence.weekdays)
+  const weekdayText = formatList(recurrence.weekdays.map((day) => translate(`recurrenceUnits.${day.toLowerCase()}`)))
 
-  if (recurrence.frequency === 'Daily') summary = 'Repeats daily'
-  if (recurrence.frequency === 'Weekly') summary = `Repeats every ${weekdayText || 'week'}`
+  if (recurrence.frequency === 'Daily') summary = translate('recurrenceSummary.daily')
+  if (recurrence.frequency === 'Weekly') summary = translate('recurrenceSummary.weekly', { days: weekdayText || translate('recurrenceUnits.weeks') })
   if (recurrence.frequency === 'Monthly') {
     summary =
       recurrence.monthlyMode === 'lastDay'
-        ? 'Repeats on the last day of each month'
+        ? translate('recurrenceSummary.monthlyLast')
         : recurrence.monthlyMode === 'firstWeekday' && weekdayText
-          ? `Repeats on the first ${weekdayText} of each month`
-          : 'Repeats on the same day every month'
+          ? translate('recurrenceSummary.monthlyFirst', { days: weekdayText })
+          : translate('recurrenceSummary.monthlySame')
   }
-  if (recurrence.frequency === 'Yearly') summary = 'Repeats yearly'
+  if (recurrence.frequency === 'Yearly') summary = translate('recurrenceSummary.yearly')
   if (recurrence.frequency === 'Custom') {
-    const unit = recurrence.customInterval === 1 ? recurrence.customUnit.replace(/s$/, '') : recurrence.customUnit
-    summary = `Repeats every ${recurrence.customInterval} ${unit}`
-    if (recurrence.customUnit === 'weeks' && weekdayText) summary += ` on ${weekdayText}`
+    summary = translate(weekdayText ? 'recurrenceSummary.customWithDays' : 'recurrenceSummary.custom', { count: recurrence.customInterval, unit: translate(`recurrenceUnits.${recurrence.customUnit}`), days: weekdayText })
     if (recurrence.customUnit === 'months' && recurrence.monthlyMode === 'firstWeekday' && weekdayText) {
       summary += ` on the first ${weekdayText}`
     }
   }
 
-  if (recurrence.endType === 'onDate' && recurrence.endDate) summary += ` until ${formatDate(recurrence.endDate)}`
-  if (recurrence.endType === 'after') summary += ` for ${recurrence.occurrences} occurrences`
+  if (recurrence.endType === 'onDate' && recurrence.endDate) summary = translate('recurrenceSummary.until', { summary, date: formatDate(recurrence.endDate) })
+  if (recurrence.endType === 'after') summary = translate('recurrenceSummary.occurrences', { summary, count: recurrence.occurrences })
 
   return summary
 }
@@ -94,6 +96,7 @@ export function TaskRecurrenceModal({
   onRemove,
   onApplyTime,
 }: TaskRecurrenceModalProps) {
+  const { t } = useLanguage()
   const [draft, setDraft] = useState<RecurrenceSettings>(recurrence ?? defaultRecurrenceSettings)
   const [error, setError] = useState('')
   const [aiInput, setAiInput] = useState('')
@@ -114,7 +117,7 @@ export function TaskRecurrenceModal({
     setAiLoading(false)
   }, [open, recurrence])
 
-  const preview = useMemo(() => createRecurrenceSummary(draft), [draft])
+  const preview = useMemo(() => createRecurrenceSummary(draft, t), [draft, t])
 
   if (!open) return null
 
@@ -141,7 +144,7 @@ export function TaskRecurrenceModal({
   }
 
   const handleSave = () => {
-    const validationError = validateRecurrence(draft)
+    const validationError = validateRecurrence(draft, t)
     if (validationError) {
       setError(validationError)
       return
@@ -212,7 +215,7 @@ export function TaskRecurrenceModal({
     setDraft(next)
     if (aiResult.time) onApplyTime?.(aiResult.time)
     setError('')
-    setAiMessage(`Applied: ${createRecurrenceSummary(next)}${aiResult.time ? ` at ${aiResult.time}` : ''}`)
+    setAiMessage(t('recurrenceSummary.applied', { summary: createRecurrenceSummary(next, t) }))
     setAiResult(null)
   }
 
@@ -222,8 +225,8 @@ export function TaskRecurrenceModal({
         <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--bp-border)]" />
 
         <header className="mb-5 text-center">
-          <h2 className="text-2xl font-black text-[var(--bp-text)]">Recurring Task</h2>
-          <p className="mt-2 text-sm text-[var(--bp-muted)]">Choose how often this task should repeat.</p>
+          <h2 className="text-2xl font-black text-[var(--bp-text)]">{t('recurrence.title')}</h2>
+          <p className="mt-2 text-sm text-[var(--bp-muted)]">{t('recurrence.repeat')}</p>
         </header>
 
         <div className="max-h-[68vh] overflow-y-auto pe-1">
@@ -270,7 +273,7 @@ export function TaskRecurrenceModal({
                     onClick={handleApplyAiResult}
                     className="mt-3 rounded-xl border border-[var(--bp-accent)]/50 bg-[var(--bp-accent-soft)] px-3 py-2 text-xs font-black text-[var(--bp-accent-ink)] transition hover:border-[var(--bp-accent)]"
                   >
-                    Apply to Recurrence
+                    {t('recurrenceFinal.apply')}
                   </button>
                 ) : null}
               </div>
@@ -278,13 +281,13 @@ export function TaskRecurrenceModal({
           </section>
 
           <section className="mt-5">
-            <p className="mb-3 text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Repeat</p>
+            <p className="mb-3 text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('recurrence.repeat')}</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {frequencies.map((frequency) => (
                 <OptionButton
                   key={frequency}
                   selected={draft.frequency === frequency}
-                  label={frequency}
+                  label={t(`recurrence.${frequency.toLowerCase()}`)}
                   onClick={() =>
                     updateDraft({
                       frequency,
@@ -302,13 +305,13 @@ export function TaskRecurrenceModal({
               (draft.customUnit === 'months' && draft.monthlyMode === 'firstWeekday'))) ||
           (draft.frequency === 'Monthly' && draft.monthlyMode === 'firstWeekday') ? (
             <section className="mt-5 rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-bg)] p-4">
-              <p className="mb-3 text-sm font-black text-[var(--bp-text)]">Weekdays</p>
+              <p className="mb-3 text-sm font-black text-[var(--bp-text)]">{t('recurrenceUnits.weekdays')}</p>
               <div className="flex flex-wrap gap-2">
                 {weekdays.map((weekday) => (
                   <Chip
                     key={weekday}
                     selected={draft.weekdays.includes(weekday)}
-                    label={weekday}
+                    label={t(`recurrenceUnits.${weekday.toLowerCase()}`)}
                     onClick={() => toggleWeekday(weekday)}
                   />
                 ))}
@@ -318,21 +321,21 @@ export function TaskRecurrenceModal({
 
           {draft.frequency === 'Monthly' || (draft.frequency === 'Custom' && draft.customUnit === 'months') ? (
             <section className="mt-5 rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-bg)] p-4">
-              <p className="mb-3 text-sm font-black text-[var(--bp-text)]">Monthly Options</p>
+              <p className="mb-3 text-sm font-black text-[var(--bp-text)]">{t('recurrenceDetail.monthlyOptions')}</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <OptionButton
                   selected={draft.monthlyMode === 'sameDay'}
-                  label="Same day every month"
+                  label={t('recurrenceDetail.sameDay')}
                   onClick={() => updateDraft({ monthlyMode: 'sameDay' })}
                 />
                 <OptionButton
                   selected={draft.monthlyMode === 'lastDay'}
-                  label="Last day of month"
+                  label={t('recurrenceDetail.lastDay')}
                   onClick={() => updateDraft({ monthlyMode: 'lastDay' })}
                 />
                 <OptionButton
                   selected={draft.monthlyMode === 'firstWeekday'}
-                  label="First weekday"
+                  label={t('recurrenceDetail.firstWeekday')}
                   onClick={() => updateDraft({ monthlyMode: 'firstWeekday' })}
                 />
               </div>
@@ -344,20 +347,20 @@ export function TaskRecurrenceModal({
               <p className="mb-3 text-sm font-black text-[var(--bp-text)]">Custom Repeat</p>
               <div className="grid gap-3 sm:grid-cols-[1fr_1.5fr]">
                 <NumberInput
-                  label="Repeat every"
+                  label={t('recurrenceUnits.repeatEvery')}
                   value={draft.customInterval}
                   onChange={(value) => updateDraft({ customInterval: value })}
                 />
                 <label>
-                  <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Unit</span>
+                  <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('recurrenceUnits.unit')}</span>
                   <select
                     value={draft.customUnit}
                     onChange={(event) => updateDraft({ customUnit: event.target.value as RecurrenceCustomUnit })}
                     className="mt-2 w-full rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-3 text-sm font-semibold text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]"
                   >
-                    <option value="days">days</option>
-                    <option value="weeks">weeks</option>
-                    <option value="months">months</option>
+                    <option value="days">{t('recurrenceUnits.days')}</option>
+                    <option value="weeks">{t('recurrenceUnits.weeks')}</option>
+                    <option value="months">{t('recurrenceUnits.months')}</option>
                   </select>
                 </label>
               </div>
@@ -365,16 +368,16 @@ export function TaskRecurrenceModal({
           ) : null}
 
           <section className="mt-5 rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-bg)] p-4">
-            <p className="mb-3 text-sm font-black text-[var(--bp-text)]">End Condition</p>
+            <p className="mb-3 text-sm font-black text-[var(--bp-text)]">{t('recurrence.ends')}</p>
             <div className="grid gap-3 sm:grid-cols-3">
-              <OptionButton selected={draft.endType === 'never'} label="Never ends" onClick={() => updateDraft({ endType: 'never' })} />
-              <OptionButton selected={draft.endType === 'onDate'} label="Ends on date" onClick={() => updateDraft({ endType: 'onDate' })} />
-              <OptionButton selected={draft.endType === 'after'} label="Ends after" onClick={() => updateDraft({ endType: 'after' })} />
+              <OptionButton selected={draft.endType === 'never'} label={t('recurrenceDetail.neverEnds')} onClick={() => updateDraft({ endType: 'never' })} />
+              <OptionButton selected={draft.endType === 'onDate'} label={t('recurrenceDetail.endsOnDate')} onClick={() => updateDraft({ endType: 'onDate' })} />
+              <OptionButton selected={draft.endType === 'after'} label={t('recurrenceDetail.endsAfter')} onClick={() => updateDraft({ endType: 'after' })} />
             </div>
 
             {draft.endType === 'onDate' ? (
               <label className="mt-4 block">
-                <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">End Date</span>
+                <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('recurrenceDetail.endDate')}</span>
                 <input
                   type="date"
                   value={draft.endDate}
@@ -387,7 +390,7 @@ export function TaskRecurrenceModal({
             {draft.endType === 'after' ? (
               <div className="mt-4">
                 <NumberInput
-                  label="Occurrences"
+                  label={t('recurrenceDetail.occurrences')}
                   value={draft.occurrences}
                   onChange={(value) => updateDraft({ occurrences: value })}
                 />
@@ -404,7 +407,7 @@ export function TaskRecurrenceModal({
         </div>
 
         <footer className={`mt-5 grid gap-3 ${mode === 'edit' ? 'grid-cols-3' : 'grid-cols-2'}`}>
-          <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+          <SecondaryButton onClick={onClose}>{t('taskForm.cancel')}</SecondaryButton>
           {mode === 'edit' ? (
             <DangerButton
               onClick={() => {
@@ -412,38 +415,38 @@ export function TaskRecurrenceModal({
                 onClose()
               }}
             >
-              Remove Recurrence
+              {t('recurrenceFinal.remove')}
             </DangerButton>
           ) : null}
-          <PrimaryButton onClick={handleSave}>{mode === 'edit' ? 'Save Changes' : 'Save Recurrence'}</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{mode === 'edit' ? t('taskForm.saveChanges') : t('recurrenceFinal.save')}</PrimaryButton>
         </footer>
       </div>
     </div>
   )
 }
 
-function validateRecurrence(recurrence: RecurrenceSettings) {
+function validateRecurrence(recurrence: RecurrenceSettings, t: (key: string) => string) {
   if (recurrence.frequency === 'Never') return ''
 
   if (recurrence.frequency === 'Weekly' && recurrence.weekdays.length === 0) {
-    return 'Select at least one weekday.'
+    return t('recurrenceFinal.selectWeekday')
   }
 
   if (recurrence.frequency === 'Monthly' && recurrence.monthlyMode === 'firstWeekday' && recurrence.weekdays.length === 0) {
-    return 'Select the weekday for the monthly recurrence.'
+    return t('recurrenceFinal.selectMonthlyWeekday')
   }
 
   if (recurrence.frequency === 'Custom') {
-    if (recurrence.customInterval <= 0) return 'Custom repeat interval must be greater than 0.'
-    if (recurrence.customUnit === 'weeks' && recurrence.weekdays.length === 0) return 'Select at least one weekday.'
+    if (recurrence.customInterval <= 0) return t('recurrenceFinal.interval')
+    if (recurrence.customUnit === 'weeks' && recurrence.weekdays.length === 0) return t('recurrenceFinal.selectWeekday')
     if (recurrence.customUnit === 'months' && recurrence.monthlyMode === 'firstWeekday' && recurrence.weekdays.length === 0) {
-      return 'Select the weekday for the monthly recurrence.'
+      return t('recurrenceFinal.selectMonthlyWeekday')
     }
   }
 
-  if (recurrence.endType === 'onDate' && !recurrence.endDate) return 'End date is required.'
+  if (recurrence.endType === 'onDate' && !recurrence.endDate) return t('recurrenceFinal.endDateRequired')
   if (recurrence.endType === 'after' && recurrence.occurrences <= 0) {
-    return 'Occurrences must be greater than 0.'
+    return t('recurrenceFinal.occurrences')
   }
 
   return ''
