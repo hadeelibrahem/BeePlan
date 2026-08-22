@@ -11,6 +11,7 @@ import WhiteboardEditorScreen from '../features/whiteboard/screens/WhiteboardEdi
 import WhiteboardShareScreen from '../features/whiteboard/screens/WhiteboardShareScreen'
 import ChallengesScreen from '../screens/ChallengesScreen'
 import ChallengeDetailScreen from '../screens/ChallengeDetailScreen'
+import { SupervisionScreen } from '../features/supervision/SupervisionScreen'
 import {
   type MainTabParamList,
   MAIN_TAB_ROUTES,
@@ -199,6 +200,7 @@ export function RootNavigator({
       <Stack.Screen name="Whiteboards" component={WhiteboardsDashboardScreen} />
       <Stack.Screen name="Whiteboard" component={WhiteboardEditorScreen} />
       <Stack.Screen name="WhiteboardShare" component={WhiteboardShareScreen} />
+      <Stack.Screen name="Supervision" component={SupervisionScreen} />
     </Stack.Navigator>
   );
 }

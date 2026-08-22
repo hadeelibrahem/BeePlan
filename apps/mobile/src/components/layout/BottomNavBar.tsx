@@ -25,7 +25,7 @@ export type BottomNavHandlers = {
 type LegacyBottomNavProps = BottomNavHandlers & { active: BottomNavPage }
 
 type MoreTabRoute = 'Reminders' | 'People'
-type MoreStackRoute = 'Calendar' | 'AiDailyPlanner' | 'Notes' | 'Analytics' | 'Notifications' | 'Whiteboards' | 'AchievementMuseum' | 'TimeCapsules' | 'Feedback' | 'Challenges'
+type MoreStackRoute = 'Calendar' | 'AiDailyPlanner' | 'Notes' | 'Analytics' | 'Notifications' | 'Whiteboards' | 'AchievementMuseum' | 'TimeCapsules' | 'Feedback' | 'Challenges' | 'Supervision'
 
 const MORE_DESTINATIONS: Array<{ label: string; labelKey?: string; route: MoreTabRoute | MoreStackRoute; icon: MobileIconName }> = [
   { label: 'navigation.reminders', route: 'Reminders', icon: 'reminders' },
@@ -40,6 +40,7 @@ const MORE_DESTINATIONS: Array<{ label: string; labelKey?: string; route: MoreTa
   { label: 'navigation.whiteboards', route: 'Whiteboards', icon: 'whiteboard' },
   { label: 'feedback.title', route: 'Feedback', icon: 'lightbulb' },
   { label: 'navigation.challenges', route: 'Challenges', icon: 'trophy' },
+  { label: 'Supervision', route: 'Supervision', icon: 'people' },
 ]
 
 /** The single visual tab bar for navigator-backed main screens. */

@@ -24,6 +24,7 @@ import { WeatherTravelModule } from './weather-travel/weather-travel.module';
 import { TaskAssistantModule } from './task-assistant/task-assistant.module';
 import { FocusRoomsModule } from './focus-rooms/focus-rooms.module';
 import { TimeCapsulesModule } from './time-capsules/time-capsules.module';
+import { SupervisionModule } from './supervision/supervision.module';
 import { WhiteboardModule } from './whiteboard/whiteboard.module';
 import { AchievementsModule } from './achievements/achievements.module';
 import { AdminModule } from './admin/admin.module';
@@ -67,6 +68,7 @@ import { RuntimeTelemetryModule } from './admin/system-health/runtime-telemetry.
     WeatherTravelModule,
     TaskAssistantModule,
     TimeCapsulesModule,
+    SupervisionModule,
     WhiteboardModule,
     AchievementsModule,
     AdminModule,

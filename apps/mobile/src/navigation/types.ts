@@ -36,6 +36,7 @@ export type RootStackParamList = {
   FeedbackDetail: { feedbackId: string }
   Challenges: undefined
   ChallengeDetail: { challengeId: string }
+  Supervision: undefined
   ReminderDetails: { reminderId: string }
   CreateReminder: { initialType?: 'task' | 'person' | 'checklist'; initialFriendId?: string }
   EditReminder: { reminderId: string }

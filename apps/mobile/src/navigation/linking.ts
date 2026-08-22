@@ -22,6 +22,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
       Whiteboards: 'whiteboards',
       Whiteboard: 'whiteboards/:boardId',
       WhiteboardShare: 'whiteboards/:boardId/share',
+      Supervision: 'supervision',
       ResetPassword: 'reset-password',
     },
   },

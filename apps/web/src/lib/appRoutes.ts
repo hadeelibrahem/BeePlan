@@ -28,6 +28,7 @@ export type AppScreen =
   | 'notifications'
   | 'settings'
   | 'timeCapsules'
+  | 'supervision'
   | 'notFound'
 
 export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string; roomId?: string; boardId?: string; feedbackId?: string }
@@ -58,6 +59,7 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/notifications': 'notifications',
   '/settings': 'settings',
   '/time-capsules': 'timeCapsules',
+  '/supervision': 'supervision',
 }
 
 export function resolveAppRoute(pathname: string): AppRoute {
@@ -119,6 +121,7 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'notifications': return '/notifications'
     case 'settings': return '/settings'
     case 'timeCapsules': return '/time-capsules'
+    case 'supervision': return '/supervision'
     case 'whiteboard': return '/whiteboard'
     case 'whiteboards': return '/whiteboards'
     case 'whiteboardEditor': return ids.boardId ? `/whiteboards/${encodeURIComponent(ids.boardId)}` : '/whiteboards'

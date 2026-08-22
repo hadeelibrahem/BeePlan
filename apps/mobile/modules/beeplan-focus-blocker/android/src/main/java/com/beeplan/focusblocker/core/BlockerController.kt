@@ -11,6 +11,8 @@ import com.beeplan.focusblocker.service.FocusBlockerService
 import com.beeplan.focusblocker.ui.BlockActivity
 import com.beeplan.focusblocker.session.FocusSession
 import com.beeplan.focusblocker.session.SessionStore
+import com.beeplan.focusblocker.session.GuardianRestrictionSource
+import com.beeplan.focusblocker.session.GuardianRestrictionStore
 import com.beeplan.focusblocker.stats.BlockEvent
 import com.beeplan.focusblocker.stats.BlockEventStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +39,7 @@ object BlockerController {
 
   // Collaborators are lazy so `initialize` is cheap and re-entrant.
   private val sessionStore by lazy { SessionStore(appContext) }
+  private val guardianStore by lazy { GuardianRestrictionStore(appContext) }
   private val eventStore by lazy { BlockEventStore(appContext) }
   private val usageAccess by lazy { UsageAccessManager(appContext) }
   private val overlayPermission by lazy { OverlayPermissionManager(appContext) }
@@ -44,6 +47,7 @@ object BlockerController {
 
   @Volatile
   private var session: FocusSession? = null
+  @Volatile private var guardianSources: Map<String, GuardianRestrictionSource> = emptyMap()
 
   private val _status = MutableStateFlow(
     FocusStatus.idle(
@@ -85,6 +89,7 @@ object BlockerController {
         }
       }
     }
+    if (guardianSources.isEmpty()) guardianSources = guardianStore.load().filter { it.endsAtMs > System.currentTimeMillis() }.associateBy { it.sourceId }
     publishStatus()
   }
 
@@ -121,7 +126,7 @@ object BlockerController {
     activeBlockPackage = null
     blockScreenActive.set(false)
     notifications.clearBlockScreen()
-    FocusBlockerService.stop(appContext)
+    if (effectiveSession() == null) FocusBlockerService.stop(appContext)
     return publishStatus()
   }
 
@@ -183,7 +188,14 @@ object BlockerController {
 
   fun statistics(sessionId: String?): Map<String, Any?> = eventStore.statistics(sessionId)
 
-  fun currentSession(): FocusSession? = session
+  fun setGuardianSources(sources: List<GuardianRestrictionSource>): Map<String, Any> {
+    guardianSources = sources.filter { it.endsAtMs > System.currentTimeMillis() }.associateBy { it.sourceId }
+    guardianStore.save(guardianSources.values)
+    if (effectiveSession() == null) FocusBlockerService.stop(appContext) else FocusBlockerService.start(appContext)
+    publishStatus()
+    return mapOf("sources" to guardianSources.keys.toList(), "blockedPackages" to guardianSources.values.flatMap { it.packages }.distinct())
+  }
+  fun currentSession(): FocusSession? = effectiveSession()
 
   // endregion
 
@@ -195,7 +207,10 @@ object BlockerController {
    * session so the service can refresh its notification, or null when idle.
    */
   fun onTick(foregroundPackage: String?): FocusSession? {
-    val current = session ?: return null
+    pruneExpiredGuardianSources()
+    val self = session
+    if (self != null && self.isExpired()) complete()
+    val current = effectiveSession() ?: return null
     // Paused: freeze the timer (do not complete) and skip all blocking checks.
     // The service is allowed to keep running; it just idles.
     if (current.paused) {
@@ -208,10 +223,6 @@ object BlockerController {
       }
       publishStatus()
       return current
-    }
-    if (current.isExpired()) {
-      complete()
-      return null
     }
     if (foregroundPackage != null && shouldBlock(current, foregroundPackage)) {
       raiseBlockScreen(current, foregroundPackage)
@@ -305,7 +316,7 @@ object BlockerController {
     activeBlockPackage = null
     blockScreenActive.set(false)
     notifications.clearBlockScreen()
-    FocusBlockerService.stop(appContext)
+    if (effectiveSession() == null) FocusBlockerService.stop(appContext)
     publishStatus()
   }
 
@@ -317,7 +328,7 @@ object BlockerController {
   }.getOrDefault(packageName)
 
   private fun currentStatus(): FocusStatus {
-    val current = session ?: return FocusStatus.idle(hasUsageAccess(), canDrawOverlays())
+    val current = effectiveSession() ?: return FocusStatus.idle(hasUsageAccess(), canDrawOverlays())
     return FocusStatus(
       isActive = true,
       strict = true,
@@ -337,5 +348,18 @@ object BlockerController {
     _status.value = next
     BlockerEventBus.emit(BlockerEvent.StatusChanged(next))
     return next
+  }
+
+  private fun pruneExpiredGuardianSources() {
+    val active = guardianSources.values.filter { it.endsAtMs > System.currentTimeMillis() }.associateBy { it.sourceId }
+    if (active.size != guardianSources.size) { guardianSources = active; guardianStore.save(active.values) }
+  }
+  private fun effectiveSession(): FocusSession? {
+    val all = guardianSources.values
+    val self = session
+    if (self == null && all.isEmpty()) return null
+    val packages = (self?.blockedPackages ?: emptySet()) + all.flatMap { it.packages }
+    val ends = listOfNotNull(self?.endsAtMs).plus(all.map { it.endsAtMs }).maxOrNull() ?: return null
+    return FocusSession("effective-restrictions", self?.taskTitle, ends, packages, "", false, self?.startedAtMs ?: System.currentTimeMillis(), self?.paused == true && all.isEmpty())
   }
 }

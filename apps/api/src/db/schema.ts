@@ -2396,3 +2396,53 @@ export const taskAssistantNotifications = pgTable(
     ),
   ],
 );
+
+/** Consent-based Guardian / Supervision data. Opaque device selections never leave the supervised device. */
+export const supervisionRelationships = pgTable('supervision_relationships', {
+  id: id(),
+  guardianUserId: uuid('guardian_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  supervisedUserId: uuid('supervised_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: varchar('status', { length: 16 }).notNull().default('pending'),
+  permissions: jsonb('permissions').notNull().default({ level: 'plan_only' }),
+  createdAt: createdAt(), acceptedAt: timestamp('accepted_at'), revokedAt: timestamp('revoked_at'), updatedAt: updatedAt(),
+}, (t) => [index('idx_supervision_guardian').on(t.guardianUserId, t.status), index('idx_supervision_supervised').on(t.supervisedUserId, t.status)]);
+
+export const supervisionRules = pgTable('supervision_rules', {
+  id: id(), relationshipId: uuid('relationship_id').notNull().references(() => supervisionRelationships.id, { onDelete: 'cascade' }),
+  createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'cascade' }), name: varchar('name', { length: 255 }).notNull(),
+  startsAt: timestamp('starts_at').notNull(), endsAt: timestamp('ends_at').notNull(), repeat: jsonb('repeat').notNull().default({ type: 'once' }),
+  mode: varchar('mode', { length: 24 }).notNull(), status: varchar('status', { length: 16 }).notNull().default('scheduled'),
+  taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  restrictionMode: varchar('restriction_mode', { length: 24 }).notNull().default('time'),
+  completionTrigger: varchar('completion_trigger', { length: 24 }).notNull().default('time_expired'),
+  appSelection: jsonb('app_selection').notNull().default({}), completedAt: timestamp('completed_at'),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+}, (t) => [index('idx_supervision_rules_relationship').on(t.relationshipId, t.status), index('idx_supervision_rules_schedule').on(t.status, t.startsAt, t.endsAt)]);
+
+export const supervisionOverrides = pgTable('supervision_overrides', {
+  id: id(), ruleId: uuid('rule_id').notNull().references(() => supervisionRules.id, { onDelete: 'cascade' }), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reason: varchar('reason', { length: 40 }).notNull(), requestedAt: createdAt(), effectiveAt: timestamp('effective_at').notNull().defaultNow(),
+}, (t) => [index('idx_supervision_overrides_rule').on(t.ruleId)]);
+
+export const supervisionAuditLogs = pgTable('supervision_audit_logs', {
+  id: id(), relationshipId: uuid('relationship_id').notNull().references(() => supervisionRelationships.id, { onDelete: 'cascade' }), actorUserId: uuid('actor_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  event: varchar('event', { length: 48 }).notNull(), ruleId: uuid('rule_id').references(() => supervisionRules.id, { onDelete: 'set null' }), metadata: jsonb('metadata').notNull().default({}), createdAt: createdAt(),
+}, (t) => [index('idx_supervision_audit_relationship').on(t.relationshipId, t.createdAt)]);
+
+export const supervisionDevices = pgTable('supervision_devices', {
+  id: id(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  platform: varchar('platform', { length: 12 }).notNull(), deviceId: varchar('device_id', { length: 255 }).notNull(), deviceName: varchar('device_name', { length: 255 }),
+  capabilityLevel: varchar('capability_level', { length: 32 }).notNull().default('none'), permissionState: varchar('permission_state', { length: 24 }).notNull().default('not_requested'),
+  appManagementEnabled: boolean('app_management_enabled').notNull().default(false),
+  selectionConfigured: boolean('selection_configured').notNull().default(false),
+  selectedAppCount: integer('selected_app_count').notNull().default(0),
+  categoriesConfigured: boolean('categories_configured').notNull().default(false),
+  lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(), createdAt: createdAt(), updatedAt: updatedAt(),
+  }, (t) => [uniqueIndex('uq_supervision_device_user_device').on(t.userId, t.deviceId), index('idx_supervision_device_user').on(t.userId)]);
+
+export const supervisionManagedApps = pgTable('supervision_managed_apps', {
+  id: id(), deviceId: uuid('device_id').notNull().references(() => supervisionDevices.id, { onDelete: 'cascade' }),
+  platformAppIdentifier: varchar('platform_app_identifier', { length: 255 }).notNull(), displayName: varchar('display_name', { length: 255 }).notNull(),
+  iconReference: text('icon_reference'), enabledForGuardianManagement: boolean('enabled_for_guardian_management').notNull().default(false),
+  lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(), createdAt: createdAt(), updatedAt: updatedAt(),
+}, (t) => [uniqueIndex('uq_supervision_managed_app_device_identifier').on(t.deviceId, t.platformAppIdentifier), index('idx_supervision_managed_apps_device_enabled').on(t.deviceId, t.enabledForGuardianManagement)]);

@@ -31,6 +31,7 @@ export type SidebarPage =
   | 'analytics'
   | 'settings'
   | 'timeCapsules'
+  | 'supervision'
   | 'whiteboard'
   | 'whiteboards'
   | 'achievements'
@@ -52,6 +53,7 @@ export type SidebarNavHandlers = {
   onNavigateSettings?: () => void
   onNavigateTimeCapsules?: () => void
   onNavigateAchievements?: () => void
+  onNavigateSupervision?: () => void
 }
 
 function BellIcon() {
@@ -105,6 +107,7 @@ const NAV_GROUPS = [
       { page: 'people', labelKey: 'navigation.people', Icon: PeopleIcon, handler: 'onNavigatePeople' },
       { page: 'feedback', labelKey: 'navigation.feedback', Icon: PlannerIcon, handler: 'onNavigateFeedback' },
       { page: 'challenges', labelKey: 'navigation.challenges', Icon: AchievementIcon, handler: 'onNavigateChallenges' },
+      { page: 'supervision', labelKey: 'Supervision', Icon: PeopleIcon, handler: 'onNavigateSupervision' },
     ]
   },
   {

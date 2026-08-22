@@ -30,6 +30,15 @@ const native = loadNativeModule();
 
 export const isFocusBlockerAvailable = native != null;
 
+export type ManagementCapability = { mode: 'accountability_only' | 'profile_owner' | 'device_owner'; hardBlockingAvailable: boolean };
+export type PackageSuspensionResult = { requested: string[]; succeeded: string[]; failed: string[]; capability: string; enforced: boolean };
+export function getManagementCapability(): ManagementCapability { return native?.getManagementCapability() ?? { mode: 'accountability_only', hardBlockingAvailable: false }; }
+export async function suspendPackages(packageNames: string[]): Promise<PackageSuspensionResult> { return (await native?.suspendPackages(packageNames)) ?? { requested: packageNames, succeeded: [], failed: packageNames, capability: 'accountability_only', enforced: false }; }
+export async function unsuspendPackages(packageNames: string[]): Promise<PackageSuspensionResult> { return (await native?.unsuspendPackages(packageNames)) ?? { requested: packageNames, succeeded: [], failed: packageNames, capability: 'accountability_only', enforced: false }; }
+export async function getSuspendedPackages(packageNames: string[]): Promise<Record<string, boolean>> { return (await native?.getSuspendedPackages(packageNames)) ?? {}; }
+export async function reconcileSuspendedPackages(packageNames: string[]) { return await native?.reconcileSuspendedPackages(packageNames) ?? { requested: packageNames, suspended: [], released: [], failed: packageNames, capability: 'accountability_only', state: 'failed' as const }; }
+export async function setGuardianRestrictionSources(sources: { sourceId: string; packages: string[]; endsAtMs: number }[]) { return await native?.setGuardianRestrictionSources(sources) ?? { sources: [], blockedPackages: [] }; }
+
 export const IDLE_STATUS: FocusBlockerStatus = {
   isActive: false,
   strict: false,
