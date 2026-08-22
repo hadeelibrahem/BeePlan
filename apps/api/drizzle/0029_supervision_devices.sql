@@ -1,0 +1,3 @@
+CREATE TABLE "supervision_devices" ("id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL, "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade, "platform" varchar(12) NOT NULL, "device_id" varchar(255) NOT NULL, "device_name" varchar(255), "capability_level" varchar(32) DEFAULT 'none' NOT NULL, "permission_state" varchar(24) DEFAULT 'not_requested' NOT NULL, "last_seen_at" timestamp DEFAULT now() NOT NULL, "created_at" timestamp DEFAULT now() NOT NULL, "updated_at" timestamp DEFAULT now() NOT NULL);
+CREATE UNIQUE INDEX "uq_supervision_device_user_device" ON "supervision_devices" ("user_id", "device_id");
+CREATE INDEX "idx_supervision_device_user" ON "supervision_devices" ("user_id");

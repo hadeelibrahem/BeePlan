@@ -30,6 +30,7 @@ export type RootStackParamList = {
   Notifications: undefined
   Settings: undefined
   TimeCapsules: undefined
+  Supervision: undefined
   ReminderDetails: { reminderId: string }
   CreateReminder: { initialType?: 'task' | 'person' | 'checklist'; initialFriendId?: string }
   EditReminder: { reminderId: string }

@@ -35,6 +35,11 @@
   </queries>
 
   <application>
+    <!-- This receiver is only a component declaration. Package suspension still requires Device Owner or Profile Owner. -->
+    <receiver android:name="com.beeplan.focusblocker.supervision.BeePlanDeviceAdminReceiver" android:permission="android.permission.BIND_DEVICE_ADMIN" android:exported="true">
+      <meta-data android:name="android.app.device_admin" android:resource="@xml/beeplan_device_admin" />
+      <intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED" /></intent-filter>
+    </receiver>
     <!-- Foreground monitoring service. specialUse is justified below. -->
     <service
       android:name="com.beeplan.focusblocker.service.FocusBlockerService"

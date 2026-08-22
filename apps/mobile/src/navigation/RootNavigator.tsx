@@ -8,6 +8,7 @@ import AchievementMuseumScreen from '../screens/AchievementMuseumScreen'
 import WhiteboardsDashboardScreen from '../features/whiteboard/screens/WhiteboardsDashboardScreen'
 import WhiteboardEditorScreen from '../features/whiteboard/screens/WhiteboardEditorScreen'
 import WhiteboardShareScreen from '../features/whiteboard/screens/WhiteboardShareScreen'
+import { SupervisionScreen } from '../features/supervision/SupervisionScreen'
 import {
   type MainTabParamList,
   MAIN_TAB_ROUTES,
@@ -180,6 +181,7 @@ export function RootNavigator({
       <Stack.Screen name="Whiteboards" component={WhiteboardsDashboardScreen} />
       <Stack.Screen name="Whiteboard" component={WhiteboardEditorScreen} />
       <Stack.Screen name="WhiteboardShare" component={WhiteboardShareScreen} />
+      <Stack.Screen name="Supervision" component={SupervisionScreen} />
     </Stack.Navigator>
   );
 }

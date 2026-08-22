@@ -17,6 +17,8 @@ export {
   allowAppTemporarily,
   emergencyExit,
   getInstalledApps,
+  getManagementCapability,
+  getSuspendedPackages,
   getStatistics,
   getStatus,
   hasOverlayPermission,
@@ -27,9 +29,13 @@ export {
   openUsageAccessSettings,
   pauseStrictMode,
   resumeStrictMode,
+  reconcileSuspendedPackages,
   startStrictMode,
+  setGuardianRestrictionSources,
   stopStrictMode,
+  suspendPackages,
   subscribeToEvents,
+  unsuspendPackages,
 } from "./src/nativeModule";
 
 export type {

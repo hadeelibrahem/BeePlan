@@ -6,6 +6,8 @@ import com.beeplan.focusblocker.core.BlockerController
 import com.beeplan.focusblocker.events.BlockerEvent
 import com.beeplan.focusblocker.events.BlockerEventBus
 import com.beeplan.focusblocker.session.FocusSession
+import com.beeplan.focusblocker.session.GuardianRestrictionSource
+import com.beeplan.focusblocker.supervision.ManagedPackageController
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -82,6 +84,27 @@ class BeePlanFocusBlockerModule : Module() {
 
     AsyncFunction("getInstalledApps") {
       InstalledAppsProvider(context).launchableApps().map { it.toMap() }
+    }
+
+    Function("getManagementCapability") {
+      val controller = ManagedPackageController(context)
+      mapOf("mode" to controller.capability(), "hardBlockingAvailable" to controller.hardBlockingAvailable())
+    }
+
+    Function("isDeviceOwner") { ManagedPackageController(context).capability() == "device_owner" }
+    Function("isProfileOwner") { ManagedPackageController(context).capability() == "profile_owner" }
+
+    AsyncFunction("suspendPackages") { packageNames: List<String> -> ManagedPackageController(context).suspend(packageNames, true).toMap() }
+    AsyncFunction("unsuspendPackages") { packageNames: List<String> -> ManagedPackageController(context).suspend(packageNames, false).toMap() }
+    AsyncFunction("getSuspendedPackages") { packageNames: List<String> -> ManagedPackageController(context).suspended(packageNames) }
+    AsyncFunction("reconcileSuspendedPackages") { packageNames: List<String> -> ManagedPackageController(context).reconcile(packageNames) }
+    AsyncFunction("setGuardianRestrictionSources") { sources: List<Map<String, Any?>> ->
+      BlockerController.setGuardianSources(sources.mapNotNull { source ->
+        val id = source["sourceId"] as? String ?: return@mapNotNull null
+        val endsAtMs = (source["endsAtMs"] as? Number)?.toLong() ?: return@mapNotNull null
+        val packages = (source["packages"] as? List<*>)?.filterIsInstance<String>()?.toSet() ?: emptySet()
+        GuardianRestrictionSource(id, packages, endsAtMs)
+      })
     }
 
     AsyncFunction("startStrictMode") { config: StartStrictModeConfig ->

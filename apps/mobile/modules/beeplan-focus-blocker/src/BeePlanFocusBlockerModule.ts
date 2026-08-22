@@ -33,6 +33,14 @@ declare class BeePlanFocusBlockerModuleType extends NativeModule<{
   openOverlaySettings(): void;
   /** Returns launchable apps with icons, sorted by label. */
   getInstalledApps(): Promise<InstalledApp[]>;
+  getManagementCapability(): { mode: 'accountability_only' | 'profile_owner' | 'device_owner'; hardBlockingAvailable: boolean };
+  isDeviceOwner(): boolean;
+  isProfileOwner(): boolean;
+  suspendPackages(packageNames: string[]): Promise<{ requested: string[]; succeeded: string[]; failed: string[]; capability: string; enforced: boolean }>;
+  unsuspendPackages(packageNames: string[]): Promise<{ requested: string[]; succeeded: string[]; failed: string[]; capability: string; enforced: boolean }>;
+  getSuspendedPackages(packageNames: string[]): Promise<Record<string, boolean>>;
+  reconcileSuspendedPackages(packageNames: string[]): Promise<{ requested: string[]; suspended: string[]; released: string[]; failed: string[]; capability: string; state: 'released' | 'enforced' | 'partially_enforced' | 'failed' }>;
+  setGuardianRestrictionSources(sources: { sourceId: string; packages: string[]; endsAtMs: number }[]): Promise<{ sources: string[]; blockedPackages: string[] }>;
   /** Arms the foreground service + blocking for the given config. */
   startStrictMode(config: StartStrictModeConfig): Promise<FocusBlockerStatus>;
   /** Tears down the service and blocking. Safe to call when idle. */
