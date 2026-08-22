@@ -4,7 +4,7 @@ export type MobileIconName =
   | 'dashboard' | 'tasks' | 'focus' | 'reminders' | 'people' | 'notifications'
   | 'calendar' | 'analytics' | 'notes' | 'planner' | 'more'
   | 'check' | 'priority' | 'add' | 'search' | 'filter' | 'folder'
-  | 'whiteboard' | 'trophy' | 'copy' | 'trash' | 'plus'
+  | 'whiteboard' | 'trophy' | 'copy' | 'trash' | 'plus' | 'lightbulb'
 
 type Props = { name: MobileIconName; color: string; size?: number; accessibilityLabel?: string }
 
@@ -31,6 +31,7 @@ const PATHS: Record<MobileIconName, string> = {
   copy: 'M8 8h12v12H8zM4 16V4h12',
   trash: 'M5 7h14M10 11v6m4-6v6M9 7V4h6v3m-9 0 1 13h10l1-13',
   plus: 'M12 5v14M5 12h14',
+  lightbulb: 'M9 18h6M10 22h4M8 14a6 6 0 1 1 8 0c-1 1-2 2-2 4h-4c0-2-1-3-2-4z',
 }
 
 /** Shared themed outline icons for the main mobile product surfaces. */

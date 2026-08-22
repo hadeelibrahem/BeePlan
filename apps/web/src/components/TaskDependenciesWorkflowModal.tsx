@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { DangerButton, PrimaryButton, SecondaryButton } from './layout'
 import { TaskStatusBadge } from './TaskBadges'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export type DependencyStatus = 'To Do' | 'In Progress' | 'Done' | 'Missed' | 'Blocked'
 export type DependencyPriority = 'Low' | 'Medium' | 'High'
@@ -41,6 +42,7 @@ export function TaskDependenciesWorkflowModal({
   onSaveReplacement,
   onRemove,
 }: TaskDependenciesWorkflowModalProps) {
+  const { t } = useLanguage()
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [replacementId, setReplacementId] = useState('')
@@ -97,8 +99,8 @@ export function TaskDependenciesWorkflowModal({
         {mode === 'add' ? (
           <>
             <ModalHeader
-              title="Add Dependency"
-              subtitle="Select tasks that must be completed before this task can start."
+              title={t('editTaskForm.addDependency')}
+              subtitle={t('editTaskForm.dependencyHelp')}
             />
             <SearchBox value={search} onChange={setSearch} />
 
@@ -120,12 +122,12 @@ export function TaskDependenciesWorkflowModal({
                   />
                 ))
               ) : (
-                <EmptyDependencyState message="No available tasks match your search." />
+                <EmptyDependencyState message={t('editTaskForm.noMatchingTasks')} />
               )}
             </div>
 
             <footer className="mt-5 grid grid-cols-2 gap-3">
-              <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+              <SecondaryButton onClick={onClose}>{t('taskForm.cancel')}</SecondaryButton>
               <PrimaryButton
                 disabled={!selectedTasks.length}
                 onClick={() => {
@@ -133,7 +135,7 @@ export function TaskDependenciesWorkflowModal({
                   onClose()
                 }}
               >
-                Add Dependency
+                {t('editTaskForm.addDependency')}
               </PrimaryButton>
             </footer>
           </>
@@ -141,7 +143,7 @@ export function TaskDependenciesWorkflowModal({
 
         {mode === 'edit' && dependency ? (
           <>
-            <ModalHeader title="Edit Dependency" subtitle="Review this dependency or replace it with another task." />
+            <ModalHeader title={t('editTaskForm.editDependency')} subtitle={t('editTaskForm.editDependencyHelp')} />
 
             <section className="rounded-[20px] border border-[var(--bp-border)] bg-[var(--bp-bg)] p-4">
               <div className="flex items-start justify-between gap-4">
@@ -152,13 +154,13 @@ export function TaskDependenciesWorkflowModal({
                 <TaskStatusBadge status={dependency.status} />
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <InfoPill label="Due Date" value={dependency.dueDate} />
-                <InfoPill label="Priority" value={dependency.priority} />
+                <InfoPill label={t('taskForm.dueDate')} value={dependency.dueDate} />
+                <InfoPill label={t('taskForm.priority')} value={dependency.priority} />
               </div>
             </section>
 
             <div className="mt-5">
-              <p className="mb-3 text-sm font-black text-[var(--bp-text)]">Replace dependency with another task</p>
+              <p className="mb-3 text-sm font-black text-[var(--bp-text)]">{t('editTaskForm.replaceDependency')}</p>
               <SearchBox value={search} onChange={setSearch} />
               <div className="mt-4 max-h-[34vh] space-y-3 overflow-y-auto pe-1">
                 {replacementOptions.length ? (
@@ -171,13 +173,13 @@ export function TaskDependenciesWorkflowModal({
                     />
                   ))
                 ) : (
-                  <EmptyDependencyState message="No replacement task is available." />
+                  <EmptyDependencyState message={t('editTaskForm.noReplacementTask')} />
                 )}
               </div>
             </div>
 
             <footer className="mt-5 grid grid-cols-2 gap-3">
-              <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+              <SecondaryButton onClick={onClose}>{t('taskForm.cancel')}</SecondaryButton>
               <PrimaryButton
                 disabled={!replacementTask}
                 onClick={() => {
@@ -186,7 +188,7 @@ export function TaskDependenciesWorkflowModal({
                   onClose()
                 }}
               >
-                Save Changes
+                {t('taskForm.saveChanges')}
               </PrimaryButton>
             </footer>
           </>
@@ -195,26 +197,26 @@ export function TaskDependenciesWorkflowModal({
         {mode === 'remove' && dependency ? (
           <>
             <ModalHeader
-              title="Remove Dependency?"
-              subtitle="This task will no longer depend on the selected task."
+              title={t('editTaskForm.removeDependency')}
+              subtitle={t('editTaskForm.removeDependencyHelp')}
             />
 
             <section className="rounded-[20px] border border-red-500/30 bg-red-500/10 p-4">
               <p className="font-black text-[var(--bp-text)]">{dependency.title}</p>
               <p className="mt-2 text-sm leading-6 text-[var(--bp-muted)]">
-                Removing this dependency will keep both tasks, but this task will no longer wait for it.
+                {t('editTaskForm.removeDependencyDetail')}
               </p>
             </section>
 
             <footer className="mt-5 grid grid-cols-2 gap-3">
-              <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+              <SecondaryButton onClick={onClose}>{t('taskForm.cancel')}</SecondaryButton>
               <DangerButton
                 onClick={() => {
                   onRemove(dependency.id)
                   onClose()
                 }}
               >
-                Remove Dependency
+                {t('editTaskForm.removeDependency')}
               </DangerButton>
             </footer>
           </>
@@ -234,13 +236,14 @@ function ModalHeader({ title, subtitle }: { title: string; subtitle: string }) {
 }
 
 function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useLanguage()
   return (
     <label className="block">
-      <span className="sr-only">Search tasks</span>
+      <span className="sr-only">{t('editTaskForm.searchTasks')}</span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Search tasks..."
+        placeholder={t('editTaskForm.searchTasksPlaceholder')}
         className="w-full rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-4 py-3 text-sm font-semibold text-[var(--bp-text)] outline-none transition placeholder:text-[var(--bp-placeholder)] focus:border-[var(--bp-accent)]"
       />
     </label>
@@ -258,6 +261,7 @@ function DependencyOption({
   multiple?: boolean
   onClick: () => void
 }) {
+  const { t } = useLanguage()
   return (
     <button
       type="button"
@@ -290,7 +294,7 @@ function DependencyOption({
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <TaskStatusBadge status={task.status} />
         <span className="rounded-full bg-[var(--bp-border)] px-3 py-2 text-xs font-black text-[var(--bp-text)]">
-          {task.priority}
+          {t(`taskLabels.priority.${task.priority.toLowerCase()}`)}
         </span>
         <span className="rounded-full bg-[var(--bp-surface)] px-3 py-2 text-xs font-bold text-[var(--bp-muted)]">
           {task.dueDate}

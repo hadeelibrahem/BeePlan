@@ -43,6 +43,12 @@ export const users = pgTable(
     // carry the version they were signed with) stop being accepted —
     // see JwtAuthGuard and AuthService.logout/resetPassword.
     tokenVersion: integer('token_version').notNull().default(0),
+    role: varchar('role', { length: 20 }).notNull().default('user'),
+    accountStatus: varchar('account_status', { length: 20 })
+      .notNull()
+      .default('active'),
+    suspendedAt: timestamp('suspended_at'),
+    suspensionReason: varchar('suspension_reason', { length: 500 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -52,6 +58,112 @@ export const users = pgTable(
     ).on(table.usernameNormalized),
   }),
 );
+
+export const USER_ROLES = ['user', 'admin', 'super_admin'] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+// Admin audit rows are deliberately append-only at the application boundary.
+// State snapshots are minimized by AdminAuditLogService before insertion.
+export const adminAuditLogs = pgTable(
+  'admin_audit_logs',
+  {
+    id: id(),
+    actorUserId: uuid('actor_user_id')
+      .notNull()
+      .references(() => users.id),
+    action: varchar('action', { length: 100 }).notNull(),
+    targetType: varchar('target_type', { length: 80 }).notNull(),
+    targetId: varchar('target_id', { length: 255 }).notNull(),
+    beforeState: jsonb('before_state'),
+    afterState: jsonb('after_state'),
+    metadata: jsonb('metadata'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_admin_audit_logs_created_at').on(table.createdAt),
+    index('idx_admin_audit_logs_target').on(table.targetType, table.targetId),
+    index('idx_admin_audit_logs_actor').on(table.actorUserId),
+  ],
+);
+
+// Observability rows store only sanitized error evidence.  These string fields
+// intentionally remain constrained at the application boundary as well.
+export const errorGroups = pgTable(
+  'error_groups',
+  {
+    id: id(),
+    fingerprint: varchar('fingerprint', { length: 128 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    errorClass: varchar('error_class', { length: 160 }).notNull(),
+    normalizedMessage: text('normalized_message').notNull(),
+    service: varchar('service', { length: 160 }).notNull().default('api'),
+    operation: varchar('operation', { length: 255 }),
+    route: varchar('route', { length: 500 }),
+    httpMethod: varchar('http_method', { length: 12 }),
+    httpStatus: integer('http_status'),
+    environment: varchar('environment', { length: 32 }).notNull(),
+    severity: varchar('severity', { length: 16 }).notNull().default('medium'),
+    status: varchar('status', { length: 20 }).notNull().default('new'),
+    firstSeenAt: timestamp('first_seen_at').defaultNow().notNull(),
+    lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+    occurrenceCount: integer('occurrence_count').notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_error_groups_fingerprint').on(table.fingerprint),
+    index('idx_error_groups_last_seen').on(table.lastSeenAt),
+    index('idx_error_groups_severity').on(table.severity),
+    index('idx_error_groups_status').on(table.status),
+    index('idx_error_groups_route').on(table.route),
+  ],
+);
+
+export const errorOccurrences = pgTable(
+  'error_occurrences',
+  {
+    id: id(),
+    errorGroupId: uuid('error_group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
+    occurredAt: timestamp('occurred_at').defaultNow().notNull(),
+    requestId: varchar('request_id', { length: 128 }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    httpMethod: varchar('http_method', { length: 12 }),
+    route: varchar('route', { length: 500 }),
+    statusCode: integer('status_code'),
+    service: varchar('service', { length: 160 }).notNull().default('api'),
+    operation: varchar('operation', { length: 255 }),
+    environment: varchar('environment', { length: 32 }).notNull(),
+    clientPlatform: varchar('client_platform', { length: 40 }),
+    clientVersion: varchar('client_version', { length: 80 }),
+    sanitizedMessage: text('sanitized_message').notNull(),
+    sanitizedStack: text('sanitized_stack'),
+    sanitizedContext: jsonb('sanitized_context'),
+  },
+  (table) => [index('idx_error_occurrences_group').on(table.errorGroupId), index('idx_error_occurrences_occurred').on(table.occurredAt), index('idx_error_occurrences_user').on(table.userId)],
+);
+
+export const errorGroupUsers = pgTable(
+  'error_group_users',
+  {
+    errorGroupId: uuid('error_group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    firstSeenAt: timestamp('first_seen_at').defaultNow().notNull(),
+    lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+    occurrenceCount: integer('occurrence_count').notNull().default(1),
+  },
+  (table) => [primaryKey({ columns: [table.errorGroupId, table.userId] }), index('idx_error_group_users_user').on(table.userId)],
+);
+export const errorAnalyses = pgTable('error_analyses', {
+  id: id(), errorGroupId: uuid('error_group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }), requestedByAdminId: uuid('requested_by_admin_id').notNull().references(() => users.id), model: varchar('model', { length: 160 }).notNull(), provider: varchar('provider', { length: 80 }).notNull(), promptVersion: varchar('prompt_version', { length: 80 }).notNull(), contextVersion: varchar('context_version', { length: 80 }).notNull(), contextHash: varchar('context_hash', { length: 128 }).notNull(), inputSummary: jsonb('input_summary').notNull(), likelyCause: text('likely_cause').notNull(), evidence: jsonb('evidence').notNull(), investigationSteps: jsonb('investigation_steps').notNull(), suggestedFix: text('suggested_fix').notNull(), likelyModules: jsonb('likely_modules').notNull(), confidence: varchar('confidence', { length: 16 }).notNull(), limitations: jsonb('limitations').notNull(), createdAt: createdAt(),
+}, (table) => [index('idx_error_analyses_group_created').on(table.errorGroupId, table.createdAt), index('idx_error_analyses_context_hash').on(table.contextHash)]);
+
+export const userReports = pgTable('user_reports', { id: id(), reporterUserId: uuid('reporter_user_id').notNull().references(() => users.id), reportedUserId: uuid('reported_user_id').notNull().references(() => users.id), category: varchar('category', { length: 40 }).notNull(), reason: varchar('reason', { length: 1000 }).notNull(), contextType: varchar('context_type', { length: 40 }), contextId: varchar('context_id', { length: 255 }), contextSnapshot: jsonb('context_snapshot'), status: varchar('status', { length: 24 }).notNull().default('pending'), reviewedByAdminId: uuid('reviewed_by_admin_id').references(() => users.id), reviewedAt: timestamp('reviewed_at'), createdAt: createdAt(), updatedAt: updatedAt() }, (table) => [index('idx_user_reports_status').on(table.status), index('idx_user_reports_reported').on(table.reportedUserId), index('idx_user_reports_created').on(table.createdAt)]);
+export const moderationActions = pgTable('moderation_actions', { id: id(), reportId: uuid('report_id').references(() => userReports.id, { onDelete: 'set null' }), subjectUserId: uuid('subject_user_id').notNull().references(() => users.id), actorAdminId: uuid('actor_admin_id').notNull().references(() => users.id), action: varchar('action', { length: 24 }).notNull(), reason: varchar('reason', { length: 1000 }).notNull(), expiresAt: timestamp('expires_at'), createdAt: createdAt() }, (table) => [index('idx_moderation_actions_subject').on(table.subjectUserId), index('idx_moderation_actions_report').on(table.reportId)]);
+export const feedbackItems = pgTable('feedback_items', { id: id(), authorUserId: uuid('author_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), category: varchar('category', { length: 24 }).notNull(), title: varchar('title', { length: 160 }).notNull(), description: varchar('description', { length: 4000 }).notNull(), status: varchar('status', { length: 24 }).notNull().default('submitted'), visibility: varchar('visibility', { length: 16 }).notNull().default('public'), reviewedByAdminId: uuid('reviewed_by_admin_id').references(() => users.id), reviewedAt: timestamp('reviewed_at'), releasedAt: timestamp('released_at'), createdAt: createdAt(), updatedAt: updatedAt() }, (table) => [index('idx_feedback_items_status').on(table.status), index('idx_feedback_items_category').on(table.category), index('idx_feedback_items_visibility').on(table.visibility), index('idx_feedback_items_created').on(table.createdAt)]);
+export const feedbackVotes = pgTable('feedback_votes', { feedbackId: uuid('feedback_id').notNull().references(() => feedbackItems.id, { onDelete: 'cascade' }), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), createdAt: createdAt() }, (table) => [primaryKey({ columns: [table.feedbackId, table.userId] }), index('idx_feedback_votes_feedback').on(table.feedbackId), index('idx_feedback_votes_user').on(table.userId)]);
+export const feedbackClusters = pgTable('feedback_clusters', { id: id(), title: varchar('title', { length: 160 }).notNull(), summary: varchar('summary', { length: 1000 }).notNull(), confidence: varchar('confidence', { length: 16 }).notNull(), status: varchar('status', { length: 16 }).notNull().default('active'), model: varchar('model', { length: 160 }).notNull(), provider: varchar('provider', { length: 80 }).notNull(), promptVersion: varchar('prompt_version', { length: 80 }).notNull(), contextVersion: varchar('context_version', { length: 80 }).notNull(), memberCount: integer('member_count').notNull(), totalVotes: integer('total_votes').notNull(), lastAnalyzedAt: timestamp('last_analyzed_at').notNull(), createdAt: createdAt(), updatedAt: updatedAt() }, (table) => [index('idx_feedback_clusters_status').on(table.status)]);
+export const feedbackClusterMembers = pgTable('feedback_cluster_members', { clusterId: uuid('cluster_id').notNull().references(() => feedbackClusters.id, { onDelete: 'cascade' }), feedbackId: uuid('feedback_id').notNull().references(() => feedbackItems.id, { onDelete: 'cascade' }), similarityScore: real('similarity_score'), createdAt: createdAt() }, (table) => [primaryKey({ columns: [table.clusterId, table.feedbackId] }), index('idx_feedback_cluster_members_feedback').on(table.feedbackId)]);
+export const feedbackClusterRuns = pgTable('feedback_cluster_runs', { id: id(), requestedByAdminId: uuid('requested_by_admin_id').notNull().references(() => users.id), model: varchar('model', { length: 160 }).notNull(), provider: varchar('provider', { length: 80 }).notNull(), promptVersion: varchar('prompt_version', { length: 80 }).notNull(), contextVersion: varchar('context_version', { length: 80 }).notNull(), contextHash: varchar('context_hash', { length: 128 }).notNull(), inputCount: integer('input_count').notNull(), outputClusterCount: integer('output_cluster_count').notNull(), reused: boolean('reused').notNull().default(false), createdAt: createdAt() }, (table) => [index('idx_feedback_cluster_runs_context').on(table.contextHash)]);
 
 export const passwordResetCodes = pgTable('password_reset_codes', {
   id: id(),
@@ -444,6 +556,9 @@ export const tasks = pgTable(
     description: text('description'),
     priority: varchar('priority', { length: 20 }).notNull().default('medium'),
     status: varchar('status', { length: 20 }).notNull().default('todo'),
+    // Server-stamped on a done transition; challenges use this rather than a
+    // mutable updated_at timestamp to count completed tasks in a window.
+    completedAt: timestamp('completed_at'),
     progress: integer('progress').notNull().default(0),
     dueDate: timestamp('due_date'),
     dueTime: varchar('due_time', { length: 20 }),
@@ -505,6 +620,52 @@ export const tasks = pgTable(
     index('idx_tasks_focus').on(table.isFocusTask),
     // Powers the "Has Reminder" filter.
     index('idx_tasks_reminder_enabled').on(table.reminderEnabled),
+  ],
+);
+
+// Community challenges are global, server-managed definitions.  Progress is a
+// derived cache rather than a client-maintained counter.
+export const challenges = pgTable(
+  'challenges',
+  {
+    id: id(),
+    title: varchar('title', { length: 160 }).notNull(),
+    description: varchar('description', { length: 2000 }).notNull().default(''),
+    type: varchar('type', { length: 32 }).notNull(),
+    targetValue: integer('target_value').notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('draft'),
+    startAt: timestamp('start_at').notNull(),
+    endAt: timestamp('end_at').notNull(),
+    // Phase H intentionally supports no grants until BeePlan has a canonical,
+    // grantable reward catalogue. These nullable fields preserve the safe API
+    // foundation without creating a competing achievement/XP system.
+    rewardType: varchar('reward_type', { length: 32 }),
+    rewardValue: integer('reward_value'),
+    badgeKey: varchar('badge_key', { length: 120 }),
+    createdByAdminId: uuid('created_by_admin_id').notNull().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    publishedAt: timestamp('published_at'),
+    cancelledAt: timestamp('cancelled_at'),
+  },
+  (table) => [index('idx_challenges_status_window').on(table.status, table.startAt, table.endAt)],
+);
+
+export const userChallengeProgress = pgTable(
+  'user_challenge_progress',
+  {
+    id: id(),
+    challengeId: uuid('challenge_id').notNull().references(() => challenges.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    progressValue: integer('progress_value').notNull().default(0),
+    completedAt: timestamp('completed_at'),
+    rewardGrantedAt: timestamp('reward_granted_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_user_challenge_progress_challenge_user').on(table.challengeId, table.userId),
+    index('idx_user_challenge_progress_challenge').on(table.challengeId),
   ],
 );
 
@@ -841,6 +1002,7 @@ export const focusRooms = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     workspaceId: uuid('workspace_id'),
     title: varchar('title', { length: 160 }).notNull(),
+    joinCode: varchar('join_code', { length: 16 }).notNull(),
     description: text('description'),
     visibility: varchar('visibility', { length: 20 })
       .notNull()
@@ -866,6 +1028,7 @@ export const focusRooms = pgTable(
       table.expiresAt,
     ),
     index('idx_focus_rooms_owner').on(table.ownerUserId),
+    uniqueIndex('uq_focus_rooms_join_code').on(table.joinCode),
   ],
 );
 

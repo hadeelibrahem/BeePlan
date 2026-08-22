@@ -1,0 +1,9 @@
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { JwtAuthGuard, type AuthenticatedRequest } from '../auth/jwt-auth.guard';
+import { FeedbackService, feedbackCategories, feedbackStatuses } from './feedback.service';
+class CreateDto { @IsIn(feedbackCategories) category!: string; @IsString() @Length(3, 160) title!: string; @IsString() @Length(10, 4000) description!: string; }
+class ListDto { @IsOptional() @IsString() search?: string; @IsOptional() @IsIn(feedbackCategories) category?: string; @IsOptional() @IsIn(feedbackStatuses) status?: string; @IsOptional() @IsIn(['newest', 'most_voted', 'recently_updated']) sort?: string; @Type(() => Number) @IsInt() @Min(1) page = 1; @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20; }
+@Controller('feedback') @UseGuards(JwtAuthGuard)
+export class FeedbackController { constructor(private readonly feedback: FeedbackService) {} @Post() submit(@Req() req: AuthenticatedRequest, @Body() body: CreateDto) { return this.feedback.submit(req.user.id, body); } @Get() list(@Req() req: AuthenticatedRequest, @Query() query: ListDto) { return this.feedback.list(req.user.id, query); } @Get('mine') mine(@Req() req: AuthenticatedRequest, @Query() query: ListDto) { return this.feedback.list(req.user.id, { ...query, mine: true }); } @Get(':id') detail(@Req() req: AuthenticatedRequest, @Param('id') id: string) { return this.feedback.publicDetail(id, req.user.id); } @Post(':id/vote') vote(@Req() req: AuthenticatedRequest, @Param('id') id: string) { return this.feedback.vote(req.user.id, id); } @Delete(':id/vote') removeVote(@Req() req: AuthenticatedRequest, @Param('id') id: string) { return this.feedback.removeVote(req.user.id, id); } }

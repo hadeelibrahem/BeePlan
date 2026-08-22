@@ -7,7 +7,6 @@ import { DatabaseModule } from '../db/database.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { FocusController } from './focus.controller';
 import { FocusService } from './focus.service';
-import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { FocusRoomsModule } from '../focus-rooms/focus-rooms.module';
 
@@ -21,7 +20,6 @@ import { FocusRoomsModule } from '../focus-rooms/focus-rooms.module';
     // and so session-start authorization matches the task write-permission model.
     // CollaborationModule does not import FocusModule, so there is no cycle.
     CollaborationModule,
-    GoogleCalendarModule,
     NotificationsModule,
     FocusRoomsModule,
     JwtModule.registerAsync({

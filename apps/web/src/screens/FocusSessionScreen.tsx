@@ -24,6 +24,7 @@ import { FOCUS_SOUND_CATEGORIES, FOCUS_SOUNDS, type FocusSound } from '../lib/fo
 import { useFocusAmbientAudio } from '../lib/useFocusAmbientAudio'
 import { FocusSoundsPanel as ExtractedFocusSoundsPanel } from '../components/focus/FocusSoundsPanel'
 import type { ApiTask } from '../lib/tasksApi'
+import { useLanguage } from '../i18n/LanguageContext'
 
 type FocusSessionScreenProps = {
   accessToken: string
@@ -38,6 +39,7 @@ export default function FocusSessionScreen({
   tasks,
   onExit,
 }: FocusSessionScreenProps) {
+  const { t } = useLanguage()
   const {
     active,
     breakState,
@@ -145,7 +147,7 @@ export default function FocusSessionScreen({
               B
             </span>
             <span className="text-sm font-black uppercase tracking-[0.2em] text-[var(--bp-muted)]">
-              BeePlan Focus
+              {t('focusSession.brand')}
             </span>
           </header>
 
@@ -177,13 +179,13 @@ export default function FocusSessionScreen({
             {active && !sessionComplete ? (
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 {active.pausedSinceMs !== null ? (
-                  <PrimaryButton onClick={focus.resume}>Resume</PrimaryButton>
+                  <PrimaryButton onClick={focus.resume}>{t('focusSession.resume')}</PrimaryButton>
                 ) : (
-                  <SecondaryButton onClick={focus.pause}>Pause</SecondaryButton>
+                  <SecondaryButton onClick={focus.pause}>{t('focusSession.pause')}</SecondaryButton>
                 )}
-                <OutlineButton onClick={() => setShowAddTime(true)}>Add Time</OutlineButton>
-                <PrimaryButton onClick={focus.requestFinish}>Finish</PrimaryButton>
-                <DangerButton onClick={() => void focus.cancel()}>Cancel</DangerButton>
+                <OutlineButton onClick={() => setShowAddTime(true)}>{t('focusSession.addTime')}</OutlineButton>
+                <PrimaryButton onClick={focus.requestFinish}>{t('focusSession.finish')}</PrimaryButton>
+                <DangerButton onClick={() => void focus.cancel()}>{t('focusSession.cancel')}</DangerButton>
               </div>
             ) : null}
           </section>
@@ -354,6 +356,7 @@ function ActiveTimer({
   elapsedMs: number
   complete: boolean
 }) {
+  const { t } = useLanguage()
   const totalMs = active.plannedMinutes * 60_000
   const fraction = complete ? 1 : Math.min(1, elapsedMs / totalMs)
   const percent = Math.round(fraction * 100)
@@ -361,7 +364,7 @@ function ActiveTimer({
   return (
     <div className="flex flex-col items-center">
       <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--bp-accent-ink)]">
-        {labelForType(active.sessionType)} • {active.plannedMinutes} min
+        {labelForType(active.sessionType)} • {t('focusUi.minutes', { count: active.plannedMinutes })}
       </p>
       <h1 className="mt-2 max-w-xl truncate text-center text-2xl font-black text-[var(--bp-text)]">
         {focusPrimaryTitle(active)}
@@ -381,10 +384,10 @@ function ActiveTimer({
       </div>
 
       <div className="mt-6">
-        <TimerRing fraction={fraction} centerLabel={complete ? 'Done' : formatClock(remainingMs)} />
+        <TimerRing fraction={fraction} centerLabel={complete ? t('focusSession.done') : formatClock(remainingMs)} />
       </div>
       <p className="mt-4 text-sm font-semibold text-[var(--bp-muted)]">
-        {complete ? 'Session complete' : active.pausedSinceMs !== null ? `Paused • ${percent}%` : `${percent}% complete`}
+        {complete ? t('focusSession.sessionComplete') : active.pausedSinceMs !== null ? t('focusSession.pausedProgress', { percent }) : t('focusSession.percentComplete', { percent })}
       </p>
     </div>
   )
@@ -401,19 +404,20 @@ function BreakTimer({
   minutes: number
   onEnd: () => void
 }) {
+  const { t } = useLanguage()
   const totalMs = minutes * 60_000
   const fraction = Math.min(1, 1 - remainingMs / totalMs)
 
   return (
     <div className="flex flex-col items-center">
-      <p className="text-xs font-black uppercase tracking-[0.2em] text-green-400">Break</p>
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-green-400">{t('focusSession.break')}</p>
       <h1 className="mt-2 text-2xl font-black text-[var(--bp-text)]">{label}</h1>
       <div className="mt-6">
         <TimerRing fraction={fraction} centerLabel={formatClock(remainingMs)} accent="var(--bp-accent)" />
       </div>
-      <p className="mt-4 text-sm font-semibold text-[var(--bp-muted)]">Relax — no task prompt after this.</p>
+      <p className="mt-4 text-sm font-semibold text-[var(--bp-muted)]">{t('focusSession.breakHelper')}</p>
       <div className="mt-6">
-        <OutlineButton onClick={onEnd}>End break</OutlineButton>
+        <OutlineButton onClick={onEnd}>{t('focusSession.endBreak')}</OutlineButton>
       </div>
     </div>
   )
@@ -455,7 +459,7 @@ function TimerRing({
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-6xl font-black tabular-nums text-[var(--bp-text)]">{centerLabel}</span>
+        <span dir="ltr" className="text-6xl font-black tabular-nums text-[var(--bp-text)]">{centerLabel}</span>
       </div>
     </div>
   )
@@ -470,30 +474,32 @@ function BreakOffer({
   onPick: (minutes: number, label: string) => void
   onSkip: () => void
 }) {
+  const { t } = useLanguage()
   return (
     <div className="flex flex-col items-center rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 px-8 py-10 backdrop-blur">
-      <h1 className="text-2xl font-black text-[var(--bp-text)]">Nice work — take a break?</h1>
-      <p className="mt-1 text-sm text-[var(--bp-muted)]">Step away, then come back refreshed.</p>
+       <h1 className="text-2xl font-black text-[var(--bp-text)]">{t('focusSession.niceWork')}</h1>
+       <p className="mt-1 text-sm text-[var(--bp-muted)]">{t('focusSession.breakDescription')}</p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         {BREAK_PRESETS.map((preset) => (
           <PrimaryButton key={preset.label} onClick={() => onPick(preset.minutes, preset.label)}>
-            {preset.label} • {preset.minutes} min
+            {preset.label} • {t('focusUi.minutes', { count: preset.minutes })}
           </PrimaryButton>
         ))}
-        <SecondaryButton onClick={onSkip}>Skip break</SecondaryButton>
+         <SecondaryButton onClick={onSkip}>{t('focusSession.skipBreak')}</SecondaryButton>
       </div>
     </div>
   )
 }
 
 function BreakFinished({ onNew, onExit }: { onNew: () => void; onExit: () => void }) {
+  const { t } = useLanguage()
   return (
     <div className="flex flex-col items-center rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/80 px-8 py-10 backdrop-blur">
-      <h1 className="text-2xl font-black text-[var(--bp-text)]">Break finished</h1>
-      <p className="mt-1 text-sm text-[var(--bp-muted)]">Ready for another focus session?</p>
+       <h1 className="text-2xl font-black text-[var(--bp-text)]">{t('focusSession.breakFinished')}</h1>
+       <p className="mt-1 text-sm text-[var(--bp-muted)]">{t('focusSession.anotherSession')}</p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <PrimaryButton onClick={onNew}>Start a focus session</PrimaryButton>
-        <SecondaryButton onClick={onExit}>Exit</SecondaryButton>
+         <PrimaryButton onClick={onNew}>{t('focusSession.startSession')}</PrimaryButton>
+         <SecondaryButton onClick={onExit}>{t('focusSession.exit')}</SecondaryButton>
       </div>
     </div>
   )
@@ -516,41 +522,42 @@ function CompletionModal({
   onOutcome: (outcome: FocusTaskOutcome) => void
   onAddTime: () => void
 }) {
+  const { t } = useLanguage()
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
       <div className="w-full max-w-md animate-[scaleUp_0.3s_ease-out] rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] p-6 text-center">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--bp-accent-soft)] text-2xl">
           🎉
         </div>
-        <h2 className="text-2xl font-black text-[var(--bp-text)]">Great job!</h2>
+        <h2 className="text-2xl font-black text-[var(--bp-text)]">{t('focusSession.greatJob')}</h2>
         <p className="mt-1 text-sm text-[var(--bp-muted)]">
-          You completed {minutes} {minutes === 1 ? 'minute' : 'minutes'} of focus.
+          {t('focusSession.completedFocus', { minutes })}
         </p>
         <p className="mt-4 text-sm font-black text-[var(--bp-text)]">
-          Did you finish this {isSubtask ? 'subtask' : 'task'}?
+          {t('focusSession.finishTask', { item: isSubtask ? t('focusSession.subtask') : t('focusSession.task') })}
         </p>
         {isSubtask ? (
           <div className="mt-4 grid gap-2">
             <PrimaryButton onClick={() => onOutcome('done')} disabled={busy || alreadyDone}>
-              Mark Complete
+              {t('focusSessionCompletion.markComplete')}
             </PrimaryButton>
             <SecondaryButton onClick={() => onOutcome('keep')} disabled={busy}>
-              Continue Later
+              {t('focusSessionCompletion.continueLater')}
             </SecondaryButton>
             <OutlineButton onClick={onAddTime} disabled={busy}>
-              Add More Time
+              {t('focusSession.addMoreTime')}
             </OutlineButton>
           </div>
         ) : (
           <div className="mt-4 grid gap-2">
             <PrimaryButton onClick={() => onOutcome('done')} disabled={busy || alreadyDone}>
-              Yes, mark task done
+              {t('focusSessionCompletion.yesMarkDone')}
             </PrimaryButton>
             <SecondaryButton onClick={() => onOutcome('partial')} disabled={busy}>
-              Partially completed
+              {t('focusSessionCompletion.partiallyCompleted')}
             </SecondaryButton>
             <OutlineButton onClick={() => onOutcome('keep')} disabled={busy}>
-              Not yet
+              {t('focusSessionCompletion.notYet')}
             </OutlineButton>
           </div>
         )}
@@ -570,6 +577,7 @@ function AddTimeModal({
   onCancel: () => void
   onConfirm: (minutes: number) => void
 }) {
+  const { t } = useLanguage()
   const [selected, setSelected] = useState<number | 'custom'>(10)
   const [customValue, setCustomValue] = useState('')
 
@@ -591,8 +599,8 @@ function AddTimeModal({
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 px-4 backdrop-blur-sm md:items-center">
       <div className="w-full max-w-md rounded-t-[28px] border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] p-6 md:rounded-3xl">
         <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--bp-border)] md:hidden" />
-        <h2 className="text-xl font-black text-[var(--bp-text)]">Add more time</h2>
-        <p className="mt-1 text-sm text-[var(--bp-muted)]">Extend your focus session.</p>
+        <h2 className="text-xl font-black text-[var(--bp-text)]">{t('focusSession.addMoreTime')}</h2>
+        <p className="mt-1 text-sm text-[var(--bp-muted)]">{t('focusSession.extendSession')}</p>
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           {QUICK_EXTENSION_OPTIONS.map((option) => (
@@ -618,14 +626,14 @@ function AddTimeModal({
                 : 'border-[var(--bp-border)] bg-[var(--bp-surface)] text-[var(--bp-muted)] hover:border-[var(--bp-accent)]/50'
             }`}
           >
-            Custom
+            {t('focusSession.custom')}
           </button>
         </div>
 
         {selected === 'custom' ? (
           <label className="mt-4 block">
             <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">
-              Minutes ({FOCUS_EXTENSION_MIN_MINUTES}–{FOCUS_EXTENSION_MAX_MINUTES})
+              {t('focusSession.minutes')} ({FOCUS_EXTENSION_MIN_MINUTES}–{FOCUS_EXTENSION_MAX_MINUTES})
             </span>
             <input
               type="number"
@@ -635,7 +643,7 @@ function AddTimeModal({
               step={1}
               autoFocus
               value={customValue}
-              placeholder="e.g. 20"
+               placeholder={t('focusSession.customMinutesPlaceholder')}
               onChange={(event) => setCustomValue(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') handleConfirm()
@@ -653,14 +661,14 @@ function AddTimeModal({
 
         <footer className="mt-5 grid grid-cols-2 gap-3">
           <SecondaryButton onClick={onCancel} disabled={busy}>
-            Cancel
+             {t('focusSession.cancel')}
           </SecondaryButton>
           <PrimaryButton onClick={handleConfirm} disabled={!canSubmit}>
             {busy
-              ? 'Adding…'
+               ? t('focusSession.adding')
               : validation.error === null
-                ? `Add ${validation.minutes} min`
-                : 'Add Time'}
+                 ? t('focusHome.startWithDuration', { duration: t('focusUi.minutes', { count: validation.minutes }) })
+                 : t('focusSession.addTime')}
           </PrimaryButton>
         </footer>
       </div>
@@ -669,14 +677,15 @@ function AddTimeModal({
 }
 
 function ExitConfirmModal({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) {
+  const { t } = useLanguage()
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
       <div className="w-full max-w-sm animate-[scaleUp_0.3s_ease-out] rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] p-6 text-center">
-        <h2 className="text-lg font-black text-[var(--bp-text)]">Leave focus?</h2>
-        <p className="mt-1 text-sm text-[var(--bp-muted)]">A focus session is still active. Leave anyway?</p>
+         <h2 className="text-lg font-black text-[var(--bp-text)]">{t('focusSession.leaveFocus')}</h2>
+         <p className="mt-1 text-sm text-[var(--bp-muted)]">{t('focusSession.leaveWarning')}</p>
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <SecondaryButton onClick={onStay}>Stay</SecondaryButton>
-          <DangerButton onClick={onLeave}>Leave</DangerButton>
+           <SecondaryButton onClick={onStay}>{t('focusSession.stay')}</SecondaryButton>
+           <DangerButton onClick={onLeave}>{t('focusSession.leave')}</DangerButton>
         </div>
       </div>
     </div>
@@ -843,20 +852,21 @@ function FocusSoundsPanel({
   onStop: () => void
   onVolumeChange: (volume: number) => void
 }) {
+  const { t } = useLanguage()
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/45 px-4 pb-5 backdrop-blur-sm md:items-center md:pb-0">
       <section className="max-h-[86vh] w-full max-w-2xl overflow-hidden rounded-3xl border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-[var(--bp-border)] px-5 py-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--bp-accent-ink)]">Focus sounds</p>
-            <h2 className="mt-1 text-xl font-black text-[var(--bp-text)]">White Noise</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--bp-accent-ink)]">{t('focusUi.focusSounds')}</p>
+            <h2 className="mt-1 text-xl font-black text-[var(--bp-text)]">{t('focusUi.whiteNoise')}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="rounded-xl px-3 py-2 text-xs font-black text-[var(--bp-muted)] transition hover:bg-[var(--bp-bg)]"
           >
-            Close
+            {t('focusUi.close')}
           </button>
         </header>
 
@@ -887,7 +897,7 @@ function FocusSoundsPanel({
                           </div>
                           {active ? (
                             <span className="mt-2 inline-flex rounded-full border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-2 py-0.5 text-[10px] font-black text-[var(--bp-accent-text)]">
-                              Currently Playing
+                              {t('focusSession.focusSounds')}
                             </span>
                           ) : null}
                         </div>
@@ -915,7 +925,7 @@ function FocusSoundsPanel({
           ) : null}
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <label className="flex flex-1 items-center gap-3">
-              <span className="w-16 text-xs font-black uppercase text-[var(--bp-muted)]">Volume</span>
+              <span className="w-16 text-xs font-black uppercase text-[var(--bp-muted)]">{t('focusUi.volume')}</span>
               <input
                 type="range"
                 min={0}
@@ -933,14 +943,14 @@ function FocusSoundsPanel({
                 onClick={onMuteToggle}
                 className="rounded-xl border border-[var(--bp-border)] px-3 py-2 text-xs font-black text-[var(--bp-text)] transition hover:border-[var(--bp-accent)]"
               >
-                {muted ? 'Unmute' : 'Mute'}
+                {muted ? t('focusUi.unmute') : t('focusUi.mute')}
               </button>
               <button
                 type="button"
                 onClick={onStop}
                 className="rounded-xl border border-[var(--bp-border)] px-3 py-2 text-xs font-black text-[var(--bp-text)] transition hover:border-[var(--bp-accent)]"
               >
-                Stop
+                {t('focusUi.stop')}
               </button>
             </div>
           </div>
@@ -969,20 +979,21 @@ function BottomUtilities({
   onToggleFullscreen: () => void
   onExit: () => void
 }) {
+  const { t } = useLanguage()
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)]/70 px-3 py-2 backdrop-blur">
-      <UtilityButton onClick={onSounds}>White Noise</UtilityButton>
-      <UtilityButton onClick={onSounds}>Ambient Sounds</UtilityButton>
+      <UtilityButton onClick={onSounds}>{t('focusUi.whiteNoise')}</UtilityButton>
+      <UtilityButton onClick={onSounds}>{t('focusUi.ambientSounds')}</UtilityButton>
       {playingSound ? (
         <div className="rounded-xl bg-[var(--bp-bg)] px-3 py-2 text-xs font-bold text-[var(--bp-muted)]">
-          🎧 Playing: <span className="text-[var(--bp-text)]">{playingSound.name}</span>
+          🎧 {t('focusSession.focusSounds')}: <span className="text-[var(--bp-text)]">{playingSound.name}</span>
         </div>
       ) : null}
       {fullscreenSupported ? (
-        <UtilityButton onClick={onToggleFullscreen}>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</UtilityButton>
+        <UtilityButton onClick={onToggleFullscreen}>{isFullscreen ? t('focusUi.exitFullscreen') : t('focusUi.fullscreen')}</UtilityButton>
       ) : null}
       <UtilityButton onClick={onExit} accent>
-        Exit Focus
+        {t('focusUi.exitFocus')}
       </UtilityButton>
     </div>
   )
@@ -1023,22 +1034,23 @@ function SidePanel({
   recommendation: FocusRecommendation | null
   task: ApiTask | null
 }) {
+  const { t } = useLanguage()
   const estimatedRemaining = task
     ? Math.max(0, (task.estimatedTimeMinutes ?? 0) - (task.spentTimeMinutes ?? 0))
     : 0
 
   return (
     <aside className="hidden w-72 shrink-0 flex-col gap-3 border-s border-[var(--bp-border)] bg-[var(--bp-surface)]/60 p-5 backdrop-blur lg:flex">
-      <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">Session insight</p>
-      <PanelStat label="Today's focus time" value={stats ? formatFocusMinutes(stats.focusMinutesToday) : '—'} />
-      <PanelStat label="Sessions today" value={stats ? String(stats.sessionsToday) : '—'} />
-      <PanelStat label="Current streak" value={stats ? `${stats.currentStreak} days` : '—'} />
+      <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('focusSession.sessionInsight')}</p>
+      <PanelStat label={t('focusSession.todayFocus')} value={stats ? formatFocusMinutes(stats.focusMinutesToday) : '—'} />
+      <PanelStat label={t('focusSession.sessionsToday')} value={stats ? String(stats.sessionsToday) : '—'} />
+      <PanelStat label={t('focusSession.currentStreak')} value={stats ? t('focusSession.days', { count: stats.currentStreak }) : '—'} />
       <PanelStat
-        label="Estimated remaining"
+        label={t('focusSession.estimatedRemaining')}
         value={task ? formatFocusMinutes(estimatedRemaining) : '—'}
       />
       <div className="mt-2 rounded-2xl border border-[var(--bp-accent)]/30 bg-[var(--bp-accent-soft)] p-3">
-        <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">AI Tip</p>
+        <p className="text-[10px] font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">{t('focusSession.aiTip')}</p>
         <p className="mt-1 text-xs leading-5 text-[var(--bp-text)]">{buildTip(active, recommendation)}</p>
       </div>
     </aside>

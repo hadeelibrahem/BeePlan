@@ -19,6 +19,8 @@ import { useTheme } from "../theme/ThemeContext";
 import type { DashboardRecommendation, TodayDashboard } from "../lib/tasksApi";
 import { focusParentLabel, focusPrimaryTitle } from "../lib/focusDisplay";
 import { RandomStartCard } from "../components/RandomStartCard";
+import { useQuery } from '@tanstack/react-query';
+import { challengesApi, type Challenge } from '../features/challenges/challengesApi';
 
 type Props = SidebarNavHandlers & {
   dashboard: TodayDashboard | null;
@@ -61,8 +63,8 @@ export default function TasksDashboardScreen({
       active="dashboard"
       {...nav}
       onNavigateTasks={onViewTasks}
-      panelTitle="Today"
-      panelCaption="Your next best action."
+      panelTitle={t("dashboardUi.today")}
+      panelCaption={t("dashboardUi.nextBestAction")}
       panelPercent={dashboard?.progress.percent ?? 0}
     >
       <div className="mx-auto w-[min(94vw,1840px)] max-w-full">
@@ -83,12 +85,12 @@ export default function TasksDashboardScreen({
         />
         {summaryError ? (
           <SectionCard className="mb-4 border-red-500/40 shadow-lg shadow-red-950/10">
-            <p className="text-sm text-red-300">{summaryError}</p>
+            <p className="text-sm text-red-300">{t("dashboardUi.loadFailed")}</p>
             <button
               className="mt-2 text-sm font-bold text-[var(--bp-accent-ink)] hover:underline"
               onClick={onRetrySummary}
             >
-              Retry dashboard
+              {t("dashboardUi.retry")}
             </button>
           </SectionCard>
         ) : null}
@@ -97,6 +99,7 @@ export default function TasksDashboardScreen({
         ) : dashboard ? (
           <main className="space-y-4 pb-6 xl:space-y-5 2xl:space-y-6">
             <Greeting dashboard={dashboard} />
+            {accessToken ? <DashboardChallenge token={accessToken} /> : null}
             {accessToken && onOpenRandomStart ? <RandomStartCard onOpen={onOpenRandomStart} /> : null}
             <KpiRow dashboard={dashboard} />
             <Hero
@@ -130,6 +133,8 @@ export default function TasksDashboardScreen({
     </AppLayout>
   );
 }
+
+function DashboardChallenge({ token }: { token: string }) { const { t } = useLanguage(); const q=useQuery({queryKey:['challenges'],queryFn:()=>challengesApi.list(token)}); const c=q.data?.filter((item:Challenge)=>item.status==='active').sort((a,b)=>new Date(a.endAt).getTime()-new Date(b.endAt).getTime())[0]; if(!c)return null; const value=Math.min(c.progressValue,c.targetValue), pct=Math.min(100,value/c.targetValue*100), unit=c.type==='focus_minutes'?t('challenges.minutes'):c.type==='focus_sessions'?t('challenges.sessions'):t('challenges.tasks'); return <SectionCard className="border-[var(--bp-accent)]"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase text-[var(--bp-accent-ink)]">{t('challenges.community')}</p><p className="mt-1 font-bold">{c.title}</p></div><a className="text-sm font-bold text-[var(--bp-accent-ink)]" href={`/challenges/${c.id}`}>{t('challenges.view')}</a></div><p className="mt-3 text-sm">{value} / {c.targetValue} {unit}</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--bp-border)]"><div className="h-full bg-[var(--bp-accent)]" style={{width:`${pct}%`}} /></div><p className="mt-2 text-xs text-[var(--bp-muted)]">{t('challenges.ends')} {new Date(c.endAt).toLocaleString()}</p></SectionCard> }
 
 function Greeting({ dashboard }: { dashboard: TodayDashboard }) {
   const tone: Record<string, string> = {
@@ -166,6 +171,7 @@ function Greeting({ dashboard }: { dashboard: TodayDashboard }) {
 }
 
 function KpiRow({ dashboard }: { dashboard: TodayDashboard }) {
+  const { t } = useLanguage();
   const p = dashboard.progress;
   const priority = dashboard.whyNow.find(
     (reason) => reason.code === "high_priority",
@@ -173,7 +179,7 @@ function KpiRow({ dashboard }: { dashboard: TodayDashboard }) {
   const tomorrow = dashboard.tomorrowPreview;
   return (
     <section
-      aria-label="Today at a glance"
+      aria-label={t('dashboardUi.atAGlance')}
       className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:gap-4"
     >
       <SectionCard className="group overflow-hidden bg-gradient-to-br from-[var(--bp-surface)] to-[var(--bp-accent)]/10 p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg">
@@ -186,15 +192,17 @@ function KpiRow({ dashboard }: { dashboard: TodayDashboard }) {
           </div>
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[.13em] text-[var(--bp-accent-ink)]">
-              Focus Today
+              {t('dashboardUi.focusToday')}
             </p>
             <p
-              aria-label={`${formatMinutes(p.focusMinutes)} focused today`}
+              aria-label={t("dashboardUi.focusedDuration", {
+                value: formatMinutes(p.focusMinutes, t),
+              })}
               className="mt-0.5 text-3xl font-black leading-none tracking-tight text-[var(--bp-text)]"
             >
-              {formatMinutes(p.focusMinutes)}
+              {formatMinutes(p.focusMinutes, t)}
             </p>
-            <p className="mt-1 text-xs text-[var(--bp-muted)]">Focused today</p>
+            <p className="mt-1 text-xs text-[var(--bp-muted)]">{t('dashboardUi.focusedToday')}</p>
           </div>
         </div>
       </SectionCard>
@@ -207,16 +215,16 @@ function KpiRow({ dashboard }: { dashboard: TodayDashboard }) {
             <TriangleAlert size={20} strokeWidth={1.75} />
           </span>
           <p className="text-xs font-bold uppercase tracking-[.13em] text-amber-300">
-            Priority
+            {t('dashboardUi.priority')}
           </p>
         </div>
         <p className="mt-2 text-lg font-black">
-          {priority ? "Attention needed" : dashboard.dailyStatus.status}
+          {priority ? t('dashboardUi.attentionNeeded') : dashboard.dailyStatus.status}
         </p>
         <p className="mt-1 text-xs text-[var(--bp-muted)]">
           {priority
-            ? "A high-priority item is ready"
-            : "Today’s attention signal"}
+            ? t("dashboardUi.highPriorityReady")
+            : t("dashboardUi.attentionSignal")}
         </p>
       </SectionCard>
       <SectionCard className="bg-gradient-to-br from-[var(--bp-surface)] to-sky-400/10 p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg">
@@ -230,20 +238,21 @@ function KpiRow({ dashboard }: { dashboard: TodayDashboard }) {
                 <CalendarDays size={20} strokeWidth={1.75} />
               </span>
               <p className="text-xs font-bold uppercase tracking-[.13em] text-sky-300">
-                Tomorrow
+                {t('dashboardUi.tomorrow')}
               </p>
             </div>
             <p className="mt-2 text-lg font-black">
-              ≈{formatMinutes(tomorrow.estimatedWorkMinutes)} planned
+              {t("dashboardUi.planned", {
+                value: formatMinutes(tomorrow.estimatedWorkMinutes, t),
+              })}
             </p>
             <p className="mt-1 text-xs text-[var(--bp-muted)]">
-              {tomorrow.dueWorkUnits} due{" "}
-              {tomorrow.dueWorkUnits === 1 ? "item" : "items"}
+              {t("dashboardUi.dueItems", { count: tomorrow.dueWorkUnits })}
             </p>
           </div>
           {tomorrow.overloadStatus === "overloaded" ? (
             <span className="rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-amber-300">
-              Busy
+              {t('dashboardUi.busy')}
             </span>
           ) : null}
         </div>
@@ -261,6 +270,7 @@ function Hero({
   onStart: (item: DashboardRecommendation) => Promise<void>;
   onContinue: () => void;
 }) {
+  const { t } = useLanguage();
   const active = dashboard.activeFocus;
   const item = active ?? dashboard.recommendation;
   if (!item)
@@ -272,9 +282,9 @@ function Hero({
           strokeWidth={1.75}
           className="text-[var(--bp-accent-ink)]"
         />
-        <h2 className="mt-2 text-xl font-black">Your day is clear</h2>
+        <h2 className="mt-2 text-xl font-black">{t('dashboardUi.dayClear')}</h2>
         <p className="text-sm text-[var(--bp-muted)]">
-          There is no Focus recommendation right now.
+          {t('dashboardUi.noFocusRecommendation')}
         </p>
       </SectionCard>
     );
@@ -287,7 +297,7 @@ function Hero({
       <div className="flex items-center gap-2 text-[var(--bp-accent-ink)]">
         <Target aria-hidden="true" size={18} strokeWidth={1.75} />
         <p className="text-xs font-bold uppercase tracking-[.2em]">
-          Do this now
+          {t('dashboardUi.doThisNow')}
         </p>
       </div>
       <h2 className="mt-3 text-2xl font-black leading-tight tracking-tight sm:text-3xl">
@@ -299,7 +309,7 @@ function Hero({
       <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-[var(--bp-subtle)]">
         {minutes ? (
           <span className="rounded-full bg-white/5 px-3 py-1.5">
-            {minutes} min focus
+            {t("dashboardUi.minutesFocus", { count: minutes })}
           </span>
         ) : null}
         {"status" in item ? (
@@ -311,7 +321,7 @@ function Hero({
       {dashboard.whyNow.length ? (
         <div className="mt-5">
           <p className="text-xs font-bold uppercase tracking-[.15em] text-[var(--bp-muted)]">
-            Why this
+            {t('dashboardUi.whyThis')}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {dashboard.whyNow.map((reason) => (
@@ -335,7 +345,7 @@ function Hero({
         className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-[#fff47a] bg-gradient-to-br from-[#fff47a] via-[var(--bp-accent)] to-[#f6dc32] px-5 py-3.5 text-base font-black text-[var(--bp-brand-dark)] shadow-lg shadow-[var(--bp-accent)]/32 transition duration-200 hover:-translate-y-0.5 hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bp-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bp-surface)] active:translate-y-0"
       >
         <Target aria-hidden="true" size={16} strokeWidth={1.75} />
-        {active ? "Continue Focus" : "Start Focus"}
+        {active ? t('dashboardUi.continueFocus') : t('dashboardUi.startFocus')}
       </button>
     </SectionCard>
   );
@@ -348,6 +358,7 @@ function Timeline({
   dashboard: TodayDashboard;
   onOpenPlanner?: () => void;
 }) {
+  const { t, language } = useLanguage();
   if (!dashboard.timeline.length)
     return (
       <SectionCard>
@@ -358,17 +369,17 @@ function Timeline({
             strokeWidth={1.75}
             className="text-[var(--bp-muted)]"
           />
-          <h2 className="text-base font-black">Today timeline</h2>
+          <h2 className="text-base font-black">{t('dashboardUi.todayTimeline')}</h2>
         </div>
         <p className="mt-2 text-sm text-[var(--bp-muted)]">
-          No accepted plan is scheduled for today.
+          {t('dashboardUi.noPlanToday')}
         </p>
         {onOpenPlanner ? (
           <button
             className="mt-3 text-sm font-bold text-[var(--bp-accent-ink)] hover:underline"
             onClick={onOpenPlanner}
           >
-            Open planner
+            {t('dashboardUi.openPlanner')}
           </button>
         ) : null}
       </SectionCard>
@@ -386,7 +397,7 @@ function Timeline({
           strokeWidth={1.75}
           className="text-[var(--bp-muted)]"
         />
-        <h2 className="text-base font-black">Today timeline</h2>
+        <h2 className="text-base font-black">{t('dashboardUi.todayTimeline')}</h2>
       </div>
       <div className="mt-4">
         {dashboard.timeline.map((block, index) => {
@@ -396,12 +407,12 @@ function Timeline({
             : Infinity;
           const marker =
             start <= now && now < end
-              ? "NOW"
+              ? t("dashboardUi.now")
               : index === nextIndex
-                ? "NEXT"
-                : "LATER";
+                ? t("dashboardUi.next")
+                : t("dashboardUi.later");
           const current =
-            marker === "NOW" ||
+            marker === t("dashboardUi.now") ||
             (dashboard.timeline.length === 1 && index === 0);
           return (
             <div
@@ -420,7 +431,7 @@ function Timeline({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-black tracking-[.18em] text-[var(--bp-accent-ink)]">
                     {current && dashboard.timeline.length === 1
-                      ? "CURRENT"
+                      ? t("dashboardUi.current")
                       : marker}
                   </span>
                   <span className="text-xs text-[var(--bp-muted)]">
@@ -428,6 +439,7 @@ function Timeline({
                       block.startTime,
                       block.endTime,
                       dashboard.timezone,
+                      language,
                     )}
                   </span>
                 </div>
@@ -437,7 +449,7 @@ function Timeline({
                 </p>
                 {current && dashboard.timeline.length === 1 ? (
                   <p className="mt-2 text-xs text-[var(--bp-muted)]">
-                    Waiting for the next scheduled block…
+                    {t("dashboardUi.waitingNext")}
                   </p>
                 ) : null}
               </div>
@@ -450,6 +462,7 @@ function Timeline({
 }
 
 function Progress({ dashboard }: { dashboard: TodayDashboard }) {
+  const { t } = useLanguage();
   const p = dashboard.progress;
   if (!p.totalWorkUnits)
     return (
@@ -461,16 +474,16 @@ function Progress({ dashboard }: { dashboard: TodayDashboard }) {
             strokeWidth={1.75}
             className="text-[var(--bp-muted)]"
           />
-          <h2 className="text-base font-black">Today’s Activity</h2>
+          <h2 className="text-base font-black">{t("dashboardUi.todayActivity")}</h2>
         </div>
         <div className="mt-3 flex items-baseline gap-2">
           <strong className="text-2xl text-[var(--bp-accent-ink)]">
-            {formatMinutes(p.focusMinutes)}
+            {formatMinutes(p.focusMinutes, t)}
           </strong>
-          <span className="text-sm text-[var(--bp-muted)]">Focus</span>
+          <span className="text-sm text-[var(--bp-muted)]">{t("dashboardUi.focus")}</span>
         </div>
         <p className="mt-1 text-sm text-[var(--bp-muted)]">
-          No scheduled work today.
+          {t("dashboardUi.noScheduledWork")}
         </p>
       </SectionCard>
     );
@@ -485,13 +498,13 @@ function Progress({ dashboard }: { dashboard: TodayDashboard }) {
               strokeWidth={1.75}
               className="text-[var(--bp-muted)]"
             />
-            <h2 className="text-base font-black">Today’s progress</h2>
+            <h2 className="text-base font-black">{t("dashboardUi.todayProgress")}</h2>
           </div>
           <p className="mt-1 text-xs text-[var(--bp-muted)]">
-            <span>
-              {p.completedWorkUnits}/{p.totalWorkUnits} units
-            </span>{" "}
-            complete
+            {t("dashboardUi.unitsComplete", {
+              completed: p.completedWorkUnits,
+              total: p.totalWorkUnits,
+            })}
           </p>
         </div>
         <strong className="text-2xl text-[var(--bp-accent-ink)]">
@@ -505,14 +518,15 @@ function Progress({ dashboard }: { dashboard: TodayDashboard }) {
         />
       </div>
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--bp-muted)]">
-        <span>{formatMinutes(p.focusMinutes)} Focus</span>
-        <span>{formatMinutes(p.remainingEstimatedMinutes)} remaining</span>
+        <span>{t("dashboardUi.focusValue", { value: formatMinutes(p.focusMinutes, t) })}</span>
+        <span>{t("dashboardUi.remaining", { value: formatMinutes(p.remainingEstimatedMinutes, t) })}</span>
       </div>
     </SectionCard>
   );
 }
 
 function Tomorrow({ dashboard }: { dashboard: TodayDashboard }) {
+  const { t: translate } = useLanguage();
   const t = dashboard.tomorrowPreview;
   const overloaded = t.overloadStatus === "overloaded";
   return (
@@ -530,28 +544,31 @@ function Tomorrow({ dashboard }: { dashboard: TodayDashboard }) {
           strokeWidth={1.75}
           className="text-sky-300"
         />
-        <h2 className="text-base font-black">Tomorrow</h2>
+        <h2 className="text-base font-black">{translate("dashboardUi.tomorrow")}</h2>
       </div>
       {overloaded ? (
         <>
           <p className="mt-2 text-sm font-bold text-orange-300">
-            Heavy workload tomorrow
+            {translate("dashboardUi.heavyWorkload")}
           </p>
-          <span className="sr-only">Tomorrow is overloaded.</span>
+          <span className="sr-only">{translate("dashboardUi.overloaded")}</span>
         </>
       ) : null}
       <p className="mt-2 text-sm text-[var(--bp-subtle)]">
-        ≈{formatMinutes(t.estimatedWorkMinutes)} planned · {t.dueWorkUnits} due
-        items · {t.highPriorityItems} high priority
+        {translate("dashboardUi.tomorrowSummary", {
+          estimate: formatMinutes(t.estimatedWorkMinutes, translate),
+          due: t.dueWorkUnits,
+          priority: t.highPriorityItems,
+        })}
       </p>
       {t.capacityMinutes !== null ? (
         <p className="mt-1 text-xs text-[var(--bp-muted)]">
-          {formatMinutes(t.capacityMinutes)} planned capacity
+          {translate("dashboardUi.plannedCapacity", { value: formatMinutes(t.capacityMinutes, translate) })}
         </p>
       ) : null}
       {overloaded ? (
         <p className="mt-2 text-xs text-[var(--bp-muted)]">
-          Review your plan tonight.
+          {translate("dashboardUi.reviewPlan")}
         </p>
       ) : null}
     </SectionCard>
@@ -559,9 +576,10 @@ function Tomorrow({ dashboard }: { dashboard: TodayDashboard }) {
 }
 
 function Suggestions({ dashboard }: { dashboard: TodayDashboard }) {
+  const { t } = useLanguage();
   return (
     <SectionCard>
-      <h2 className="text-base font-black">Suggestions</h2>
+      <h2 className="text-base font-black">{t("dashboardUi.suggestions")}</h2>
       {dashboard.suggestions.map((suggestion) => (
         <div key={suggestion.id} className="mt-3">
           <p className="font-semibold">{suggestion.title}</p>
@@ -574,17 +592,18 @@ function Suggestions({ dashboard }: { dashboard: TodayDashboard }) {
   );
 }
 function Empty({ onViewTasks }: { onViewTasks: () => void }) {
+  const { t } = useLanguage();
   return (
     <SectionCard className="py-8 text-center">
-      <h2 className="text-lg font-black">Nothing planned yet</h2>
+      <h2 className="text-lg font-black">{t("dashboardUi.nothingPlanned")}</h2>
       <p className="mt-2 text-sm text-[var(--bp-muted)]">
-        Add a task or accept a daily plan to see your guided day here.
+        {t("dashboardUi.emptyDescription")}
       </p>
       <button
         className="mt-4 text-sm font-bold text-[var(--bp-accent-ink)] hover:underline"
         onClick={onViewTasks}
       >
-        View tasks{" "}
+        {t("dashboardUi.viewTasks")}{" "}
         <DirectionalChevron direction="forward" className="inline h-4 w-4" />
       </button>
     </SectionCard>
@@ -609,18 +628,23 @@ function Skeleton() {
     </div>
   );
 }
-function formatMinutes(minutes: number) {
+function formatMinutes(
+  minutes: number,
+  t: ReturnType<typeof useLanguage>["t"],
+) {
   const hours = Math.floor(Math.max(0, minutes) / 60);
   const rest = Math.max(0, minutes) % 60;
-  return hours ? `${hours}h${rest ? ` ${rest}m` : ""}` : `${rest}m`;
+  if (!hours) return t("dashboardUi.minutes", { count: rest });
+  if (!rest) return t("dashboardUi.hours", { count: hours });
+  return t("dashboardUi.hoursMinutes", { hours, minutes: rest });
 }
-function formatRange(start: string, end: string | null, timezone: string) {
+function formatRange(start: string, end: string | null, timezone: string, language: "en" | "ar") {
   const options: Intl.DateTimeFormatOptions = {
     hour: "numeric",
     minute: "2-digit",
     timeZone: timezone,
   };
   const format = (value: string) =>
-    new Intl.DateTimeFormat(undefined, options).format(new Date(value));
-  return end ? `${format(start)}–${format(end)}` : `${format(start)}–now`;
+    new Intl.DateTimeFormat(language === "ar" ? "ar" : "en-US", options).format(new Date(value));
+  return end ? `${format(start)}–${format(end)}` : format(start);
 }

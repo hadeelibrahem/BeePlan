@@ -12,7 +12,11 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
   DB_SSL: booleanFromEnvironment.default(false),
   DB_KEEP_ALIVE: booleanFromEnvironment.default(true),
-  DB_KEEP_ALIVE_INITIAL_DELAY_MS: z.coerce.number().int().nonnegative().default(10_000),
+  DB_KEEP_ALIVE_INITIAL_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(10_000),
   DB_POOL_MIN: z.coerce.number().int().min(0).max(10).default(1),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(30).default(10),
   DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
@@ -32,7 +36,6 @@ export const envSchema = z.object({
   GOOGLE_WEB_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
-  GOOGLE_CALENDAR_CALLBACK_URL: z.string().url().optional(),
   PUBLIC_BASE_URL: z.string().url().optional(),
   API_PUBLIC_URL: z.string().url().optional(),
   FRONTEND_URL: z.string().url().optional(),
@@ -41,6 +44,8 @@ export const envSchema = z.object({
   QWEN_API_KEY: z.string().optional(),
   QWEN_BASE_URL: z.string().url().optional(),
   QWEN_MODEL: z.string().optional(),
+  ADMIN_ERROR_ANALYSIS_MODEL: z.string().optional(),
+  ADMIN_FEEDBACK_CLUSTERING_MODEL: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_BASE_URL: z.string().url().optional(),
   OPENROUTER_MODEL: z.string().optional(),

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLanguage } from '../i18n/LanguageContext'
 import {
   downloadAttachment,
   getAttachmentPreviewBlob,
@@ -39,12 +40,13 @@ export default function AttachmentPreviewModal({
   onClose,
   onError,
 }: AttachmentPreviewModalProps) {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
   const [textPreview, setTextPreview] = useState('')
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetPreview | null>(null)
   const [activeSheetName, setActiveSheetName] = useState('')
-  const [error, setError] = useState('')
+  const [hasError, setHasError] = useState(false)
   const fileName = attachment?.fileName ?? attachment?.name ?? 'Attachment'
   const previewKind = useMemo(() => getPreviewKind(attachment), [attachment])
   const canFetchPreview = ['image', 'pdf', 'text', 'html', 'audio', 'video', 'spreadsheet'].includes(previewKind)
@@ -56,7 +58,7 @@ export default function AttachmentPreviewModal({
       setTextPreview('')
       setSpreadsheetPreview(null)
       setActiveSheetName('')
-      setError('')
+      setHasError(false)
       return
     }
 
@@ -67,7 +69,7 @@ export default function AttachmentPreviewModal({
     setPreviewUrl('')
     setTextPreview('')
     setSpreadsheetPreview(null)
-    setError('')
+    setHasError(false)
 
     getAttachmentPreviewBlob(accessToken, taskId, attachment)
       .then(async ({ blob }) => {
@@ -102,9 +104,9 @@ export default function AttachmentPreviewModal({
         objectUrl = URL.createObjectURL(blob)
         setPreviewUrl(objectUrl)
       })
-      .catch((previewError: unknown) => {
+      .catch(() => {
         if (!cancelled) {
-          setError(previewError instanceof Error ? previewError.message : 'Unable to load attachment preview.')
+          setHasError(true)
         }
       })
       .finally(() => {
@@ -125,9 +127,8 @@ export default function AttachmentPreviewModal({
     try {
       await downloadAttachment(accessToken, taskId, attachment)
     } catch (downloadError) {
-      const message = downloadError instanceof Error ? downloadError.message : 'Unable to download attachment.'
-      setError(message)
-      onError?.(message)
+      setHasError(true)
+      onError?.(t('attachmentPreview.downloadFailed'))
     }
   }
 
@@ -137,20 +138,21 @@ export default function AttachmentPreviewModal({
         <header className="flex items-center justify-between gap-3 border-b border-[var(--bp-border)] px-4 py-3">
           <div className="min-w-0">
             <h2 className="truncate text-base font-black text-[var(--bp-text)]">{fileName}</h2>
-            <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{attachment.fileType ?? attachment.type ?? 'Attached file'}</p>
+            <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{attachment.fileType ?? attachment.type ?? t('attachmentPreview.attachment')}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => void handleDownload()}
+              aria-label={t('attachmentPreview.download')}
               className="rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-3 py-2 text-xs font-black text-[var(--bp-accent-text)]"
             >
-              Download
+              {t('attachmentPreview.download')}
             </button>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close preview"
+              aria-label={t('attachmentPreview.close')}
               className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--bp-border)] text-lg font-black text-[var(--bp-text)]"
             >
               x
@@ -161,10 +163,10 @@ export default function AttachmentPreviewModal({
         <div className="min-h-[360px] flex-1 overflow-auto bg-[var(--bp-bg)] p-4">
           {loading ? (
             <div className="flex h-[52vh] items-center justify-center text-sm font-bold text-[var(--bp-muted)]">
-              Loading preview...
+              {t('attachmentPreview.loadingPreview')}
             </div>
-          ) : error ? (
-            <PreviewFallback message={error} onDownload={handleDownload} />
+          ) : hasError ? (
+            <PreviewFallback message={t('attachmentPreview.loadFailed')} onDownload={handleDownload} />
           ) : canFetchPreview ? (
             <PreviewContent
               kind={previewKind}
@@ -176,7 +178,7 @@ export default function AttachmentPreviewModal({
             />
           ) : (
             <PreviewFallback
-              message="Preview is not available for this file type. You can download it instead."
+              message={t('attachmentPreview.unavailable')}
               onDownload={handleDownload}
             />
           )}
@@ -247,10 +249,11 @@ function SpreadsheetPreviewTable({
   preview: SpreadsheetPreview | null
   onSelectSheet: (sheetName: string) => void
 }) {
+  const { t } = useLanguage()
   if (!preview) {
     return (
       <div className="flex h-[52vh] items-center justify-center text-sm font-bold text-[var(--bp-muted)]">
-        Loading spreadsheet...
+        {t('attachmentPreview.loadingSpreadsheet')}
       </div>
     )
   }
@@ -258,7 +261,7 @@ function SpreadsheetPreviewTable({
   if (!preview.rows.length) {
     return (
       <div className="flex h-[52vh] items-center justify-center rounded-lg border border-dashed border-[var(--bp-border)] text-sm font-semibold text-[var(--bp-muted)]">
-        This sheet is empty.
+        {t('attachmentPreview.emptySheet')}
       </div>
     )
   }
@@ -270,7 +273,7 @@ function SpreadsheetPreviewTable({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-black uppercase text-[var(--bp-muted)]">Sheet</p>
+          <p className="text-xs font-black uppercase text-[var(--bp-muted)]">{t('attachmentPreview.sheet')}</p>
           <p className="truncate text-sm font-bold text-[var(--bp-text)]">{preview.activeSheet}</p>
         </div>
         {preview.sheetNames.length > 1 ? (
@@ -295,7 +298,7 @@ function SpreadsheetPreviewTable({
 
       {preview.truncated ? (
         <p className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-surface)] px-3 py-2 text-xs font-semibold text-[var(--bp-muted)]">
-          Showing the first {MAX_SPREADSHEET_ROWS} rows and {MAX_SPREADSHEET_COLUMNS} columns of {preview.totalRows} rows and {preview.totalColumns} columns.
+          {t('attachmentPreview.truncated', { rows: MAX_SPREADSHEET_ROWS, columns: MAX_SPREADSHEET_COLUMNS, totalRows: preview.totalRows, totalColumns: preview.totalColumns })}
         </p>
       ) : null}
 
@@ -336,6 +339,7 @@ function PreviewFallback({
   message: string
   onDownload: () => Promise<void>
 }) {
+  const { t } = useLanguage()
   return (
     <div className="flex min-h-[52vh] flex-col items-center justify-center rounded-lg border border-dashed border-[var(--bp-border)] px-4 text-center">
       <p className="max-w-md text-sm font-semibold text-[var(--bp-subtle)]">{message}</p>
@@ -344,7 +348,7 @@ function PreviewFallback({
         onClick={() => void onDownload()}
         className="mt-4 rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-4 py-2 text-sm font-black text-[var(--bp-accent-text)]"
       >
-        Download
+        {t('attachmentPreview.download')}
       </button>
     </div>
   )

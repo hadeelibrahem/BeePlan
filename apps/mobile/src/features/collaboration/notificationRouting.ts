@@ -8,6 +8,8 @@ export type NotificationDestination =
   | { screen: 'Focus' }
   | { screen: 'AiDailyPlanner' }
   | { screen: 'Notifications' }
+  | { screen: 'Challenges' }
+  | { screen: 'ChallengeDetail'; challengeId: string }
   | null
 
 const COLLABORATION_TYPES = new Set<string>(['comment_added', 'mention', 'member_joined', 'member_removed', 'member_role_changed', 'ownership_transferred'])
@@ -15,6 +17,9 @@ const COLLABORATION_TYPES = new Set<string>(['comment_added', 'mention', 'member
 /** Mirrors the web notification route rules using mobile stack destinations. */
 export function notificationDestination(notification: AppNotification): NotificationDestination {
   const data = notification.data ?? {}
+  if (notification.type === 'challenge_completed') {
+    return typeof data.challengeId === 'string' && data.challengeId ? { screen: 'ChallengeDetail', challengeId: data.challengeId } : { screen: 'Challenges' }
+  }
   const reminderId = typeof data.reminderId === 'string' ? data.reminderId : undefined
   if ((notification.type === 'reminder' || notification.type === 'reminder_updated') && reminderId) return { screen: 'ReminderDetails', reminderId }
   const route = typeof data.route === 'string' ? data.route : ''

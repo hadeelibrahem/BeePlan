@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { DirectionalChevron } from './layout'
 import { useLanguage } from '../i18n/LanguageContext'
 import type { ApiSubtask, ApiSubtaskPriority, ApiSubtaskStatus, SubtaskPayload } from '../lib/tasksApi'
-import { SUBTASK_PRIORITY_LABEL, SUBTASK_STATUS_LABEL } from '../lib/subtaskDisplay'
 
 const PRIORITIES: ApiSubtaskPriority[] = ['low', 'medium', 'high', 'urgent']
 const STATUSES: ApiSubtaskStatus[] = ['todo', 'in_progress', 'done', 'blocked', 'missed']
@@ -135,7 +134,7 @@ export default function SubtaskFormModal({
   onDelete,
   onSubmit,
 }: Props) {
-  const { isRTL } = useLanguage()
+  const { isRTL, t } = useLanguage()
   const [values, setValues] = useState<FormValues>(() => fromSubtask(initialSubtask))
   const [submitting, setSubmitting] = useState(false)
 
@@ -172,11 +171,11 @@ export default function SubtaskFormModal({
               className="mb-4 flex items-center gap-2 text-sm text-[var(--bp-muted)] hover:text-[var(--bp-text)]"
             >
               <DirectionalChevron direction="back" isRTL={isRTL} className="h-4 w-4" />
-              Back
+              {t('taskForm.back')}
             </button>
-            <h2 className="text-2xl font-black">{isEdit ? 'Edit Subtask' : 'Add Subtask'}</h2>
+            <h2 className="text-2xl font-black">{isEdit ? t('taskForm.editSubtask') : t('taskForm.addSubtask')}</h2>
             <p className="mt-1 text-sm text-[var(--bp-muted)]">
-              {isEdit ? 'Update the details for this subtask' : 'Create a new subtask'}
+              {isEdit ? t('taskForm.updateSubtask') : t('taskForm.createSubtask')}
             </p>
           </div>
 
@@ -186,27 +185,27 @@ export default function SubtaskFormModal({
               onClick={onDelete}
               className="rounded-xl border border-red-500/40 px-4 py-3 text-sm font-bold text-red-300 hover:bg-red-500/10"
             >
-              Delete
+              {t('taskForm.delete')}
             </button>
           ) : null}
         </div>
 
         <div className="space-y-5">
           <div>
-            <FieldLabel label="Subtask Title" required />
+            <FieldLabel label={t('taskForm.subtaskTitle')} required />
             <input
               className={inputClass}
-              placeholder="Enter subtask title..."
+              placeholder={t('taskForm.titlePlaceholder')}
               value={values.title}
               onChange={(e) => update('title', e.target.value)}
             />
           </div>
 
           <div>
-            <FieldLabel label="Description" />
+            <FieldLabel label={t('taskForm.description')} />
             <textarea
               className={`${inputClass} min-h-24 resize-none`}
-              placeholder="Describe this subtask..."
+              placeholder={t('taskForm.descriptionPlaceholder')}
               value={values.description}
               onChange={(e) => update('description', e.target.value)}
             />
@@ -214,15 +213,15 @@ export default function SubtaskFormModal({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <FieldLabel label="Priority" />
+              <FieldLabel label={t('taskForm.priority')} />
               <div className="grid grid-cols-2 gap-2">
                 {PRIORITIES.map((p) => (
-                  <Segment key={p} label={SUBTASK_PRIORITY_LABEL[p]} active={values.priority === p} onClick={() => update('priority', p)} />
+                  <Segment key={p} label={t(`taskLabels.priority.${p}`)} active={values.priority === p} onClick={() => update('priority', p)} />
                 ))}
               </div>
             </div>
             <div>
-              <FieldLabel label="Status" />
+              <FieldLabel label={t('taskForm.status')} />
               <select
                 className={inputClass}
                 value={values.status}
@@ -230,7 +229,7 @@ export default function SubtaskFormModal({
               >
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {SUBTASK_STATUS_LABEL[s]}
+                    {t(`taskLabels.status.${s === 'in_progress' ? 'inProgress' : s}`)}
                   </option>
                 ))}
               </select>
@@ -247,14 +246,14 @@ export default function SubtaskFormModal({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <FieldLabel label="Start Date" />
+              <FieldLabel label={t('taskForm.startDate')} />
               <div className="grid grid-cols-2 gap-2">
                 <input type="date" className={inputClass} value={values.startDate} onChange={(e) => update('startDate', e.target.value)} />
                 <input type="time" className={inputClass} value={values.startTime} onChange={(e) => update('startTime', e.target.value)} />
               </div>
             </div>
             <div>
-              <FieldLabel label="Due Date" />
+              <FieldLabel label={t('taskForm.dueDate')} />
               <div className="grid grid-cols-2 gap-2">
                 <input type="date" className={inputClass} value={values.dueDate} onChange={(e) => update('dueDate', e.target.value)} />
                 <input type="time" className={inputClass} value={values.dueTime} onChange={(e) => update('dueTime', e.target.value)} />
@@ -264,7 +263,7 @@ export default function SubtaskFormModal({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <FieldLabel label="Estimated Duration (minutes)" />
+              <FieldLabel label={t('taskForm.estimatedDuration')} />
               <input
                 type="number"
                 min={0}
@@ -275,10 +274,10 @@ export default function SubtaskFormModal({
               />
             </div>
             <div>
-              <FieldLabel label="Assignee" />
+              <FieldLabel label={t('taskForm.assignee')} />
               <input
                 className={inputClass}
-                placeholder="Optional"
+                placeholder={t('taskForm.optional')}
                 value={values.assignee}
                 onChange={(e) => update('assignee', e.target.value)}
               />
@@ -310,7 +309,7 @@ export default function SubtaskFormModal({
                 onChange={(e) => update('reminderEnabled', e.target.checked)}
                 className="h-4 w-4 accent-[var(--bp-accent)]"
               />
-              <span className="text-sm font-bold text-[var(--bp-text)]">Enable reminder</span>
+              <span className="text-sm font-bold text-[var(--bp-text)]">{t('taskForm.reminder')}</span>
             </label>
             {values.reminderEnabled ? (
               <div className="mt-3">
@@ -328,7 +327,7 @@ export default function SubtaskFormModal({
           </div>
 
           <div>
-            <FieldLabel label="Tags (comma separated)" />
+              <FieldLabel label={t('taskForm.tags')} />
             <input
               className={inputClass}
               placeholder="e.g. research, writing"
@@ -339,7 +338,7 @@ export default function SubtaskFormModal({
 
           {siblings.length ? (
             <div>
-              <FieldLabel label="Depends On" />
+              <FieldLabel label={t('taskForm.dependsOn')} />
               <div className="flex flex-wrap gap-2">
                 {siblings.map((sib) => (
                   <button
@@ -360,10 +359,10 @@ export default function SubtaskFormModal({
           ) : null}
 
           <div>
-            <FieldLabel label="Notes" />
+            <FieldLabel label={t('taskForm.notes')} />
             <textarea
               className={`${inputClass} min-h-20 resize-none`}
-              placeholder="Additional notes (optional)..."
+              placeholder={t('taskForm.notesPlaceholder')}
               value={values.notes}
               onChange={(e) => update('notes', e.target.value)}
             />
@@ -376,7 +375,7 @@ export default function SubtaskFormModal({
             onClick={onCancel}
             className="rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-10 py-4 font-bold text-[var(--bp-text)] hover:bg-[var(--bp-border)]"
           >
-            Cancel
+            {t('taskForm.cancel')}
           </button>
           <button
             type="button"
@@ -384,7 +383,7 @@ export default function SubtaskFormModal({
             onClick={() => void handleSubmit()}
             className="rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-10 py-4 font-black text-[var(--bp-accent-text)] shadow-lg shadow-[var(--bp-accent)]/20 disabled:opacity-50"
           >
-            {isEdit ? 'Save Changes' : 'Add Subtask'}
+            {isEdit ? t('taskForm.saveChanges') : t('taskForm.addSubtask')}
           </button>
         </div>
       </div>

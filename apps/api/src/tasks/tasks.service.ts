@@ -47,7 +47,6 @@ import {
   users,
 } from '../db/schema';
 import { Optional } from '@nestjs/common';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { TaskAssistantService } from '../task-assistant/task-assistant.service';
 import type { NotificationType } from '../notifications/notification-types';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -133,7 +132,6 @@ export class TasksService {
     private readonly notifications: NotificationsService,
     private readonly commitmentsService: RecurringCommitmentsService,
     private readonly weatherTravel: WeatherTravelService,
-    @Optional() private readonly googleCalendar?: GoogleCalendarService,
     @Optional() private readonly taskAssistant?: TaskAssistantService,
   ) {}
 
@@ -182,51 +180,71 @@ export class TasksService {
       const [createdTask] = await tx
         .insert(tasks)
         .values({
-        userId,
-        title: dto.title.trim(),
-        description: dto.description?.trim() || null,
-        priority: dto.priority ?? 'medium',
-        status,
-        progress,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-        dueTime: dto.dueTime || null,
-        scheduledDate: schedule?.scheduledDate ?? null,
-        scheduledStartTime: schedule?.scheduledStartTime ?? null,
-        scheduledEndTime: schedule?.scheduledEndTime ?? null,
-        destination: dto.destination ?? null,
-        weatherTravelEnabled: dto.weatherTravelEnabled ?? false,
-        travelMode: dto.travelMode ?? null,
-        category: dto.category?.trim() || null,
-        notes: dto.notes?.trim() || null,
-        estimatedTimeMinutes,
-        manualSpentMinutes,
-        spentTimeMinutes,
-        remainingTimeMinutes: this.calculateRemainingMinutes(
+          userId,
+          title: dto.title.trim(),
+          description: dto.description?.trim() || null,
+          priority: dto.priority ?? 'medium',
+          status,
+          progress,
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+          dueTime: dto.dueTime || null,
+          scheduledDate: schedule?.scheduledDate ?? null,
+          scheduledStartTime: schedule?.scheduledStartTime ?? null,
+          scheduledEndTime: schedule?.scheduledEndTime ?? null,
+          destination: dto.destination ?? null,
+          weatherTravelEnabled: dto.weatherTravelEnabled ?? false,
+          travelMode: dto.travelMode ?? null,
+          category: dto.category?.trim() || null,
+          notes: dto.notes?.trim() || null,
           estimatedTimeMinutes,
+          manualSpentMinutes,
           spentTimeMinutes,
-        ),
-        reminderEnabled: dto.reminderEnabled ?? false,
-        reminderBeforeMinutes: dto.reminderBeforeMinutes ?? null,
-        labels: this.normalizeLabelNames(dto.labels),
-        attachments: dto.attachments ?? null,
-        isFavorite: dto.isFavorite ?? false,
-        isFocusTask: dto.isFocusTask ?? false,
+          remainingTimeMinutes: this.calculateRemainingMinutes(
+            estimatedTimeMinutes,
+            spentTimeMinutes,
+          ),
+          reminderEnabled: dto.reminderEnabled ?? false,
+          reminderBeforeMinutes: dto.reminderBeforeMinutes ?? null,
+          labels: this.normalizeLabelNames(dto.labels),
+          attachments: dto.attachments ?? null,
+          isFavorite: dto.isFavorite ?? false,
+          isFocusTask: dto.isFocusTask ?? false,
         })
         .returning();
 
       if (dto.subtasks?.length) {
         const createdSubtasks = await tx
           .insert(subtasks)
-          .values(dto.subtasks.map((subtask, index) => this.toSubtaskInsert(createdTask.id, subtask, index)))
+          .values(
+            dto.subtasks.map((subtask, index) =>
+              this.toSubtaskInsert(createdTask.id, subtask, index),
+            ),
+          )
           .returning({ id: subtasks.id, title: subtasks.title });
-        const subtaskIdByTitle = new Map(createdSubtasks.map((row) => [row.title.trim().toLowerCase(), row.id]));
-        const dependencyRows = dto.subtasks.flatMap((subtask, index) =>
-          (subtask.dependencyTitles ?? []).map((title) => ({
-            subtaskId: createdSubtasks[index].id,
-            dependsOnSubtaskId: subtaskIdByTitle.get(title.trim().toLowerCase()),
-          })).filter((row): row is { subtaskId: string; dependsOnSubtaskId: string } => Boolean(row.dependsOnSubtaskId && row.dependsOnSubtaskId !== row.subtaskId)),
+        const subtaskIdByTitle = new Map(
+          createdSubtasks.map((row) => [
+            row.title.trim().toLowerCase(),
+            row.id,
+          ]),
         );
-        if (dependencyRows.length) await tx.insert(subtaskDependencies).values(dependencyRows);
+        const dependencyRows = dto.subtasks.flatMap((subtask, index) =>
+          (subtask.dependencyTitles ?? [])
+            .map((title) => ({
+              subtaskId: createdSubtasks[index].id,
+              dependsOnSubtaskId: subtaskIdByTitle.get(
+                title.trim().toLowerCase(),
+              ),
+            }))
+            .filter(
+              (row): row is { subtaskId: string; dependsOnSubtaskId: string } =>
+                Boolean(
+                  row.dependsOnSubtaskId &&
+                  row.dependsOnSubtaskId !== row.subtaskId,
+                ),
+            ),
+        );
+        if (dependencyRows.length)
+          await tx.insert(subtaskDependencies).values(dependencyRows);
       }
       return createdTask;
     });
@@ -237,8 +255,11 @@ export class TasksService {
 
     await this.recalculateProgress(userId, task.id);
     await this.addActivity(userId, task.id, 'created', 'Task created');
-    void this.googleCalendar?.enqueueTaskSync(userId, task.id);
-    await this.taskAssistant?.refreshWithLogging(userId, task.id, 'task_created');
+    await this.taskAssistant?.refreshWithLogging(
+      userId,
+      task.id,
+      'task_created',
+    );
 
     return this.findOne(userId, task.id);
   }
@@ -647,9 +668,10 @@ export class TasksService {
         memberRoleByTaskId.get(item.id) === 'owner',
     }));
     const preparedTasks = actionableTasks.map((item) => {
-      const role = item.userId === userId
-        ? 'owner' as const
-        : (memberRoleByTaskId.get(item.id) ?? 'viewer' as const);
+      const role =
+        item.userId === userId
+          ? ('owner' as const)
+          : (memberRoleByTaskId.get(item.id) ?? ('viewer' as const));
       return {
         ...item,
         // The assembled task entity historically reports false for
@@ -852,6 +874,10 @@ export class TasksService {
     }
     if (dto.priority !== undefined) updateData.priority = dto.priority;
     if (dto.status !== undefined) updateData.status = dto.status;
+    if (dto.status === 'done' && existingTask.status !== 'done')
+      updateData.completedAt = new Date();
+    if (dto.status !== undefined && dto.status !== 'done')
+      updateData.completedAt = null;
     if (dto.progress !== undefined) updateData.progress = dto.progress;
     if (dto.dueDate !== undefined) {
       updateData.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
@@ -911,8 +937,11 @@ export class TasksService {
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(userId, taskId, 'updated', 'Task updated');
     await this.notifyMembersOfChange(userId, existingTask, dto);
-    void this.googleCalendar?.enqueueTaskSync(userId, taskId);
-    await this.taskAssistant?.refreshWithLogging(userId, taskId, 'task_updated');
+    await this.taskAssistant?.refreshWithLogging(
+      userId,
+      taskId,
+      'task_updated',
+    );
 
     return this.findOne(userId, taskId);
   }
@@ -921,7 +950,6 @@ export class TasksService {
     // Deleting a task is owner-only (spec: editors cannot delete).
     await this.getTaskForUser(userId, taskId, 'owner');
     await this.db.delete(tasks).where(eq(tasks.id, taskId));
-    void this.googleCalendar?.enqueueTaskSync(userId, taskId, 'delete');
   }
 
   async changeStatus(userId: string, taskId: string, dto: TaskStatusDto) {
@@ -942,6 +970,12 @@ export class TasksService {
       .update(tasks)
       .set({
         status: dto.status,
+        completedAt:
+          dto.status === 'done'
+            ? task.status === 'done'
+              ? task.completedAt
+              : new Date()
+            : null,
         updatedAt: new Date(),
       })
       .where(eq(tasks.id, taskId));
@@ -959,13 +993,16 @@ export class TasksService {
       },
     );
     await this.notifyMembersOfChange(userId, task, { status: dto.status });
-    void this.googleCalendar?.enqueueTaskSync(userId, taskId);
     if (dto.status === 'done' || dto.status === 'missed')
       void this.taskAssistant
         ?.invalidateTask(userId, taskId)
         .catch(() => undefined);
     else
-      await this.taskAssistant?.refreshWithLogging(userId, taskId, 'task_status_changed');
+      await this.taskAssistant?.refreshWithLogging(
+        userId,
+        taskId,
+        'task_status_changed',
+      );
 
     return this.findOne(userId, taskId);
   }
@@ -1139,7 +1176,11 @@ export class TasksService {
 
     await this.recalculateProgress(userId, taskId);
     await this.addActivity(userId, taskId, 'subtask_added', 'Subtask added');
-    await this.taskAssistant?.refreshWithLogging(userId, taskId, 'subtask_created');
+    await this.taskAssistant?.refreshWithLogging(
+      userId,
+      taskId,
+      'subtask_created',
+    );
 
     return this.findOne(userId, taskId);
   }
@@ -1480,7 +1521,11 @@ export class TasksService {
       'subtask_deleted',
       'Subtask deleted',
     );
-    await this.taskAssistant?.refreshWithLogging(userId, taskId, 'subtask_deleted');
+    await this.taskAssistant?.refreshWithLogging(
+      userId,
+      taskId,
+      'subtask_deleted',
+    );
 
     return this.findOne(userId, taskId);
   }

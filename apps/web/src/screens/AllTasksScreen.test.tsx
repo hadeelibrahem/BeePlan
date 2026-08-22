@@ -194,6 +194,22 @@ describe('AllTasksScreen completion checkbox', () => {
   })
 })
 
+describe('AllTasksScreen primary creation action', () => {
+  it('keeps Add Task available and opens the existing creation chooser', async () => {
+    const user = userEvent.setup()
+    const onCreateTask = vi.fn()
+    renderScreen([makeTask()], { onCreateTask })
+    const fab = await screen.findByRole('button', { name: /add task/i })
+    expect(fab).toHaveTextContent('+')
+    expect(fab).toHaveClass('fixed', 'bottom-6', 'z-40')
+    await user.click(fab)
+    expect(screen.getByRole('dialog', { name: 'Add Task' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /manual task/i }))
+    expect(onCreateTask).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('+ Add Task')).not.toBeInTheDocument()
+  })
+})
+
 describe('AllTasksScreen inline status changes', () => {
   beforeEach(() => {
     vi.clearAllMocks()

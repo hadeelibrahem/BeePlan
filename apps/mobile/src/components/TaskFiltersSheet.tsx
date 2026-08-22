@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { PrimaryButton, SecondaryButton } from './layout'
 import type { TaskDueFilter, TaskFilterSummary } from '../lib/tasksApi'
 import { useTheme } from '../theme/useTheme'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export type TaskFiltersSheetProps = {
   visible: boolean
@@ -39,6 +40,7 @@ export function TaskFiltersSheet({
 }: TaskFiltersSheetProps) {
   const { theme } = useTheme()
   const { colors } = theme
+  const { t } = useLanguage()
   const insets = useSafeAreaInsets()
   const counts = summary?.counts
   const categories = summary?.categories ?? []
@@ -46,7 +48,7 @@ export function TaskFiltersSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}>
-        <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" accessibilityLabel="Close filters sheet" />
+        <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" accessibilityLabel={t('allTasks.closeFilters')} />
 
         <View
           className="rounded-t-[28px] border px-5 pt-3"
@@ -65,40 +67,40 @@ export function TaskFiltersSheet({
 
           <View className="mb-5 items-center">
             <Text className="text-2xl font-black" style={{ color: colors.text }}>
-              Filters
+              {t('allTasks.filters')}
             </Text>
             <Text className="mt-2 text-center text-sm" style={{ color: colors.secondaryText }}>
-              Narrow down your task list
+              {t('allTasks.filterHelp')}
             </Text>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
             <Text className="mb-2 text-xs font-black uppercase" style={{ color: colors.secondaryText }}>
-              Quick Filters
+              {t('allTasks.quickFilters')}
             </Text>
             <View className="mb-5 gap-2">
               <FilterRow
-                label="Overdue"
+                label={t('taskLabels.due.overdue')}
                 count={counts?.overdue ?? 0}
                 active={dueFilter === 'overdue'}
                 onPress={() => onToggleDue('overdue')}
               />
               <FilterRow
-                label="Due Today"
+                label={t('taskLabels.due.dueToday')}
                 count={counts?.today ?? 0}
                 active={dueFilter === 'today'}
                 onPress={() => onToggleDue('today')}
               />
               <FilterRow
-                label="Upcoming"
+                label={t('taskLabels.due.upcoming')}
                 count={counts?.upcoming ?? 0}
                 active={dueFilter === 'upcoming'}
                 onPress={() => onToggleDue('upcoming')}
               />
-              <FilterRow label="Focus Tasks" count={counts?.focus ?? 0} active={focusActive} onPress={onToggleFocus} />
-              <FilterRow label="Completed" count={counts?.completed ?? 0} active={completedActive} onPress={onToggleCompleted} />
+              <FilterRow label={t('allTasks.focusTasks')} count={counts?.focus ?? 0} active={focusActive} onPress={onToggleFocus} />
+              <FilterRow label={t('taskLabels.due.completed')} count={counts?.completed ?? 0} active={completedActive} onPress={onToggleCompleted} />
               <FilterRow
-                label="High Priority"
+                label={t('allTasks.highPriority')}
                 count={counts?.highPriority ?? 0}
                 active={highPriorityActive}
                 onPress={onToggleHighPriority}
@@ -106,12 +108,12 @@ export function TaskFiltersSheet({
             </View>
 
             <Text className="mb-2 text-xs font-black uppercase" style={{ color: colors.secondaryText }}>
-              Categories
+              {t('allTasks.categories')}
             </Text>
             <View className="mb-2 gap-2">
               {categories.length === 0 ? (
                 <Text className="text-sm" style={{ color: colors.secondaryText }}>
-                  No categories yet.
+                  {t('allTasks.noCategories')}
                 </Text>
               ) : (
                 categories.map((category) => (
@@ -129,10 +131,10 @@ export function TaskFiltersSheet({
 
           <View className="mt-4 flex-row gap-3">
             <SecondaryButton onPress={onClear} fullWidth>
-              Clear
+              {t('allTasks.clear')}
             </SecondaryButton>
             <PrimaryButton onPress={onClose} fullWidth>
-              Apply
+              {t('allTasks.apply')}
             </PrimaryButton>
           </View>
         </View>

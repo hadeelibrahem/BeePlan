@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { AppLayout } from './AppLayout'
+import { FloatingActionButton } from './FloatingActionButton'
 import { LanguageProvider } from '../../i18n/LanguageContext'
 
 vi.mock('./GlobalHeader', () => ({ GlobalHeader: () => null }))
@@ -44,5 +45,19 @@ describe('shared app shell', () => {
     expect(screen.getByRole('button', { name: 'Tasks' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('button', { name: 'Tasks' })).not.toBeDisabled()
     expect(screen.getByText('Today')).toBeInTheDocument()
+  })
+
+  it('keeps a nested page floating action mounted', () => {
+    renderShell(
+      <AppLayout active="tasks">
+        <AppLayout active="tasks" fab={<FloatingActionButton ariaLabel="Add Task" />}>
+          <div>Tasks content</div>
+        </AppLayout>
+      </AppLayout>,
+    )
+
+    const fab = screen.getByRole('button', { name: 'Add Task' })
+    expect(fab).toBeInTheDocument()
+    expect(fab.parentElement).toBe(document.body)
   })
 })

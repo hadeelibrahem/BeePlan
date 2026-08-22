@@ -10,6 +10,7 @@ import {
 } from '../api/collaboration.api'
 import { friendlyError } from '../errorMessages'
 import type { TaskComment, TaskMember } from '../types'
+import { useLanguage } from '../../../i18n/LanguageContext'
 
 type Props = {
   taskId: string
@@ -22,6 +23,7 @@ type Props = {
 const PAGE_SIZE = 20
 
 export function CommentsSection({ taskId, accessToken, members, currentUserId, onError }: Props) {
+  const { t } = useLanguage()
   const [comments, setComments] = useState<TaskComment[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -76,7 +78,7 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
         setComments((prev) => prev.map((c) => (c.id === tempId ? saved : c)))
       } catch (err) {
         setComments((prev) => prev.filter((c) => c.id !== tempId)) // rollback
-        onError(friendlyError(err, 'Could not post your comment.'))
+        onError(friendlyError(err, t('comments.postFailed')))
       }
     },
     [taskId, accessToken, currentUserId, members, onError],
@@ -94,7 +96,7 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
         setComments((prev) => prev.map((c) => (c.id === comment.id ? saved : c)))
       } catch (err) {
         setComments((prev) => prev.map((c) => (c.id === comment.id ? previous : c))) // rollback
-        onError(friendlyError(err, 'Could not update your comment.'))
+        onError(friendlyError(err, t('comments.updateFailed')))
       }
     },
     [accessToken, onError],
@@ -108,7 +110,7 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
         await deleteComment(comment.id, accessToken)
       } catch (err) {
         setComments(snapshot) // rollback
-        onError(friendlyError(err, 'Could not delete your comment.'))
+        onError(friendlyError(err, t('comments.deleteFailed')))
       }
     },
     [comments, accessToken, onError],
@@ -133,9 +135,9 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
   return (
     <section
       className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4"
-      aria-label="Comments"
+      aria-label={t('comments.title')}
     >
-      <h3 className="mb-2.5 text-sm font-black">Comments</h3>
+      <h3 className="mb-2.5 text-sm font-black">{t('comments.title')}</h3>
 
       <CommentComposer members={members} onSubmit={handleCreate} />
 
@@ -147,14 +149,14 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
         </div>
       ) : loadFailed ? (
         <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-center">
-          <p className="text-xs font-semibold text-red-300">Couldn’t load comments.</p>
+          <p className="text-xs font-semibold text-red-300">{t('comments.loadFailed')}</p>
           <GhostButton size="sm" className="mt-2" onClick={() => void load(1)}>
-            Retry
+            {t('comments.retry')}
           </GhostButton>
         </div>
       ) : comments.length === 0 ? (
         <p className="mt-6 text-center text-sm text-[var(--bp-muted)]">
-          No comments yet. Start the conversation.
+          {t('comments.empty')}
         </p>
       ) : (
         <ul className="mt-3 divide-y divide-[var(--bp-border)]/60 overflow-hidden rounded-xl border border-[var(--bp-border)]/70 bg-[var(--bp-bg)]">
@@ -173,12 +175,12 @@ export function CommentsSection({ taskId, accessToken, members, currentUserId, o
           ))}
           {hasMore ? (
             <GhostButton size="sm" className="w-full" onClick={() => void load(page + 1)}>
-              Load older comments
+              {t('comments.loadOlder')}
             </GhostButton>
           ) : null}
         </ul>
       )}
-      <ConfirmDestructiveModal open={commentToDelete !== null} title="Delete comment?" message="This action cannot be undone." confirmLabel="Delete comment" isConfirming={isDeletingComment} onCancel={() => !isDeletingComment && setCommentToDelete(null)} onConfirm={() => void confirmDeleteComment()} />
+      <ConfirmDestructiveModal open={commentToDelete !== null} title={t('comments.deleteTitle')} message={t('comments.deleteMessage')} confirmLabel={t('comments.deleteAction')} isConfirming={isDeletingComment} onCancel={() => !isDeletingComment && setCommentToDelete(null)} onConfirm={() => void confirmDeleteComment()} />
     </section>
   )
 }
@@ -198,6 +200,7 @@ function CommentComposer({
   onCancel?: () => void
   compact?: boolean
 }) {
+  const { t } = useLanguage()
   const [text, setText] = useState(initial)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -263,15 +266,15 @@ function CommentComposer({
           if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void submit()
         }}
         rows={compact ? 2 : 3}
-        placeholder="Write a comment… use @ to mention a member"
-        aria-label="Write a comment"
+        placeholder={t('comments.placeholder')}
+        aria-label={t('comments.write')}
         className="w-full resize-none rounded-xl border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2.5 text-sm text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]/60"
       />
 
       {mentionCandidates.length ? (
         <ul
           role="listbox"
-          aria-label="Mention a member"
+          aria-label={t('comments.mention')}
           className="absolute left-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] py-1 shadow-2xl"
         >
           {mentionCandidates.map((member) => (
@@ -296,11 +299,11 @@ function CommentComposer({
       <div className="mt-2 flex justify-end gap-2">
         {onCancel ? (
           <GhostButton size="sm" onClick={onCancel}>
-            Cancel
+            {t('comments.cancel')}
           </GhostButton>
         ) : null}
         <PrimaryButton size="sm" loading={submitting} disabled={!text.trim()} onClick={() => void submit()}>
-          {onCancel ? 'Save' : 'Comment'}
+          {onCancel ? t('comments.save') : t('comments.comment')}
         </PrimaryButton>
       </div>
     </div>
@@ -328,6 +331,7 @@ function CommentItem({
   onSaveEdit: (message: string, mentionedUserIds: string[]) => void
   onDelete: () => void
 }) {
+  const { t } = useLanguage()
   const isPending = comment.id.startsWith('temp-')
   return (
     <li className={`flex gap-3 px-3 py-3 transition hover:bg-[var(--bp-border)]/15 ${isPending ? 'opacity-60' : ''}`}>
@@ -341,8 +345,8 @@ function CommentItem({
           <span className="text-xs font-bold text-[var(--bp-text)]">
             {comment.author?.fullName ?? 'Unknown'}
           </span>
-          <span className="text-[10px] opacity-70 text-[var(--bp-muted)]">{formatTime(comment.createdAt)}</span>
-          {comment.isEdited ? <span className="text-[10px] opacity-70 text-[var(--bp-muted)]">(edited)</span> : null}
+          <span className="text-[10px] opacity-70 text-[var(--bp-muted)]">{formatTime(comment.createdAt, t)}</span>
+          {comment.isEdited ? <span className="text-[10px] opacity-70 text-[var(--bp-muted)]">{t('comments.edited')}</span> : null}
         </div>
 
         {isEditing ? (
@@ -364,10 +368,10 @@ function CommentItem({
         {isOwn && !isEditing && !isPending ? (
           <div className="mt-1 flex gap-3 text-[11px] font-semibold text-[var(--bp-muted)]">
             <button type="button" className="hover:text-[var(--bp-accent-ink)]" onClick={onStartEdit}>
-              Edit
+              {t('comments.edit')}
             </button>
             <button type="button" className="hover:text-red-400" onClick={onDelete}>
-              Delete
+              {t('comments.delete')}
             </button>
           </div>
         ) : null}
@@ -390,13 +394,16 @@ function renderWithMentions(message: string) {
   )
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, t: ReturnType<typeof useLanguage>['t']): string {
   const date = new Date(iso)
   const diff = Date.now() - date.getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return t('comments.justNow')
+  if (mins < 60) return t('comments.minutesAgo', { count: mins })
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('comments.hoursAgo', { count: hours })
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
+
+
+

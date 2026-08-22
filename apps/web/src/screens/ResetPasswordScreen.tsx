@@ -8,8 +8,10 @@ import {
   PrimaryButton,
 } from '../components/AuthShared'
 import { useAuth } from '../hooks/useAuth'
+import { useLanguage } from '../i18n/LanguageContext'
 
 export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) {
+  const { t } = useLanguage()
   const { updatePassword, verifyRecoveryCode } = useAuth()
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -48,9 +50,9 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     const e: { [k: string]: string } = {}
     setSubmitError('')
 
-    if (!email.trim()) e.email = 'Email address is required'
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Please enter a valid email'
-    if (!code.trim()) e.code = 'Reset code is required'
+    if (!email.trim()) e.email = 'auth.emailRequired'
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'auth.emailInvalid'
+    if (!code.trim()) e.code = 'auth.resetCodeRequired'
 
     if (Object.keys(e).length > 0) {
       setErrors(e)
@@ -68,7 +70,8 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
       setIsLoading(false)
     } catch (err) {
       setIsLoading(false)
-      setSubmitError(err instanceof Error ? err.message : 'Invalid or expired reset code. Please request a new code.')
+      console.error('Unable to verify password reset code', err)
+      setSubmitError('auth.resetCodeInvalid')
       setShakeActive(true)
       setTimeout(() => setShakeActive(false), 500)
     }
@@ -78,10 +81,10 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     ev.preventDefault()
     const e: { [k: string]: string } = {}
     setSubmitError('')
-    if (!password) e.password = 'Password is required'
-    else if (password.length < 8) e.password = 'Password must be at least 8 characters'
-    if (!confirmPassword) e.confirmPassword = 'Please confirm your password'
-    else if (confirmPassword !== password) e.confirmPassword = 'Passwords do not match'
+    if (!password) e.password = 'auth.passwordRequired'
+    else if (password.length < 8) e.password = 'auth.passwordMinimum'
+    if (!confirmPassword) e.confirmPassword = 'auth.confirmPasswordRequired'
+    else if (confirmPassword !== password) e.confirmPassword = 'auth.passwordsDoNotMatch'
     if (Object.keys(e).length > 0) {
       setErrors(e)
       setShakeActive(true)
@@ -101,7 +104,8 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
       }, 1200)
     } catch (err) {
       setIsLoading(false)
-      setSubmitError(err instanceof Error ? err.message : 'Unable to update password. Please open the reset link again.')
+      console.error('Unable to update password', err)
+      setSubmitError('auth.passwordUpdateFailed')
     }
   }
 
@@ -111,7 +115,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
       onClick={() => setShowPassword((s) => !s)}
       className="text-[9px] font-bold text-[var(--bp-muted)] hover:text-[var(--bp-text)] px-1"
     >
-      {showPassword ? 'HIDE' : 'SHOW'}
+      {showPassword ? t('common.hide') : t('common.show')}
     </button>
   )
 
@@ -119,10 +123,10 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
     <AuthShell
       headline={
         <>
-          Secure your <span className="text-[var(--bp-accent-ink)] text-glow">BeePlan workspace</span>.
+          {t('auth.secureYour')} <span className="text-[var(--bp-accent-ink)] text-glow">{t('auth.beePlanWorkspace')}</span>.
         </>
       }
-      sub="Set a strong new password to protect your reminders, tasks, and smart plans from unauthorised access."
+      sub={t('auth.securePasswordDescription')}
     >
       <AuthCard shake={shakeActive}>
         {isDone ? (
@@ -133,16 +137,16 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                 <polyline points="30,52 45,65 70,38" fill="none" />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-[var(--bp-text)] tracking-tight">Password Updated!</h3>
+            <h3 className="text-2xl font-bold text-[var(--bp-text)] tracking-tight">{t('auth.passwordUpdated')}</h3>
             <p className="text-xs text-[var(--bp-muted)] mt-3 leading-relaxed max-w-xs mx-auto">
-              Your BeePlan password has been reset successfully. Opening your workspace...
+              {t('auth.passwordResetOpening', { brand_name: 'BeePlan' })}
             </p>
             <button
               type="button"
               onClick={onBack}
               className="mt-8 w-full h-12 rounded-xl border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] text-[var(--bp-accent-ink)] text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-all btn-glow"
             >
-              Open BeePlan
+              {t('auth.openBeePlan')}
             </button>
           </div>
         ) : (
@@ -163,12 +167,12 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
 
             <div className="text-center mb-6">
               <h3 className="text-xl font-bold text-[var(--bp-text)]">
-                {codeVerified ? 'Create New Password' : 'Enter Reset Code'}
+                {codeVerified ? t('auth.createNewPassword') : t('auth.enterResetCode')}
               </h3>
               <p className="text-xs text-[var(--bp-muted)] mt-2 leading-relaxed">
                 {codeVerified
-                  ? 'Choose a strong password for your BeePlan account.'
-                  : 'Enter the code we sent to your email before creating a new password.'}
+                  ? t('auth.chooseStrongPassword', { brand_name: 'BeePlan' })
+                  : t('auth.enterCodeInstruction')}
               </p>
             </div>
 
@@ -176,8 +180,8 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <AuthInput
-                    label="New Password"
-                    placeholder="Enter new password"
+                    label={t('auth.newPassword')}
+                    placeholder={t('auth.newPasswordPlaceholder')}
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(v) => {
@@ -185,7 +189,7 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                       setErrors((p) => ({ ...p, password: '' }))
                       setSubmitError('')
                     }}
-                    error={errors.password}
+                    error={errors.password ? t(errors.password) : undefined}
                     rightSlot={showHideBtn}
                   />
                   {strength && (
@@ -194,15 +198,15 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                         <div className={`h-full ${strength.color} ${strength.w} rounded-full transition-all duration-300`} />
                       </div>
                       <p className="text-[10px] text-[var(--bp-muted)]">
-                        Strength: <span className="font-semibold text-[var(--bp-text)]">{strength.label}</span>
+                        {t('auth.strength', { strength: t(`auth.${strength.label.toLowerCase()}`) })}
                       </p>
                     </div>
                   )}
                 </div>
 
                 <AuthInput
-                  label="Confirm New Password"
-                  placeholder="Re-enter new password"
+                  label={t('auth.confirmNewPassword')}
+                  placeholder={t('auth.confirmPasswordPlaceholder')}
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(v) => {
@@ -210,58 +214,58 @@ export default function ResetPasswordScreen({ onBack }: { onBack: () => void }) 
                     setErrors((p) => ({ ...p, confirmPassword: '' }))
                     setSubmitError('')
                   }}
-                  error={errors.confirmPassword}
+                  error={errors.confirmPassword ? t(errors.confirmPassword) : undefined}
                   rightSlot={showHideBtn}
                 />
 
                 <div className="pt-1">
                   <PrimaryButton loading={isLoading} disabled={isLoading}>
-                    {isLoading ? 'Updating...' : 'Update Password'}
+                    {isLoading ? t('auth.updating') : t('auth.updatePassword')}
                   </PrimaryButton>
                 </div>
-                {submitError && <p className="text-red-400 text-xs ps-1">{submitError}</p>}
+                {submitError && <p className="text-red-400 text-xs ps-1">{t(submitError)}</p>}
               </form>
             ) : (
               <form onSubmit={handleVerifyCode} className="space-y-4">
                 <AuthInput
-                  label="Email Address"
-                  placeholder="name@example.com"
+                  label={t('auth.emailAddress')}
+                  placeholder={t('auth.emailPlaceholder')}
                   value={email}
                   onChange={(v) => {
                     setEmail(v)
                     setErrors((p) => ({ ...p, email: '' }))
                     setSubmitError('')
                   }}
-                  error={errors.email}
+                  error={errors.email ? t(errors.email) : undefined}
                 />
 
                 <AuthInput
-                  label="Reset Code"
-                  placeholder="Enter the code from your email"
+                  label={t('auth.resetCode')}
+                  placeholder={t('auth.resetCodePlaceholder')}
                   value={code}
                   onChange={(v) => {
                     setCode(v)
                     setErrors((p) => ({ ...p, code: '' }))
                     setSubmitError('')
                   }}
-                  error={errors.code}
+                  error={errors.code ? t(errors.code) : undefined}
                 />
                 {devResetCode && (
                   <p className="text-[var(--bp-accent-ink)] text-xs ps-1">
-                    Development code: <span className="font-bold tracking-widest">{devResetCode}</span>
+                    {t('auth.developmentCode')} <span className="font-bold tracking-widest" dir="ltr">{devResetCode}</span>
                   </p>
                 )}
 
                 <div className="pt-1">
                   <PrimaryButton loading={isLoading} disabled={isLoading}>
-                    {isLoading ? 'Checking...' : 'Verify Code'}
+                    {isLoading ? t('auth.checking') : t('auth.verifyCode')}
                   </PrimaryButton>
                 </div>
-                {submitError && <p className="text-red-400 text-xs ps-1">{submitError}</p>}
+                {submitError && <p className="text-red-400 text-xs ps-1">{t(submitError)}</p>}
               </form>
             )}
 
-            <AuthFooterLink prefix="Changed your mind?" label="Back to Sign In" onClick={onBack} />
+            <AuthFooterLink prefix={t('auth.changedMind')} label={t('auth.backToSignIn')} onClick={onBack} />
           </div>
         )}
       </AuthCard>

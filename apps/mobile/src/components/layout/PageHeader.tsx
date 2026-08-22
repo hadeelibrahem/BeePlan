@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useTheme } from '../../theme/useTheme'
+import { useLanguage } from '../../i18n/LanguageContext'
 
 type PageHeaderProps = {
   title: string
@@ -11,6 +12,7 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, subtitle, onBack, actions }: PageHeaderProps) {
   const { theme } = useTheme()
+  const { t, isRTL } = useLanguage()
 
   return (
     <View className="mb-5">
@@ -20,11 +22,11 @@ export function PageHeader({ title, subtitle, onBack, actions }: PageHeaderProps
             <Pressable
               onPress={onBack}
               accessibilityRole="button"
-              accessibilityLabel="Go back"
+              accessibilityLabel={t('actions.back')}
               className="h-11 w-11 items-center justify-center rounded-xl active:opacity-70"
               style={{ backgroundColor: theme.colors.border }}
             >
-              <Text className="text-base font-black" style={{ color: theme.colors.text }}>{'←'}</Text>
+              <Text className="text-base font-black" style={{ color: theme.colors.text }}>{isRTL ? '→' : '←'}</Text>
             </Pressable>
           )}
 

@@ -1,15 +1,17 @@
 import type React from 'react'
 import { BeePlanLogo } from './BeePlanLogo'
+import { useLanguage } from '../i18n/LanguageContext'
 
-export function BrandHeader({ tagline = 'SMART PRODUCTIVITY' }: { tagline?: string }) {
+export function BrandHeader({ tagline = true }: { tagline?: boolean }) {
   return (
     <div className="text-center mb-8 flex flex-col items-center">
-      <BeePlanLogo className="mb-6" showTagline={Boolean(tagline)} size={56} />
+      <BeePlanLogo className="mb-6" showTagline={tagline} size={56} />
     </div>
   )
 }
 
 export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: string }) {
+  const { t } = useLanguage()
   return (
     <div className="relative z-10 hidden flex-col justify-between overflow-hidden border-e border-[var(--bp-border)] bg-[var(--bp-bg)] p-16 lg:flex lg:w-1/2">
       <div className="relative z-10">
@@ -27,7 +29,7 @@ export function LeftPanel({ headline, sub }: { headline: React.ReactNode; sub: s
       </div>
 
       <div className="relative z-10 text-xs text-[var(--bp-subtle)]">
-        &copy; {new Date().getFullYear()} BeePlan Inc. All rights reserved.
+        {t('auth.copyright', { year: new Date().getFullYear() })}
       </div>
     </div>
   )

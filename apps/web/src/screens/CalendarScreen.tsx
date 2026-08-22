@@ -41,7 +41,6 @@ import {
   Target,
   X,
 } from "lucide-react";
-import { GoogleCalendarEvents } from "../features/calendar/GoogleCalendarEvents";
 
 type CalendarScreenProps = SidebarNavHandlers & {
   tasks?: ApiTask[];
@@ -473,7 +472,6 @@ export default function CalendarScreen({
         accessToken={accessToken}
         date={selectedDateKey}
       />
-      <GoogleCalendarEvents token={accessToken} date={selectedDateKey} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button

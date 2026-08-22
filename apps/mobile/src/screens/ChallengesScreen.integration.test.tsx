@@ -1,0 +1,2 @@
+import { challengePercent,challengeUnit } from './ChallengesScreen';
+describe('challenge formatting',()=>{const t=(k:string)=>k;const base:any={type:'focus_minutes',progressValue:140,targetValue:100};it('clamps progress',()=>expect(challengePercent(base)).toBe(100));it('formats units',()=>{expect(challengeUnit(base,t)).toBe('challenges.minutes');expect(challengeUnit({...base,type:'focus_sessions'},t)).toBe('challenges.sessions');expect(challengeUnit({...base,type:'tasks_completed'},t)).toBe('challenges.tasks')})});

@@ -12,7 +12,6 @@ import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ContextModule } from '../context/context.module';
 import { WeatherTravelModule } from '../weather-travel/weather-travel.module';
-import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 import { TaskAssistantModule } from '../task-assistant/task-assistant.module';
 
 @Module({
@@ -25,7 +24,6 @@ import { TaskAssistantModule } from '../task-assistant/task-assistant.module';
     NotificationsModule,
     ContextModule,
     WeatherTravelModule,
-    GoogleCalendarModule,
     TaskAssistantModule,
     JwtModule.registerAsync({
       inject: [ConfigService],

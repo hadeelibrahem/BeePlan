@@ -26,6 +26,9 @@ export class JoinFocusRoomDto {
   @IsOptional() @IsBoolean() showTimer?: boolean;
   @IsOptional() @IsBoolean() showStatistics?: boolean;
 }
+export class JoinFocusRoomByCodeDto {
+  @IsString() @Length(4, 32) code!: string;
+}
 export class CreateCommitmentDto {
   @IsInt() @Min(1) @Max(480) durationMinutes!: number;
   @IsOptional() @IsString() @Length(1, 160) goalLabel?: string;

@@ -9,7 +9,6 @@ import {
   recurringCommitments,
   savedLocations,
   skippedCommitmentOccurrences,
-  googleCalendarEvents,
 } from '../db/schema';
 import type {
   CreateRecurringCommitmentDto,
@@ -191,12 +190,11 @@ export class RecurringCommitmentsService {
         ),
     ]);
     const skippedIds = new Set(skipped.map((row) => row.commitmentId));
-    const commitmentWindows = commitmentsToBusyWindows(excludeSkippedCommitments(commitments, skippedIds), date);
-    const start = new Date(`${date}T00:00:00`);
-    const end = new Date(`${date}T23:59:59`);
-    const googleEvents = await this.db.select().from(googleCalendarEvents).where(and(eq(googleCalendarEvents.userId, userId), gte(googleCalendarEvents.startAt, start), lte(googleCalendarEvents.startAt, end)));
-    const calendarWindows: CommitmentBusyWindow[] = googleEvents.filter((event) => event.startAt && event.endAt).map((event) => ({ commitmentId: `google:${event.id}`, title: event.title, start: event.allDay ? '00:00' : event.startAt!.toISOString().slice(11, 16), end: event.allDay ? '23:59' : event.endAt!.toISOString().slice(11, 16), placeName: event.location ?? null }));
-    return [...commitmentWindows, ...calendarWindows];
+    const commitmentWindows = commitmentsToBusyWindows(
+      excludeSkippedCommitments(commitments, skippedIds),
+      date,
+    );
+    return commitmentWindows;
   }
 
   /** Dated, unmerged occurrences for conflict UI and one-occurrence resolution. */
@@ -209,14 +207,17 @@ export class RecurringCommitmentsService {
       this.db
         .select({ commitmentId: skippedCommitmentOccurrences.commitmentId })
         .from(skippedCommitmentOccurrences)
-        .where(and(
-          eq(skippedCommitmentOccurrences.userId, userId),
-          eq(skippedCommitmentOccurrences.date, date),
-        )),
+        .where(
+          and(
+            eq(skippedCommitmentOccurrences.userId, userId),
+            eq(skippedCommitmentOccurrences.date, date),
+          ),
+        ),
     ]);
     const skippedIds = new Set(skipped.map((row) => row.commitmentId));
-    return excludeSkippedCommitments(commitments, skippedIds)
-      .filter((commitment) => commitmentAppliesOn(commitment, date));
+    return excludeSkippedCommitments(commitments, skippedIds).filter(
+      (commitment) => commitmentAppliesOn(commitment, date),
+    );
   }
 
   async skipOccurrence(
@@ -361,7 +362,8 @@ export function weekdayOf(date: string): number | null {
     parsed.getUTCFullYear() !== year ||
     parsed.getUTCMonth() !== month - 1 ||
     parsed.getUTCDate() !== day
-  ) return null;
+  )
+    return null;
   return parsed.getUTCDay();
 }
 

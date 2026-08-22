@@ -43,6 +43,7 @@ import { CollaborationPanel } from '../features/collaboration/components/Collabo
 import { SharedBadge } from '../features/collaboration/components/SharedBadge';
 import { createTaskDeleteConfirmationController } from '../features/tasks/taskDeleteConfirmation';
 import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict';
+import { useLanguage } from '../i18n/LanguageContext';
 import { TravelWeatherCard } from '../components/TravelWeatherCard';
 
 type Props = {
@@ -83,6 +84,7 @@ export default function TaskDetailsScreen({
 }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const { t, language, formatPercent } = useLanguage();
   const [status, setStatus] = useState<TaskStatus>(toTaskStatus(task));
   const [progress, setProgress] = useState(task?.progress ?? 0);
   const [isStatusSheetVisible, setIsStatusSheetVisible] = useState(false);
@@ -238,9 +240,9 @@ export default function TaskDetailsScreen({
   if (!task) {
   return (
     <AppScreen>
-        <PageHeader title="Task Details" onBack={onBack} />
+        <PageHeader title={t('taskDetails.title')} onBack={onBack} />
         <SectionCard className="mb-3">
-          <Text style={{ color: colors.secondaryText }}>This task could not be loaded. Go back and try again.</Text>
+          <Text style={{ color: colors.secondaryText }}>{t('taskDetails.loadFailed')}</Text>
         </SectionCard>
       </AppScreen>
     );
@@ -252,11 +254,11 @@ export default function TaskDetailsScreen({
         isViewer ? undefined : (
           <BottomActionBar>
             <OutlineButton size="sm" onPress={() => setIsStatusSheetVisible(true)} className="flex-1">
-              Status
+              {t('editTask.status')}
             </OutlineButton>
-            {status === 'Done' && linkedAchievementId && onViewAchievement ? <OutlineButton size="sm" onPress={() => onViewAchievement(linkedAchievementId)} className="flex-1">View Museum</OutlineButton> : status === 'Done' && onAddToAchievement ? <OutlineButton size="sm" onPress={onAddToAchievement} className="flex-1">Museum</OutlineButton> : null}
+            {status === 'Done' && linkedAchievementId && onViewAchievement ? <OutlineButton size="sm" onPress={() => onViewAchievement(linkedAchievementId)} className="flex-1">{t('taskDetails.viewMuseum')}</OutlineButton> : status === 'Done' && onAddToAchievement ? <OutlineButton size="sm" onPress={onAddToAchievement} className="flex-1">{t('taskDetails.museum')}</OutlineButton> : null}
             <PrimaryButton size="sm" onPress={onEdit} className="flex-1">
-              Edit Task
+              {t('editTask.title')}
             </PrimaryButton>
           </BottomActionBar>
         )
@@ -264,7 +266,7 @@ export default function TaskDetailsScreen({
     >
       <ExistingScheduleConflict accessToken={accessToken} taskId={task.id} onResolved={onRefresh} />
       <TravelWeatherCard token={accessToken} task={task} />
-      <PageHeader title="Task Details" onBack={onBack} />
+      <PageHeader title={t('taskDetails.title')} onBack={onBack} />
 
       {error ? <Text className="mb-3 text-sm font-bold text-red-300">{error}</Text> : null}
 
@@ -272,7 +274,7 @@ export default function TaskDetailsScreen({
         <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
           <TaskStatusBadge status={status} />
           <TaskPriorityBadge priority={toUiPriority(task.priority)} />
-          <Badge label={task.category || 'General'} color={colors.accent} />
+          <Badge label={task.category || t('createTask.categoryGeneral')} color={colors.accent} />
           {task.isShared || sharedMemberCount > 1 ? (
             <SharedBadge memberCount={sharedMemberCount || undefined} />
           ) : null}
@@ -280,14 +282,14 @@ export default function TaskDetailsScreen({
 
         <Text className="text-xl font-black leading-7" style={{ color: colors.text }}>{task.title}</Text>
         <Text className="mt-2 text-sm leading-5" style={{ color: colors.secondaryText }}>
-          {task.description || 'No description yet.'}
+          {task.description || t('taskDetails.noDescription')}
         </Text>
 
         <View className="mt-3 gap-2">
-          <InfoRow label="Created" value={formatDate(task.createdAt)} />
-          <InfoRow label="Updated" value={formatDate(task.updatedAt)} />
-          <InfoRow label="Due Date" value={`${formatDate(task.dueDate) || 'No due date'}${task.dueTime ? ` - ${task.dueTime}` : ''}`} />
-          <InfoRow label="Scheduled" value={task.scheduledDate && task.scheduledStartTime ? `${task.scheduledDate} · ${task.scheduledStartTime}–${task.scheduledEndTime ?? 'derived'}` : 'Unscheduled'} />
+          <InfoRow label={t('taskDetails.created')} value={formatDate(task.createdAt, language)} />
+          <InfoRow label={t('taskDetails.updated')} value={formatDate(task.updatedAt, language)} />
+          <InfoRow label={t('taskDetails.dueDate')} value={`${formatDate(task.dueDate, language) || t('taskDetails.noDueDate')}${task.dueTime ? ` - ${task.dueTime}` : ''}`} />
+          <InfoRow label={t('taskDetails.scheduled')} value={task.scheduledDate && task.scheduledStartTime ? `${task.scheduledDate} · ${task.scheduledStartTime}–${task.scheduledEndTime ?? t('taskDetails.derived')}` : t('taskDetails.unscheduled')} />
         </View>
       </SectionCard>
 
@@ -304,26 +306,26 @@ export default function TaskDetailsScreen({
       {(task.isShared || sharedMemberCount > 1) && onOpenAiCollaboration ? (
         <SectionCard className="mb-3">
           <Text className="mb-1 text-sm font-black" style={{ color: colors.text }}>
-            AI Collaboration
+            {t('editTask.aiCollaboration')}
           </Text>
           <Text className="mb-3 text-xs leading-4" style={{ color: colors.secondaryText }}>
-            See how work is split, what's due today, and AI suggestions for keeping the team balanced.
+            {t('taskDetails.aiHelp')}
           </Text>
-          <OutlineButton onPress={onOpenAiCollaboration}>Open AI Collaboration</OutlineButton>
+          <OutlineButton onPress={onOpenAiCollaboration}>{t('editTask.openAiCollaboration')}</OutlineButton>
         </SectionCard>
       ) : null}
 
-      <Card title="Progress">
+      <Card title={t('taskDetails.progress')}>
         <View className="mb-2 flex-row items-center justify-between">
           <Text className="text-sm" style={{ color: colors.secondaryText }}>
-            {completedSubtasks} of {subtaskItems.length} subtasks completed
+            {t('taskDetails.subtasksCompleted', { completed: completedSubtasks, total: subtaskItems.length })}
           </Text>
-          <Text className="text-2xl font-black" style={{ color: colors.text }}>{progress}%</Text>
+          <Text className="text-2xl font-black" style={{ color: colors.text }}>{formatPercent(progress)}</Text>
         </View>
         <ProgressBar value={progress} color={colors.primary} />
       </Card>
 
-      <Card title="Subtasks">
+      <Card title={t('createTask.subtasks')}>
         <SubtaskManagementSection
           task={{ ...task, subtasks: subtaskItems }}
           accessToken={accessToken}
@@ -338,31 +340,31 @@ export default function TaskDetailsScreen({
           }}
         />
       </Card>
-      {!isViewer ? <Card title="Danger Zone"><Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>Deleting this task cannot be undone.</Text><DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>Delete Task</DangerButton></Card> : null}
+      {!isViewer ? <Card title={t('editTask.dangerZone')}><Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>{t('editTask.deleteWarning')}</Text><DangerButton onPress={() => deleteConfirmationRef.current?.requestConfirmation(task.title)} fullWidth>{t('editTask.deleteTask')}</DangerButton></Card> : null}
 
-      <Card title="Dependencies">
+      <Card title={t('createTask.dependencies')}>
         <DependencyManagementSection task={task} tasks={tasks} accessToken={accessToken} canEdit={!isViewer} onDependenciesChange={setDependencyItems} onError={setError} onTaskUpdated={(updated) => { setDependencyItems(toDependencyTasks(updated.dependencies)); setStatus(toTaskStatus(updated)); setProgress(updated.progress); onTaskUpdated?.(updated) }} />
       </Card>
 
-      <Card title="Automation">
-        <AutomationRow label="Reminder" value={reminderText} />
-        <AutomationRow label="Recurring" value={`${recurrenceSummary}${recurrence ? ` - ${nextOccurrence}` : ''}`} />
-        <AutomationRow label="Focus" value={focusText} isLast />
+      <Card title={t('taskDetails.automation')}>
+        <AutomationRow label={t('createTask.reminder')} value={reminderText} />
+        <AutomationRow label={t('taskDetails.recurring')} value={`${recurrenceSummary}${recurrence ? ` - ${nextOccurrence}` : ''}`} />
+        <AutomationRow label={t('editTask.focus')} value={focusText} isLast />
       </Card>
 
-      <Card title="Time Tracking">
+      <Card title={t('taskDetails.timeTracking')}>
         <View className="gap-2">
           {Object.entries(taskTimeTracking(task)).map(([label, value]) => <View key={label} className="flex-row justify-between py-1"><Text className="text-sm" style={{ color: colors.secondaryText }}>{label.charAt(0).toUpperCase() + label.slice(1)}</Text><Text className="text-sm font-bold" style={{ color: colors.text }}>{value}</Text></View>)}
         </View>
       </Card>
 
-      <Card title="Notes">
+      <Card title={t('editTask.notes')}>
         <Text className="rounded-2xl p-3 text-sm leading-5" style={{ backgroundColor: colors.background, color: colors.secondaryText }}>
-          {task.notes || 'No notes yet.'}
+          {task.notes || t('taskDetails.noNotes')}
         </Text>
       </Card>
 
-      <Card title="Attachments">
+      <Card title={t('createTask.attachments')}>
         {attachmentItems.length ? (
           <View className="gap-2">
             {attachmentItems.map((file) => (
@@ -390,7 +392,7 @@ export default function TaskDetailsScreen({
             ))}
           </View>
         ) : (
-          <EmptyBlock title="No attachments yet" description="Files uploaded from Edit Task will appear here." />
+          <EmptyBlock title={t('editTask.noAttachments')} description={t('taskDetails.attachmentsHelp')} />
         )}
       </Card>
 
@@ -482,11 +484,11 @@ function normalizeDependencyPriority(priority: string): DependencyTask['priority
   return 'Medium';
 }
 
-function formatDate(value?: string) {
+function formatDate(value?: string, language: 'en' | 'ar' = 'en') {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
 }
 
 function formatFileSize(size?: number | string) {

@@ -168,8 +168,8 @@ export default function FocusScreen({
       active="focus"
       {...nav}
       onNavigateDashboard={onBackDashboard}
-      panelTitle="Deep work"
-      panelCaption={focus.active ? 'Focus session in progress.' : 'Start a session to get in the zone.'}
+      panelTitle={t('focusHome.deepWork')}
+      panelCaption={focus.active ? t('focusHome.sessionInProgress') : t('focusHome.startInZone')}
       panelPercent={focus.active ? 100 : visibleQueue.length ? 100 : 0}
     >
       <PageHeader
@@ -179,7 +179,7 @@ export default function FocusScreen({
           <TopActionBar pageOnly
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search focus tasks..."
+            searchPlaceholder={t('focusHome.searchTasks')}
             themeMode={mode}
             onToggleTheme={toggleTheme}
             languageLabel={t('common.languageToggle')}
@@ -190,7 +190,7 @@ export default function FocusScreen({
         }
       />
 
-      {onOpenRooms ? <div className="mb-5 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black">Shared Focus Sessions</h2><p className="text-sm opacity-75">Start and finish a synchronized focus session together.</p></div><PrimaryButton onClick={onOpenRooms}>Explore sessions</PrimaryButton></div></div> : null}
+      {onOpenRooms ? <div className="mb-5 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black">{t('focusHome.sharedSessions')}</h2><p className="text-sm opacity-75">{t('focusHome.sharedDescription')}</p></div><PrimaryButton onClick={onOpenRooms}>{t('focusHome.exploreSessions')}</PrimaryButton></div></div> : null}
 
       {error || focus.error ? (
         <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
@@ -199,7 +199,7 @@ export default function FocusScreen({
       ) : null}
 
       {showFocusSkeleton ? <CoreListSkeleton variant="focus" rows={4} /> : <>
-      <StatsRow stats={stats} />
+      <StatsRow stats={stats} t={t} />
 
       {focus.active ? (
         <InProgressCard
@@ -208,12 +208,14 @@ export default function FocusScreen({
           remaining={formatClock(focus.remainingMs)}
           complete={focus.sessionComplete}
           onResume={onOpenWorkspace}
+          t={t}
         />
       ) : (
         <RecommendationCard
           recommendation={recommendation}
           onStart={startRecommendation}
           onView={onViewTaskDetails}
+          t={t}
         />
       )}
 
@@ -223,6 +225,7 @@ export default function FocusScreen({
         onStart={openStartModal}
         onRemove={(taskId) => void handleRemoveFocus(taskId)}
         onView={onViewTaskDetails}
+        t={t}
       />
 
       <TodaySessions sessions={todaySessions} />
@@ -248,38 +251,40 @@ function InProgressCard({
   remaining,
   complete,
   onResume,
+  t,
 }: {
   title: string
   subtitle?: string | null
   remaining: string
   complete: boolean
   onResume: () => void
+  t: ReturnType<typeof useLanguage>['t']
 }) {
   return (
     <section className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent-soft)] p-4">
       <div className="min-w-0">
-        <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">Focus session in progress</p>
+        <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">{t('focusHome.sessionInProgressLabel')}</p>
         <h3 className="mt-1 truncate text-lg font-black text-[var(--bp-text)]">{title}</h3>
         {subtitle ? <p className="mt-0.5 truncate text-xs font-semibold text-[var(--bp-muted)]">{subtitle}</p> : null}
         <p className="mt-0.5 text-sm font-semibold tabular-nums text-[var(--bp-muted)]">
-          {complete ? 'Session complete' : `${remaining} remaining`}
+          {complete ? t('focusHome.sessionComplete') : t('focusHome.remaining', { time: remaining })}
         </p>
       </div>
-      <PrimaryButton onClick={onResume}>Resume Session</PrimaryButton>
+      <PrimaryButton onClick={onResume}>{t('focusHome.resumeSession')}</PrimaryButton>
     </section>
   )
 }
 
 // --- Stats -----------------------------------------------------------------
 
-function StatsRow({ stats }: { stats: FocusStats | null }) {
+function StatsRow({ stats, t }: { stats: FocusStats | null; t: ReturnType<typeof useLanguage>['t'] }) {
   const tiles = [
-    { label: 'Focus today', value: stats ? formatFocusMinutes(stats.focusMinutesToday) : '—' },
-    { label: 'Sessions today', value: stats ? String(stats.sessionsToday) : '—' },
-    { label: 'Completed', value: stats ? String(stats.completedSessionsToday) : '—' },
-    { label: 'Current streak', value: stats ? `${stats.currentStreak}d` : '—' },
-    { label: 'This week', value: stats ? formatFocusMinutes(stats.totalFocusMinutesThisWeek) : '—' },
-    { label: 'Top task', value: stats?.topFocusTask?.title ?? 'None yet' },
+    { label: t('focusHome.focusToday'), value: stats ? formatFocusMinutes(stats.focusMinutesToday) : '—' },
+    { label: t('focusHome.sessionsToday'), value: stats ? String(stats.sessionsToday) : '—' },
+    { label: t('focusHome.completed'), value: stats ? String(stats.completedSessionsToday) : '—' },
+    { label: t('focusHome.currentStreak'), value: stats ? `${stats.currentStreak}d` : '—' },
+    { label: t('focusHome.thisWeek'), value: stats ? formatFocusMinutes(stats.totalFocusMinutesThisWeek) : '—' },
+    { label: t('focusHome.topTask'), value: stats?.topFocusTask?.title ?? t('focusHome.noneYet') },
   ]
 
   return (
@@ -302,17 +307,19 @@ function RecommendationCard({
   recommendation,
   onStart,
   onView,
+  t,
 }: {
   recommendation: FocusRecommendation | null
   onStart: (rec: FocusRecommendation) => void
   onView?: (taskId: string) => void
+  t: ReturnType<typeof useLanguage>['t']
 }) {
   if (!recommendation) {
     return (
       <section className="mb-4 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
-        <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Recommended now</p>
+        <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('focusHome.recommendedNow')}</p>
         <p className="mt-1 text-sm text-[var(--bp-muted)]">
-          No suggestion yet — add tasks or mark one as a focus task to get a recommendation.
+          {t('focusHome.noSuggestion')}
         </p>
       </section>
     )
@@ -325,20 +332,20 @@ function RecommendationCard({
   return (
     <section className="mb-4 rounded-2xl border border-[var(--bp-accent)]/40 bg-[var(--bp-accent-soft)] p-4">
       <p className="text-xs font-black uppercase tracking-wide text-[var(--bp-accent-ink)]">
-        {isSubtask ? 'Do this now' : 'Recommended now'}
+        {isSubtask ? t('focusHome.doThisNow') : t('focusHome.recommendedNow')}
       </p>
       <h3 className="mt-1 text-lg font-black text-[var(--bp-text)]">{primary}</h3>
       {parent ? <p className="mt-0.5 text-xs font-semibold text-[var(--bp-muted)]">{parent}</p> : null}
       {recommendation.estimatedMinutes ? (
-        <p className="mt-1 text-xs text-[var(--bp-muted)]">Estimated: {formatFocusMinutes(recommendation.estimatedMinutes)}</p>
+        <p className="mt-1 text-xs text-[var(--bp-muted)]">{t('focusHome.estimated', { duration: formatFocusMinutes(recommendation.estimatedMinutes) })}</p>
       ) : null}
-      <p className="mt-1 text-sm text-[var(--bp-muted)]">Reason: {recommendation.reason}</p>
+      <p className="mt-1 text-sm text-[var(--bp-muted)]">{t('focusHome.reason', { reason: recommendation.reason })}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <PrimaryButton size="sm" onClick={() => onStart(recommendation)}>
-          Start Focus
+          {t('focusHome.startFocus')}
         </PrimaryButton>
         <OutlineButton size="sm" onClick={() => onView?.(recommendation.taskId)}>
-          View task
+          {t('focusHome.viewTask')}
         </OutlineButton>
       </div>
     </section>
@@ -353,17 +360,19 @@ function FocusQueue({
   onStart,
   onRemove,
   onView,
+  t,
 }: {
   items: FocusQueueItem[]
   disabled: boolean
   onStart: (task: StartTarget) => void
   onRemove: (taskId: string) => void
   onView?: (taskId: string) => void
+  t: ReturnType<typeof useLanguage>['t']
 }) {
   return (
     <section className="mb-4">
       <h3 className="mb-2 text-sm font-black text-[var(--bp-text)]">
-        Focus Queue <span className="text-xs font-semibold text-[var(--bp-muted)]">· {items.length} items</span>
+        {t('focusHome.queue')} <span className="text-xs font-semibold text-[var(--bp-muted)]">· {t('focusHome.items', { count: items.length })}</span>
       </h3>
 
       {items.length ? (
@@ -375,15 +384,15 @@ function FocusQueue({
                 <h4 className="truncate text-sm font-black text-[var(--bp-text)]">{focusPrimaryTitle(item)}</h4>
                 {focusParentLabel(item) ? <p className="mt-0.5 text-xs font-semibold text-[var(--bp-muted)]">{focusParentLabel(item)}</p> : null}
               </button>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--bp-muted)]"><Meta label="Due" value={formatDue(item.dueDate ?? undefined, '')} /><Meta label="Estimated" value={item.estimatedMinutes ? formatFocusMinutes(item.estimatedMinutes) : '—'} /><Meta label="Ready" value={item.hasOpenDependencies ? 'Waiting' : 'Ready'} /></div>
-              <div className="mt-4 flex gap-2"><PrimaryButton size="sm" disabled={disabled} className="flex-1" onClick={() => onStart({ id: item.taskId, title: focusPrimaryTitle(item), priority: item.priority as ApiTask['priority'], category: '', taskTitle: item.taskTitle, subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle })}>Start Focus</PrimaryButton>{item.subtaskId ? null : <OutlineButton size="sm" onClick={() => onRemove(item.taskId)}>Remove</OutlineButton>}</div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--bp-muted)]"><Meta label={t('focusHome.due')} value={formatDue(item.dueDate ?? undefined, '')} /><Meta label={t('focusHome.estimatedShort')} value={item.estimatedMinutes ? formatFocusMinutes(item.estimatedMinutes) : '—'} /><Meta label={t('focusHome.ready')} value={item.hasOpenDependencies ? t('focusHome.waiting') : t('focusHome.ready')} /></div>
+              <div className="mt-4 flex gap-2"><PrimaryButton size="sm" disabled={disabled} className="flex-1" onClick={() => onStart({ id: item.taskId, title: focusPrimaryTitle(item), priority: item.priority as ApiTask['priority'], category: '', taskTitle: item.taskTitle, subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle })}>{t('focusHome.startFocus')}</PrimaryButton>{item.subtaskId ? null : <OutlineButton size="sm" onClick={() => onRemove(item.taskId)}>{t('focusHome.remove')}</OutlineButton>}</div>
             </div>
           ))}
         </div>
       ) : (
         <div className="flex h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--bp-border)] px-4 text-center">
-          <p className="text-sm font-black text-[var(--bp-text)]">No focus tasks yet</p>
-          <p className="mt-1 text-xs text-[var(--bp-muted)]">Turn on Focus Task from Task Details to add it here.</p>
+          <p className="text-sm font-black text-[var(--bp-text)]">{t('focusHome.noFocusTasks')}</p>
+          <p className="mt-1 text-xs text-[var(--bp-muted)]">{t('focusHome.focusTaskHint')}</p>
         </div>
       )}
     </section>
@@ -403,6 +412,7 @@ export function FocusCard({
   onRemove: () => void
   onView: () => void
 }) {
+  const { t } = useLanguage()
   const completedSubtasks = task.subtasks.filter((subtask) => subtask.isDone).length
   const priority = toUiPriority(task.priority)
   const status = toUiStatus(task.status)
@@ -414,17 +424,17 @@ export function FocusCard({
           <Badge label={priority} type={priority} />
           <Badge label={status} type={status} />
           <span className="rounded-full bg-[var(--bp-bg)] px-2 py-1 text-[11px] font-bold text-[var(--bp-muted)]">
-            {task.category || 'General'}
+            {task.category || t('focusHome.general')}
           </span>
         </div>
         <h4 className="truncate text-sm font-black text-[var(--bp-text)]">{task.title}</h4>
       </button>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--bp-muted)]">
-        <Meta label="Due" value={formatDue(task.dueDate, task.dueTime)} />
-        <Meta label="Estimated" value={task.estimatedTimeMinutes ? formatFocusMinutes(task.estimatedTimeMinutes) : '—'} />
-        <Meta label="Subtasks" value={task.subtasks.length ? `${completedSubtasks}/${task.subtasks.length} done` : 'None'} />
-        <Meta label="Progress" value={`${task.progress}%`} />
+        <Meta label={t('focusHome.due')} value={formatDue(task.dueDate, task.dueTime)} />
+        <Meta label={t('focusHome.estimatedShort')} value={task.estimatedTimeMinutes ? formatFocusMinutes(task.estimatedTimeMinutes) : '—'} />
+        <Meta label={t('focusHome.subtasks')} value={task.subtasks.length ? `${completedSubtasks}/${task.subtasks.length} ${t('focusHome.done')}` : t('focusHome.none')} />
+        <Meta label={t('focusHome.progress')} value={`${task.progress}%`} />
       </div>
 
       <div className="mt-3 h-1.5 rounded-full bg-[var(--bp-bg)]">
@@ -438,10 +448,10 @@ export function FocusCard({
 
       <div className="mt-4 flex gap-2">
         <PrimaryButton size="sm" onClick={onStart} disabled={disabled} className="flex-1">
-          Start Focus
+          {t('focusHome.startFocus')}
         </PrimaryButton>
         <OutlineButton size="sm" onClick={onRemove}>
-          Remove
+          {t('focusHome.remove')}
         </OutlineButton>
       </div>
     </div>
@@ -460,9 +470,10 @@ function Meta({ label, value }: { label: string; value: string }) {
 // --- Today's sessions ------------------------------------------------------
 
 function TodaySessions({ sessions }: { sessions: FocusSession[] }) {
+  const { t } = useLanguage()
   return (
     <section className="rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4">
-      <h3 className="mb-3 text-sm font-black text-[var(--bp-text)]">Today's Sessions</h3>
+      <h3 className="mb-3 text-sm font-black text-[var(--bp-text)]">{t('focusHome.todaySessions')}</h3>
       {sessions.length ? (
         <div className="divide-y divide-[var(--bp-border)]">
           {sessions.map((session) => (
@@ -473,7 +484,7 @@ function TodaySessions({ sessions }: { sessions: FocusSession[] }) {
                 </p>
                 {focusParentLabel(session) ? <p className="text-xs text-[var(--bp-muted)]">{focusParentLabel(session)}</p> : null}
                 <p className="text-xs text-[var(--bp-muted)]">
-                  {labelForType(session.sessionType) } · {formatTime(session.startedAt)}
+                  {labelForType(session.sessionType, t) } · {formatTime(session.startedAt)}
                 </p>
               </div>
               <div className="flex items-center gap-2 text-end">
@@ -486,20 +497,22 @@ function TodaySessions({ sessions }: { sessions: FocusSession[] }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-[var(--bp-muted)]">No sessions yet today. Start one from the queue above.</p>
+        <p className="text-sm text-[var(--bp-muted)]">{t('focusHome.noSessions')}</p>
       )}
     </section>
   )
 }
 
 function SessionStatusBadge({ status }: { status: string }) {
+  const { t } = useLanguage()
   const color =
     status === 'completed'
       ? 'bg-green-500/20 text-green-300'
       : status === 'cancelled'
         ? 'bg-red-500/20 text-red-300'
         : 'bg-blue-500/20 text-blue-300'
-  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${color}`}>{status}</span>
+  const label = status === 'completed' ? t('focusHome.statusCompleted') : status === 'cancelled' ? t('focusHome.statusCancelled') : t('focusHome.statusActive')
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${color}`}>{label}</span>
 }
 
 // --- Start-session modal ---------------------------------------------------
@@ -515,17 +528,20 @@ function StartSessionModal({
   onClose: () => void
   onStart: (type: FocusSessionType, minutes: number) => void
 }) {
+  const { t } = useLanguage()
   const [selected, setSelected] = useState<FocusSessionType>('pomodoro')
   const [customMinutes, setCustomMinutes] = useState(30)
   const preset = SESSION_TYPE_PRESETS.find((item) => item.type === selected)
   const minutes = selected === 'custom' ? clamp(customMinutes, 1, 600) : (preset?.minutes ?? 25)
+  const presetLabel = (type: FocusSessionType) => t(`focusHome.${type === 'pomodoro' ? 'pomodoro' : type === 'deep' ? 'deep' : type === 'long' ? 'long' : 'custom'}`)
+  const presetDescription = (type: FocusSessionType) => t(`focusHome.${type === 'pomodoro' ? 'pomodoroDescription' : type === 'deep' ? 'deepDescription' : type === 'long' ? 'longDescription' : 'customDescription'}`)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 px-4 backdrop-blur-[2px] md:items-center">
       <div className="w-full max-w-lg rounded-t-[28px] border border-[var(--bp-border)] bg-[var(--bp-surface-elevated)] p-6 md:rounded-[28px]">
         <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--bp-border)] md:hidden" />
         <header className="mb-4 text-center">
-          <h2 className="text-2xl font-black text-[var(--bp-text)]">Start Focus Session</h2>
+          <h2 className="text-2xl font-black text-[var(--bp-text)]">{t('focusHome.startSession')}</h2>
           <p className="mt-1 truncate text-sm text-[var(--bp-muted)]">{taskTitle}</p>
         </header>
 
@@ -542,17 +558,17 @@ function StartSessionModal({
               }`}
             >
               <p className="text-sm font-black text-[var(--bp-text)]">
-                {item.label}
+                {presetLabel(item.type)}
                 {item.type !== 'custom' ? ` · ${item.minutes}m` : ''}
               </p>
-              <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{item.description}</p>
+              <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{presetDescription(item.type)}</p>
             </button>
           ))}
         </div>
 
         {selected === 'custom' ? (
           <label className="mt-4 block">
-            <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">Minutes</span>
+            <span className="text-xs font-black uppercase tracking-wide text-[var(--bp-muted)]">{t('focusHome.minutes')}</span>
             <input
               type="number"
               min={1}
@@ -565,9 +581,9 @@ function StartSessionModal({
         ) : null}
 
         <footer className="mt-5 grid grid-cols-2 gap-3">
-          <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
+          <SecondaryButton onClick={onClose}>{t('focusUi.cancel')}</SecondaryButton>
           <PrimaryButton onClick={() => onStart(selected, minutes)} disabled={busy}>
-            Start {minutes} min
+            {t('focusHome.startWithDuration', { duration: t('focusUi.minutes', { count: minutes }) })}
           </PrimaryButton>
         </footer>
       </div>
@@ -591,8 +607,8 @@ function Badge({ label, type }: { label: string; type: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${color}`}>{label}</span>
 }
 
-function labelForType(type: FocusSessionType): string {
-  return SESSION_TYPE_PRESETS.find((item) => item.type === type)?.label ?? 'Focus'
+function labelForType(type: FocusSessionType, t?: ReturnType<typeof useLanguage>['t']): string {
+  return t ? t(`focusHome.${type === 'pomodoro' ? 'pomodoro' : type === 'deep' ? 'deep' : type === 'long' ? 'long' : 'custom'}`) : SESSION_TYPE_PRESETS.find((item) => item.type === type)?.label ?? 'Focus'
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -601,7 +617,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function formatDue(value?: string, dueTime?: string): string {
-  if (!value) return 'No due date'
+  if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   const datePart = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)

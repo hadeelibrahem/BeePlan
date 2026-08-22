@@ -4,6 +4,7 @@ import { AppScreen, InputField, OutlineButton, PrimaryButton, SectionCard } from
 import BeePlanLogo from '../components/BeePlanLogo';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/useTheme';
+import { useLanguage } from '../i18n/LanguageContext';
 import {
   getPasswordStrength,
   hasNoErrors,
@@ -20,6 +21,7 @@ interface AuthScreenProps {
 export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenProps) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const { t } = useLanguage();
   const { clearOAuthError, oauthError, oauthMessage, signIn, signInWithGoogle, signUp } = useAuth();
   const submitInFlightRef = useRef(false);
   const googleInFlightRef = useRef(false);
@@ -63,8 +65,8 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
         const hasSession = await signUp({ fullName: name.trim(), email: email.trim(), password });
         setSuccessMessage(
           hasSession
-            ? 'Account created successfully.'
-            : 'Account created successfully. Please check your email to confirm it.',
+            ? t('auth.accountCreated')
+            : t('auth.accountCreatedConfirm'),
         );
         if (hasSession) onSuccess?.(email);
       } else {
@@ -73,11 +75,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
       }
     } catch (error) {
       setSubmitError(
-        error instanceof Error
-          ? error.message
-          : isSignUp
-            ? 'Sign up failed. Please try again.'
-            : 'Sign in failed. Please try again.',
+        isSignUp ? t('auth.signUpFailed') : t('auth.signInFailed'),
       );
     } finally {
       submitInFlightRef.current = false;
@@ -99,7 +97,8 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
     try {
       await signInWithGoogle();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Google sign-in failed. Please try again.');
+      console.error('Google sign-in failed', error);
+      setSubmitError(t('auth.googleSignInFailed'));
     } finally {
       googleInFlightRef.current = false;
       setIsGoogleLoading(false);
@@ -132,19 +131,19 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
           <SectionCard className="p-6">
             <Text className="text-center text-2xl font-bold" style={{ color: colors.text }}>
-              {isSignUp ? 'Create your account' : 'Welcome back'}
+              {isSignUp ? t('auth.createAccountTitle') : t('auth.welcomeBackTitle')}
             </Text>
             <Text className="mb-6 mt-2 text-center text-sm" style={{ color: colors.secondaryText }}>
               {isSignUp
-                ? 'Start organizing your reminders and plans with BeePlan.'
-                : 'Sign in to manage your reminders, tasks, and smart plans.'}
+                ? t('auth.createAccountSubtitle', { brand_name: t('common.brand_name') })
+                : t('auth.signInSubtitle')}
             </Text>
 
             <View className="gap-4">
               {isSignUp && (
                 <InputField
-                  label="Full Name"
-                  placeholder="e.g. John Doe"
+                  label={t('auth.fullName')}
+                  placeholder={t('auth.fullNamePlaceholder')}
                   value={name}
                   onChangeText={(value) => {
                     setName(value);
@@ -155,13 +154,13 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                     setSubmitError('');
                     setSuccessMessage('');
                   }}
-                  error={errors.name}
+                  error={translateAuthError(errors.name, t)}
                 />
               )}
 
               <InputField
-                label="Email Address"
-                placeholder="name@example.com"
+                label={t('auth.emailAddress')}
+                placeholder={t('auth.emailPlaceholder')}
                 value={email}
                 onChangeText={(value) => {
                   setEmail(value);
@@ -174,15 +173,15 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                 }}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                error={errors.email}
+                error={translateAuthError(errors.email, t)}
               />
 
               <View>
                 <View className="mb-2 flex-row items-center justify-between">
-                  <Text className="text-xs font-semibold uppercase tracking-wider" style={{ color: colors.secondaryText }}>Password</Text>
+                  <Text className="text-xs font-semibold uppercase tracking-wider" style={{ color: colors.secondaryText }}>{t('auth.password')}</Text>
                   {!isSignUp && (
-                    <Pressable onPress={onForgotPassword} accessibilityRole="button" accessibilityLabel="Forgot password">
-                      <Text className="text-xs font-semibold" style={{ color: colors.accentInk }}>Forgot Password?</Text>
+                    <Pressable onPress={onForgotPassword} accessibilityRole="button" accessibilityLabel={t('auth.forgotPassword')}>
+                      <Text className="text-xs font-semibold" style={{ color: colors.accentInk }}>{t('auth.forgotPassword')}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -190,9 +189,10 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   className="flex-row items-center justify-between rounded-2xl border px-4 py-3.5"
                   style={{ backgroundColor: colors.input, borderColor: errors.password ? colors.error : colors.border }}
                 >
-                  <TextInputPasswordField
-                    value={password}
-                    showPassword={showPassword}
+                    <TextInputPasswordField
+                      value={password}
+                      showPassword={showPassword}
+                      placeholder={t('auth.passwordPlaceholder')}
                     onChangeText={(value) => {
                       setPassword(value);
                       setErrors((previous) => ({
@@ -209,13 +209,13 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                       setSuccessMessage('');
                     }}
                   />
-                  <Pressable onPress={() => setShowPassword(!showPassword)} accessibilityRole="button" accessibilityLabel="Toggle password visibility">
+                  <Pressable onPress={() => setShowPassword(!showPassword)} accessibilityRole="button" accessibilityLabel={t('auth.togglePassword')}>
                     <Text className="px-2 text-xs font-semibold" style={{ color: colors.secondaryText }}>
-                      {showPassword ? 'HIDE' : 'SHOW'}
+                      {showPassword ? t('actions.hide') : t('actions.show')}
                     </Text>
                   </Pressable>
                 </View>
-                {errors.password && <Text className="ml-1 mt-1 text-xs" style={{ color: colors.error }}>{errors.password}</Text>}
+                {errors.password && <Text className="ml-1 mt-1 text-xs" style={{ color: colors.error }}>{translateAuthError(errors.password, t)}</Text>}
                 {isSignUp && password && (
                   <PasswordStrengthMeter strength={passwordStrength} />
                 )}
@@ -223,8 +223,8 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
               {isSignUp && (
                 <InputField
-                  label="Confirm Password"
-                  placeholder="Re-enter password"
+                  label={t('auth.confirmPassword')}
+                  placeholder={t('auth.confirmPasswordPlaceholder')}
                   value={confirmPassword}
                   onChangeText={(value) => {
                     setConfirmPassword(value);
@@ -237,25 +237,25 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   }}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  error={errors.confirmPassword}
+                  error={translateAuthError(errors.confirmPassword, t)}
                 />
               )}
 
               {(oauthError || submitError) && (
-                <Text className="ml-1 mt-1 text-xs" style={{ color: colors.error }}>{oauthError || submitError}</Text>
+                <Text className="ml-1 mt-1 text-xs" style={{ color: colors.error }}>{oauthError ? t('auth.googleSignInFailed') : submitError}</Text>
               )}
               {oauthMessage && <Text className="ml-1 mt-1 text-xs" style={{ color: colors.success }}>{oauthMessage}</Text>}
               {successMessage && <Text className="ml-1 mt-1 text-xs" style={{ color: colors.success }}>{successMessage}</Text>}
 
               <PrimaryButton onPress={() => void handleSubmit()} disabled={isSubmitDisabled} loading={isLoading} fullWidth className="mt-2">
-                {isSignUp ? 'Create Account' : 'Sign In'}
+                {isSignUp ? t('auth.createAccount') : t('auth.signIn')}
               </PrimaryButton>
             </View>
 
             <View className="my-6 flex-row items-center">
               <View className="h-px flex-1" style={{ backgroundColor: colors.border }} />
               <Text className="px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.secondaryText }}>
-                or continue with
+                {t('auth.orContinueWith')}
               </Text>
               <View className="h-px flex-1" style={{ backgroundColor: colors.border }} />
             </View>
@@ -280,7 +280,7 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
                   <View className="mr-2 h-5 w-5 items-center justify-center rounded-full bg-white">
                     <Text className="text-xs font-black" style={{ color: colors.accentText }}>A</Text>
                   </View>
-                  <Text className="text-sm font-semibold" style={{ color: colors.text }}>Coming Soon</Text>
+                  <Text className="text-sm font-semibold" style={{ color: colors.text }}>{t('auth.comingSoon')}</Text>
                 </View>
               </OutlineButton>
             </View>
@@ -288,10 +288,10 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
           <View className="mt-6 flex-row items-center justify-center">
             <Text className="text-sm" style={{ color: colors.secondaryText }}>
-              {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+              {isSignUp ? t('auth.alreadyHaveAccount') : t('auth.dontHaveAccount')}
             </Text>
-            <Pressable onPress={toggleMode} accessibilityRole="button" accessibilityLabel="Toggle sign in or sign up">
-              <Text className="text-sm font-bold underline" style={{ color: colors.accentInk }}>{isSignUp ? 'Sign In' : 'Sign Up'}</Text>
+            <Pressable onPress={toggleMode} accessibilityRole="button" accessibilityLabel={t('auth.toggleMode')}>
+              <Text className="text-sm font-bold underline" style={{ color: colors.accentInk }}>{isSignUp ? t('auth.signIn') : t('auth.signUp')}</Text>
             </Pressable>
           </View>
         </View>
@@ -302,14 +302,15 @@ export default function AuthScreen({ onSuccess, onForgotPassword }: AuthScreenPr
 
 function PasswordStrengthMeter({ strength }: { strength: 'Weak' | 'Medium' | 'Strong' }) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const filled = strength === 'Strong' ? 3 : strength === 'Medium' ? 2 : 1;
   const color = strength === 'Strong' ? theme.colors.success : strength === 'Medium' ? theme.colors.warning : theme.colors.error;
   return (
     <View className="ml-1 mt-2" accessibilityLiveRegion="polite">
-      <View accessibilityRole="progressbar" accessibilityLabel={`Password strength: ${strength}`} accessibilityValue={{ min: 0, max: 3, now: filled }} className="flex-row gap-1">
+      <View accessibilityRole="progressbar" accessibilityLabel={t('auth.passwordStrength', { strength: translatedStrength(strength, t) })} accessibilityValue={{ min: 0, max: 3, now: filled }} className="flex-row gap-1">
         {[1, 2, 3].map((segment) => <View key={segment} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: segment <= filled ? color : theme.colors.border }} />)}
       </View>
-      <Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>Password strength: <Text className="font-bold" style={{ color: theme.colors.text }}>{strength}</Text></Text>
+      <Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>{t('auth.passwordStrength', { strength: translatedStrength(strength, t) })}</Text>
     </View>
   );
 }
@@ -317,17 +318,19 @@ function PasswordStrengthMeter({ strength }: { strength: 'Weak' | 'Medium' | 'St
 function TextInputPasswordField({
   value,
   showPassword,
+  placeholder,
   onChangeText,
 }: {
   value: string;
   showPassword: boolean;
+  placeholder: string;
   onChangeText: (value: string) => void;
 }) {
   const { theme } = useTheme();
 
   return (
     <TextInput
-      placeholder="Enter password"
+      placeholder={placeholder}
       placeholderTextColor={theme.colors.placeholder}
       value={value}
       onChangeText={onChangeText}
@@ -338,4 +341,20 @@ function TextInputPasswordField({
       style={{ color: theme.colors.text }}
     />
   );
+}
+
+function translatedStrength(strength: 'Weak' | 'Medium' | 'Strong', t: ReturnType<typeof useLanguage>['t']) {
+  return t(strength === 'Medium' ? 'auth.fair' : `auth.${strength.toLowerCase()}`);
+}
+
+function translateAuthError(error: string | undefined, t: ReturnType<typeof useLanguage>['t']) {
+  if (!error) return undefined;
+  const normalized = error.toLowerCase();
+  if (normalized.includes('full name')) return t('auth.fullNameRequired');
+  if (normalized.includes('email') && normalized.includes('required')) return t('auth.emailRequired');
+  if (normalized.includes('valid email')) return t('auth.emailInvalid');
+  if (normalized.includes('passwords do not match')) return t('auth.passwordsMismatch');
+  if (normalized.includes('password') && normalized.includes('required')) return t('auth.passwordRequired');
+  if (normalized.includes('6 characters')) return t('auth.passwordTooShort');
+  return t('common.somethingWentWrong');
 }

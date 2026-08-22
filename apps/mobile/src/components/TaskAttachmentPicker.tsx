@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 import { Pressable, Text, View } from 'react-native';
 import { useTheme } from '../theme/useTheme';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const ALLOWED_TYPES = [
   'image/*',
@@ -31,6 +32,7 @@ type Props = {
 export default function TaskAttachmentPicker({ files, onChange, disabled, onValidationError }: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const { t } = useLanguage();
   const fileKeySet = useMemo(
     () => new Set(files.map((file) => `${file.uri}:${file.name ?? ''}:${file.size ?? 0}`)),
     [files],
@@ -49,7 +51,7 @@ export default function TaskAttachmentPicker({ files, onChange, disabled, onVali
 
     const accepted: DocumentPicker.DocumentPickerAsset[] = [];
     for (const asset of result.assets ?? []) {
-      const validationError = getValidationError(asset);
+      const validationError = getValidationError(asset, t);
       if (validationError) {
         onValidationError?.(validationError);
         continue;
@@ -72,7 +74,7 @@ export default function TaskAttachmentPicker({ files, onChange, disabled, onVali
     <View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Upload files"
+        accessibilityLabel={t('attachments.uploadFiles')}
         onPress={() => void handlePick()}
         className="rounded-xl border border-dashed p-4 active:opacity-80"
         style={{
@@ -82,13 +84,13 @@ export default function TaskAttachmentPicker({ files, onChange, disabled, onVali
         }}
       >
         <Text className="text-center text-sm font-black" style={{ color: colors.accentInk }}>
-          Upload files
+          {t('attachments.uploadFiles')}
         </Text>
         <Text className="mt-2 text-center text-sm" style={{ color: colors.secondaryText }}>
-          Drag-and-drop is available on web. On mobile, tap to browse.
+          {t('attachments.mobileHelp')}
         </Text>
         <Text className="mt-1 text-center text-xs" style={{ color: colors.secondaryText }}>
-          Images, PDF, Word, Excel, PowerPoint, and text files
+          {t('attachments.supportedFiles')}
         </Text>
       </Pressable>
 
@@ -116,6 +118,7 @@ function AttachmentDraftRow({
 }) {
   const { theme } = useTheme();
   const { colors } = theme;
+  const { t } = useLanguage();
 
   return (
     <View className="flex-row items-center gap-3 rounded-xl p-3" style={{ backgroundColor: colors.card }}>
@@ -124,7 +127,7 @@ function AttachmentDraftRow({
       </View>
       <View className="min-w-0 flex-1">
         <Text className="text-sm font-bold" style={{ color: colors.text }} numberOfLines={1}>
-          {file.name ?? 'Attachment'}
+          {file.name ?? t('attachments.attachment')}
         </Text>
         <Text className="text-xs" style={{ color: colors.secondaryText }}>
           {formatFileSize(file.size)}
@@ -133,24 +136,24 @@ function AttachmentDraftRow({
       </View>
       <Pressable onPress={onRemove} className="rounded-lg px-3 py-1.5 active:opacity-80" style={{ backgroundColor: `${colors.error}22` }}>
         <Text className="text-xs font-bold" style={{ color: colors.error }}>
-          Remove
+          {t('attachments.remove')}
         </Text>
       </Pressable>
     </View>
   );
 }
 
-function getValidationError(asset: DocumentPicker.DocumentPickerAsset) {
+function getValidationError(asset: DocumentPicker.DocumentPickerAsset, t: ReturnType<typeof useLanguage>['t']) {
   if (asset.size && asset.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    return `${asset.name ?? 'Selected file'} is too large. Maximum size is 10MB.`;
+    return t('attachments.tooLarge', { name: asset.name ?? t('attachments.selectedFile') });
   }
 
   if (asset.mimeType && !isAllowedMimeType(asset.mimeType)) {
-    return `${asset.name ?? 'Selected file'} is not a supported file type.`;
+    return t('attachments.unsupported', { name: asset.name ?? t('attachments.selectedFile') });
   }
 
   if (!asset.mimeType && asset.name && !isAllowedByExtension(asset.name)) {
-    return `${asset.name} is not a supported file type.`;
+    return t('attachments.unsupported', { name: asset.name });
   }
 
   return '';

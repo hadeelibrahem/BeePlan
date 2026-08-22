@@ -6,15 +6,9 @@ import type { ApiTask } from '../lib/tasksApi'
 import { useTheme } from '../theme/useTheme'
 import { createTaskParamsForCalendarDate } from './calendarCreateTask'
 import { ExistingScheduleConflict } from '../components/ExistingScheduleConflict'
-import { GoogleCalendarEvents } from '../features/calendar/GoogleCalendarEvents'
+import { useLanguage } from '../i18n/LanguageContext'
 
 type ViewMode = 'month' | 'week' | 'day'
-
-const tabs: { value: ViewMode; label: string }[] = [
-  { value: 'month', label: 'Month' },
-  { value: 'week', label: 'Week' },
-  { value: 'day', label: 'Day' },
-]
 
 const dayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
@@ -35,6 +29,12 @@ export default function CalendarScreen({ tasks, reminders, accessToken = '', onB
 }) {
   const { theme } = useTheme()
   const { colors } = theme
+  const { t, language } = useLanguage()
+  const tabs: { value: ViewMode; label: string }[] = [
+    { value: 'month', label: t('calendar.month') },
+    { value: 'week', label: t('calendar.week') },
+    { value: 'day', label: t('calendar.day') },
+  ]
   const [mode, setMode] = useState<ViewMode>('month')
   const [cursor, setCursor] = useState(new Date())
   const [selected, setSelected] = useState(dayKey(new Date()))
@@ -77,18 +77,18 @@ export default function CalendarScreen({ tasks, reminders, accessToken = '', onB
 
   return (
     <AppScreen>
-      <PageHeader title="Calendar" subtitle="Tasks and reminders" onBack={onBack} />
+      <PageHeader title={t('calendar.title')} subtitle={t('calendar.subtitle')} onBack={onBack} />
       <ExistingScheduleConflict accessToken={accessToken} date={selected} />
       <FilterTabs tabs={tabs} active={mode} onChange={setMode} />
       <View className="mb-3 flex-row items-center justify-between">
-        <Pressable onPress={() => move(-1)} accessibilityRole="button" accessibilityLabel="Previous period">
-          <Text style={{ color: colors.accentInk }}>&lt; Prev</Text>
+        <Pressable onPress={() => move(-1)} accessibilityRole="button" accessibilityLabel={t('calendar.previousPeriod')}>
+          <Text style={{ color: colors.accentInk }}>&lt; {t('calendar.previous')}</Text>
         </Pressable>
         <Text className="font-black" style={{ color: colors.text }}>
-          {cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+          {cursor.toLocaleDateString(language === 'ar' ? 'ar' : 'en-US', { month: 'long', year: 'numeric' })}
         </Text>
-        <Pressable onPress={() => move(1)} accessibilityRole="button" accessibilityLabel="Next period">
-          <Text style={{ color: colors.accentInk }}>Next &gt;</Text>
+        <Pressable onPress={() => move(1)} accessibilityRole="button" accessibilityLabel={t('calendar.nextPeriod')}>
+          <Text style={{ color: colors.accentInk }}>{t('calendar.next')} &gt;</Text>
         </Pressable>
       </View>
       <SectionCard>
@@ -98,13 +98,13 @@ export default function CalendarScreen({ tasks, reminders, accessToken = '', onB
             const items = byDate.get(key)
             const active = key === selected
             return (
-              <Pressable key={key} onPress={() => { setSelected(key); setCursor(date) }} accessibilityRole="button" accessibilityState={{ selected: active }} accessibilityLabel={`${date.toDateString()}, ${items?.tasks.length ?? 0} tasks, ${items?.reminders.length ?? 0} reminders`} className={mode === 'month' ? 'w-[14.28%] min-h-16 p-1' : 'w-full min-h-16 p-2'} style={{ backgroundColor: active ? colors.accentSoft : 'transparent', borderColor: colors.border, borderWidth: 0.5 }}>
+              <Pressable key={key} onPress={() => { setSelected(key); setCursor(date) }} accessibilityRole="button" accessibilityState={{ selected: active }} accessibilityLabel={t('calendar.daySummary', { date: date.toLocaleDateString(language === 'ar' ? 'ar' : 'en-US'), tasks: items?.tasks.length ?? 0, reminders: items?.reminders.length ?? 0 })} className={mode === 'month' ? 'w-[14.28%] min-h-16 p-1' : 'w-full min-h-16 p-2'} style={{ backgroundColor: active ? colors.accentSoft : 'transparent', borderColor: colors.border, borderWidth: 0.5 }}>
                 <Text style={{ color: colors.text }}>{date.getDate()}</Text>
                 <View className="mt-1 flex-row gap-1">
                   {items?.tasks.length ? <View className="h-2 w-2 rounded-full" style={{ backgroundColor: colors.accent }} /> : null}
                   {items?.reminders.length ? <View className="h-2 w-2 rounded-full" style={{ backgroundColor: colors.warning }} /> : null}
                 </View>
-                {mode !== 'month' ? <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{items?.tasks.length ?? 0} tasks / {items?.reminders.length ?? 0} reminders</Text> : null}
+                {mode !== 'month' ? <Text className="mt-1 text-xs" style={{ color: colors.secondaryText }}>{t('calendar.counts', { tasks: items?.tasks.length ?? 0, reminders: items?.reminders.length ?? 0 })}</Text> : null}
               </Pressable>
             )
           })}
@@ -113,23 +113,22 @@ export default function CalendarScreen({ tasks, reminders, accessToken = '', onB
       <SectionCard className="mt-3">
         <View className="mb-2 flex-row items-center justify-between gap-3">
           <Text className="flex-1 font-black" style={{ color: colors.text }}>
-          {new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+          {new Date(`${selected}T00:00:00`).toLocaleDateString(language === 'ar' ? 'ar' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </Text>
           <Pressable
             onPress={() => onCreateTask(createTaskParamsForCalendarDate(selected))}
             accessibilityRole="button"
-            accessibilityLabel={`Create task for ${selected}`}
+            accessibilityLabel={t('calendar.createTaskFor', { date: selected })}
             className="rounded-xl px-3 py-2 active:opacity-80"
             style={{ backgroundColor: colors.accent }}
           >
-            <Text className="text-xs font-black" style={{ color: colors.accentText }}>+ Task</Text>
+            <Text className="text-xs font-black" style={{ color: colors.accentText }}>+ {t('calendar.task')}</Text>
           </Pressable>
         </View>
-        <GoogleCalendarEvents accessToken={accessToken} date={selected} />
         <ScrollView>
-          {selectedItems.tasks.map((task) => <Pressable key={task.id} onPress={() => onTask(task.id)} accessibilityRole="button" accessibilityLabel={`Open task ${task.title}`} className="mb-2 rounded-lg p-2" style={{ backgroundColor: colors.background }}><Text style={{ color: colors.text }}>Task: {task.title}</Text></Pressable>)}
-          {selectedItems.reminders.map((reminder) => <Pressable key={reminder.id} onPress={() => onReminder(reminder.id)} accessibilityRole="button" accessibilityLabel={`Open reminder ${reminder.title}`} className="mb-2 rounded-lg p-2" style={{ backgroundColor: colors.background }}><Text style={{ color: colors.text }}>Reminder: {reminder.title}</Text></Pressable>)}
-          {!selectedItems.tasks.length && !selectedItems.reminders.length ? <Text style={{ color: colors.secondaryText }}>Nothing scheduled.</Text> : null}
+          {selectedItems.tasks.map((task) => <Pressable key={task.id} onPress={() => onTask(task.id)} accessibilityRole="button" accessibilityLabel={t('calendar.openTask', { title: task.title })} className="mb-2 rounded-lg p-2" style={{ backgroundColor: colors.background }}><Text style={{ color: colors.text }}>{t('calendar.taskValue', { title: task.title })}</Text></Pressable>)}
+          {selectedItems.reminders.map((reminder) => <Pressable key={reminder.id} onPress={() => onReminder(reminder.id)} accessibilityRole="button" accessibilityLabel={t('calendar.openReminder', { title: reminder.title })} className="mb-2 rounded-lg p-2" style={{ backgroundColor: colors.background }}><Text style={{ color: colors.text }}>{t('calendar.reminderValue', { title: reminder.title })}</Text></Pressable>)}
+          {!selectedItems.tasks.length && !selectedItems.reminders.length ? <Text style={{ color: colors.secondaryText }}>{t('calendar.nothingScheduled')}</Text> : null}
         </ScrollView>
       </SectionCard>
     </AppScreen>

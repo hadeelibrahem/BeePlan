@@ -1,0 +1,3 @@
+import { apiFetch, readJsonOrThrow } from '../../lib/apiClient'
+export type Challenge={id:string;title:string;description:string;type:'focus_minutes'|'focus_sessions'|'tasks_completed';targetValue:number;status:'scheduled'|'active'|'completed';startAt:string;endAt:string;progressValue:number;completed:boolean;completedAt:string|null}
+export const challengesApi={list:(token:string)=>apiFetch('/challenges',{headers:{Authorization:`Bearer ${token}`}}).then(r=>readJsonOrThrow<Challenge[]>(r,'challenges')),get:(token:string,id:string)=>apiFetch(`/challenges/${id}`,{headers:{Authorization:`Bearer ${token}`}}).then(r=>readJsonOrThrow<Challenge>(r,'challenge'))}

@@ -21,6 +21,7 @@ import type {
   UseFocusBlocker,
 } from "../../../modules/beeplan-focus-blocker";
 import type { StrictModePrefs } from "./strictModeStorage";
+import { useLanguage } from '../../i18n/LanguageContext';
 
 type Props = {
   visible: boolean;
@@ -42,6 +43,7 @@ export function StrictModeSetupSheet({
   onClose,
   onSaved,
 }: Props) {
+  const { t } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -323,8 +325,7 @@ export function StrictModeSetupSheet({
           <View style={{ flexDirection: "row", gap: 12, marginTop: 16 }}>
             <View style={{ flex: 1 }}>
               <OutlineButton fullWidth onPress={onClose}>
-                Cancel
-              </OutlineButton>
+                {t('common.cancel')}</OutlineButton>
             </View>
             <View style={{ flex: 1 }}>
               <PrimaryButton

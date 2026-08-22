@@ -16,7 +16,7 @@ import { queryKeys } from '../lib/queryKeys'
 import { getTasks } from '../lib/tasksApi'
 import { computeCompletionTrend, computeTaskAnalytics } from '../lib/analytics'
 import { getReminders } from '../features/reminders'
-import { formatFocusMinutes, getFocusStats } from '../lib/focusApi'
+import { getFocusStats } from '../lib/focusApi'
 
 type AnalyticsScreenProps = SidebarNavHandlers & {
   accessToken?: string
@@ -26,7 +26,7 @@ type AnalyticsScreenProps = SidebarNavHandlers & {
 const LOADING_LABEL = '…'
 
 export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: AnalyticsScreenProps) {
-  const { t, toggleLanguage } = useLanguage()
+  const { formatNumber, formatPercent, t, toggleLanguage } = useLanguage()
   const { mode, toggleTheme } = useTheme()
 
   // Read tasks from the same unfiltered cache the Tasks screen, dashboard, and
@@ -57,14 +57,10 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
   // Show the loading placeholder only before the first result lands; once tasks
   // are cached, navigating back keeps the numbers on screen instead of flashing.
   const tasksLoading = tasksQuery.isLoading
-  const tasksError = tasksQuery.isError
-    ? tasksQuery.error instanceof Error
-      ? tasksQuery.error.message
-      : 'Unable to load analytics.'
-    : ''
+  const tasksError = tasksQuery.isError ? t('analyticsUi.loadFailed') : ''
 
   const remindersLoading = remindersQuery.isLoading
-  const remindersValue = remindersLoading ? LOADING_LABEL : String(remindersQuery.data?.length ?? 0)
+  const remindersValue = remindersLoading ? LOADING_LABEL : formatNumber(remindersQuery.data?.length ?? 0)
   const focusStats = focusStatsQuery.data
 
   const statValue = (value: string) => (tasksLoading ? LOADING_LABEL : value)
@@ -73,8 +69,8 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
     <AppLayout
       active="analytics"
       {...nav}
-      panelTitle="Keep going!"
-      panelCaption="You're doing great today."
+      panelTitle={t('analyticsUi.keepGoing')}
+      panelCaption={t('analyticsUi.doingGreat')}
       panelPercent={analytics.completionRate}
     >
       <PageHeader
@@ -101,56 +97,66 @@ export default function AnalyticsScreen({ accessToken, onSignOut, ...nav }: Anal
             disabled={tasksQuery.isFetching}
             className="text-xs font-bold text-[var(--bp-accent-ink)] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {tasksQuery.isFetching ? 'Retrying…' : 'Retry'}
+            {tasksQuery.isFetching ? t('analyticsUi.retrying') : t('analyticsUi.retry')}
           </button>
         </div>
       ) : null}
 
       <section className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={statValue(String(analytics.completedTasks))} title="Completed Tasks" desc="Tasks marked done" />
-        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={statValue(String(analytics.missedTasks))} title="Missed Tasks" desc="Tasks past their due date" />
-        <StatsCard icon={<AnalyticsIcon className="h-4 w-4" />} value={statValue(`${analytics.completionRate}%`)} title="Completion Rate" desc="Completed of all tasks" />
-        <StatsCard icon={<RemindersIcon className="h-4 w-4" />} value={remindersValue} title="Reminders" desc="Active and completed" />
+        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={statValue(formatNumber(analytics.completedTasks))} title={t('analyticsUi.completedTasks')} desc={t('analyticsUi.tasksMarkedDone')} />
+        <StatsCard icon={<TasksIcon className="h-4 w-4" />} value={statValue(formatNumber(analytics.missedTasks))} title={t('analyticsUi.missedTasks')} desc={t('analyticsUi.tasksPastDue')} />
+        <StatsCard icon={<AnalyticsIcon className="h-4 w-4" />} value={statValue(formatPercent(analytics.completionRate))} title={t('analyticsUi.completionRate')} desc={t('analyticsUi.completedOfAll')} />
+        <StatsCard icon={<RemindersIcon className="h-4 w-4" />} value={remindersValue} title={t('analyticsUi.reminders')} desc={t('analyticsUi.activeAndCompleted')} />
       </section>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <SectionCard>
-          <h2 className="mb-1 text-sm font-bold">Completion trend</h2>
-          <p className="mb-3 text-xs text-[var(--bp-muted)]">Tasks completed in the last 14 days</p>
+          <h2 className="mb-1 text-sm font-bold">{t('analyticsUi.completionTrend')}</h2>
+          <p className="mb-3 text-xs text-[var(--bp-muted)]">{t('analyticsUi.lastFourteenDays')}</p>
           <CompletionTrend points={completionTrend} loading={tasksLoading} />
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-1 text-sm font-bold">Focus time</h2>
-          <p className="mb-3 text-xs text-[var(--bp-muted)]">Based on completed focus sessions</p>
+          <h2 className="mb-1 text-sm font-bold">{t('analyticsUi.focusTime')}</h2>
+          <p className="mb-3 text-xs text-[var(--bp-muted)]">{t('analyticsUi.basedOnFocus')}</p>
           {focusStatsQuery.isLoading ? (
-            <p className="text-sm text-[var(--bp-muted)]">Loading focus summary...</p>
+            <p className="text-sm text-[var(--bp-muted)]">{t('analyticsUi.loadingFocus')}</p>
           ) : focusStatsQuery.isError ? (
-            <p role="status" className="text-sm text-red-300">Focus summary is unavailable right now.</p>
+            <p role="status" className="text-sm text-red-300">{t('analyticsUi.focusUnavailable')}</p>
           ) : focusStats ? (
-            <dl className="grid grid-cols-2 gap-3" aria-label="Focus time summary">
-              <FocusMetric label="Today" value={formatFocusMinutes(focusStats.focusMinutesToday)} />
-              <FocusMetric label="This week" value={formatFocusMinutes(focusStats.totalFocusMinutesThisWeek)} />
-              <FocusMetric label="Completed sessions today" value={String(focusStats.completedSessionsToday)} />
-              <FocusMetric label="Current streak" value={`${focusStats.currentStreak} day${focusStats.currentStreak === 1 ? '' : 's'}`} />
+            <dl className="grid grid-cols-2 gap-3" aria-label={t('analyticsUi.focusSummary')}>
+              <FocusMetric label={t('analyticsUi.today')} value={formatMinutes(focusStats.focusMinutesToday, t, formatNumber)} />
+              <FocusMetric label={t('analyticsUi.thisWeek')} value={formatMinutes(focusStats.totalFocusMinutesThisWeek, t, formatNumber)} />
+              <FocusMetric label={t('analyticsUi.sessionsToday')} value={formatNumber(focusStats.completedSessionsToday)} />
+              <FocusMetric label={t('analyticsUi.currentStreak')} value={t('analyticsUi.days', { count: formatNumber(focusStats.currentStreak) })} />
             </dl>
           ) : (
-            <p className="text-sm text-[var(--bp-muted)]">No focus sessions yet.</p>
+            <p className="text-sm text-[var(--bp-muted)]">{t('analyticsUi.noFocusSessions')}</p>
           )}
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-3 text-sm font-bold">Tasks by Category</h2>
+          <h2 className="mb-3 text-sm font-bold">{t('analyticsUi.tasksByCategory')}</h2>
           <BreakdownList entries={analytics.byCategory} total={analytics.totalTasks} loading={tasksLoading} />
         </SectionCard>
 
         <SectionCard>
-          <h2 className="mb-3 text-sm font-bold">Tasks by Priority</h2>
-          <BreakdownList entries={analytics.byPriority} total={analytics.totalTasks} loading={tasksLoading} labelize={capitalize} />
+          <h2 className="mb-3 text-sm font-bold">{t('analyticsUi.tasksByPriority')}</h2>
+          <BreakdownList entries={analytics.byPriority} total={analytics.totalTasks} loading={tasksLoading} labelize={(value) => t(`taskLabels.priority.${value}`)} />
         </SectionCard>
       </div>
     </AppLayout>
   )
+}
+
+type Translate = (key: string, params?: Record<string, string | number>) => string
+function formatMinutes(totalMinutes: number, t: Translate, formatNumber: (value: number) => string) {
+  const minutes = Math.max(0, Math.round(totalMinutes))
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours && rest) return t('analyticsUi.hoursMinutes', { hours: formatNumber(hours), minutes: formatNumber(rest) })
+  if (hours) return t('analyticsUi.hours', { count: formatNumber(hours) })
+  return t('analyticsUi.minutes', { count: formatNumber(rest) })
 }
 
 function FocusMetric({ label, value }: { label: string; value: string }) {
@@ -163,15 +169,16 @@ function FocusMetric({ label, value }: { label: string; value: string }) {
 }
 
 function CompletionTrend({ points, loading }: { points: ReturnType<typeof computeCompletionTrend>; loading: boolean }) {
-  if (loading) return <p className="text-sm text-[var(--bp-muted)]">Loading completion trend...</p>
+  const { formatNumber, t } = useLanguage()
+  if (loading) return <p className="text-sm text-[var(--bp-muted)]">{t('analyticsUi.loadingTrend')}</p>
 
   const maximum = Math.max(1, ...points.map((point) => point.completed))
   const total = points.reduce((sum, point) => sum + point.completed, 0)
-  if (total === 0) return <p className="text-sm text-[var(--bp-muted)]">No completions recorded in the last 14 days.</p>
+  if (total === 0) return <p className="text-sm text-[var(--bp-muted)]">{t('analyticsUi.noCompletions')}</p>
 
   return (
     <>
-      <div role="img" aria-label={`Completion trend: ${total} tasks completed in the last 14 days`}>
+      <div role="img" aria-label={t('analyticsUi.trendDescription', { count: formatNumber(total) })}>
         <div className="flex h-28 items-end gap-1" aria-hidden="true">
           {points.map((point) => (
             <div key={point.date} className="flex min-w-0 flex-1 flex-col justify-end">
@@ -187,15 +194,11 @@ function CompletionTrend({ points, loading }: { points: ReturnType<typeof comput
           <span>{points.at(-1)?.date}</span>
         </div>
       </div>
-      <ul className="sr-only" aria-label="Daily completion values">
-        {points.map((point) => <li key={point.date}>{point.date}: {point.completed} completed</li>)}
+      <ul className="sr-only" aria-label={t('analyticsUi.dailyValues')}>
+        {points.map((point) => <li key={point.date}>{t('analyticsUi.dailyCompleted', { date: point.date, count: formatNumber(point.completed) })}</li>)}
       </ul>
     </>
   )
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function BreakdownList({
@@ -209,12 +212,13 @@ function BreakdownList({
   loading?: boolean
   labelize?: (value: string) => string
 }) {
+  const { formatNumber, formatPercent, t } = useLanguage()
   if (loading) {
-    return <p className="text-sm text-[var(--bp-muted)]">Loading breakdown…</p>
+    return <p className="text-sm text-[var(--bp-muted)]">{t('analyticsUi.loadingBreakdown')}</p>
   }
 
   if (!entries.length) {
-    return <p className="text-sm text-[var(--bp-muted)]">No tasks yet — create one to see a breakdown here.</p>
+    return <p className="text-sm text-[var(--bp-muted)]">{t('analyticsUi.noTasksBreakdown')}</p>
   }
 
   return (
@@ -225,7 +229,7 @@ function BreakdownList({
           <div key={label}>
             <div className="mb-1 flex items-center justify-between text-sm">
               <span className="font-semibold text-[var(--bp-text)]">{labelize(label)}</span>
-              <span className="text-[var(--bp-muted)]">{count} - {percent}%</span>
+              <span className="text-[var(--bp-muted)]">{formatNumber(count)} - {formatPercent(percent)}</span>
             </div>
             <div className="h-1.5 rounded-full bg-[var(--bp-bg)]">
               <div className="h-1.5 rounded-full bg-[var(--bp-accent)]" style={{ width: `${percent}%` }} />

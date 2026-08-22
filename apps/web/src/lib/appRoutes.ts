@@ -23,13 +23,15 @@ export type AppScreen =
   | 'whiteboardEditor'
   | 'achievements'
   | 'social'
+  | 'feedback'
+  | 'challenges'
   | 'notifications'
   | 'settings'
   | 'timeCapsules'
   | 'supervision'
   | 'notFound'
 
-export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string; roomId?: string; boardId?: string }
+export type AppRoute = { screen: AppScreen; taskId?: string; reminderId?: string; roomId?: string; boardId?: string; feedbackId?: string }
 
 const STATIC_ROUTES: Record<string, AppScreen> = {
   '/': 'dashboard',
@@ -52,6 +54,8 @@ const STATIC_ROUTES: Record<string, AppScreen> = {
   '/whiteboards': 'whiteboards',
   '/achievements': 'achievements',
   '/people': 'social',
+  '/feedback': 'feedback',
+  '/challenges': 'challenges',
   '/notifications': 'notifications',
   '/settings': 'settings',
   '/time-capsules': 'timeCapsules',
@@ -67,6 +71,9 @@ export function resolveAppRoute(pathname: string): AppRoute {
   if (focusRoom) return { screen: 'focusRooms', roomId: decodeURIComponent(focusRoom[1]) }
   const whiteboard = normalized.match(/^\/whiteboards\/([^/]+)$/)
   if (whiteboard) return { screen: 'whiteboardEditor', boardId: decodeURIComponent(whiteboard[1]) }
+  const feedback = normalized.match(/^\/feedback\/([^/]+)$/)
+  if (feedback) return { screen: 'feedback', feedbackId: decodeURIComponent(feedback[1]) }
+  if (normalized.match(/^\/challenges\/([^/]+)$/)) return { screen: 'challenges', feedbackId: decodeURIComponent(normalized.split('/').pop()!) }
 
   const task = normalized.match(/^\/tasks\/([^/]+)(?:\/(edit|collaboration))?$/)
   if (task) {
@@ -109,6 +116,8 @@ export function pathForScreen(screen: Exclude<AppScreen, 'notFound'>, ids: { tas
     case 'notes': return '/notes'
     case 'analytics': return '/analytics'
     case 'social': return '/people'
+    case 'feedback': return '/feedback'
+    case 'challenges': return '/challenges'
     case 'notifications': return '/notifications'
     case 'settings': return '/settings'
     case 'timeCapsules': return '/time-capsules'

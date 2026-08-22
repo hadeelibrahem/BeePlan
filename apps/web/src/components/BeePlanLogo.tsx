@@ -10,11 +10,12 @@ type BeePlanLogoProps = {
 }
 
 function BeeIcon({ size }: { size: number }) {
+  const { t } = useLanguage()
   const filterId = `beeplan-glow-${size}`
 
   return (
     <svg
-      aria-label="BeePlan bee icon"
+      aria-label={t('auth.beeIconLabel')}
       fill="none"
       height={size}
       viewBox="0 0 64 64"
@@ -92,6 +93,7 @@ export function BeePlanLogo({
   showTagline = false,
   className = '',
 }: BeePlanLogoProps) {
+  const { t } = useLanguage()
   if (iconOnly) {
     return (
       <span className={className} style={{ alignItems: 'center', display: 'inline-flex' }}>
@@ -127,7 +129,7 @@ export function BeePlanLogo({
           marginTop: gap * 0.3,
         }}
       >
-        Bee<span style={{ color: YELLOW }}>Plan</span>
+        Bee{/* i18n-audit-ignore: BeePlan brand wordmark */}<span style={{ color: YELLOW }}>Plan</span>
       </span>
       {showTagline && (
         <span
@@ -141,7 +143,7 @@ export function BeePlanLogo({
             textTransform: 'uppercase',
           }}
         >
-          SMART PRODUCTIVITY
+          {t('auth.smartProductivity')}
         </span>
       )}
     </div>
@@ -149,3 +151,4 @@ export function BeePlanLogo({
 }
 
 export default BeePlanLogo
+import { useLanguage } from '../i18n/LanguageContext'

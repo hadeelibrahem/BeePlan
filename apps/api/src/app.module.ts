@@ -21,13 +21,19 @@ import { SocialModule } from './social/social.module';
 import { SpeechModule } from './speech/speech.module';
 import { TasksModule } from './tasks/tasks.module';
 import { WeatherTravelModule } from './weather-travel/weather-travel.module';
-import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { TaskAssistantModule } from './task-assistant/task-assistant.module';
 import { FocusRoomsModule } from './focus-rooms/focus-rooms.module';
 import { TimeCapsulesModule } from './time-capsules/time-capsules.module';
 import { SupervisionModule } from './supervision/supervision.module';
 import { WhiteboardModule } from './whiteboard/whiteboard.module';
 import { AchievementsModule } from './achievements/achievements.module';
+import { AdminModule } from './admin/admin.module';
+import { ObservabilityModule } from './observability/observability.module';
+import { AdminAiModule } from './admin-ai/admin-ai.module';
+import { ReportsModule } from './reports/reports.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { ChallengesModule } from './challenges/challenges.module';
+import { RuntimeTelemetryModule } from './admin/system-health/runtime-telemetry.module';
 
 @Module({
   imports: [
@@ -44,6 +50,7 @@ import { AchievementsModule } from './achievements/achievements.module';
     }),
     ScheduleModule.forRoot(),
     DatabaseModule,
+    RuntimeTelemetryModule,
     AuthModule,
     RemindersModule,
     SocialModule,
@@ -59,12 +66,17 @@ import { AchievementsModule } from './achievements/achievements.module';
     FocusModule,
     FocusRoomsModule,
     WeatherTravelModule,
-    GoogleCalendarModule,
     TaskAssistantModule,
     TimeCapsulesModule,
     SupervisionModule,
     WhiteboardModule,
     AchievementsModule,
+    AdminModule,
+    ObservabilityModule,
+    AdminAiModule,
+    ReportsModule,
+    FeedbackModule,
+    ChallengesModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

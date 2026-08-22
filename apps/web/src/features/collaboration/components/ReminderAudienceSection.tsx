@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PrimaryButton } from '../../../components/layout/Buttons'
+import { useLanguage } from '../../../i18n/LanguageContext'
 import { createPersonalReminder, createSharedReminder, getTaskReminders } from '../api/collaboration.api'
 import { friendlyError } from '../errorMessages'
 import type { TaskReminder } from '../types'
@@ -17,12 +18,15 @@ type Props = {
  * on the Task Details page. Moved into the Edit Task screen's Reminder
  * section so there is a single place to manage reminders.
  */
-export function ReminderAudienceSection({ taskId, accessToken, canEditShared, onError, onNotice }: Props) {
+export function ReminderAudienceSection({ taskId, accessToken, canEditShared, onError, onNotice: emitNotice }: Props) {
+  const { t } = useLanguage()
   const [tab, setTab] = useState<'shared' | 'personal'>(canEditShared ? 'shared' : 'personal')
   const [when, setWhen] = useState('')
   const [title, setTitle] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [reminders, setReminders] = useState<TaskReminder[]>([])
+  const onNotice = (_message?: string) =>
+    emitNotice(t(tab === 'shared' ? 'editTaskControls.sharedReminderSet' : 'editTaskControls.personalReminderSet'))
 
   useEffect(() => {
     let active = true
@@ -46,11 +50,7 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
       setReminders((prev) => [created, ...prev])
       setWhen('')
       setTitle('')
-      onNotice(
-        tab === 'shared'
-          ? 'Shared reminder set for everyone on this task.'
-          : 'Personal reminder set — only you will be notified.',
-      )
+      onNotice()
     } catch (err) {
       onError(friendlyError(err, 'Could not create the reminder.'))
     } finally {
@@ -61,7 +61,7 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h4 className="text-xs font-black">🔔 Reminder Audience</h4>
+        <h4 className="text-xs font-black">🔔 {t('editTaskControls.reminderAudience')}</h4>
         <div className="flex overflow-hidden rounded-lg border border-[var(--bp-border)]">
           {(['shared', 'personal'] as const).map((option) => (
             <button
@@ -76,7 +76,7 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
                   : 'text-[var(--bp-muted)] hover:text-[var(--bp-text)]'
               }`}
             >
-              {option}
+              {t(`editTaskControls.${option}`)}
             </button>
           ))}
         </div>
@@ -84,8 +84,8 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
 
       <p className="mb-2 text-[11px] leading-5 text-[var(--bp-muted)]">
         {tab === 'shared'
-          ? 'A shared reminder notifies every member of this task.'
-          : 'A personal reminder notifies only you.'}
+          ? t('editTaskControls.sharedReminderHelp')
+          : t('editTaskControls.personalReminderHelp')}
       </p>
 
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -93,19 +93,19 @@ export function ReminderAudienceSection({ taskId, accessToken, canEditShared, on
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Reminder title (optional)"
-          aria-label="Reminder title"
+          placeholder={t('editTaskControls.reminderTitlePlaceholder')}
+          aria-label={t('editTaskControls.reminderTitle')}
           className="flex-1 rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-xs text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]/60"
         />
         <input
           type="datetime-local"
           value={when}
           onChange={(e) => setWhen(e.target.value)}
-          aria-label="Reminder time"
+          aria-label={t('editTaskControls.reminderTime')}
           className="rounded-lg border border-[var(--bp-border)] bg-[var(--bp-input)] px-3 py-2 text-xs text-[var(--bp-text)] outline-none focus:border-[var(--bp-accent)]/60"
         />
         <PrimaryButton size="sm" loading={submitting} disabled={!when} onClick={() => void submit()}>
-          Set
+          {t('editTaskControls.setReminder')}
         </PrimaryButton>
       </div>
 

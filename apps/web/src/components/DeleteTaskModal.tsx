@@ -1,4 +1,5 @@
 import { OutlineButton } from './layout/Buttons'
+import { useLanguage } from '../i18n/LanguageContext'
 
 type DeleteTaskModalProps = {
   taskTitle?: string
@@ -15,6 +16,7 @@ export default function DeleteTaskModal({
   onCancel,
   onConfirm,
 }: DeleteTaskModalProps) {
+  const { t } = useLanguage()
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
@@ -28,25 +30,24 @@ export default function DeleteTaskModal({
         </div>
 
         <h2 id="delete-task-title" className="text-2xl font-black">
-          Delete Task?
+          {t('deleteTask.title')}
         </h2>
         <p className="mt-3 text-sm leading-6 text-[var(--bp-muted)]">
-          This action cannot be undone. Are you sure you want to permanently delete
-          {taskTitle ? <span className="font-bold text-[var(--bp-subtle)]"> "{taskTitle}"</span> : ' this task'}?
+          {taskTitle ? t('deleteTask.confirmWithTitle', { taskTitle }) : t('deleteTask.confirm')}
         </p>
         <p className="mt-2 text-sm leading-6 text-[var(--bp-muted)]">
-          Subtasks, attachments, and collaboration data may also be removed.
+          {t('deleteTask.relatedDataWarning')}
         </p>
 
         {error ? (
           <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300">
-            {error}
+            {t('deleteTask.failed')}
           </p>
         ) : null}
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <OutlineButton className="flex-1 rounded-xl px-8 py-4 font-bold" onClick={onCancel} disabled={isDeleting}>
-            Cancel
+            {t('taskForm.cancel')}
           </OutlineButton>
           <button
             type="button"
@@ -54,7 +55,7 @@ export default function DeleteTaskModal({
             disabled={isDeleting}
             className="flex-1 rounded-xl bg-red-500 px-8 py-4 font-black text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isDeleting ? 'Deleting...' : 'Delete Task'}
+            {isDeleting ? t('deleteTask.deleting') : t('deleteTask.action')}
           </button>
         </div>
       </div>

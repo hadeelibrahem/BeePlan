@@ -11,6 +11,7 @@ import type { TaskMember, TaskRole } from '../types'
 import { InviteMemberModal } from './InviteMemberModal'
 import { MembersSection } from './MembersSection'
 import { Toast } from './Toast'
+import { useLanguage } from '../../../i18n/LanguageContext'
 
 type Props = {
   task: ApiTask
@@ -35,6 +36,7 @@ export function ManageMembersSection({
   onRefresh,
   onMembersLoaded,
 }: Props) {
+  const { t } = useLanguage()
   const [members, setMembers] = useState<TaskMember[]>([])
   const [loadingMembers, setLoadingMembers] = useState(true)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -71,10 +73,10 @@ export function ManageMembersSection({
       ) // optimistic
       try {
         await updateMemberRole(task.id, member.userId, role, accessToken)
-        setNotice(`${member.user.fullName} is now a ${role}.`)
+        setNotice(t('collaborationMembers.changedRole', { name: member.user.fullName, role: t(`collaborationMembers.${role}`) }))
       } catch (err) {
         setMembers(previous) // rollback
-        setError(friendlyError(err, 'Could not change the role.'))
+        setError(friendlyError(err, t('collaborationMembers.changeRoleFailed')))
       }
     },
     [members, task.id, accessToken],
@@ -86,10 +88,10 @@ export function ManageMembersSection({
       setMembers((prev) => prev.filter((m) => m.userId !== member.userId)) // optimistic
       try {
         await apiRemoveMember(task.id, member.userId, accessToken)
-        setNotice(`${member.user.fullName} was removed.`)
+        setNotice(t('collaborationMembers.removed', { name: member.user.fullName }))
       } catch (err) {
         setMembers(previous) // rollback
-        setError(friendlyError(err, 'Could not remove the member.'))
+        setError(friendlyError(err, t('collaborationMembers.removeFailed')))
       }
     },
     [members, task.id, accessToken],
@@ -99,11 +101,11 @@ export function ManageMembersSection({
     async (member: TaskMember) => {
       try {
         await apiTransferOwnership(task.id, member.userId, accessToken)
-        setNotice(`${member.user.fullName} is now the owner.`)
+        setNotice(t('collaborationMembers.transferred', { name: member.user.fullName }))
         await loadMembers()
         onRefresh?.()
       } catch (err) {
-        setError(friendlyError(err, 'Could not transfer ownership.'))
+        setError(friendlyError(err, t('collaborationMembers.transferFailed')))
       }
     },
     [task.id, accessToken, loadMembers, onRefresh],
@@ -133,7 +135,7 @@ export function ManageMembersSection({
           onInvited={(member, name) => {
             setInviteOpen(false)
             setMembers((prev) => [...prev.filter((m) => m.userId !== member.userId), member])
-            setNotice(`Invitation sent to ${name}.`)
+            setNotice(t('sharedFocusRooms.invitationSentTo', { email: name }))
             onRefresh?.()
           }}
         />

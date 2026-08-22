@@ -30,6 +30,7 @@ import {
 import { useTheme } from '../theme/useTheme';
 import { TaskPriorityBadge, TaskStatusBadge } from '../components/TaskBadges';
 import { queryKeys } from '../lib/queryKeys';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type TaskListItem = {
   id: string;
@@ -60,19 +61,6 @@ type Props = {
 
 type TaskFilter = 'all' | 'todo' | 'inProgress' | 'done' | 'missed';
 
-const FILTERS: { value: TaskFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'todo', label: 'To Do' },
-  { value: 'inProgress', label: 'In Progress' },
-  { value: 'done', label: 'Done' },
-  { value: 'missed', label: 'Missed' },
-];
-
-const DUE_FILTER_LABELS: Record<TaskDueFilter, string> = {
-  today: 'Today',
-  upcoming: 'Upcoming',
-  overdue: 'Overdue',
-};
 type SortField = 'due' | 'priority' | 'created' | 'title';
 const SORT_STORAGE_KEY = 'beeplan-task-sort';
 const PRIORITY_RANK: Record<string, number> = { Low: 1, Medium: 2, High: 3, Urgent: 4 };
@@ -99,6 +87,9 @@ export default function AllTasksScreen({
   onTaskUpdated,
 }: Props) {
   const { theme } = useTheme();
+  const { t } = useLanguage();
+  const filterTabs: { value: TaskFilter; label: string }[] = [{ value: 'all', label: t('filters.all') }, { value: 'todo', label: t('taskLabels.status.todo') }, { value: 'inProgress', label: t('taskLabels.status.inProgress') }, { value: 'done', label: t('taskLabels.status.done') }, { value: 'missed', label: t('taskLabels.status.missed') }];
+  const dueFilterLabels: Record<TaskDueFilter, string> = { today: t('taskLabels.due.today'), upcoming: t('taskLabels.due.upcoming'), overdue: t('taskLabels.due.overdue') };
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskFilter>('all');
@@ -198,12 +189,12 @@ export default function AllTasksScreen({
   if (statusFilter !== 'all') {
     activeChips.push({
       key: 'status',
-      label: FILTERS.find((filter) => filter.value === statusFilter)?.label ?? statusFilter,
+      label: filterTabs.find((filter) => filter.value === statusFilter)?.label ?? statusFilter,
       onRemove: () => setStatusFilter('all'),
     });
   }
   if (dueFilter) {
-    activeChips.push({ key: 'due', label: DUE_FILTER_LABELS[dueFilter], onRemove: () => setDueFilter(null) });
+    activeChips.push({ key: 'due', label: dueFilterLabels[dueFilter], onRemove: () => setDueFilter(null) });
   }
   if (focusActive) {
     activeChips.push({ key: 'focus', label: 'Focus Tasks', onRemove: () => setFocusActive(false) });
@@ -242,16 +233,16 @@ export default function AllTasksScreen({
         removeClippedSubviews
         ListHeaderComponent={
           <>
-            <PageHeader title="All Tasks" subtitle="Manage, filter, and track all your tasks" />
+            <PageHeader title={t('allTasks.title')} subtitle={t('allTasks.subtitle')} />
 
             <View className="mb-3 flex-row items-center gap-2">
               <View className="flex-1">
-                <SearchInput value={search} onChangeText={setSearch} placeholder="Search tasks..." />
+                <SearchInput value={search} onChangeText={setSearch} placeholder={t('allTasks.search')} />
               </View>
               <Pressable
                 onPress={() => setFiltersVisible(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Open filters"
+                accessibilityLabel={t('allTasks.openFilters')}
                 className="h-11 items-center justify-center rounded-xl border px-4 active:opacity-80"
                 style={{
                   borderColor: hasActiveFilters ? theme.colors.accent : theme.colors.border,
@@ -260,14 +251,14 @@ export default function AllTasksScreen({
               >
                 <View className="flex-row items-center gap-1">
                   <MobileIcon name="filter" color={hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText} size={14} />
-                  <Text className="text-xs font-black" style={{ color: hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText }}>Filters{hasActiveFilters ? ` (${activeChips.length})` : ''}</Text>
+                  <Text className="text-xs font-black" style={{ color: hasActiveFilters ? theme.colors.accent : theme.colors.secondaryText }}>{t('allTasks.filters')}{hasActiveFilters ? ` (${activeChips.length})` : ''}</Text>
                 </View>
               </Pressable>
             </View>
 
-            <FilterTabs tabs={FILTERS} active={statusFilter} onChange={setStatusFilter} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2 mt-2"><View className="flex-row gap-2">{(['due', 'priority', 'created', 'title'] as SortField[]).map((field) => <Pressable key={field} onPress={() => updateSort(field)} accessibilityRole="button" accessibilityLabel={`Sort by ${field}`} className="rounded-full border px-3 py-1.5" style={{ borderColor: sort.field === field ? theme.colors.accent : theme.colors.border }}><Text className="text-xs font-bold" style={{ color: sort.field === field ? theme.colors.accent : theme.colors.secondaryText }}>{field === 'due' ? 'Due date' : field === 'created' ? 'Created' : field[0].toUpperCase() + field.slice(1)}{sort.field === field ? ` ${sort.direction === 'asc' ? '↑' : '↓'}` : ''}</Text></Pressable>)}</View></ScrollView>
-            {suggestions.map((suggestion) => <View key={suggestion.id} className="mb-2 rounded-xl border p-3" style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}><Text className="text-xs font-black" style={{ color: theme.colors.text }}>BeePlan noticed a pattern</Text><Text className="mt-1 text-sm" style={{ color: theme.colors.secondaryText }}>{suggestion.reason}</Text><Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>{suggestion.preview}</Text><View className="mt-2 flex-row gap-3"><Pressable onPress={() => onViewTaskDetails({ id: suggestion.sourceTaskId, title: suggestion.taskTitle, category: '', due: '', priority: 'Medium', status: 'To Do', progress: 0 })} accessibilityRole="button" accessibilityLabel={`Review recurrence suggestion for ${suggestion.taskTitle}`}><Text className="text-xs font-bold" style={{ color: theme.colors.accentInk }}>Review</Text></Pressable><Pressable onPress={() => { setSuggestions((current) => current.filter((item) => item.id !== suggestion.id)); if (accessToken) void dismissRecurrenceSuggestion(accessToken, suggestion.id).catch(() => void getRecurrenceSuggestions(accessToken).then((result) => setSuggestions(result.suggestions))); }} accessibilityRole="button" accessibilityLabel="Dismiss recurrence suggestion"><Text className="text-xs font-bold" style={{ color: theme.colors.secondaryText }}>Dismiss</Text></Pressable></View></View>)}
+            <FilterTabs tabs={filterTabs} active={statusFilter} onChange={setStatusFilter} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2 mt-2"><View className="flex-row gap-2">{(['due', 'priority', 'created', 'title'] as SortField[]).map((field) => <Pressable key={field} onPress={() => updateSort(field)} accessibilityRole="button" accessibilityLabel={t('allTasks.sortBy', { field: t(`allTasks.sort.${field}`) })} className="rounded-full border px-3 py-1.5" style={{ borderColor: sort.field === field ? theme.colors.accent : theme.colors.border }}><Text className="text-xs font-bold" style={{ color: sort.field === field ? theme.colors.accent : theme.colors.secondaryText }}>{t(`allTasks.sort.${field}`)}{sort.field === field ? ` ${sort.direction === 'asc' ? '↑' : '↓'}` : ''}</Text></Pressable>)}</View></ScrollView>
+            {suggestions.map((suggestion) => <View key={suggestion.id} className="mb-2 rounded-xl border p-3" style={{ borderColor: theme.colors.accent, backgroundColor: theme.colors.accentSoft }}><Text className="text-xs font-black" style={{ color: theme.colors.text }}>{t('allTasks.pattern')}</Text><Text className="mt-1 text-sm" style={{ color: theme.colors.secondaryText }}>{suggestion.reason}</Text><Text className="mt-1 text-xs" style={{ color: theme.colors.secondaryText }}>{suggestion.preview}</Text><View className="mt-2 flex-row gap-3"><Pressable onPress={() => onViewTaskDetails({ id: suggestion.sourceTaskId, title: suggestion.taskTitle, category: '', due: '', priority: 'Medium', status: 'To Do', progress: 0 })} accessibilityRole="button" accessibilityLabel={t('allTasks.reviewSuggestion', { title: suggestion.taskTitle })}><Text className="text-xs font-bold" style={{ color: theme.colors.accentInk }}>{t('allTasks.review')}</Text></Pressable><Pressable onPress={() => { setSuggestions((current) => current.filter((item) => item.id !== suggestion.id)); if (accessToken) void dismissRecurrenceSuggestion(accessToken, suggestion.id).catch(() => void getRecurrenceSuggestions(accessToken).then((result) => setSuggestions(result.suggestions))); }} accessibilityRole="button" accessibilityLabel={t('allTasks.dismissSuggestion')}><Text className="text-xs font-bold" style={{ color: theme.colors.secondaryText }}>{t('allTasks.dismiss')}</Text></Pressable></View></View>)}
 
             {activeChips.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3 mt-3">
@@ -290,38 +281,38 @@ export default function AllTasksScreen({
                     style={{ borderColor: theme.colors.border }}
                   >
                     <Text className="text-xs font-bold" style={{ color: theme.colors.secondaryText }}>
-                      Clear Filters
+                      {t('allTasks.clearFilters')}
                     </Text>
                   </Pressable>
                 </View>
               </ScrollView>
             )}
 
-            {listError ? <Text className="mb-3 text-sm font-bold text-red-300">{listError}</Text> : null}
-            {listLoading ? <Text className="mb-3 text-sm font-bold" style={{ color: theme.colors.accentInk }}>Loading tasks...</Text> : null}
+            {listError ? <Text className="mb-3 text-sm font-bold text-red-300">{t('allTasks.loadFailed')}</Text> : null}
+            {listLoading ? <Text className="mb-3 text-sm font-bold" style={{ color: theme.colors.accentInk }}>{t('allTasks.loading')}</Text> : null}
 
             <View className="mb-3 flex-row justify-between">
-              <StatsCard icon="tasks" value={String(taskItems.length)} title="All Tasks" width="full" />
+              <StatsCard icon="tasks" value={String(taskItems.length)} title={t('allTasks.title')} width="full" />
             </View>
             <View className="mb-3 flex-row flex-wrap justify-between gap-y-2">
-              <MiniStat icon="tasks" label="To Do" value={String(statusCounts.todo)} />
-              <MiniStat icon="focus" label="Progress" value={String(statusCounts.inProgress)} />
-              <MiniStat icon="check" label="Done" value={String(statusCounts.done)} />
-              <MiniStat icon="priority" label="Missed" value={String(statusCounts.missed)} />
+              <MiniStat icon="tasks" label={t('taskLabels.status.todo')} value={String(statusCounts.todo)} />
+              <MiniStat icon="focus" label={t('taskDetails.progress')} value={String(statusCounts.inProgress)} />
+              <MiniStat icon="check" label={t('taskLabels.status.done')} value={String(statusCounts.done)} />
+              <MiniStat icon="priority" label={t('taskLabels.status.missed')} value={String(statusCounts.missed)} />
             </View>
 
-            <Text className="mb-2 text-sm font-bold" style={{ color: theme.colors.text }}>Tasks</Text>
+            <Text className="mb-2 text-sm font-bold" style={{ color: theme.colors.text }}>{t('allTasks.tasks')}</Text>
           </>
         }
         ListEmptyComponent={
           !listLoading ? (
             <EmptyState
               icon="0"
-              title="No tasks match the selected filters."
+              title={t('allTasks.noMatches')}
               description={
                 hasActiveFilters || search
-                  ? 'Try clearing a filter or adjusting your search.'
-                  : "You don't have any tasks yet — create one to get started."
+                  ? t('allTasks.filteredEmpty')
+                  : t('allTasks.empty')
               }
             />
           ) : null

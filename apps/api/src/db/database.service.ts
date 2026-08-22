@@ -30,8 +30,15 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
 
   async onModuleInit() {
     await this.ensureUsersAuthColumns();
+    await this.ensureAdminFoundation();
+    await this.ensureObservabilityTables();
+    await this.ensureErrorAnalysisTables();
+    await this.ensureReportsModerationTables();
+    await this.ensureFeedbackTables();
+    await this.ensureFeedbackClusteringTables();
     await this.ensurePasswordResetCodesTable();
     await this.ensureTasksTables();
+    await this.ensureChallengeTables();
     await this.ensureRecurrenceSuggestionDismissalsTable();
     await this.ensureRemindersTable();
     await this.ensureGoogleLoginApprovalsTable();
@@ -48,7 +55,6 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.ensureCollaborationTables();
     await this.ensureAiRecommendationsTable();
     await this.ensurePersonalContextTables();
-    await this.ensureGoogleCalendarTables();
     await this.ensureWhiteboardAssetReferencesColumn();
     await this.ensureMultipleWhiteboardColumns();
     await this.ensureWhiteboardMembershipTables();
@@ -170,6 +176,75 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     return this.pool;
   }
 
+  private async ensureAdminFoundation() {
+    await this.getPool().query(`
+      alter table users
+        add column if not exists role varchar(20) not null default 'user',
+        add column if not exists account_status varchar(20) not null default 'active',
+        add column if not exists suspended_at timestamp,
+        add column if not exists suspension_reason varchar(500);
+      create table if not exists admin_audit_logs (
+        id uuid primary key default gen_random_uuid() not null,
+        actor_user_id uuid not null references users(id),
+        action varchar(100) not null,
+        target_type varchar(80) not null,
+        target_id varchar(255) not null,
+        before_state jsonb,
+        after_state jsonb,
+        metadata jsonb,
+        created_at timestamp default now() not null
+      );
+      create index if not exists idx_admin_audit_logs_created_at on admin_audit_logs(created_at);
+      create index if not exists idx_admin_audit_logs_target on admin_audit_logs(target_type, target_id);
+      create index if not exists idx_admin_audit_logs_actor on admin_audit_logs(actor_user_id);
+    `);
+  }
+
+  // The existing deployment path provisions newer tables defensively at boot;
+  // retain that safe forward-compatible policy while the Drizzle history remains
+  // intentionally untouched.
+  private async ensureObservabilityTables() {
+    await this.getPool().query(`
+      create table if not exists error_groups (
+        id uuid primary key default gen_random_uuid() not null, fingerprint varchar(128) not null unique,
+        title varchar(255) not null, error_class varchar(160) not null, normalized_message text not null,
+        service varchar(160) not null default 'api', operation varchar(255), route varchar(500), http_method varchar(12), http_status integer,
+        environment varchar(32) not null, severity varchar(16) not null default 'medium', status varchar(20) not null default 'new',
+        first_seen_at timestamp not null default now(), last_seen_at timestamp not null default now(), occurrence_count integer not null default 1,
+        created_at timestamp not null default now(), updated_at timestamp not null default now()
+      );
+      create index if not exists idx_error_groups_last_seen on error_groups(last_seen_at);
+      create index if not exists idx_error_groups_severity on error_groups(severity);
+      create index if not exists idx_error_groups_status on error_groups(status);
+      create index if not exists idx_error_groups_route on error_groups(route);
+      create table if not exists error_occurrences (
+        id uuid primary key default gen_random_uuid() not null, error_group_id uuid not null references error_groups(id) on delete cascade,
+        occurred_at timestamp not null default now(), request_id varchar(128), user_id uuid references users(id) on delete set null,
+        http_method varchar(12), route varchar(500), status_code integer, service varchar(160) not null default 'api', operation varchar(255), environment varchar(32) not null,
+        client_platform varchar(40), client_version varchar(80), sanitized_message text not null, sanitized_stack text, sanitized_context jsonb
+      );
+      create index if not exists idx_error_occurrences_group on error_occurrences(error_group_id);
+      create index if not exists idx_error_occurrences_occurred on error_occurrences(occurred_at);
+      create index if not exists idx_error_occurrences_user on error_occurrences(user_id);
+      create table if not exists error_group_users (
+        error_group_id uuid not null references error_groups(id) on delete cascade, user_id uuid not null references users(id) on delete cascade,
+        first_seen_at timestamp not null default now(), last_seen_at timestamp not null default now(), occurrence_count integer not null default 1,
+        primary key(error_group_id, user_id)
+      );
+      create index if not exists idx_error_group_users_user on error_group_users(user_id);
+    `);
+  }
+  private async ensureErrorAnalysisTables() {
+    await this.getPool().query(`create table if not exists error_analyses (id uuid primary key default gen_random_uuid() not null, error_group_id uuid not null references error_groups(id) on delete cascade, requested_by_admin_id uuid not null references users(id), model varchar(160) not null, provider varchar(80) not null, prompt_version varchar(80) not null, context_version varchar(80) not null, context_hash varchar(128) not null, input_summary jsonb not null, likely_cause text not null, evidence jsonb not null, investigation_steps jsonb not null, suggested_fix text not null, likely_modules jsonb not null, confidence varchar(16) not null, limitations jsonb not null, created_at timestamp not null default now()); create index if not exists idx_error_analyses_group_created on error_analyses(error_group_id, created_at); create index if not exists idx_error_analyses_context_hash on error_analyses(context_hash);`);
+  }
+  private async ensureReportsModerationTables() {
+    await this.getPool().query(`create table if not exists user_reports (id uuid primary key default gen_random_uuid() not null, reporter_user_id uuid not null references users(id), reported_user_id uuid not null references users(id), category varchar(40) not null, reason varchar(1000) not null, context_type varchar(40), context_id varchar(255), context_snapshot jsonb, status varchar(24) not null default 'pending', reviewed_by_admin_id uuid references users(id), reviewed_at timestamp, created_at timestamp not null default now(), updated_at timestamp not null default now()); create index if not exists idx_user_reports_status on user_reports(status); create index if not exists idx_user_reports_reported on user_reports(reported_user_id); create index if not exists idx_user_reports_created on user_reports(created_at); create table if not exists moderation_actions (id uuid primary key default gen_random_uuid() not null, report_id uuid references user_reports(id) on delete set null, subject_user_id uuid not null references users(id), actor_admin_id uuid not null references users(id), action varchar(24) not null, reason varchar(1000) not null, expires_at timestamp, created_at timestamp not null default now()); create index if not exists idx_moderation_actions_subject on moderation_actions(subject_user_id); create index if not exists idx_moderation_actions_report on moderation_actions(report_id);`);
+  }
+  private async ensureFeedbackTables() {
+    await this.getPool().query(`create table if not exists feedback_items (id uuid primary key default gen_random_uuid() not null, author_user_id uuid not null references users(id) on delete cascade, category varchar(24) not null, title varchar(160) not null, description varchar(4000) not null, status varchar(24) not null default 'submitted', visibility varchar(16) not null default 'public', reviewed_by_admin_id uuid references users(id), reviewed_at timestamp, released_at timestamp, created_at timestamp not null default now(), updated_at timestamp not null default now()); create index if not exists idx_feedback_items_status on feedback_items(status); create index if not exists idx_feedback_items_visibility on feedback_items(visibility); create index if not exists idx_feedback_items_created on feedback_items(created_at); create table if not exists feedback_votes (feedback_id uuid not null references feedback_items(id) on delete cascade, user_id uuid not null references users(id) on delete cascade, created_at timestamp not null default now(), primary key(feedback_id, user_id)); create index if not exists idx_feedback_votes_feedback on feedback_votes(feedback_id);`);
+  }
+  private async ensureFeedbackClusteringTables() { await this.getPool().query(`create table if not exists feedback_clusters (id uuid primary key default gen_random_uuid(), title varchar(160) not null, summary varchar(1000) not null, confidence varchar(16) not null, status varchar(16) not null default 'active', model varchar(160) not null, provider varchar(80) not null, prompt_version varchar(80) not null, context_version varchar(80) not null, member_count integer not null, total_votes integer not null, last_analyzed_at timestamp not null, created_at timestamp not null default now(), updated_at timestamp not null default now()); create table if not exists feedback_cluster_members (cluster_id uuid not null references feedback_clusters(id) on delete cascade, feedback_id uuid not null references feedback_items(id) on delete cascade, similarity_score real, created_at timestamp not null default now(), primary key(cluster_id, feedback_id)); create table if not exists feedback_cluster_runs (id uuid primary key default gen_random_uuid(), requested_by_admin_id uuid not null references users(id), model varchar(160) not null, provider varchar(80) not null, prompt_version varchar(80) not null, context_version varchar(80) not null, context_hash varchar(128) not null, input_count integer not null, output_cluster_count integer not null, reused boolean not null default false, created_at timestamp not null default now()); create index if not exists idx_feedback_clusters_status on feedback_clusters(status); create index if not exists idx_feedback_cluster_members_feedback on feedback_cluster_members(feedback_id); create index if not exists idx_feedback_cluster_runs_context on feedback_cluster_runs(context_hash);`); }
+
   private connectionMode(databaseUrl: string) {
     try {
       const url = new URL(databaseUrl);
@@ -278,6 +353,42 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
+  private async ensureChallengeTables() {
+    // Compatibility provisioning mirrors the forward 0034 migration. Existing
+    // databases may boot without the migration journal containing recent
+    // product migrations, so challenge reads/scheduler must never race a
+    // missing relation.
+    await this.getPool().query(`
+      create table if not exists challenges (
+        id uuid primary key default gen_random_uuid() not null,
+        title varchar(160) not null,
+        description varchar(2000) not null default '',
+        type varchar(32) not null,
+        target_value integer not null check (target_value > 0),
+        status varchar(20) not null default 'draft' check (status in ('draft','scheduled','active','completed','cancelled')),
+        start_at timestamp not null,
+        end_at timestamp not null,
+        reward_type varchar(32), reward_value integer, badge_key varchar(120),
+        created_by_admin_id uuid not null references users(id),
+        created_at timestamp not null default now(), updated_at timestamp not null default now(),
+        published_at timestamp, cancelled_at timestamp,
+        check (end_at > start_at),
+        check (reward_type is null and reward_value is null and badge_key is null)
+      );
+      create index if not exists idx_challenges_status_window on challenges(status,start_at,end_at);
+      create table if not exists user_challenge_progress (
+        id uuid primary key default gen_random_uuid() not null,
+        challenge_id uuid not null references challenges(id) on delete cascade,
+        user_id uuid not null references users(id) on delete cascade,
+        progress_value integer not null default 0,
+        completed_at timestamp, reward_granted_at timestamp,
+        created_at timestamp not null default now(), updated_at timestamp not null default now(),
+        unique(challenge_id,user_id)
+      );
+      create index if not exists idx_user_challenge_progress_challenge on user_challenge_progress(challenge_id);
+    `);
+  }
+
   private async ensureTasksTables() {
     await this.getPool().query(`
       create table if not exists tasks (
@@ -330,6 +441,11 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
         add column if not exists is_favorite boolean not null default false,
         add column if not exists is_focus_task boolean not null default false,
         add column if not exists manual_spent_minutes integer not null default 0,
+        -- Challenges count task completions by the server-stamped transition
+        -- time, not by the mutable updated_at value. Keep this compatibility
+        -- provisioner aligned with the forward Challenge migration so older
+        -- deployed databases can boot before migrations are applied.
+        add column if not exists completed_at timestamp,
         add column if not exists updated_at timestamp default now() not null,
         add column if not exists recurrence_root_id uuid references tasks(id) on delete set null
     `);
@@ -1120,63 +1236,6 @@ export class DatabaseService implements OnModuleDestroy, OnModuleInit {
     await this.getPool().query(`
       create index if not exists google_login_approvals_email_created_at_idx
         on google_login_approvals (email, created_at desc)
-    `);
-  }
-
-  private async ensureGoogleCalendarTables() {
-    await this.getPool().query(`
-      create table if not exists google_calendar_connections (
-        id uuid primary key default gen_random_uuid() not null,
-        user_id uuid not null unique references users(id) on delete cascade,
-        account_email varchar(255) not null,
-        access_token text not null,
-        refresh_token text,
-        token_expires_at timestamp,
-        sync_direction varchar(20) not null default 'two_way',
-        default_reminder_minutes integer not null default 10,
-        sync_tasks boolean not null default true, sync_focus_sessions boolean not null default true, sync_reminders boolean not null default false, sync_calendar_blocks boolean not null default true,
-        last_synced_at timestamp,
-        sync_cursor text,
-        created_at timestamp default now() not null,
-        updated_at timestamp default now() not null
-      );
-      create table if not exists google_calendars (
-        id uuid primary key default gen_random_uuid() not null,
-        user_id uuid not null references users(id) on delete cascade, connection_id uuid references google_calendar_connections(id) on delete cascade,
-        external_id varchar(255) not null,
-        summary varchar(255) not null,
-        description text,
-        timezone varchar(100), color varchar(32),
-        selected boolean not null default false,
-        next_sync_token text, last_successful_sync_at timestamp, last_full_sync_at timestamp, sync_status varchar(20) not null default 'idle', last_sync_error text, sync_lease_until timestamp,
-        updated_at timestamp default now() not null,
-        unique(user_id, external_id)
-      );
-      create table if not exists google_calendar_events (
-        id uuid primary key default gen_random_uuid() not null,
-        user_id uuid not null references users(id) on delete cascade, connection_id uuid references google_calendar_connections(id) on delete cascade,
-        calendar_id uuid not null references google_calendars(id) on delete cascade,
-        external_id varchar(512) not null, google_calendar_external_id varchar(255), google_event_id varchar(512),
-        recurring_event_id varchar(512), etag varchar(255),
-        status varchar(20) not null default 'synced', ownership varchar(24) not null default 'google_imported',
-        beeplan_entity_type varchar(24), beeplan_entity_id varchar(255), last_google_updated_at timestamp,
-        title varchar(500) not null, description text, location text,
-        start_at timestamp, end_at timestamp, all_day boolean not null default false,
-        timezone varchar(100), payload jsonb not null default '{}',
-        updated_at timestamp not null,
-        unique(user_id, external_id)
-      );
-      alter table google_calendar_connections add column if not exists sync_tasks boolean not null default true, add column if not exists sync_focus_sessions boolean not null default true, add column if not exists sync_reminders boolean not null default false, add column if not exists sync_calendar_blocks boolean not null default true;
-      alter table google_calendars add column if not exists next_sync_token text, add column if not exists last_successful_sync_at timestamp, add column if not exists last_full_sync_at timestamp, add column if not exists sync_status varchar(20) not null default 'idle', add column if not exists last_sync_error text, add column if not exists sync_lease_until timestamp;
-      update google_calendars set sync_lease_until = to_timestamp(0) where sync_lease_until is null;
-      alter table google_calendar_events add column if not exists connection_id uuid references google_calendar_connections(id) on delete cascade, add column if not exists google_calendar_external_id varchar(255), add column if not exists google_event_id varchar(512), add column if not exists ownership varchar(24) not null default 'google_imported', add column if not exists beeplan_entity_type varchar(24), add column if not exists beeplan_entity_id varchar(255), add column if not exists last_google_updated_at timestamp;
-      create unique index if not exists uq_google_events_user_entity on google_calendar_events(user_id, beeplan_entity_type, beeplan_entity_id);
-      create table if not exists google_calendar_sync_jobs (
-        id uuid primary key default gen_random_uuid() not null, user_id uuid not null references users(id) on delete cascade, connection_id uuid not null references google_calendar_connections(id) on delete cascade,
-        operation varchar(16) not null, entity_type varchar(24) not null, entity_id varchar(255) not null, attempt_count integer not null default 0, next_retry_at timestamp default now() not null, last_error text, status varchar(16) not null default 'pending', created_at timestamp default now() not null, updated_at timestamp default now() not null
-      );
-      create index if not exists idx_google_calendar_sync_jobs_due on google_calendar_sync_jobs(status, next_retry_at);
-      create index if not exists idx_google_events_user_start on google_calendar_events(user_id, start_at);
     `);
   }
 

@@ -6,13 +6,12 @@ import {
   describeDatabaseError,
   withTransientDatabaseRetry,
 } from '../db/database-error';
-import {
-  focusSessions,
-  googleCalendarEvents,
-  subtasks,
-  tasks,
-} from '../db/schema';
+import { focusSessions, subtasks, tasks } from '../db/schema';
 import { NotificationsService } from './notifications.service';
+import {
+  RuntimeTelemetryRegistry,
+  runtimeTelemetry,
+} from '../admin/system-health/runtime-telemetry.registry';
 
 const MINUTE = 60_000;
 
@@ -24,6 +23,7 @@ export class NotificationSchedulerService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly notifications: NotificationsService,
+    private readonly telemetry: RuntimeTelemetryRegistry = runtimeTelemetry,
   ) {}
   private get db() {
     return this.databaseService.db;
@@ -33,30 +33,60 @@ export class NotificationSchedulerService {
   async tick() {
     if (this.running) return;
     this.running = true;
+    const telemetryStartedAt = Date.now();
+    this.telemetry.workerStarted('notification-scheduler');
     const now = new Date();
     try {
       const scans = [
         ['tasks', () => this.emitTaskReminders(now)],
-        ['calendar', () => this.emitCalendarReminders(now)],
         ['focus', () => this.emitFocusReminders(now)],
       ] as const;
-      const results = await Promise.allSettled(scans.map(([, scan]) =>
-        withTransientDatabaseRetry(scan, { attempts: 2 })));
+      const results = await Promise.allSettled(
+        scans.map(([, scan]) =>
+          withTransientDatabaseRetry(scan, { attempts: 2 }),
+        ),
+      );
       results.forEach((result, index) => {
-        if (result.status === 'rejected') this.logger.warn(JSON.stringify({
-          event: 'notification_scheduler_scan_failed',
-          scan: scans[index][0],
-          retryNextTick: true,
-          pool: this.databaseService.poolStats(),
-          ...describeDatabaseError(result.reason, 'query'),
-        }));
+        if (result.status === 'rejected')
+          this.logger.warn(
+            JSON.stringify({
+              event: 'notification_scheduler_scan_failed',
+              scan: scans[index][0],
+              retryNextTick: true,
+              pool: this.databaseService.poolStats(),
+              ...describeDatabaseError(result.reason, 'query'),
+            }),
+          );
       });
-      this.logger.debug(JSON.stringify({
-        event: 'notification_scheduler_finished',
-        successfulScans: results.filter((result) => result.status === 'fulfilled').length,
-        failedScans: results.filter((result) => result.status === 'rejected').length,
-        pool: this.databaseService.poolStats(),
-      }));
+      this.logger.debug(
+        JSON.stringify({
+          event: 'notification_scheduler_finished',
+          successfulScans: results.filter(
+            (result) => result.status === 'fulfilled',
+          ).length,
+          failedScans: results.filter((result) => result.status === 'rejected')
+            .length,
+          pool: this.databaseService.poolStats(),
+        }),
+      );
+      if (results.some((result) => result.status === 'rejected'))
+        this.telemetry.workerFailed(
+          'notification-scheduler',
+          'scan_failure',
+          Date.now() - telemetryStartedAt,
+        );
+      else
+        this.telemetry.workerSucceeded(
+          'notification-scheduler',
+          Date.now() - telemetryStartedAt,
+        );
+    } catch (error) {
+      this.telemetry.workerFailed(
+        'notification-scheduler',
+        'database_or_scan_failure',
+        Date.now() - telemetryStartedAt,
+      );
+      throw error;
     } finally {
       this.running = false;
     }
@@ -173,46 +203,6 @@ export class NotificationSchedulerService {
           },
         );
       }
-    }
-  }
-
-  private async emitCalendarReminders(now: Date) {
-    const until = new Date(now.getTime() + 30 * MINUTE);
-    const rows = await this.db
-      .select()
-      .from(googleCalendarEvents)
-      .where(
-        and(
-          eq(googleCalendarEvents.status, 'synced'),
-          eq(googleCalendarEvents.ownership, 'google_imported'),
-          isNotNull(googleCalendarEvents.startAt),
-          gte(googleCalendarEvents.startAt, now),
-          lte(googleCalendarEvents.startAt, until),
-        ),
-      )
-      .limit(500);
-    for (const event of rows) {
-      if (!event.startAt) continue;
-      await this.notifications.createOnce(
-        {
-          userId: event.userId,
-          type: 'calendar_event_created',
-          title: 'Upcoming calendar event',
-          body: `${event.title} starts soon.`,
-          data: {
-            entityType: 'calendar_event',
-            entityId: event.id,
-            route: `/calendar?event=${event.id}`,
-            event: 'upcoming',
-          },
-        },
-        {
-          entityType: 'calendar_upcoming',
-          entityId: event.id,
-          triggerAt: event.startAt,
-          key: `calendar_upcoming:${event.userId}:${event.id}:${event.startAt.toISOString()}`,
-        },
-      );
     }
   }
 

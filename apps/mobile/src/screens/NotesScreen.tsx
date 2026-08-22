@@ -28,7 +28,7 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
     setLoading(true)
     setError('')
     try { setNotes(await getNotes(accessToken)) }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load notes.') }
+    catch (cause) { console.error('Unable to load notes', cause); setError('notesScreen.loadFailed') }
     finally { setLoading(false) }
   }
 
@@ -49,7 +49,7 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
 
   const create = async () => {
     const titleError = validateNoteTitle(draftTitle)
-    if (titleError) { setError(titleError); return }
+    if (titleError) { setError('notesScreen.titleRequired'); return }
     setCreating(true)
     setError('')
     try {
@@ -57,20 +57,20 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
       setNotes((current) => [note, ...current])
       setDraftTitle('')
       setDraftContent('')
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to create note.') }
+    } catch (cause) { console.error('Unable to create note', cause); setError('notesScreen.createFailed') }
     finally { setCreating(false) }
   }
 
   const save = async (noteId: string) => {
     const titleError = validateNoteTitle(editTitle)
-    if (titleError) { setError(titleError); return }
+    if (titleError) { setError('notesScreen.titleRequired'); return }
     setSavingId(noteId)
     setError('')
     try {
       const updated = await updateNote(accessToken, noteId, { title: editTitle.trim(), content: editContent.trim() })
       setNotes((current) => current.map((note) => note.id === noteId ? updated : note))
       setEditingId(null)
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to update note.') }
+    } catch (cause) { console.error('Unable to update note', cause); setError('notesScreen.updateFailed') }
     finally { setSavingId(null) }
   }
 
@@ -80,13 +80,13 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
       setSavingId(note.id)
       setError('')
       try { await deleteNote(accessToken, note.id); setNotes((current) => current.filter((item) => item.id !== note.id)) }
-      catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to delete note.') }
+      catch (cause) { console.error('Unable to delete note', cause); setError('notesScreen.deleteFailed') }
       finally { setSavingId(null) }
     })() },
   ])
 
   return <AppScreen>
-    <PageHeader title="Notes" subtitle="Jot down ideas and quick thoughts" onBack={onBack} />
+    <PageHeader title={t('notesScreen.title')} subtitle={t('notesScreen.subtitle')} onBack={onBack} />
     <SectionCard className="mb-3" style={{ borderColor: `${colors.accent}66` }}>
       <View className="flex-row items-start gap-3">
         <View accessible accessibilityLabel={t('notesMotivation.iconLabel')} className="h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${colors.accent}20` }}><Text style={{ color: colors.accentInk }}>✦</Text></View>
@@ -97,22 +97,22 @@ export default function NotesScreen({ accessToken, onBack }: { accessToken: stri
       </View>
     </SectionCard>
     <SectionCard className="mb-3">
-      <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>New note</Text>
-      <InputField label="Title" value={draftTitle} onChangeText={setDraftTitle} placeholder="Title" />
-      <InputField label="Content" value={draftContent} onChangeText={setDraftContent} placeholder="Write something... Markdown text is preserved." multiline />
-      <PrimaryButton onPress={() => void create()} disabled={!draftTitle.trim()} loading={creating} size="sm">Add note</PrimaryButton>
+      <Text className="mb-2 text-sm font-black" style={{ color: colors.text }}>{t('notesScreen.newNote')}</Text>
+      <InputField label={t('notesScreen.noteTitle')} value={draftTitle} onChangeText={setDraftTitle} placeholder={t('notesScreen.noteTitle')} />
+      <InputField label={t('notesScreen.content')} value={draftContent} onChangeText={setDraftContent} placeholder={t('notesScreen.contentPlaceholder')} multiline />
+      <PrimaryButton onPress={() => void create()} disabled={!draftTitle.trim()} loading={creating} size="sm">{t('notesScreen.addNote')}</PrimaryButton>
     </SectionCard>
-    <SearchInput value={search} onChangeText={setSearch} placeholder="Search notes" />
-    {error ? <View className="mb-3 rounded-xl p-3" style={{ backgroundColor: `${colors.error}18` }}><Text style={{ color: colors.error }}>{error}</Text><Pressable onPress={() => void load()} accessibilityRole="button" accessibilityLabel="Retry loading notes" className="mt-2"><Text className="font-bold" style={{ color: colors.accentInk }}>Retry</Text></Pressable></View> : null}
-    {loading ? <LoadingState /> : visibleNotes.length === 0 ? <EmptyState icon="N" title={search ? 'No matching notes' : 'No notes yet'} description={search ? 'Try a different search term.' : 'Create your first note above.'} /> : visibleNotes.map((note) => <SectionCard key={note.id} className="mb-3">
+    <SearchInput value={search} onChangeText={setSearch} placeholder={t('notesScreen.search')} />
+    {error ? <View className="mb-3 rounded-xl p-3" style={{ backgroundColor: `${colors.error}18` }}><Text style={{ color: colors.error }}>{t(error)}</Text><Pressable onPress={() => void load()} accessibilityRole="button" accessibilityLabel={t('notesScreen.retryLoading')} className="mt-2"><Text className="font-bold" style={{ color: colors.accentInk }}>{t('notesScreen.retry')}</Text></Pressable></View> : null}
+    {loading ? <LoadingState /> : visibleNotes.length === 0 ? <EmptyState icon="N" title={search ? t('notesScreen.noMatching') : t('notesScreen.noNotes')} description={search ? t('notesScreen.tryDifferent') : t('notesScreen.createFirst')} /> : visibleNotes.map((note) => <SectionCard key={note.id} className="mb-3">
       {editingId === note.id ? <View>
         <InputField label="Title" value={editTitle} onChangeText={setEditTitle} />
         <InputField label="Content" value={editContent} onChangeText={setEditContent} multiline />
-        <View className="flex-row gap-2"><SecondaryButton size="sm" onPress={() => setEditingId(null)}>Cancel</SecondaryButton><PrimaryButton size="sm" onPress={() => void save(note.id)} loading={savingId === note.id} disabled={!editTitle.trim()}>Save</PrimaryButton></View>
+        <View className="flex-row gap-2"><SecondaryButton size="sm" onPress={() => setEditingId(null)}>{t('common.cancel')}</SecondaryButton><PrimaryButton size="sm" onPress={() => void save(note.id)} loading={savingId === note.id} disabled={!editTitle.trim()}>{t('notesScreen.save')}</PrimaryButton></View>
       </View> : <View>
         <View className="mb-1 flex-row items-start justify-between gap-3"><Text className="flex-1 text-sm font-black" style={{ color: colors.text }}>{note.title}</Text><Text className="text-xs" style={{ color: colors.secondaryText }}>{new Date(note.updatedAt).toLocaleDateString()}</Text></View>
         {note.content ? <Text className="mb-3 text-sm" style={{ color: colors.secondaryText }}>{note.content}</Text> : null}
-        <View className="flex-row gap-2"><SecondaryButton size="sm" onPress={() => beginEdit(note)}>Edit</SecondaryButton><SecondaryButton size="sm" disabled={savingId === note.id} onPress={() => remove(note)}>Delete</SecondaryButton></View>
+        <View className="flex-row gap-2"><SecondaryButton size="sm" onPress={() => beginEdit(note)}>{t('notesScreen.edit')}</SecondaryButton><SecondaryButton size="sm" disabled={savingId === note.id} onPress={() => remove(note)}>{t('notesScreen.delete')}</SecondaryButton></View>
       </View>}
     </SectionCard>)}
   </AppScreen>

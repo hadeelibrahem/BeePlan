@@ -120,7 +120,8 @@ export default function EditTaskScreen({
   const [notice, setNotice] = useState('')
   const [estimatedHours, setEstimatedHours] = useState(String(task.estimatedHours))
   const [spentHours, setSpentHours] = useState(String(task.manualSpentHours ?? task.spentHours))
-  const [error, setError] = useState('')
+  const [errorKey, setErrorKey] = useState('')
+  const error = errorKey ? t(errorKey) : ''
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(task.progress)
   const [subtasks, setSubtasks] = useState<ApiSubtask[]>(task.subtasks)
@@ -139,7 +140,8 @@ export default function EditTaskScreen({
   const [recurrence, setRecurrence] = useState<RecurrenceSettings | null>(recurrenceToUi(task.recurrence))
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false)
   const [moreOptions, setMoreOptions] = useState(false)
-  const recurrenceSummary = createRecurrenceSummary(recurrence)
+  const recurrenceSummary = createRecurrenceSummary(recurrence, t)
+  const recurrenceState = JSON.stringify(recurrence)
 
   // Warn before leaving with unsaved edits (compared against the task as first
   // loaded). Pending attachment uploads count as changes too.
@@ -161,7 +163,7 @@ export default function EditTaskScreen({
       focusEnabled: task.isFocusTask,
       estimatedHours: String(task.estimatedHours),
       spentHours: String(task.manualSpentHours ?? task.spentHours),
-      recurrenceSummary: createRecurrenceSummary(recurrenceToUi(task.recurrence)),
+      recurrenceState: JSON.stringify(recurrenceToUi(task.recurrence)),
     }),
     [task],
   )
@@ -182,9 +184,9 @@ export default function EditTaskScreen({
     focusEnabled !== initialValues.focusEnabled ||
     estimatedHours !== initialValues.estimatedHours ||
     spentHours !== initialValues.spentHours ||
-    recurrenceSummary !== initialValues.recurrenceSummary ||
+    recurrenceState !== initialValues.recurrenceState ||
     draftAttachments.length > 0
-  const { markSaved } = useUnsavedChangesGuard(isDirty)
+  const { markSaved } = useUnsavedChangesGuard(isDirty, { message: t('editTaskFeedback.unsavedChanges') })
 
   const {
     isOpen: isDeleteDialogOpen,
@@ -228,9 +230,9 @@ export default function EditTaskScreen({
       .then((items) => {
         if (!cancelled) setAttachments(items)
       })
-      .catch((fetchError: unknown) => {
+      .catch(() => {
         if (!cancelled) {
-          setError(fetchError instanceof Error ? fetchError.message : 'Unable to load attachments.')
+          setErrorKey('editTaskFeedback.loadAttachmentsFailed')
         }
       })
 
@@ -243,7 +245,7 @@ export default function EditTaskScreen({
     setSubtasks(updatedTask.subtasks)
     setDependencies(updatedTask.dependencies)
     setProgress(updatedTask.progress)
-    setError('')
+    setErrorKey('')
     onTaskUpdated?.(updatedTask)
   }
 
@@ -255,7 +257,7 @@ export default function EditTaskScreen({
       applyUpdatedTask(updatedTask)
       setAddingSubtask(false)
     } catch (subtaskError) {
-      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to add subtask.')
+      setErrorKey('editTaskFeedback.addSubtaskFailed')
     }
   }
 
@@ -267,7 +269,7 @@ export default function EditTaskScreen({
       applyUpdatedTask(updatedTask)
       setEditingSubtaskId(null)
     } catch (subtaskError) {
-      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.')
+      setErrorKey('editTaskFeedback.updateSubtaskFailed')
     }
   }
 
@@ -278,7 +280,7 @@ export default function EditTaskScreen({
       const updatedTask = await deleteSubtask(accessToken, task.id, deletingSubtaskId)
       applyUpdatedTask(updatedTask)
     } catch (subtaskError) {
-      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to delete subtask.')
+      setErrorKey('editTaskFeedback.deleteSubtaskFailed')
     } finally {
       setDeletingSubtaskId(null)
     }
@@ -295,7 +297,7 @@ export default function EditTaskScreen({
       })
       applyUpdatedTask(updatedTask)
     } catch (subtaskError) {
-      setError(subtaskError instanceof Error ? subtaskError.message : 'Unable to update subtask.')
+      setErrorKey('editTaskFeedback.updateSubtaskFailed')
     }
   }
 
@@ -306,7 +308,7 @@ export default function EditTaskScreen({
       const updatedTask = await addDependencies(accessToken, task.id, selected.map((item) => item.id))
       applyUpdatedTask(updatedTask)
     } catch (dependencyError) {
-      setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to add dependency.')
+      setErrorKey('editTaskFeedback.addDependencyFailed')
     }
   }
 
@@ -317,7 +319,7 @@ export default function EditTaskScreen({
       const updatedTask = await removeDependency(accessToken, task.id, dependencyId)
       applyUpdatedTask(updatedTask)
     } catch (dependencyError) {
-      setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to remove dependency.')
+      setErrorKey('editTaskFeedback.removeDependencyFailed')
     }
   }
 
@@ -328,7 +330,7 @@ export default function EditTaskScreen({
       const updatedTask = await replaceDependency(accessToken, task.id, oldDependencyId, replacement.id)
       applyUpdatedTask(updatedTask)
     } catch (dependencyError) {
-      setError(dependencyError instanceof Error ? dependencyError.message : 'Unable to replace dependency.')
+      setErrorKey('editTaskFeedback.replaceDependencyFailed')
     }
   }
 
@@ -342,7 +344,7 @@ export default function EditTaskScreen({
       await deleteAttachment(accessToken, task.id, attachment.id)
     } catch (deleteError) {
       setAttachments(previous)
-      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete attachment.')
+      setErrorKey('editTaskFeedback.deleteAttachmentFailed')
     } finally {
       setIsDeletingAttachment(false)
       setAttachmentToDelete(null)
@@ -351,17 +353,17 @@ export default function EditTaskScreen({
 
   async function handleSave() {
     if (!title.trim()) {
-      setError('Task title is required.')
+      setErrorKey('editTaskFeedback.titleRequired')
       return
     }
 
     if (dueTime && !dueDate) {
-      setError('Due time requires a due date.')
+      setErrorKey('editTaskFeedback.dueDateRequired')
       return
     }
 
     if (status === 'Done' && subtasks.some((item) => !item.isDone)) {
-      setError('Complete all subtasks before marking this task as Done.')
+      setErrorKey('editTaskFeedback.completeSubtasks')
       return
     }
 
@@ -369,7 +371,7 @@ export default function EditTaskScreen({
     const spentTimeMinutes = Math.round((Number(spentHours) || 0) * 60)
     const scheduleValidationError = taskScheduleValidationError({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })
     if (scheduleValidationError) {
-      setError(scheduleValidationError)
+      setErrorKey('editTaskFeedback.invalidSchedule')
       return
     }
     if (accessToken && canValidateTaskSchedule({ scheduledDate, scheduledStartTime, scheduledEndTime, estimatedTimeMinutes })) {
@@ -379,7 +381,7 @@ export default function EditTaskScreen({
       if (!scheduledEndTime && validation.normalizedSchedule) setScheduledEndTime(validation.normalizedSchedule.scheduledEndTime)
     }
     setSaving(true)
-    setError('')
+    setErrorKey('')
 
     try {
       const updatedTask = await onSave?.({
@@ -421,7 +423,7 @@ export default function EditTaskScreen({
       markSaved()
       onSaved?.(updatedTask)
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save task changes.')
+      setErrorKey('editTaskFeedback.saveFailed')
     } finally {
       setUploadingAttachments(false)
       setSaving(false)
@@ -432,9 +434,9 @@ export default function EditTaskScreen({
     if (!timeConflict || !accessToken) return
     const target = which === 'existing' ? timeConflict.existingTask : timeConflict.proposedTask
     const schedule = mode === 'manual' ? manual : (await getNearestTaskSchedule(accessToken, target)).schedule
-    if (!schedule) { setError('No available slot was found.'); return }
+    if (!schedule) { setErrorKey('editTaskFeedback.invalidSchedule'); return }
     const validation = await validateTaskSchedule(accessToken, { ...target, ...schedule })
-    if (validation.conflicts.length) { setError('The selected slot conflicts with another task.'); return }
+    if (validation.conflicts.length) { setErrorKey('editTaskFeedback.invalidSchedule'); return }
     if (!window.confirm(`Current schedule → Proposed schedule\n${target.title}: ${target.scheduledDate} ${target.scheduledStartTime}–${target.scheduledEndTime} → ${schedule.scheduledDate} ${schedule.scheduledStartTime}–${schedule.scheduledEndTime}`)) return
     if (which === 'existing') {
       await updateTask(accessToken, target.id, schedule)
@@ -498,10 +500,10 @@ export default function EditTaskScreen({
         panelPercent={task.progress}
       >
           <div className="mb-3 flex items-center gap-2 text-xs text-[var(--bp-muted)]">
-            <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">Back</button>
+            <button type="button" onClick={onBack} className="hover:text-[var(--bp-text)]">{t('taskForm.back')}</button>
             <span>Tasks</span>
             <span>/</span>
-            <span className="text-[var(--bp-text)]">Edit Task</span>
+            <span className="text-[var(--bp-text)]">{t('taskForm.editTask')}</span>
           </div>
 
           <PageHeader
@@ -524,11 +526,11 @@ export default function EditTaskScreen({
 
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
             <section className="space-y-3">
-              <Card title="Task Information" code="INFO">
-                <FieldLabel label="Task Title" required htmlFor="edit-task-title" />
+              <Card title={t('createTask.information')} code="INFO">
+                <FieldLabel label={t('taskForm.taskTitle')} required htmlFor="edit-task-title" />
                 <input id="edit-task-title" required aria-required="true" aria-invalid={Boolean(error && !title.trim())} aria-describedby={error ? 'edit-task-error' : undefined} className={inputClass} value={title} onChange={(event) => setTitle(event.target.value)} />
 
-                <FieldLabel label="Description" htmlFor="edit-task-description" />
+                <FieldLabel label={t('taskForm.description')} htmlFor="edit-task-description" />
                 <textarea
                   id="edit-task-description"
                   className={`${inputClass} min-h-28 resize-none`}
@@ -538,35 +540,35 @@ export default function EditTaskScreen({
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <FieldLabel label="Category" htmlFor="edit-task-category" />
+                    <FieldLabel label={t('createTask.category')} htmlFor="edit-task-category" />
                     <input
                       id="edit-task-category"
                       className={inputClass}
                       value={category}
                       onChange={(event) => setCategory(event.target.value)}
-                      placeholder="e.g. Work, Study, Personal"
+                      placeholder={t('createTask.selectCategory')}
                     />
                   </div>
                   <div>
-                    <FieldLabel label="Status" htmlFor="edit-task-status" />
+                    <FieldLabel label={t('taskForm.status')} htmlFor="edit-task-status" />
                     <select id="edit-task-status" className={inputClass} value={status} onChange={(event) => setStatus(event.target.value)}>
-                      <option>To Do</option>
-                      <option>In Progress</option>
-                      <option>Done</option>
-                      <option>Missed</option>
+                      <option value="To Do">{t('taskLabels.status.todo')}</option>
+                      <option value="In Progress">{t('taskLabels.status.inProgress')}</option>
+                      <option value="Done">{t('taskLabels.status.done')}</option>
+                      <option value="Missed">{t('taskLabels.status.missed')}</option>
                     </select>
                   </div>
                 </div>
               </Card>
 
-              <Card title="Editable Subtasks" action="+ Add Subtask" onAction={() => setAddingSubtask(true)}>
+              <Card title={t('editTaskForm.subtasks')} action={t('editTaskForm.addSubtask')} onAction={() => setAddingSubtask(true)}>
                 <div className="space-y-2">
                   {subtasks.map((item) => (
                     <div key={item.id} className="grid gap-2 rounded-xl bg-[var(--bp-surface)] p-3 md:grid-cols-[28px_1fr_auto_auto] md:items-center">
                       <button
                         type="button"
                         onClick={() => void handleToggleSubtask(item)}
-                        aria-label={item.isDone ? 'Mark subtask incomplete' : 'Mark subtask complete'}
+                        aria-label={item.isDone ? t('editTaskForm.markSubtaskIncomplete') : t('editTaskForm.markSubtaskComplete')}
                         className={`h-5 w-5 rounded border text-[10px] font-black ${item.isDone ? 'border-green-400 bg-green-400 text-[#1F2937]' : 'border-slate-500'}`}
                       >
                         {item.isDone ? 'OK' : ''}
@@ -579,9 +581,9 @@ export default function EditTaskScreen({
                           {item.isShared ? <SharedBadge /> : null}
                         </div>
                         {item.assigneeUserId && item.assignee ? (
-                          <p className="mt-0.5 text-xs text-[var(--bp-muted)]">Assigned to {item.assignee}</p>
+                          <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{t('editTaskForm.assignedTo', { name: item.assignee })}</p>
                         ) : !item.assigneeUserId && !item.isShared ? (
-                          <p className="mt-0.5 text-xs text-[var(--bp-muted)]">Unassigned</p>
+                          <p className="mt-0.5 text-xs text-[var(--bp-muted)]">{t('editTaskForm.unassigned')}</p>
                         ) : null}
                       </div>
                       <button
@@ -589,35 +591,37 @@ export default function EditTaskScreen({
                         onClick={() => setEditingSubtaskId(item.id)}
                         className="rounded-lg bg-[var(--bp-border)] px-3 py-2 text-xs font-bold text-[var(--bp-text)]"
                       >
-                        Edit
+                        {t('editTaskForm.edit')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setDeletingSubtaskId(item.id)}
                         className="rounded-lg border border-red-500/40 px-3 py-2 text-xs font-bold text-red-300"
                       >
-                        Delete
+                        {t('editTaskForm.delete')}
                       </button>
                     </div>
                   ))}
-                  {!subtasks.length ? <p className="text-sm text-[var(--bp-muted)]">No subtasks yet.</p> : null}
+                  {!subtasks.length ? <p className="text-sm text-[var(--bp-muted)]">{t('editTaskForm.noSubtasks')}</p> : null}
                 </div>
               </Card>
 
-              <Card title="Notes">
+              <Card title={t('taskForm.notes')}>
                 <textarea
                   className={`${inputClass} min-h-20 resize-none`}
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
+                  placeholder={t('taskForm.notesPlaceholder')}
+                  aria-label={t('taskForm.notes')}
                 />
               </Card>
 
-              <Card title="Attachments">
+              <Card title={t('createTask.attachments')}>
                 <TaskAttachmentPicker
                   files={draftAttachments}
                   onChange={setDraftAttachments}
                   disabled={saving || uploadingAttachments}
-                  onValidationError={setError}
+                  onValidationError={() => setErrorKey('editTaskFeedback.attachmentInvalid')}
                 />
                 <div className="mt-4 space-y-2">
                   {attachments.map((file) => (
@@ -625,6 +629,7 @@ export default function EditTaskScreen({
                       <button
                         type="button"
                         onClick={() => handlePreviewAttachment(file)}
+                        aria-label={t('editTaskForm.viewAttachment', { name: file.fileName ?? file.name ?? '' })}
                         className="flex min-w-0 flex-1 items-center gap-3 text-left"
                       >
                         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black text-white ${attachmentColor(file.fileType ?? file.type, file.fileName ?? file.name)}`}>
@@ -642,11 +647,11 @@ export default function EditTaskScreen({
                         onClick={() => setAttachmentToDelete(file)}
                         className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-300"
                       >
-                        Delete
+                        {t('editTaskForm.removeAttachment')}
                       </button>
                     </div>
                   ))}
-                  {!attachments.length ? <p className="text-sm text-[var(--bp-muted)]">No attachments yet.</p> : null}
+                  {!attachments.length ? <p className="text-sm text-[var(--bp-muted)]">{t('editTaskForm.noAttachments')}</p> : null}
                 </div>
               </Card>
 
@@ -682,7 +687,7 @@ export default function EditTaskScreen({
             </section>
 
             <aside className="space-y-3">
-              <Card title="Task Settings" code="SET">
+              <Card title={t('createTask.settings')} code="SET">
                 <FieldLabel label="Priority" />
                 <div className="mb-3 grid grid-cols-3 gap-2">
                   <Segment active={priority === 'Low'} label="Low" color="text-green-400" onClick={() => setPriority('Low')} />
@@ -692,18 +697,18 @@ export default function EditTaskScreen({
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
                   <div>
-                    <FieldLabel label="Deadline · when this must be finished" htmlFor="edit-task-due-date" />
-                    <input id="edit-task-due-date" type="date" className={inputClass} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                    <FieldLabel label={`${t('createTask.deadline')} · ${t('createTask.deadlineHelp')}`} htmlFor="edit-task-due-date" />
+                    <input id="edit-task-due-date" type="date" aria-label={t('taskForm.dueDate')} className={inputClass} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
                   </div>
                   <div>
-                    <FieldLabel label="Deadline time" htmlFor="edit-task-due-time" />
-                    <input id="edit-task-due-time" type="time" className={inputClass} value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
+                    <FieldLabel label={t('createTask.deadlineTime')} htmlFor="edit-task-due-time" />
+                    <input id="edit-task-due-time" type="time" aria-label={t('editTaskControls.dueTime')} className={inputClass} value={dueTime} onChange={(event) => setDueTime(event.target.value)} />
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3">
-                  <div><FieldLabel label="Schedule · when you plan to do this" htmlFor="edit-task-scheduled-date" /><input id="edit-task-scheduled-date" type="date" className={inputClass} value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} /></div>
-                  <div><FieldLabel label="Start time" htmlFor="edit-task-scheduled-start" /><input id="edit-task-scheduled-start" type="time" className={inputClass} value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} /></div>
-                  <div><FieldLabel label="End time" htmlFor="edit-task-scheduled-end" /><input id="edit-task-scheduled-end" type="time" className={inputClass} value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} /></div>
+                  <div><FieldLabel label={`${t('createTask.schedule')} · ${t('createTask.scheduleHelp')}`} htmlFor="edit-task-scheduled-date" /><input id="edit-task-scheduled-date" type="date" aria-label={t('taskForm.startDate')} className={inputClass} value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} /></div>
+                  <div><FieldLabel label={t('createTask.startTime')} htmlFor="edit-task-scheduled-start" /><input id="edit-task-scheduled-start" type="time" aria-label={t('createTask.startTime')} className={inputClass} value={scheduledStartTime} onChange={(event) => setScheduledStartTime(event.target.value)} /></div>
+                  <div><FieldLabel label={t('createTask.endTime')} htmlFor="edit-task-scheduled-end" /><input id="edit-task-scheduled-end" type="time" aria-label={t('createTask.endTime')} className={inputClass} value={scheduledEndTime} onChange={(event) => setScheduledEndTime(event.target.value)} /></div>
                 </div>
                 <WeatherTravelTaskFields accessToken={accessToken} destination={destination} enabled={weatherTravelEnabled} travelMode={travelMode} onDestination={setDestination} onEnabled={setWeatherTravelEnabled} onTravelMode={setTravelMode} />
               </Card>
@@ -712,7 +717,7 @@ export default function EditTaskScreen({
               {moreOptions ? <Card title="Progress Overview" code={`${progress}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs text-[var(--bp-muted)]">
-                    {completedSubtasksCount} of {subtasks.length} subtasks completed
+                    {t('editTaskForm.subtasksCompleted', { completed: completedSubtasksCount, total: subtasks.length })}
                   </span>
                   <span className="text-lg font-black text-[var(--bp-accent-ink)]">{progress}%</span>
                 </div>
@@ -721,15 +726,15 @@ export default function EditTaskScreen({
                 </div>
               </Card> : null}
 
-              <Card title="Reminder & Recurring">
-                <FieldLabel label="Reminder" />
+              <Card title={t('editTaskControls.reminderAndRecurrence')}>
+                <FieldLabel label={t('createTask.reminder')} />
                 <label className="mb-3 flex items-center gap-2 text-sm text-[var(--bp-subtle)]">
                   <input
                     type="checkbox"
                     checked={reminderEnabled}
                     onChange={(event) => setReminderEnabled(event.target.checked)}
                   />
-                  Enable reminder
+                  {t('editTaskControls.enableReminder')}
                 </label>
                 <select
                   className={inputClass}
@@ -739,7 +744,7 @@ export default function EditTaskScreen({
                 >
                   {reminderMinuteOptions.map((minutes) => (
                     <option key={minutes} value={minutes}>
-                      {formatReminderLabel(minutes)}
+                      {formatReminderLabel(minutes, t)}
                     </option>
                   ))}
                 </select>
@@ -750,13 +755,13 @@ export default function EditTaskScreen({
                       taskId={task.id}
                       accessToken={accessToken}
                       canEditShared={canEditShared}
-                      onError={setError}
+                      onError={() => setErrorKey('editTaskFeedback.reminderFailed')}
                       onNotice={setNotice}
                     />
                   </div>
                 ) : null}
 
-                <FieldLabel label="Recurring" />
+                <FieldLabel label={t('editTaskControls.recurrence')} />
                 <button
                   type="button"
                   onClick={() => setIsRecurrenceModalOpen(true)}
@@ -774,17 +779,18 @@ export default function EditTaskScreen({
                     canEditShared={canEditShared}
                     focusEnabled={focusEnabled}
                     onFocusEnabledChange={setFocusEnabled}
-                    onError={setError}
+                    onError={() => setErrorKey('editTaskFeedback.saveFailed')}
                   />
                 ) : null}
               </Card>
 
-              <Card title="Dependencies" action="+ Add" onAction={() => setDependencyModalMode('add')}>
+              <Card title={t('createTask.dependencies')} action={t('createTask.addDependency')} onAction={() => setDependencyModalMode('add')}>
                 {dependencies.map((dependency) => (
                   <Dependency
                     key={dependency.id}
                     label={dependency.title}
                     status={toUiStatus(dependency.status)}
+                    t={t}
                     onReplace={() => {
                       setSelectedDependency(dependency)
                       setDependencyModalMode('edit')
@@ -840,14 +846,14 @@ export default function EditTaskScreen({
           <footer className="mt-6 flex flex-col gap-4 border-t border-[var(--bp-border)] pt-4">
             <div className="flex flex-col gap-2 sm:flex-row">
               <button onClick={onCancel} className="rounded-lg bg-[var(--bp-border)] px-6 py-2.5 text-sm font-bold text-[var(--bp-text)]">
-                Cancel Changes
+                {t('taskConflict.cancelChanges')}
               </button>
               <button
                 onClick={() => void handleSave()}
                 disabled={saving}
                 className="rounded-lg border border-[var(--bp-accent)] bg-[var(--bp-accent-soft)] px-6 py-2.5 text-sm font-black text-[var(--bp-accent-text)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('taskForm.saving') : t('taskForm.saveChanges')}
               </button>
             </div>
             <div className="border-t border-red-500/25 pt-4"><p className="mb-2 text-xs font-black uppercase tracking-wide text-red-400">Danger zone</p><button onClick={openDeleteDialog} className="rounded-lg border border-red-500/50 px-5 py-2.5 text-sm font-bold text-red-400">Delete Task</button></div>
@@ -945,7 +951,7 @@ export default function EditTaskScreen({
         taskId={task.id}
         attachment={previewAttachment}
         onClose={() => setPreviewAttachment(null)}
-        onError={setError}
+        onError={() => setErrorKey('editTaskFeedback.attachmentInvalid')}
       />
     </>
   )
@@ -1019,11 +1025,13 @@ function Dependency({
   status,
   onReplace,
   onRemove,
+  t,
 }: {
   label: string
   status: string
   onReplace: () => void
   onRemove: () => void
+  t: (key: string, params?: Record<string, string | number>) => string
 }) {
   return (
     <div className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-[var(--bp-surface)] p-3">
@@ -1033,10 +1041,10 @@ function Dependency({
       </div>
       <div className="flex shrink-0 gap-1.5">
         <button type="button" onClick={onReplace} className="rounded-lg bg-[var(--bp-border)] px-2.5 py-1.5 text-xs font-bold text-[var(--bp-text)]">
-          Replace
+          {t('editTaskForm.replace')}
         </button>
         <button type="button" onClick={onRemove} className="rounded-lg border border-red-500/40 px-2.5 py-1.5 text-xs font-bold text-red-300">
-          Remove
+          {t('editTaskForm.remove')}
         </button>
       </div>
     </div>
@@ -1084,12 +1092,10 @@ function attachmentColor(type?: string, fileName?: string) {
   return 'bg-orange-500'
 }
 
-function formatReminderLabel(minutes: number) {
-  if (minutes === 10) return '10 minutes before'
-  if (minutes === 30) return '30 minutes before'
-  if (minutes === 60) return '1 hour before'
-  if (minutes === 1440) return '1 day before'
-  return `${minutes} minutes before`
+function formatReminderLabel(minutes: number, t: (key: string, params?: Record<string, string | number>) => string) {
+  if (minutes === 60) return t('editTaskControls.hoursBefore', { count: 1 })
+  if (minutes === 1440) return t('editTaskControls.daysBefore', { count: 1 })
+  return t('editTaskControls.minutesBefore', { count: minutes })
 }
 
 type DependencySource = Pick<ApiTask, 'id' | 'title' | 'category' | 'status' | 'dueDate' | 'priority'>

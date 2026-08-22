@@ -12,6 +12,7 @@ import { buildReminderParsePrompt } from './prompts/reminder-parse.prompt';
 import { normalizeReminderDraft, ReminderDraft } from './reminder-draft';
 import { inferSmartLocationWithRules } from './smart-location-inference.service';
 import { parseJsonResponse } from './utils/json-response';
+import { runtimeTelemetry } from '../admin/system-health/runtime-telemetry.registry';
 
 export type PersonReminderMatch = {
   status: 'matched' | 'needs_selection' | 'no_match';
@@ -70,6 +71,8 @@ export class AiService {
     }
 
     let raw: string;
+    const providerStartedAt = Date.now();
+    runtimeTelemetry.providerStarted('qwen');
     try {
       const response = await this.client.chat.completions.create({
         model: this.model,
@@ -81,7 +84,16 @@ export class AiService {
         temperature: 0.2,
       });
       raw = response.choices[0]?.message?.content ?? '';
+      runtimeTelemetry.providerSucceeded(
+        'qwen',
+        Date.now() - providerStartedAt,
+      );
     } catch (error) {
+      runtimeTelemetry.providerFailed(
+        'qwen',
+        'provider_unavailable',
+        Date.now() - providerStartedAt,
+      );
       this.logger.error(
         `Qwen request failed: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
@@ -114,9 +126,14 @@ export class AiService {
   }
 
   /** Reuses the configured AI provider for privacy-minimized daily summaries. */
-  async generateDailyMotivation(input: { systemPrompt: string; summary: Record<string, unknown> }): Promise<string> {
+  async generateDailyMotivation(input: {
+    systemPrompt: string;
+    summary: Record<string, unknown>;
+  }): Promise<string> {
     if (!this.client || !this.model) {
-      throw new InternalServerErrorException('AI motivation is not configured.');
+      throw new InternalServerErrorException(
+        'AI motivation is not configured.',
+      );
     }
     try {
       const response = await Promise.race([
@@ -129,14 +146,23 @@ export class AiService {
           temperature: 0.35,
           max_tokens: 80,
         }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Daily motivation AI timed out.')), 8_000)),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Daily motivation AI timed out.')),
+            8_000,
+          ),
+        ),
       ]);
       return response.choices[0]?.message?.content?.trim() ?? '';
     } catch (error) {
       // Daily motivation is optional and has a deterministic server-side
       // fallback. Provider timeouts should not look like application errors.
-      this.logger.warn(`Daily motivation request failed: ${error instanceof Error ? error.message : 'unknown error'}`);
-      throw new InternalServerErrorException('Failed to generate daily motivation with AI.');
+      this.logger.warn(
+        `Daily motivation request failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+      throw new InternalServerErrorException(
+        'Failed to generate daily motivation with AI.',
+      );
     }
   }
 

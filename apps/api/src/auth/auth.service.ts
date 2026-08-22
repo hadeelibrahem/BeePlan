@@ -20,6 +20,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service';
 import { googleLoginApprovals, passwordResetCodes, users } from '../db/schema';
+import { runtimeTelemetry } from '../admin/system-health/runtime-telemetry.registry';
 import { isValidIanaTimezone } from '../timezone';
 import { normalizeUsername, validateUsername, usernameSeed } from './username';
 import {
@@ -44,7 +45,13 @@ const registerSchema = z.object({
   username: z.string().trim().optional(),
   email: z.string().trim().email('Please enter a valid email address'),
   password: passwordSchema,
-  timezone: z.string().trim().min(1).max(100).refine(isValidIanaTimezone, 'Timezone must be a valid IANA timezone').optional(),
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .refine(isValidIanaTimezone, 'Timezone must be a valid IANA timezone')
+    .optional(),
 });
 
 const loginSchema = z.object({
@@ -163,7 +170,11 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const username = await this.allocateUsername(parsed.data.username ?? usernameSeed(fullName), undefined, parsed.data.username == null);
+    const username = await this.allocateUsername(
+      parsed.data.username ?? usernameSeed(fullName),
+      undefined,
+      parsed.data.username == null,
+    );
     const [createdUser] = await this.databaseService.db
       .insert(users)
       .values({
@@ -251,9 +262,10 @@ export class AuthService {
       throw new ConflictException('This email is already registered.');
     }
 
-    const username = parsed.data.username == null
-      ? user.username
-      : await this.allocateUsername(parsed.data.username, userId);
+    const username =
+      parsed.data.username == null
+        ? user.username
+        : await this.allocateUsername(parsed.data.username, userId);
 
     const [updatedUser] = await this.databaseService.db
       .update(users)
@@ -330,7 +342,11 @@ export class AuthService {
     const fullName =
       parsed.data.fullName?.trim() || email.split('@')[0] || 'BeePlan User';
     const avatarUrl = parsed.data.avatarUrl || null;
-    const username = await this.allocateUsername(parsed.data.username ?? usernameSeed(fullName), undefined, parsed.data.username == null);
+    const username = await this.allocateUsername(
+      parsed.data.username ?? usernameSeed(fullName),
+      undefined,
+      parsed.data.username == null,
+    );
     const emailVerified =
       parsed.data.emailVerified ?? parsed.data.provider === 'google';
     const providerUserId = parsed.data.providerUserId;
@@ -1051,7 +1067,11 @@ export class AuthService {
     };
   }
 
-  private async allocateUsername(value: string, excludeUserId?: string, autoSuffix = false) {
+  private async allocateUsername(
+    value: string,
+    excludeUserId?: string,
+    autoSuffix = false,
+  ) {
     let normalized = normalizeUsername(value);
     const validationError = validateUsername(normalized);
     if (validationError) {
@@ -1065,7 +1085,8 @@ export class AuthService {
         where: eq(users.usernameNormalized, candidate),
       });
       if (!owner || owner.id === excludeUserId) return candidate;
-      if (!autoSuffix) throw new ConflictException('That username is already taken.');
+      if (!autoSuffix)
+        throw new ConflictException('That username is already taken.');
       suffix += 1;
       candidate = `${normalized.slice(0, 20 - String(suffix).length)}${suffix}`;
     }
@@ -1152,6 +1173,8 @@ export class AuthService {
     }
 
     const safeName = this.escapeHtml(fullName || 'there');
+    const emailStartedAt = Date.now();
+    runtimeTelemetry.providerStarted('email');
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -1246,6 +1269,8 @@ export class AuthService {
       return code;
     }
 
+    const emailStartedAt = Date.now();
+    runtimeTelemetry.providerStarted('email');
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -1268,11 +1293,17 @@ export class AuthService {
     });
 
     if (!response.ok) {
+      runtimeTelemetry.providerFailed(
+        'email',
+        response.status === 429 ? 'rate_limit' : 'provider_error',
+        Date.now() - emailStartedAt,
+      );
       throw new InternalServerErrorException(
         'Unable to send reset code. Please try again.',
       );
     }
 
+    runtimeTelemetry.providerSucceeded('email', Date.now() - emailStartedAt);
     return undefined;
   }
 
@@ -1305,6 +1336,8 @@ export class AuthService {
       return;
     }
 
+    const emailStartedAt = Date.now();
+    runtimeTelemetry.providerStarted('email');
     try {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -1330,13 +1363,27 @@ export class AuthService {
       });
 
       if (!response.ok) {
+        runtimeTelemetry.providerFailed(
+          'email',
+          response.status === 429 ? 'rate_limit' : 'provider_error',
+          Date.now() - emailStartedAt,
+        );
         const errorText = await response.text().catch(() => '');
         console.error(
           '[BeePlan auth] Unable to send login notification email.',
           errorText,
         );
-      }
+      } else
+        runtimeTelemetry.providerSucceeded(
+          'email',
+          Date.now() - emailStartedAt,
+        );
     } catch (error) {
+      runtimeTelemetry.providerFailed(
+        'email',
+        'network_error',
+        Date.now() - emailStartedAt,
+      );
       console.error(
         '[BeePlan auth] Unable to send login notification email.',
         error,

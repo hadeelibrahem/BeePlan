@@ -1,7 +1,8 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
-import { json, urlencoded } from 'express';
+import { json, urlencoded, type NextFunction, type Request, type Response } from 'express';
+import { randomUUID } from 'crypto';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -13,6 +14,11 @@ async function bootstrap() {
   );
   app.use(json({ limit: '4mb' }));
   app.use(urlencoded({ extended: true, limit: '1mb' }));
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    const candidate = req.headers['x-request-id'];
+    (req as typeof req & { requestId?: string }).requestId = typeof candidate === 'string' && /^[a-zA-Z0-9_-]{8,128}$/.test(candidate) ? candidate : randomUUID();
+    next();
+  });
   const allowedOrigins = new Set(
     [
       'http://localhost:5173',

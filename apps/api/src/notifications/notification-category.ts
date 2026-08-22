@@ -56,6 +56,11 @@ const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
   ai_missing_assignment: 'ai',
   ai_daily_summary: 'ai',
   time_capsule_ready: 'system',
+  moderation_warning: 'system',
+  moderation_restored: 'system',
+  feedback_planned: 'system',
+  feedback_released: 'system',
+  challenge_completed: 'system',
 };
 
 export function getNotificationCategory(
