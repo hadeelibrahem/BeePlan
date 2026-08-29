@@ -1276,152 +1276,6 @@ export const reminders = pgTable(
   ],
 );
 
-export const habits = pgTable('habits', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  frequency: varchar('frequency', { length: 20 }).notNull(),
-  targetCount: integer('target_count').notNull().default(1),
-  reminderTime: time('reminder_time'),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: createdAt(),
-});
-
-export const habitLogs = pgTable('habit_logs', {
-  id: id(),
-  habitId: uuid('habit_id')
-    .notNull()
-    .references(() => habits.id, { onDelete: 'cascade' }),
-  logDate: date('log_date').notNull(),
-  completedCount: integer('completed_count').notNull().default(0),
-  isCompleted: boolean('is_completed').notNull().default(false),
-});
-
-export const courses = pgTable('courses', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 255 }).notNull(),
-  color: varchar('color', { length: 32 }),
-  description: text('description'),
-});
-
-export const exams = pgTable('exams', {
-  id: id(),
-  courseId: uuid('course_id')
-    .notNull()
-    .references(() => courses.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  examDate: timestamp('exam_date').notNull(),
-  notes: text('notes'),
-});
-
-export const assignments = pgTable('assignments', {
-  id: id(),
-  courseId: uuid('course_id')
-    .notNull()
-    .references(() => courses.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  dueDate: timestamp('due_date').notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('todo'),
-  grade: decimal('grade', { precision: 5, scale: 2 }),
-});
-
-export const studySessions = pgTable('study_sessions', {
-  id: id(),
-  courseId: uuid('course_id')
-    .notNull()
-    .references(() => courses.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  startTime: timestamp('start_time').notNull(),
-  endTime: timestamp('end_time').notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('planned'),
-});
-
-export const shoppingLists = pgTable('shopping_lists', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  storeName: varchar('store_name', { length: 255 }),
-  locationId: uuid('location_id').references(() => savedLocations.id, {
-    onDelete: 'set null',
-  }),
-});
-
-export const shoppingItems = pgTable('shopping_items', {
-  id: id(),
-  listId: uuid('list_id')
-    .notNull()
-    .references(() => shoppingLists.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 255 }).notNull(),
-  quantity: integer('quantity').notNull().default(1),
-  isDone: boolean('is_done').notNull().default(false),
-});
-
-export const goals = pgTable('goals', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  targetDate: date('target_date'),
-  progress: integer('progress').notNull().default(0),
-  status: varchar('status', { length: 20 }).notNull().default('active'),
-});
-
-export const goalTasks = pgTable(
-  'goal_tasks',
-  {
-    goalId: uuid('goal_id')
-      .notNull()
-      .references(() => goals.id, { onDelete: 'cascade' }),
-    taskId: uuid('task_id')
-      .notNull()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-  },
-  (table) => [primaryKey({ columns: [table.goalId, table.taskId] })],
-);
-
-export const groups = pgTable('groups', {
-  id: id(),
-  name: varchar('name', { length: 255 }).notNull(),
-  ownerId: uuid('owner_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  createdAt: createdAt(),
-});
-
-export const groupMembers = pgTable('group_members', {
-  id: id(),
-  groupId: uuid('group_id')
-    .notNull()
-    .references(() => groups.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  role: varchar('role', { length: 20 }).notNull().default('member'),
-});
-
-export const sharedTasks = pgTable('shared_tasks', {
-  id: id(),
-  taskId: uuid('task_id')
-    .notNull()
-    .references(() => tasks.id, { onDelete: 'cascade' }),
-  groupId: uuid('group_id')
-    .notNull()
-    .references(() => groups.id, { onDelete: 'cascade' }),
-  assignedTo: uuid('assigned_to').references(() => users.id, {
-    onDelete: 'set null',
-  }),
-});
-
 export const notifications = pgTable(
   'notifications',
   {
@@ -1622,16 +1476,6 @@ export const aiRecommendations = pgTable(
   (table) => [index('idx_ai_reco_task').on(table.taskId, table.createdAt)],
 );
 
-export const deviceTokens = pgTable('device_tokens', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  token: text('token').notNull(),
-  platform: varchar('platform', { length: 20 }).notNull(),
-  createdAt: createdAt(),
-});
-
 // A directional friend request that becomes a mutual friendship once accepted.
 // `requesterId` sent the request to `addresseeId`. Uniqueness is enforced on
 // the ordered pair; the service also blocks a reverse-direction duplicate.
@@ -1702,18 +1546,6 @@ export const userLocationSnapshots = pgTable('user_location_snapshots', {
   accuracyMeters: integer('accuracy_meters'),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
   updatedAt: updatedAt(),
-});
-
-export const dailyUserStats = pgTable('daily_user_stats', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  date: date('date').notNull(),
-  completedTasks: integer('completed_tasks').notNull().default(0),
-  missedTasks: integer('missed_tasks').notNull().default(0),
-  completedHabits: integer('completed_habits').notNull().default(0),
-  missedReminders: integer('missed_reminders').notNull().default(0),
 });
 
 // ---------------------------------------------------------------------------

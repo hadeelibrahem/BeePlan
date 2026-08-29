@@ -155,6 +155,13 @@
       "when": 1788100000000,
       "tag": "0039_app_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788200000000,
+      "tag": "0040_legacy_unused_table_cleanup",
+      "breakpoints": true
     }
   ]
 }
