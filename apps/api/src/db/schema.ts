@@ -40,7 +40,7 @@ export const users = pgTable(
     emailVerified: boolean('email_verified').notNull().default(false),
     timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
     // Bumped on logout and password reset so previously-issued JWTs (which
-    // carry the version they were signed with) stop being accepted —
+    // carry the version they were signed with) stop being accepted -
     // see JwtAuthGuard and AuthService.logout/resetPassword.
     tokenVersion: integer('token_version').notNull().default(0),
     role: varchar('role', { length: 20 }).notNull().default('user'),
@@ -388,7 +388,7 @@ export const categories = pgTable('categories', {
 // location for a recurring commitment. Previously an unused base table; extended
 // with icon/address/category/updatedAt for the Personal Context feature so the
 // app never needs a second place model (reminders keep their inline jsonb
-// location — see reminders.location).
+// location - see reminders.location).
 export const savedLocations = pgTable(
   'saved_locations',
   {
@@ -398,7 +398,7 @@ export const savedLocations = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     // The short canonical label shown in the row, e.g. "Home", "University".
     name: varchar('name', { length: 255 }).notNull(),
-    // Optional emoji/icon for the row (e.g. "🏠").
+    // Optional emoji/icon for the row (e.g. "??").
     icon: varchar('icon', { length: 16 }),
     // Human-readable address / location value, e.g. "Tubas, Palestine".
     address: text('address'),
@@ -415,7 +415,7 @@ export const savedLocations = pgTable(
   (table) => [index('idx_saved_locations_user').on(table.userId)],
 );
 
-// Natural-language names ("home", "البيت", "campus", "الجامعة") that resolve to
+// Natural-language names ("home", "?????", "campus", "???????") that resolve to
 // a canonical savedLocation. Scoped to the user; a given normalized alias maps
 // to at most one place per user (enforced by the unique index) so AI resolution
 // is deterministic.
@@ -445,8 +445,8 @@ export const savedLocationAliases = pgTable(
 );
 
 // A recurring, fixed weekly commitment (e.g. "University Classes", Mon/Tue/Wed
-// 08:00–11:00). The AI planner treats an active commitment whose weekday matches
-// the plan date as a HARD busy interval — no task/focus/study block may overlap
+// 08:00-11:00). The AI planner treats an active commitment whose weekday matches
+// the plan date as a HARD busy interval - no task/focus/study block may overlap
 // it. Times are the user's local wall-clock (same convention as
 // plannerPreferences sleep/lunch/unavailableHours).
 export const recurringCommitments = pgTable(
@@ -467,7 +467,7 @@ export const recurringCommitments = pgTable(
       { onDelete: 'set null' },
     ),
     repeatWeekly: boolean('repeat_weekly').notNull().default(true),
-    // Optional bounds — the commitment only applies within [startDate, endDate].
+    // Optional bounds - the commitment only applies within [startDate, endDate].
     startDate: date('start_date'),
     endDate: date('end_date'),
     // When false the commitment is temporarily disabled (ignored by the planner).
@@ -541,7 +541,7 @@ export const tasks = pgTable(
   {
     id: id(),
     // The task owner. Retained as `user_id` (not renamed to `owner_id`) so
-    // every existing single-user query keeps working unchanged — a personal
+    // every existing single-user query keeps working unchanged - a personal
     // task is simply a task whose owner has no other accepted members.
     userId: uuid('user_id')
       .notNull()
@@ -580,7 +580,7 @@ export const tasks = pgTable(
       .notNull()
       .default(0),
     // Total time spent, DERIVED as manualSpentMinutes + sum of the task's
-    // completed Focus Session minutes. A cache — never edited directly; both
+    // completed Focus Session minutes. A cache - never edited directly; both
     // TasksService (manual writes) and FocusService (session finish/cancel)
     // recompute it via TasksService.recomputeTaskSpentTime.
     spentTimeMinutes: integer('spent_time_minutes').notNull().default(0),
@@ -606,7 +606,7 @@ export const tasks = pgTable(
   },
   (table) => [
     // `findAll`/`findOne` and virtually every mutation filter by
-    // (userId, id) or userId alone — this is the hottest lookup in the app.
+    // (userId, id) or userId alone - this is the hottest lookup in the app.
     index('idx_tasks_user_id').on(table.userId),
     // Powers status filter tabs (All Tasks) and the dashboard summary counts.
     index('idx_tasks_status').on(table.status),
@@ -746,7 +746,7 @@ export const subtasks = pgTable(
     orderIndex: integer('order_index').notNull().default(0),
     assignee: varchar('assignee', { length: 80 }),
     // Structured link to the collaborator this subtask is assigned to (set by
-    // the AI Collaboration Planner apply step, or manually). Nullable — most
+    // the AI Collaboration Planner apply step, or manually). Nullable - most
     // subtasks have no assignee. `assignee` (free text) is kept in sync with
     // the assignee's display name for backward compatibility with UI that
     // only reads the string field.
@@ -782,14 +782,14 @@ export const subtasks = pgTable(
     estimatedDurationMinutes: integer('estimated_duration_minutes'),
     actualDurationMinutes: integer('actual_duration_minutes'),
     // 'user' when the estimate was entered by a person, 'ai' when inferred by
-    // the planner — the UI shows an "AI Estimate" badge for the latter.
+    // the planner - the UI shows an "AI Estimate" badge for the latter.
     estimatedDurationSource: varchar('estimated_duration_source', {
       length: 10,
     })
       .notNull()
       .default('user'),
     // Lightweight per-subtask reminder config. Not a standalone reminder
-    // entity yet — future-ready to be promoted without a schema redesign.
+    // entity yet - future-ready to be promoted without a schema redesign.
     reminderEnabled: boolean('reminder_enabled').notNull().default(false),
     reminderMinutesBeforeDue: integer('reminder_minutes_before_due'),
     reminderTime: timestamp('reminder_time'),
@@ -868,7 +868,7 @@ export const subtaskAttachments = pgTable(
 );
 
 // Note: task_dependencies.taskId is already served by the composite primary
-// key below (taskId, dependencyTaskId) — Postgres can use a multi-column
+// key below (taskId, dependencyTaskId) - Postgres can use a multi-column
 // btree index for lookups on just its leading column, so a separate index
 // on taskId alone would only add write overhead with no read benefit.
 export const taskDependencies = pgTable(
@@ -1018,6 +1018,16 @@ export const focusRooms = pgTable(
       .default(false),
     statisticsVisible: boolean('statistics_visible').notNull().default(true),
     leaderboardEnabled: boolean('leaderboard_enabled').notNull().default(false),
+    aiFocusCoachEnabled: boolean('ai_focus_coach_enabled')
+      .notNull()
+      .default(true),
+    aiFocusCoachMode: varchar('ai_focus_coach_mode', { length: 20 })
+      .notNull()
+      .default('balanced'),
+    lastFocusCoachInterventionAt: timestamp('last_focus_coach_intervention_at'),
+    distractingMessageCount: integer('distracting_message_count')
+      .notNull()
+      .default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -1161,6 +1171,29 @@ export const focusRoomActivityEvents = pgTable(
   ],
 );
 
+export const focusRoomMessages = pgTable(
+  'focus_room_messages',
+  {
+    id: id(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => focusRooms.id, { onDelete: 'cascade' }),
+    senderUserId: uuid('sender_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    senderType: varchar('sender_type', { length: 16 })
+      .notNull()
+      .default('user'),
+    content: varchar('content', { length: 2000 }).notNull(),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_focus_room_messages_history').on(table.roomId, table.createdAt),
+    index('idx_focus_room_messages_sender').on(table.senderUserId),
+  ],
+);
+
 export const focusRoomInvitations = pgTable(
   'focus_room_invitations',
   {
@@ -1209,7 +1242,7 @@ export const reminders = pgTable(
     status: varchar('status', { length: 20 }).notNull().default('active'),
     // Optional link to a task. When set, the reminder is a task reminder.
     taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
-    // 'personal' (default) — visible/firing only for `userId`. 'shared' — every
+    // 'personal' (default) - visible/firing only for `userId`. 'shared' - every
     // accepted member of `taskId` receives it. Non-task reminders are always
     // personal. See RemindersService and the collaboration notification fan-out.
     audience: varchar('audience', { length: 20 }).notNull().default('personal'),
@@ -1582,7 +1615,7 @@ export const aiRecommendations = pgTable(
     resolvedByUserId: uuid('resolved_by_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
-    // Why the card left "pending" — see RESOLUTION_REASONS in
+    // Why the card left "pending" - see RESOLUTION_REASONS in
     // recommendation-validation.logic.ts. Null for user-driven approve/dismiss.
     resolutionReason: varchar('resolution_reason', { length: 40 }),
   },
@@ -1688,7 +1721,7 @@ export const dailyUserStats = pgTable('daily_user_stats', {
 // ---------------------------------------------------------------------------
 
 // One row per (task, user) collaboration link. A `pending` row IS the pending
-// invitation — there is no separate invitations table, which keeps a single
+// invitation - there is no separate invitations table, which keeps a single
 // source of truth for "who is on this task and in what state". The task owner
 // always has an implicit owner role via tasks.userId and is NOT required to
 // have a row here (though a row may exist after an ownership transfer).
@@ -2424,6 +2457,46 @@ export const supervisionOverrides = pgTable('supervision_overrides', {
   reason: varchar('reason', { length: 40 }).notNull(), requestedAt: createdAt(), effectiveAt: timestamp('effective_at').notNull().defaultNow(),
 }, (t) => [index('idx_supervision_overrides_rule').on(t.ruleId)]);
 
+export const supervisionAccessRequests = pgTable(
+  'supervision_access_requests',
+  {
+    id: id(),
+    relationshipId: uuid('relationship_id')
+      .notNull()
+      .references(() => supervisionRelationships.id, { onDelete: 'cascade' }),
+    supervisedUserId: uuid('supervised_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => supervisionRules.id, { onDelete: 'cascade' }),
+    packageName: varchar('package_name', { length: 255 }).notNull(),
+    decision: varchar('decision', { length: 24 }).notNull(),
+    category: varchar('category', { length: 24 }).notNull().default('unclear'),
+    confidence: real('confidence').notNull().default(0),
+    reason: varchar('reason', { length: 500 }).notNull(),
+    durationMinutes: integer('duration_minutes'),
+    decisionSource: varchar('decision_source', { length: 24 }).notNull(),
+    expiresAt: timestamp('expires_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('idx_supervision_access_user_created').on(
+      t.supervisedUserId,
+      t.createdAt,
+    ),
+    index('idx_supervision_access_relationship').on(
+      t.relationshipId,
+      t.createdAt,
+    ),
+    index('idx_supervision_access_package_expiry').on(
+      t.packageName,
+      t.expiresAt,
+    ),
+  ],
+);
+
 export const supervisionAuditLogs = pgTable('supervision_audit_logs', {
   id: id(), relationshipId: uuid('relationship_id').notNull().references(() => supervisionRelationships.id, { onDelete: 'cascade' }), actorUserId: uuid('actor_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   event: varchar('event', { length: 48 }).notNull(), ruleId: uuid('rule_id').references(() => supervisionRules.id, { onDelete: 'set null' }), metadata: jsonb('metadata').notNull().default({}), createdAt: createdAt(),
@@ -2446,3 +2519,52 @@ export const supervisionManagedApps = pgTable('supervision_managed_apps', {
   iconReference: text('icon_reference'), enabledForGuardianManagement: boolean('enabled_for_guardian_management').notNull().default(false),
   lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(), createdAt: createdAt(), updatedAt: updatedAt(),
 }, (t) => [uniqueIndex('uq_supervision_managed_app_device_identifier').on(t.deviceId, t.platformAppIdentifier), index('idx_supervision_managed_apps_device_enabled').on(t.deviceId, t.enabledForGuardianManagement)]);
+export const appGuardSettings = pgTable('app_guard_settings', {
+  id: id(),
+  userId: uuid('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull().default(false),
+  maxTemporaryMinutes: integer('max_temporary_minutes').notNull().default(10),
+  strictness: varchar('strictness', { length: 16 })
+    .notNull()
+    .default('balanced'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+export const appGuardRestrictedApps = pgTable(
+  'app_guard_restricted_apps',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    packageName: varchar('package_name', { length: 255 }).notNull(),
+    displayName: varchar('display_name', { length: 255 }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('uq_app_guard_user_package').on(t.userId, t.packageName),
+    index('idx_app_guard_user').on(t.userId),
+  ],
+);
+export const appGuardAccessDecisions = pgTable(
+  'app_guard_access_decisions',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    packageName: varchar('package_name', { length: 255 }).notNull(),
+    decision: varchar('decision', { length: 12 }).notNull(),
+    category: varchar('category', { length: 24 }).notNull(),
+    confidence: real('confidence').notNull(),
+    reason: varchar('reason', { length: 500 }).notNull(),
+    durationMinutes: integer('duration_minutes'),
+    expiresAt: timestamp('expires_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('idx_app_guard_decisions_user').on(t.userId, t.createdAt)],
+);
