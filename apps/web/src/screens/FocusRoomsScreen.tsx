@@ -13,6 +13,7 @@ import {
   createRoomInvitation,
   decideRoomInvitation,
   getFocusRoom,
+  getFocusRoomMessages,
   getRoomInvitations,
   joinFocusRoom,
   joinFocusRoomByCode,
@@ -25,9 +26,12 @@ import {
   startCommitment,
   pauseCommitment,
   resumeCommitment,
+  sendFocusRoomMessage,
+  setFocusRoomCoach,
   extendCommitment,
   subscribeRoomEvents,
   type FocusRoom,
+  type FocusRoomChatMessage,
   type ManagedRoomInvitation,
   type RoomInvitation,
 } from "../lib/focusRoomsApi";
@@ -37,6 +41,7 @@ import { useFocusAmbientAudio } from "../lib/useFocusAmbientAudio";
 import { FocusSoundsPanel } from "../components/focus/FocusSoundsPanel";
 import { useLanguage } from "../i18n/LanguageContext";
 import { OutlineButton, PrimaryButton } from "../components/layout/Buttons";
+import { mergeFocusRoomChatMessages } from "../lib/focusRoomChatMessages";
 
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)
@@ -44,6 +49,59 @@ const clock = (seconds: number) =>
     .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 const TERMINAL_STATUSES = new Set(["completed", "ended_early", "terminated", "cancelled"]);
 const isTerminalStatus = (status?: string | null) => Boolean(status && TERMINAL_STATUSES.has(status));
+export function LegacyFocusRoomChatPanel({ open, onClose, room, accessToken, language }: { open: boolean; onClose: () => void; room: FocusRoom; accessToken: string; language: 'en' | 'ar' }) {
+  const [messages, setMessages] = useState<FocusRoomChatMessage[]>([]), [draft, setDraft] = useState(''), [loading, setLoading] = useState(true), [sending, setSending] = useState(false), [error, setError] = useState(''), [coachEnabled, setCoachEnabled] = useState(room.aiFocusCoachEnabled !== false);
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (!open) return; const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }; document.addEventListener('keydown', close); return () => document.removeEventListener('keydown', close); }, [open, onClose]);
+  useEffect(() => { let active = true; setLoading(true); void getFocusRoomMessages(accessToken, room.id).then(result => { if (active) setMessages(result.messages) }).catch(() => active && setError('Unable to load chat.')).finally(() => active && setLoading(false)); return () => { active = false } }, [accessToken, room.id, room.events]);
+  useEffect(() => { const node = scroller.current; if (node && node.scrollHeight - node.scrollTop - node.clientHeight < 120) node.scrollTop = node.scrollHeight }, [messages]);
+  const send = async () => { const content = draft.trim(); if (!content || sending) return; setSending(true); setError(''); try { const message = await sendFocusRoomMessage(accessToken, room.id, content); setMessages(current => current.some(item => item.id === message.id) ? current : [...current, message]); setDraft('') } catch { setError('Message could not be sent.') } finally { setSending(false) } };
+  const toggleCoach = async () => { try { const result = await setFocusRoomCoach(accessToken, room.id, !coachEnabled); setCoachEnabled(result.aiFocusCoachEnabled) } catch { setError('Only the session owner can change the Focus Coach setting.') } };
+  const owner = room.ownerUserId === room.currentUserId;
+  if (!open) return null;
+  return <section className="mt-6 rounded-2xl border border-[var(--bp-border)] bg-[var(--bp-surface)] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black">Session chat</h2><p className="mt-1 text-xs text-[var(--bp-muted)]">{coachEnabled ? '🐝 Bee Focus Coach is enabled and may help keep this session on track.' : 'Focus Coach is disabled.'}</p></div>{owner && <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={coachEnabled} onChange={() => void toggleCoach()} /> AI Focus Coach</label>}</div><div ref={scroller} className="mt-4 max-h-80 space-y-3 overflow-y-auto pe-1">{loading ? <p className="text-sm text-[var(--bp-muted)]">Loading chat…</p> : messages.length ? messages.map(message => <article key={message.id} className={`rounded-xl px-3 py-2 text-sm ${message.senderType === 'ai' ? 'border border-amber-400/30 bg-amber-400/10' : 'bg-[var(--bp-bg)]'}`}><div className="flex items-center justify-between gap-3"><strong>{message.senderType === 'ai' ? '🐝 Bee Focus Coach' : message.senderName}</strong><time className="text-[10px] text-[var(--bp-muted)]">{new Date(message.createdAt).toLocaleTimeString(language === 'ar' ? 'ar' : 'en', { hour: '2-digit', minute: '2-digit' })}</time></div><p className="mt-1 whitespace-pre-wrap">{message.content}</p></article>) : <p className="text-sm text-[var(--bp-muted)]">No messages yet. Share a quick update or ask Bee Focus Coach for help.</p>}</div><div className="mt-4 flex gap-2"><input value={draft} maxLength={2000} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send() } }} placeholder="Message the session…" className="min-w-0 flex-1 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2 text-sm" /><PrimaryButton size="sm" loading={sending} disabled={!draft.trim()} onClick={() => void send()}>Send</PrimaryButton></div>{error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}</section>;
+}
+function FocusRoomChatPanel({ open, onClose, room, accessToken, language, messages, mergeMessages }: { open: boolean; onClose: () => void; room: FocusRoom; accessToken: string; language: 'en' | 'ar'; messages: FocusRoomChatMessage[]; mergeMessages: (incoming: FocusRoomChatMessage[], source: 'history' | 'send') => void }) {
+  const { t } = useLanguage();
+  const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const scroller = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const requestGeneration = useRef(0);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    if (import.meta.env.DEV) console.info(`[FocusChat:Web] panel mount roomId=${room.id}`);
+    return () => { if (import.meta.env.DEV) console.info(`[FocusChat:Web] panel unmount roomId=${room.id}`); };
+  }, [open, room.id]);
+  useEffect(() => {
+    if (!open) return;
+    const request = ++requestGeneration.current;
+    let active = true;
+    setLoading(current => current || messages.length === 0);
+    setError('');
+    if (import.meta.env.DEV) console.info(`[FocusChat] history fetch start roomId=${room.id}`);
+    void getFocusRoomMessages(accessToken, room.id)
+      .then(result => {
+        if (!active || request !== requestGeneration.current) return;
+        mergeMessages(result.messages, 'history');
+        if (import.meta.env.DEV) console.info(`[FocusChat] history fetch success count=${result.messages.length}`);
+      })
+      .catch(() => active && request === requestGeneration.current && setError(t('sharedFocusChat.loadFailed')))
+      .finally(() => { if (active && request === requestGeneration.current) setLoading(false); });
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onCloseRef.current(); };
+    document.addEventListener('keydown', escape);
+    return () => { active = false; document.removeEventListener('keydown', escape); };
+    // A chat lifecycle is keyed only by visibility, credentials, and room id.
+    // Parent timer renders and callback identity changes must not refetch history.
+  }, [accessToken, mergeMessages, open, room.id]);
+  useEffect(() => { if (open && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [messages, open]);
+  const send = async () => { const content = draft.trim(); if (!content || sending) return; setSending(true); setError(''); try { const message = await sendFocusRoomMessage(accessToken, room.id, content); mergeMessages([message], 'send'); setDraft(''); } catch { setError(t('sharedFocusChat.sendFailed')); } finally { setSending(false); } };
+  if (!open) return null;
+  return <div className="fixed inset-0 z-[60] flex items-end bg-slate-950/45 sm:items-stretch sm:justify-end" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section role="dialog" aria-modal="true" aria-label={t('sharedFocusChat.title')} className="flex h-[85vh] w-full max-w-md flex-col rounded-t-3xl bg-[var(--bp-surface)] p-4 shadow-2xl sm:h-full sm:rounded-none"><header className="flex items-start justify-between gap-3"><div><h2 className="font-black">{t('sharedFocusChat.title')}</h2><p className="mt-1 text-xs text-[var(--bp-muted)]">{room.aiFocusCoachEnabled === false ? t('sharedFocusChat.coachOff') : t('sharedFocusChat.coachOn')}</p></div><button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-sm font-bold" aria-label={t('sharedFocusChat.close')}>{t('sharedFocusChat.close')}</button></header><div ref={scroller} className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto">{loading && messages.length === 0 ? <p className="text-sm text-[var(--bp-muted)]">{t('sharedFocusChat.loading')}</p> : messages.length ? messages.map(message => <article key={message.id} className={`rounded-xl px-3 py-2 text-sm ${message.senderType === 'ai' ? 'border border-amber-400/30 bg-amber-400/10' : 'bg-[var(--bp-bg)]'}`}><div className="flex justify-between gap-3"><strong>{message.senderType === 'ai' ? t('sharedFocusChat.coach') : message.senderName}</strong><time className="text-[10px] text-[var(--bp-muted)]">{new Date(message.createdAt).toLocaleTimeString(language === 'ar' ? 'ar' : 'en', { hour: '2-digit', minute: '2-digit' })}</time></div><p className="mt-1 whitespace-pre-wrap">{message.content}</p></article>) : <p className="text-sm text-[var(--bp-muted)]">{t('sharedFocusChat.empty')}</p>}</div><div className="mt-4 flex gap-2"><input autoFocus value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void send(); } }} placeholder={t('sharedFocusChat.placeholder')} className="min-w-0 flex-1 rounded-xl border border-[var(--bp-border)] bg-[var(--bp-bg)] px-3 py-2 text-sm" /><PrimaryButton size="sm" loading={sending} disabled={!draft.trim()} onClick={() => void send()}>{t('sharedFocusChat.send')}</PrimaryButton></div>{error ? <p role="alert" className="mt-2 text-xs text-red-600">{error}</p> : null}</section></div>;
+}
 const eventMessage = (event: FocusRoom["events"][number], room: FocusRoom, t: (key: string, params?: Record<string, string | number>) => string) => {
   const actor =
     room.members.find((member) => member.userId === event.userId)
@@ -182,6 +240,19 @@ export default function FocusRoomsScreen({
   const [controlBusy, setControlBusy] = useState(false), [controlError, setControlError] = useState(""), [pauseConfirm, setPauseConfirm] = useState(false), [addTimeOpen, setAddTimeOpen] = useState(false);
   const [isFocusSoundsOpen, setIsFocusSoundsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false), [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [chatMessages, setChatMessages] = useState<FocusRoomChatMessage[]>([]);
+  const chatOpenRef = useRef(false), currentUserIdRef = useRef<string | null>(null);
+  chatOpenRef.current = chatOpen;
+  currentUserIdRef.current = room?.currentUserId ?? null;
+  const mergeChatMessages = useCallback((incoming: FocusRoomChatMessage[], source: 'history' | 'realtime' | 'send') => {
+    setChatMessages(previous => {
+      const next = mergeFocusRoomChatMessages(previous, incoming);
+      if (import.meta.env.DEV) console.info(`[FocusChat:Web] ${source} merge before=${previous.length} after=${next.length}`);
+      return next;
+    });
+  }, []);
+  useEffect(() => { setChatMessages([]); }, [roomId]);
   const ambientAudio = useFocusAmbientAudio();
   const openFocusSounds = useCallback(() => setIsFocusSoundsOpen(true), []);
   const closeFocusSounds = useCallback(() => setIsFocusSoundsOpen(false), []);
@@ -261,16 +332,27 @@ export default function FocusRoomsScreen({
     // idempotent when the document becomes visible/online again.
     const visibility = () => { if (!document.hidden) connect(); };
     connect();
-    void subscribeRoomEvents(
+    const stream = () => void subscribeRoomEvents(
       accessToken,
       roomId,
       (event) => {
+        if (import.meta.env.DEV) console.info(`[FocusChat:Web] raw event type=${event.type}`);
         if (event.id && seenEvents.current.has(event.id)) return;
         if (event.id) seenEvents.current.add(event.id);
-        void refresh();
+        if (event.type === "chat_message" && event.payload?.message) {
+          if (import.meta.env.DEV) console.info(`[FocusChat:Web] chat_message received id=${event.payload.message.id}`);
+          mergeChatMessages([event.payload.message], 'realtime');
+          if (!chatOpenRef.current && event.payload.message.senderUserId !== currentUserIdRef.current) setChatUnreadCount(count => count + 1);
+        }
+        if (event.type !== "chat_message") void refresh();
       },
       controller.signal,
-    ).catch(() => undefined);
+    ).then(() => {
+      if (!disposed) { if (import.meta.env.DEV) console.info(`[FocusChat:Web] stream reconnecting roomId=${roomId}`); window.setTimeout(stream, 1000); }
+    }).catch((cause) => {
+      if (!disposed) { if (import.meta.env.DEV) console.info(`[FocusChat:Web] stream disconnected reason=${cause instanceof Error ? cause.name : "unknown"}`); window.setTimeout(stream, 1000); }
+    });
+    stream();
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("online", connect);
     return () => {
@@ -610,7 +692,8 @@ export default function FocusRoomsScreen({
           </section>
         ) : active ? (
           <>
-          <SharedFocusExperienceAdapter room={room} remainingSeconds={remaining ?? 0} progress={room.commitment?.durationMinutes ? Math.max(0, Math.min(1, 1 - (remaining ?? 0) / (room.commitment.durationMinutes * 60))) : 0} busy={controlBusy} error={controlError} fullscreenSupported={typeof document !== "undefined" && document.fullscreenEnabled} isFullscreen={isFullscreen} onOpenSounds={openFocusSounds} onToggleFullscreen={toggleFullscreen} onPause={() => setPauseConfirm(true)} onResume={() => void sharedControl(() => resumeCommitment(accessToken, room.commitment!.id), Boolean(room.commitment?.pausedAt))} onAddTime={() => setAddTimeOpen(true)} onFinish={() => setLeaveOpen(true)} onCancel={() => setLeaveOpen(true)} soundPanel={isFocusSoundsOpen ? <FocusSoundsPanel activeSound={ambientAudio.activeSound} isPlaying={ambientAudio.isPlaying} muted={ambientAudio.muted} volume={ambientAudio.volume} error={ambientAudio.error} onClose={closeFocusSounds} onMuteToggle={ambientAudio.toggleMuted} onPause={ambientAudio.pause} onPlay={ambientAudio.play} onStop={ambientAudio.stop} onVolumeChange={ambientAudio.setVolume} /> : null} participants={<div className="mt-6 space-y-2">{room.members.map(member => <div key={member.userId} className="flex items-center justify-between rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-2 text-sm text-[var(--bp-text)]"><span>{member.displayName}</span><span className="text-[var(--bp-muted)]">{member.state === "offline" ? t("sharedFocusLifecycle.reconnecting") : t("sharedFocusLifecycle.focusing")}</span></div>)}</div>} />
+          <SharedFocusExperienceAdapter room={room} remainingSeconds={remaining ?? 0} progress={room.commitment?.durationMinutes ? Math.max(0, Math.min(1, 1 - (remaining ?? 0) / (room.commitment.durationMinutes * 60))) : 0} busy={controlBusy} error={controlError} fullscreenSupported={typeof document !== "undefined" && document.fullscreenEnabled} isFullscreen={isFullscreen} onOpenSounds={openFocusSounds} onOpenChat={() => { setChatUnreadCount(0); setChatOpen(true); }} chatUnreadCount={chatUnreadCount} onToggleFullscreen={toggleFullscreen} onPause={() => setPauseConfirm(true)} onResume={() => void sharedControl(() => resumeCommitment(accessToken, room.commitment!.id), Boolean(room.commitment?.pausedAt))} onAddTime={() => setAddTimeOpen(true)} onFinish={() => setLeaveOpen(true)} onCancel={() => setLeaveOpen(true)} soundPanel={isFocusSoundsOpen ? <FocusSoundsPanel activeSound={ambientAudio.activeSound} isPlaying={ambientAudio.isPlaying} muted={ambientAudio.muted} volume={ambientAudio.volume} error={ambientAudio.error} onClose={closeFocusSounds} onMuteToggle={ambientAudio.toggleMuted} onPause={ambientAudio.pause} onPlay={ambientAudio.play} onStop={ambientAudio.stop} onVolumeChange={ambientAudio.setVolume} /> : null} participants={<div className="mt-6 space-y-2">{room.members.map(member => <div key={member.userId} className="flex items-center justify-between rounded-xl border border-[var(--bp-border)] bg-[var(--bp-surface)] px-4 py-2 text-sm text-[var(--bp-text)]"><span>{member.displayName}</span><span className="text-[var(--bp-muted)]">{member.state === "offline" ? t("sharedFocusLifecycle.reconnecting") : t("sharedFocusLifecycle.focusing")}</span></div>)}</div>} />
+          <FocusRoomChatPanel open={chatOpen} onClose={() => setChatOpen(false)} room={room} accessToken={accessToken} language={language} messages={chatMessages} mergeMessages={mergeChatMessages} />
           {pauseConfirm && <Dialog title={t("sharedFocusLifecycle.pauseTitle")} description={t("sharedFocusLifecycle.pauseDescription")} onClose={() => !controlBusy && setPauseConfirm(false)}><div className="mt-6 flex justify-end gap-3"><OutlineButton disabled={controlBusy} onClick={() => setPauseConfirm(false)}>{t("sharedFocusLifecycle.keepFocusing")}</OutlineButton><PrimaryButton loading={controlBusy} onClick={() => { setPauseConfirm(false); void sharedControl(() => pauseCommitment(accessToken, room.commitment!.id), !room.commitment?.pausedAt); }}>{t("sharedFocusLifecycle.pauseEveryone")}</PrimaryButton></div></Dialog>}
           {addTimeOpen && <Dialog title={t("sharedFocusLifecycle.addTimeTitle")} description={t("sharedFocusLifecycle.addTimeDescription")} onClose={() => !controlBusy && setAddTimeOpen(false)}><div className="mt-6 flex flex-wrap justify-end gap-3">{[5, 10, 15].map((minutes) => <PrimaryButton key={minutes} loading={controlBusy} disabled={controlBusy} onClick={() => { setAddTimeOpen(false); void sharedControl(() => extendCommitment(accessToken, room.commitment!.id, minutes), room.commitment?.status === "active"); }}>{t("sharedFocusLifecycle.minutesToAdd", { count: minutes })}</PrimaryButton>)}<OutlineButton disabled={controlBusy} onClick={() => setAddTimeOpen(false)}>{t('common.cancel')}</OutlineButton></div></Dialog>}
           </>

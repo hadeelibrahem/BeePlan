@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import com.beeplan.focusblocker.core.BlockerController
 
 /**
@@ -47,6 +48,7 @@ class BlockActivity : ComponentActivity() {
       // endsAtMs is the single clock source; the composable derives the ticking
       // countdown and calls onExpired when it crosses zero.
       var done by remember { mutableStateOf(false) }
+      val requestResult by controller.appGuardRequestResult.collectAsState()
       BlockScreen(
         model = BlockScreenModel(
           appName = blockedApp?.name ?: "This app",
@@ -56,12 +58,13 @@ class BlockActivity : ComponentActivity() {
           totalMs = (session.endsAtMs - session.startedAtMs).coerceAtLeast(1L),
           motivationalMessage = session.motivationalMessage.ifBlank { DEFAULT_MESSAGE },
           allowEmergencyExit = session.allowEmergencyExit,
+          isAppGuard = controller.isAppGuardRestrictionActive(),
         ),
         onReturnToApp = { returnToBeePlan() },
-        onReallyNeed = { durationMs ->
-          blockedPackage?.let { controller.allowTemporarily(it, durationMs) }
-          finishAndRemove()
-        },
+        onAskBee = { justification -> blockedPackage?.let { controller.requestBeeJustification(it, justification) } ?: "" },
+        result = requestResult,
+        onRequestTimeout = { controller.expireAppGuardRequest(it) },
+        onOpenApp = { finishAndRemove() },
         onExpired = {
           if (!done) {
             done = true

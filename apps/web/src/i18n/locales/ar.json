@@ -294,7 +294,7 @@
     "updateFailed": "تعذر تحديث هذه المهمة."
   },
   "navigation": {
-    "dashboard":"لوحة التحكم","tasks":"المهام","focus":"التركيز","dailyPlanner":"المخطط الذكي","reminders":"التذكيرات","calendar":"التقويم","notes":"الملاحظات","whiteboard":"اللوحة الشخصية","timeCapsule":"كبسولة زمنية","people":"الأشخاص","feedback":"الملاحظات والأفكار","challenges":"التحديات","notifications":"الإشعارات","analytics":"التحليلات","achievementMuseum":"متحف الإنجازات","settings":"الإعدادات","main":"الرئيسية","workspace":"مساحة العمل","system":"النظام"
+    "dashboard":"لوحة التحكم","tasks":"المهام","focus":"التركيز","dailyPlanner":"المخطط الذكي","reminders":"التذكيرات","calendar":"التقويم","notes":"الملاحظات","whiteboard":"اللوحة الشخصية","timeCapsule":"كبسولة زمنية","people":"الأشخاص","feedback":"الملاحظات والأفكار","challenges":"التحديات","supervision":"حارس التطبيقات الذكي","notifications":"الإشعارات","analytics":"التحليلات","achievementMuseum":"متحف الإنجازات","settings":"الإعدادات","main":"الرئيسية","workspace":"مساحة العمل","system":"النظام"
   },
   "notesMotivation": {
     "label": "تقدمك اليوم",
@@ -1253,6 +1253,8 @@
     "email": "البريد الإلكتروني",
     "role": "الدور",
     "status": "الحالة",
+    "challengeStartDate": "تاريخ البدء",
+    "challengeEndDate": "تاريخ الانتهاء",
     "joined": "تاريخ الانضمام",
     "actions": "الإجراءات",
     "noUsersFound": "لم يتم العثور على مستخدمين",
@@ -1911,6 +1913,16 @@
     "transferFailed": "تعذر نقل الملكية.",
     "menu": "إجراءات إضافية للعضو"
   },
-  "achievementMuseum": {"title":"متحف الإنجازات","journey":"رحلتك","subtitle":"مجموعة من اللحظات والمشاريع والمحطات التي شكّلت طريقك.","collection":"المجموعة","search":"ابحث في متحفك...","add":"إضافة إنجاز","count":"إنجاز واحد","countPlural":"{{count}} إنجازات","since":"منذ {{year}}","clear":"مسح","yourCollection":"مجموعتك","featured":"المعرض المميز","explore":"استكشف المعرض","hall":"القاعة {{number}}","moments":"لحظة تستحق التذكر","momentsPlural":"{{count}} لحظات تستحق التذكر","emptyTitle":"متحفك ينتظر قصته الأولى.","emptyHelp":"احفظ المشاريع والمحطات واللحظات التي تريد تذكرها بعد سنوات.","emptyAction":"أضف أول إنجاز","loading":"جارٍ تحميل متحفك...","category":{"All":"الكل","Education":"التعليم","Career":"المهنة","Skills":"المهارات","Personal":"شخصي","Learning":"التعلم","Health":"الصحة","Financial":"المالية","Milestone":"محطة","Other":"أخرى"},"error":"تعذر تحميل إنجازاتك.","review":"مراجعة {{year}} ←"}
-
+  "achievementMuseum": {"title":"متحف الإنجازات","journey":"رحلتك","subtitle":"مجموعة من اللحظات والمشاريع والمحطات التي شكّلت طريقك.","collection":"المجموعة","search":"ابحث في متحفك...","add":"إضافة إنجاز","count":"إنجاز واحد","countPlural":"{{count}} إنجازات","since":"منذ {{year}}","clear":"مسح","yourCollection":"مجموعتك","featured":"المعرض المميز","explore":"استكشف المعرض","hall":"القاعة {{number}}","moments":"لحظة تستحق التذكر","momentsPlural":"{{count}} لحظات تستحق التذكر","emptyTitle":"متحفك ينتظر قصته الأولى.","emptyHelp":"احفظ المشاريع والمحطات واللحظات التي تريد تذكرها بعد سنوات.","emptyAction":"أضف أول إنجاز","loading":"جارٍ تحميل متحفك...","category":{"All":"الكل","Education":"التعليم","Career":"المهنة","Skills":"المهارات","Personal":"شخصي","Learning":"التعلم","Health":"الصحة","Financial":"المالية","Milestone":"محطة","Other":"أخرى"},"error":"تعذر تحميل إنجازاتك.","review":"مراجعة {{year}} ←"},
+  "supervision": {
+    "title":"الإشراف","heading":"إدارة التقدم والقيود","description":"يبقى تقدم الدراسة وقيود الجهاز المعتمدة خاصة وقائمة على الموافقة.","userFallback":"مستخدم BeePlan","durationMinutes":"{{count}} دقيقة",
+    "empty":{"title":"لا يوجد أشخاص تحت الإشراف حتى الآن","description":"ستظهر علاقات الإشراف المقبولة هنا."},
+    "actions":{"openDashboard":"فتح لوحة التحكم","people":"الأشخاص","createRestriction":"إنشاء قيد","creatingRestriction":"جارٍ إنشاء القيد…"},
+    "status":{"active":"نشط","scheduled":"مجدول","paused":"متوقف مؤقتًا","cancelled":"ملغى","overridden":"تم تجاوزه","completed":"مكتمل"},"levels":{"planOnly":"الخطة فقط","accountability":"المساءلة","progressOnly":"التقدم فقط","deviceRestrictions":"قيود الجهاز"},"app":{"strictModeIntervention":"تدخل الوضع الصارم","accountabilityOnly":"المساءلة فقط"},
+    "restrictions":{"title":"القيود النشطة","description":"قواعد الدراسة الحالية التي أنشأها المشرف.","restrictedApps":"التطبيقات المقيّدة","approvedApps":"التطبيقات المعتمدة","approvedAppsUnavailable":"التطبيقات المعتمدة غير متاحة.","endsWhen":"ينتهي عند","enforcement":"التنفيذ","noneActive":"لا توجد قيود نشطة حاليًا."},
+    "create":{"title":"إنشاء قيد","description":"اختر التطبيقات المعتمدة وموعد انتهاء القيد.","fields":{"restriction":"القيد","releaseCondition":"شرط الإنهاء","task":"المهمة","maximumDuration":"المدة القصوى"},"selectTask":"اختر مهمة تحت الإشراف"},
+    "options":{"untilTime":"حتى وقت محدد","untilTaskCompleted":"حتى إكمال المهمة","taskOrTime":"المهمة أو الوقت"},"activity":{"title":"النشاط","empty":"لا يوجد نشاط حتى الآن."},"defaults":{"restrictionName":"وضع الدراسة"},
+    "audit":{"appManagementConsentUpdated":"تم تحديث الموافقة على إدارة التطبيقات","appManagementConsentRevoked":"تم إلغاء الموافقة على إدارة التطبيقات","permissionsUpdated":"تم تحديث أذونات المشاركة","accepted":"تم قبول الإشراف","rejected":"تم رفض الإشراف","requested":"تم طلب الإشراف","revoked":"تم إلغاء الإشراف","ruleCreated":"تم إنشاء القيد","ruleUpdated":"تم تحديث القيد","overrideUsed":"تم استخدام تجاوز للقيد","rulePaused":"تم إيقاف القيد مؤقتًا","ruleResumed":"تم استئناف القيد","ruleEnded":"تم إنهاء القيد","ruleStarted":"بدأ القيد","ruleTaskCompleted":"انتهى القيد عند إكمال المهمة","ruleTimeExpired":"انتهى القيد بانتهاء الوقت"},"errors":{"loadFailed":"تعذر تحميل بيانات الإشراف.","createFailed":"تعذر إنشاء القيد."}
+  },
+  "sharedFocusChat": {"chat":"الدردشة","title":"دردشة التركيز","close":"إغلاق","send":"إرسال","retry":"إعادة المحاولة","placeholder":"رسالة...","loading":"جارٍ تحميل الدردشة...","empty":"لا توجد رسائل بعد. حافظوا على تركيزكم معًا.","coach":"مدرب التركيز Bee","coachOn":"مدرب التركيز بالذكاء الاصطناعي مفعّل","coachOff":"مدرب التركيز بالذكاء الاصطناعي متوقف","loadFailed":"تعذر تحميل الدردشة.","sendFailed":"تعذر إرسال الرسالة."}
 }

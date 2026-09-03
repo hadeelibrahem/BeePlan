@@ -166,6 +166,28 @@ export class AiService {
     }
   }
 
+  /** Generates a concise response for an already-authorized Shared Focus chat. */
+  async generateFocusCoachReply(input: { systemPrompt: string; context: string }): Promise<string> {
+    if (!this.client || !this.model) throw new InternalServerErrorException('AI Focus Coach is not configured.');
+    const startedAt = Date.now();
+    const timeoutMs = this.configService.get<number>('FOCUS_COACH_TIMEOUT_MS') ?? 15_000;
+    this.logger.debug(`[FocusCoachProvider] start model=${this.model} timeoutMs=${timeoutMs}`);
+    runtimeTelemetry.providerStarted('qwen');
+    try {
+      const response = await this.client.chat.completions.create({ model: this.model, messages: [{ role: 'system', content: input.systemPrompt }, { role: 'user', content: input.context }], temperature: 0.35, max_tokens: 120 }, { timeout: timeoutMs });
+      const durationMs = Date.now() - startedAt;
+      runtimeTelemetry.providerSucceeded('qwen', durationMs);
+      this.logger.debug(`[FocusCoachProvider] success durationMs=${durationMs}`);
+      return (response.choices[0]?.message?.content ?? '').trim().slice(0, 600);
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      const timeout = error instanceof Error && /timeout/i.test(error.message);
+      runtimeTelemetry.providerFailed('qwen', timeout ? 'timeout' : 'provider_unavailable', durationMs);
+      this.logger.warn(`[FocusCoachProvider] ${timeout ? 'timeout' : 'error'} durationMs=${durationMs} category=${error instanceof Error ? error.name : 'unknown'}`);
+      throw new InternalServerErrorException('AI Focus Coach is temporarily unavailable.');
+    }
+  }
+
   /**
    * Parses a person-based reminder ("remind me to talk to Ahmad when I see
    * him") and matches the extracted name against the user's accepted friends.

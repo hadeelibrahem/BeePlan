@@ -48,7 +48,7 @@ class BeePlanFocusBlockerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("BeePlanFocusBlocker")
 
-    Events("onStatusChange", "onBlockAttempt", "onSessionEnded", "onEmergencyExit")
+    Events("onStatusChange", "onBlockAttempt", "onSessionEnded", "onEmergencyExit", "onBeeJustificationRequested")
 
     OnCreate {
       BlockerController.initialize(context)
@@ -107,6 +107,16 @@ class BeePlanFocusBlockerModule : Module() {
       })
     }
 
+    // Self-owned App Guard uses the same native fail-closed restriction engine.
+    AsyncFunction("setAppGuardRestrictionSources") { sources: List<Map<String, Any?>> ->
+      BlockerController.setAppGuardSources(sources.mapNotNull { source ->
+        val id = source["sourceId"] as? String ?: return@mapNotNull null
+        val endsAtMs = (source["endsAtMs"] as? Number)?.toLong() ?: return@mapNotNull null
+        val packages = (source["packages"] as? List<*>)?.filterIsInstance<String>()?.toSet() ?: emptySet()
+        GuardianRestrictionSource(id, packages, endsAtMs)
+      })
+    }
+
     AsyncFunction("startStrictMode") { config: StartStrictModeConfig ->
       require(config.sessionId.isNotBlank()) { "sessionId is required" }
       require(config.endsAtMs > System.currentTimeMillis()) { "endsAtMs must be in the future" }
@@ -140,9 +150,21 @@ class BeePlanFocusBlockerModule : Module() {
       BlockerController.emergencyExit(reason).toMap()
     }
 
-    AsyncFunction("allowAppTemporarily") { packageName: String, durationMs: Double ->
-      BlockerController.allowTemporarily(packageName, durationMs.toLong())
+    AsyncFunction("installSignedTemporaryGrant") { token: String, userId: String -> BlockerController.installSignedTemporaryGrant(token, userId) }
+    AsyncFunction("configureAppGuardRequestClient") { apiBaseUrl: String?, accessToken: String?, userId: String? ->
+      BlockerController.configureAppGuardRequestClient(apiBaseUrl, accessToken, userId)
     }
+    AsyncFunction("getPendingAppGuardRequest") {
+      BlockerController.pendingAppGuardRequest()?.let { request ->
+        mapOf("requestId" to request.requestId, "packageName" to request.packageName, "justification" to request.justification)
+      }
+    }
+    AsyncFunction("deliverAppGuardRequestResult") { requestId: String, decision: String, reason: String?, signedGrant: String?, userId: String? ->
+      if (BuildConfig.DEBUG) android.util.Log.i("FocusBlocker", "[AppGuard:Native] result delivery invoked requestId=$requestId decision=$decision")
+      BlockerController.deliverAppGuardResult(requestId, decision, reason, signedGrant, userId)
+    }
+    Function("expireAppGuardRequest") { requestId: String -> BlockerController.expireAppGuardRequest(requestId) }
+    AsyncFunction("allowAppTemporarily") { packageName: String, durationMs: Double -> BlockerController.allowTemporarily(packageName, durationMs.toLong()) }
 
     AsyncFunction("getStatistics") { sessionId: String? ->
       BlockerController.statistics(sessionId)
@@ -179,5 +201,6 @@ class BeePlanFocusBlockerModule : Module() {
           "timestampMs" to event.timestampMs.toDouble(),
         ),
       )
+    is BlockerEvent.BeeJustificationRequested -> sendEvent("onBeeJustificationRequested", mapOf("requestId" to event.requestId, "packageName" to event.packageName, "justification" to event.justification))
   }
 }

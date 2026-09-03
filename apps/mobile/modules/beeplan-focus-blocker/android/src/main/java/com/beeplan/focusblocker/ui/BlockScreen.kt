@@ -1,6 +1,7 @@
 package com.beeplan.focusblocker.ui
 
 import android.graphics.drawable.Drawable
+import android.util.Log
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -33,6 +34,8 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.beeplan.focusblocker.core.BlockerController
+import com.beeplan.focusblocker.BuildConfig
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +53,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
@@ -63,20 +67,21 @@ data class BlockScreenModel(
   val totalMs: Long,
   val motivationalMessage: String,
   val allowEmergencyExit: Boolean,
+  val isAppGuard: Boolean,
 )
 
 // BeePlan brand accent (matches theme/colors.ts BRAND_YELLOW / BRAND_DARK).
 private val BrandYellow = Color(0xFFFDEF4B)
 private val BrandDark = Color(0xFF2B323F)
 
-/** Duration granted when the user confirms "I really need this app". */
-private val TEMP_ALLOW_MS = TimeUnit.MINUTES.toMillis(5)
-
 @Composable
 fun BlockScreen(
   model: BlockScreenModel,
   onReturnToApp: () -> Unit,
-  onReallyNeed: (durationMs: Long) -> Unit,
+  onAskBee: (String) -> String,
+  result: BlockerController.AppGuardRequestResult?,
+  onRequestTimeout: (String) -> Unit,
+  onOpenApp: () -> Unit,
   onExpired: () -> Unit,
 ) {
   val dark = isSystemInDarkTheme()
@@ -88,7 +93,19 @@ fun BlockScreen(
 
   MaterialTheme(colorScheme = colors) {
     var remainingMs by remember { mutableLongStateOf((model.endsAtMs - System.currentTimeMillis()).coerceAtLeast(0)) }
-    var showConfirm by remember { mutableStateOf(false) }
+    var justification by remember { mutableStateOf("") }
+    var requestId by remember { mutableStateOf<String?>(null) }
+    val currentRequestId = requestId
+    val currentResult = result?.takeIf { it.requestId == currentRequestId }
+    // A missing or stale result remains submitting until the bounded timeout;
+    // it can never be treated as an approval.
+    val state = if (currentRequestId == null) "idle" else currentResult?.state ?: "submitting"
+    LaunchedEffect(currentRequestId, currentResult?.requestId, currentResult?.state) {
+      if (BuildConfig.DEBUG && currentResult != null) {
+        Log.i("FocusBlocker", "[AppGuard:Native] result received requestId=${currentResult.requestId} state=${currentResult.state}")
+      }
+    }
+    LaunchedEffect(currentRequestId, state) { if (state == "submitting" && currentRequestId != null) { delay(50_000); onRequestTimeout(currentRequestId) } }
 
     // Single ticking clock: recompute from wall time each second, fire onExpired.
     LaunchedEffect(model.endsAtMs) {
@@ -118,53 +135,33 @@ fun BlockScreen(
           PulsingBadge(icon = model.appIcon, accent = colors.primary)
 
           Text(
-            text = "Stay Focused",
+            text = if (model.isAppGuard) "AI App Guard" else "Stay Focused",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.ExtraBold,
             color = colors.onBackground,
           )
 
           Text(
-            text = "${model.appName} is blocked during your focus session.",
+            text = if (model.isAppGuard) "This app is restricted by your AI App Guard." else "This app is currently restricted.",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = colors.onBackground.copy(alpha = 0.72f),
           )
 
-          CountdownRing(
-            remainingMs = remainingMs,
-            totalMs = model.totalMs,
-            accent = colors.primary,
-            onColor = colors.onBackground,
-          )
+          if (!model.isAppGuard) CountdownRing(remainingMs = remainingMs, totalMs = model.totalMs, accent = colors.primary, onColor = colors.onBackground)
 
-          model.taskTitle?.takeIf { it.isNotBlank() }?.let { title ->
-            Text(
-              text = "Focusing on",
-              style = MaterialTheme.typography.labelMedium,
-              color = colors.onBackground.copy(alpha = 0.5f),
-            )
-            Text(
-              text = title,
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.SemiBold,
-              textAlign = TextAlign.Center,
-              color = colors.onBackground,
-            )
-          }
-
-          Text(
-            text = model.motivationalMessage,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            color = colors.onBackground.copy(alpha = 0.66f),
-            modifier = Modifier.padding(horizontal = 8.dp),
-          )
+          if (state == "approved") { Text("Temporary access granted for ${((result?.expiresAt ?: System.currentTimeMillis()) - System.currentTimeMillis()).coerceAtLeast(0) / 60_000} minutes.", textAlign = TextAlign.Center); Button(onClick = onOpenApp, modifier = Modifier.fillMaxWidth()) { Text("Open app") } }
+          else if (state == "denied" || state == "error") { Text(result?.reason ?: "Bee recommends staying focused for now.", textAlign = TextAlign.Center); TextButton(onClick = { requestId = null }) { Text("Edit reason") } }
+          else { Text("Why do you need to use it right now?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, color = colors.onBackground); OutlinedTextField(value = justification, onValueChange = { justification = it }, enabled = state != "submitting", minLines = 3, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Explain what you need to do and why it can't wait.") }) }
 
           Spacer(Modifier.height(8.dp))
 
           Button(
-            onClick = onReturnToApp,
+            onClick = {
+              if (state != "submitting" && justification.trim().length >= 8) {
+                onAskBee(justification.trim()).takeIf { it.isNotBlank() }?.let { requestId = it }
+              }
+            }, enabled = justification.trim().length >= 8 && state != "submitting" && state != "approved",
             modifier = Modifier
               .fillMaxWidth()
               .height(60.dp), // large touch target
@@ -173,41 +170,12 @@ fun BlockScreen(
               contentColor = colors.onPrimary,
             ),
           ) {
-            Text("Return to BeePlan", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text(if (state == "submitting") "Analyzing your request..." else if (state == "error") "Try again" else "Ask Bee", fontWeight = FontWeight.Bold, fontSize = 17.sp)
           }
 
-          if (model.allowEmergencyExit) {
-            TextButton(onClick = { showConfirm = true }, modifier = Modifier.height(48.dp)) {
-              Text(
-                "I really need this app",
-                color = colors.onBackground.copy(alpha = 0.6f),
-              )
-            }
-          }
+          TextButton(onClick = onReturnToApp, modifier = Modifier.height(48.dp)) { Text("Go back", color = colors.onBackground.copy(alpha = 0.6f)) }
         }
       }
-    }
-
-    if (showConfirm) {
-      AlertDialog(
-        onDismissRequest = { showConfirm = false },
-        title = { Text("Break focus?") },
-        text = {
-          Text(
-            "This will unblock ${model.appName} for 5 minutes and is recorded in your " +
-              "focus stats. Are you sure it can't wait?",
-          )
-        },
-        confirmButton = {
-          TextButton(onClick = {
-            showConfirm = false
-            onReallyNeed(TEMP_ALLOW_MS)
-          }) { Text("Unblock 5 min") }
-        },
-        dismissButton = {
-          TextButton(onClick = { showConfirm = false }) { Text("Keep focusing") }
-        },
-      )
     }
   }
 }

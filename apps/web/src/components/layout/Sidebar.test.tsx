@@ -4,6 +4,32 @@ import { Sidebar } from './Sidebar'
 import { LanguageProvider } from '../../i18n/LanguageContext'
 
 describe('Settings sidebar navigation', () => {
+  it('localizes Supervision in the desktop sidebar and mobile drawer', () => {
+    window.localStorage.setItem('beeplan.language-preference', 'en')
+    const english = render(
+      <LanguageProvider>
+        <Sidebar active="supervision" mobileOpen onCloseMobile={() => undefined} />
+      </LanguageProvider>,
+    )
+
+    expect(screen.getAllByRole('button', { name: 'Supervision' })).toHaveLength(2)
+    english.unmount()
+
+    window.localStorage.setItem('beeplan.language-preference', 'ar')
+
+    const arabic = render(
+      <LanguageProvider>
+        <Sidebar active="supervision" mobileOpen onCloseMobile={() => undefined} />
+      </LanguageProvider>,
+    )
+
+    expect(screen.getAllByRole('button', { name: 'الإشراف' })).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Supervision' })).not.toBeInTheDocument()
+
+    arabic.unmount()
+    window.localStorage.removeItem('beeplan.language-preference')
+  })
+
   it('constrains the desktop sidebar and makes shared content scrollable', () => {
     const { container } = render(<LanguageProvider><Sidebar active="dashboard" /></LanguageProvider>)
     const desktopSidebar = container.querySelector('aside')

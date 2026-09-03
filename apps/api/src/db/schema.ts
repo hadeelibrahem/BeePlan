@@ -10,6 +10,7 @@ import {
   primaryKey,
   real,
   text,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   time,
   timestamp,
   uniqueIndex,
@@ -123,10 +124,14 @@ export const errorOccurrences = pgTable(
   'error_occurrences',
   {
     id: id(),
-    errorGroupId: uuid('error_group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
+    errorGroupId: uuid('error_group_id')
+      .notNull()
+      .references(() => errorGroups.id, { onDelete: 'cascade' }),
     occurredAt: timestamp('occurred_at').defaultNow().notNull(),
     requestId: varchar('request_id', { length: 128 }),
-    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     httpMethod: varchar('http_method', { length: 12 }),
     route: varchar('route', { length: 500 }),
     statusCode: integer('status_code'),
@@ -139,31 +144,215 @@ export const errorOccurrences = pgTable(
     sanitizedStack: text('sanitized_stack'),
     sanitizedContext: jsonb('sanitized_context'),
   },
-  (table) => [index('idx_error_occurrences_group').on(table.errorGroupId), index('idx_error_occurrences_occurred').on(table.occurredAt), index('idx_error_occurrences_user').on(table.userId)],
+  (table) => [
+    index('idx_error_occurrences_group').on(table.errorGroupId),
+    index('idx_error_occurrences_occurred').on(table.occurredAt),
+    index('idx_error_occurrences_user').on(table.userId),
+  ],
 );
 
 export const errorGroupUsers = pgTable(
   'error_group_users',
   {
-    errorGroupId: uuid('error_group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    errorGroupId: uuid('error_group_id')
+      .notNull()
+      .references(() => errorGroups.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     firstSeenAt: timestamp('first_seen_at').defaultNow().notNull(),
     lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
     occurrenceCount: integer('occurrence_count').notNull().default(1),
   },
-  (table) => [primaryKey({ columns: [table.errorGroupId, table.userId] }), index('idx_error_group_users_user').on(table.userId)],
+  (table) => [
+    primaryKey({ columns: [table.errorGroupId, table.userId] }),
+    index('idx_error_group_users_user').on(table.userId),
+  ],
 );
-export const errorAnalyses = pgTable('error_analyses', {
-  id: id(), errorGroupId: uuid('error_group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }), requestedByAdminId: uuid('requested_by_admin_id').notNull().references(() => users.id), model: varchar('model', { length: 160 }).notNull(), provider: varchar('provider', { length: 80 }).notNull(), promptVersion: varchar('prompt_version', { length: 80 }).notNull(), contextVersion: varchar('context_version', { length: 80 }).notNull(), contextHash: varchar('context_hash', { length: 128 }).notNull(), inputSummary: jsonb('input_summary').notNull(), likelyCause: text('likely_cause').notNull(), evidence: jsonb('evidence').notNull(), investigationSteps: jsonb('investigation_steps').notNull(), suggestedFix: text('suggested_fix').notNull(), likelyModules: jsonb('likely_modules').notNull(), confidence: varchar('confidence', { length: 16 }).notNull(), limitations: jsonb('limitations').notNull(), createdAt: createdAt(),
-}, (table) => [index('idx_error_analyses_group_created').on(table.errorGroupId, table.createdAt), index('idx_error_analyses_context_hash').on(table.contextHash)]);
+export const errorAnalyses = pgTable(
+  'error_analyses',
+  {
+    id: id(),
+    errorGroupId: uuid('error_group_id')
+      .notNull()
+      .references(() => errorGroups.id, { onDelete: 'cascade' }),
+    requestedByAdminId: uuid('requested_by_admin_id')
+      .notNull()
+      .references(() => users.id),
+    model: varchar('model', { length: 160 }).notNull(),
+    provider: varchar('provider', { length: 80 }).notNull(),
+    promptVersion: varchar('prompt_version', { length: 80 }).notNull(),
+    contextVersion: varchar('context_version', { length: 80 }).notNull(),
+    contextHash: varchar('context_hash', { length: 128 }).notNull(),
+    inputSummary: jsonb('input_summary').notNull(),
+    likelyCause: text('likely_cause').notNull(),
+    evidence: jsonb('evidence').notNull(),
+    investigationSteps: jsonb('investigation_steps').notNull(),
+    suggestedFix: text('suggested_fix').notNull(),
+    likelyModules: jsonb('likely_modules').notNull(),
+    confidence: varchar('confidence', { length: 16 }).notNull(),
+    limitations: jsonb('limitations').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_error_analyses_group_created').on(
+      table.errorGroupId,
+      table.createdAt,
+    ),
+    index('idx_error_analyses_context_hash').on(table.contextHash),
+  ],
+);
 
-export const userReports = pgTable('user_reports', { id: id(), reporterUserId: uuid('reporter_user_id').notNull().references(() => users.id), reportedUserId: uuid('reported_user_id').notNull().references(() => users.id), category: varchar('category', { length: 40 }).notNull(), reason: varchar('reason', { length: 1000 }).notNull(), contextType: varchar('context_type', { length: 40 }), contextId: varchar('context_id', { length: 255 }), contextSnapshot: jsonb('context_snapshot'), status: varchar('status', { length: 24 }).notNull().default('pending'), reviewedByAdminId: uuid('reviewed_by_admin_id').references(() => users.id), reviewedAt: timestamp('reviewed_at'), createdAt: createdAt(), updatedAt: updatedAt() }, (table) => [index('idx_user_reports_status').on(table.status), index('idx_user_reports_reported').on(table.reportedUserId), index('idx_user_reports_created').on(table.createdAt)]);
-export const moderationActions = pgTable('moderation_actions', { id: id(), reportId: uuid('report_id').references(() => userReports.id, { onDelete: 'set null' }), subjectUserId: uuid('subject_user_id').notNull().references(() => users.id), actorAdminId: uuid('actor_admin_id').notNull().references(() => users.id), action: varchar('action', { length: 24 }).notNull(), reason: varchar('reason', { length: 1000 }).notNull(), expiresAt: timestamp('expires_at'), createdAt: createdAt() }, (table) => [index('idx_moderation_actions_subject').on(table.subjectUserId), index('idx_moderation_actions_report').on(table.reportId)]);
-export const feedbackItems = pgTable('feedback_items', { id: id(), authorUserId: uuid('author_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), category: varchar('category', { length: 24 }).notNull(), title: varchar('title', { length: 160 }).notNull(), description: varchar('description', { length: 4000 }).notNull(), status: varchar('status', { length: 24 }).notNull().default('submitted'), visibility: varchar('visibility', { length: 16 }).notNull().default('public'), reviewedByAdminId: uuid('reviewed_by_admin_id').references(() => users.id), reviewedAt: timestamp('reviewed_at'), releasedAt: timestamp('released_at'), createdAt: createdAt(), updatedAt: updatedAt() }, (table) => [index('idx_feedback_items_status').on(table.status), index('idx_feedback_items_category').on(table.category), index('idx_feedback_items_visibility').on(table.visibility), index('idx_feedback_items_created').on(table.createdAt)]);
-export const feedbackVotes = pgTable('feedback_votes', { feedbackId: uuid('feedback_id').notNull().references(() => feedbackItems.id, { onDelete: 'cascade' }), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }), createdAt: createdAt() }, (table) => [primaryKey({ columns: [table.feedbackId, table.userId] }), index('idx_feedback_votes_feedback').on(table.feedbackId), index('idx_feedback_votes_user').on(table.userId)]);
-export const feedbackClusters = pgTable('feedback_clusters', { id: id(), title: varchar('title', { length: 160 }).notNull(), summary: varchar('summary', { length: 1000 }).notNull(), confidence: varchar('confidence', { length: 16 }).notNull(), status: varchar('status', { length: 16 }).notNull().default('active'), model: varchar('model', { length: 160 }).notNull(), provider: varchar('provider', { length: 80 }).notNull(), promptVersion: varchar('prompt_version', { length: 80 }).notNull(), contextVersion: varchar('context_version', { length: 80 }).notNull(), memberCount: integer('member_count').notNull(), totalVotes: integer('total_votes').notNull(), lastAnalyzedAt: timestamp('last_analyzed_at').notNull(), createdAt: createdAt(), updatedAt: updatedAt() }, (table) => [index('idx_feedback_clusters_status').on(table.status)]);
-export const feedbackClusterMembers = pgTable('feedback_cluster_members', { clusterId: uuid('cluster_id').notNull().references(() => feedbackClusters.id, { onDelete: 'cascade' }), feedbackId: uuid('feedback_id').notNull().references(() => feedbackItems.id, { onDelete: 'cascade' }), similarityScore: real('similarity_score'), createdAt: createdAt() }, (table) => [primaryKey({ columns: [table.clusterId, table.feedbackId] }), index('idx_feedback_cluster_members_feedback').on(table.feedbackId)]);
-export const feedbackClusterRuns = pgTable('feedback_cluster_runs', { id: id(), requestedByAdminId: uuid('requested_by_admin_id').notNull().references(() => users.id), model: varchar('model', { length: 160 }).notNull(), provider: varchar('provider', { length: 80 }).notNull(), promptVersion: varchar('prompt_version', { length: 80 }).notNull(), contextVersion: varchar('context_version', { length: 80 }).notNull(), contextHash: varchar('context_hash', { length: 128 }).notNull(), inputCount: integer('input_count').notNull(), outputClusterCount: integer('output_cluster_count').notNull(), reused: boolean('reused').notNull().default(false), createdAt: createdAt() }, (table) => [index('idx_feedback_cluster_runs_context').on(table.contextHash)]);
+export const userReports = pgTable(
+  'user_reports',
+  {
+    id: id(),
+    reporterUserId: uuid('reporter_user_id')
+      .notNull()
+      .references(() => users.id),
+    reportedUserId: uuid('reported_user_id')
+      .notNull()
+      .references(() => users.id),
+    category: varchar('category', { length: 40 }).notNull(),
+    reason: varchar('reason', { length: 1000 }).notNull(),
+    contextType: varchar('context_type', { length: 40 }),
+    contextId: varchar('context_id', { length: 255 }),
+    contextSnapshot: jsonb('context_snapshot'),
+    status: varchar('status', { length: 24 }).notNull().default('pending'),
+    reviewedByAdminId: uuid('reviewed_by_admin_id').references(() => users.id),
+    reviewedAt: timestamp('reviewed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_user_reports_status').on(table.status),
+    index('idx_user_reports_reported').on(table.reportedUserId),
+    index('idx_user_reports_created').on(table.createdAt),
+  ],
+);
+export const moderationActions = pgTable(
+  'moderation_actions',
+  {
+    id: id(),
+    reportId: uuid('report_id').references(() => userReports.id, {
+      onDelete: 'set null',
+    }),
+    subjectUserId: uuid('subject_user_id')
+      .notNull()
+      .references(() => users.id),
+    actorAdminId: uuid('actor_admin_id')
+      .notNull()
+      .references(() => users.id),
+    action: varchar('action', { length: 24 }).notNull(),
+    reason: varchar('reason', { length: 1000 }).notNull(),
+    expiresAt: timestamp('expires_at'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_moderation_actions_subject').on(table.subjectUserId),
+    index('idx_moderation_actions_report').on(table.reportId),
+  ],
+);
+export const feedbackItems = pgTable(
+  'feedback_items',
+  {
+    id: id(),
+    authorUserId: uuid('author_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    category: varchar('category', { length: 24 }).notNull(),
+    title: varchar('title', { length: 160 }).notNull(),
+    description: varchar('description', { length: 4000 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull().default('submitted'),
+    visibility: varchar('visibility', { length: 16 })
+      .notNull()
+      .default('public'),
+    reviewedByAdminId: uuid('reviewed_by_admin_id').references(() => users.id),
+    reviewedAt: timestamp('reviewed_at'),
+    releasedAt: timestamp('released_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('idx_feedback_items_status').on(table.status),
+    index('idx_feedback_items_category').on(table.category),
+    index('idx_feedback_items_visibility').on(table.visibility),
+    index('idx_feedback_items_created').on(table.createdAt),
+  ],
+);
+export const feedbackVotes = pgTable(
+  'feedback_votes',
+  {
+    feedbackId: uuid('feedback_id')
+      .notNull()
+      .references(() => feedbackItems.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.feedbackId, table.userId] }),
+    index('idx_feedback_votes_feedback').on(table.feedbackId),
+    index('idx_feedback_votes_user').on(table.userId),
+  ],
+);
+export const feedbackClusters = pgTable(
+  'feedback_clusters',
+  {
+    id: id(),
+    title: varchar('title', { length: 160 }).notNull(),
+    summary: varchar('summary', { length: 1000 }).notNull(),
+    confidence: varchar('confidence', { length: 16 }).notNull(),
+    status: varchar('status', { length: 16 }).notNull().default('active'),
+    model: varchar('model', { length: 160 }).notNull(),
+    provider: varchar('provider', { length: 80 }).notNull(),
+    promptVersion: varchar('prompt_version', { length: 80 }).notNull(),
+    contextVersion: varchar('context_version', { length: 80 }).notNull(),
+    memberCount: integer('member_count').notNull(),
+    totalVotes: integer('total_votes').notNull(),
+    lastAnalyzedAt: timestamp('last_analyzed_at').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index('idx_feedback_clusters_status').on(table.status)],
+);
+export const feedbackClusterMembers = pgTable(
+  'feedback_cluster_members',
+  {
+    clusterId: uuid('cluster_id')
+      .notNull()
+      .references(() => feedbackClusters.id, { onDelete: 'cascade' }),
+    feedbackId: uuid('feedback_id')
+      .notNull()
+      .references(() => feedbackItems.id, { onDelete: 'cascade' }),
+    similarityScore: real('similarity_score'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.clusterId, table.feedbackId] }),
+    index('idx_feedback_cluster_members_feedback').on(table.feedbackId),
+  ],
+);
+export const feedbackClusterRuns = pgTable(
+  'feedback_cluster_runs',
+  {
+    id: id(),
+    requestedByAdminId: uuid('requested_by_admin_id')
+      .notNull()
+      .references(() => users.id),
+    model: varchar('model', { length: 160 }).notNull(),
+    provider: varchar('provider', { length: 80 }).notNull(),
+    promptVersion: varchar('prompt_version', { length: 80 }).notNull(),
+    contextVersion: varchar('context_version', { length: 80 }).notNull(),
+    contextHash: varchar('context_hash', { length: 128 }).notNull(),
+    inputCount: integer('input_count').notNull(),
+    outputClusterCount: integer('output_cluster_count').notNull(),
+    reused: boolean('reused').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [index('idx_feedback_cluster_runs_context').on(table.contextHash)],
+);
 
 export const passwordResetCodes = pgTable('password_reset_codes', {
   id: id(),
@@ -255,16 +444,25 @@ export const whiteboardMembers = pgTable(
   'whiteboard_members',
   {
     id: id(),
-    boardId: uuid('board_id').notNull().references(() => whiteboards.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => whiteboards.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     role: varchar('role', { length: 10 }).notNull().default('owner'),
-    invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    invitedBy: uuid('invited_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     acceptedAt: timestamp('accepted_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex('uq_whiteboard_members_board_user').on(table.boardId, table.userId),
+    uniqueIndex('uq_whiteboard_members_board_user').on(
+      table.boardId,
+      table.userId,
+    ),
     index('idx_whiteboard_members_user').on(table.userId),
     index('idx_whiteboard_members_board').on(table.boardId),
   ],
@@ -274,11 +472,17 @@ export const whiteboardInvitations = pgTable(
   'whiteboard_invitations',
   {
     id: id(),
-    boardId: uuid('board_id').notNull().references(() => whiteboards.id, { onDelete: 'cascade' }),
+    boardId: uuid('board_id')
+      .notNull()
+      .references(() => whiteboards.id, { onDelete: 'cascade' }),
     emailNormalized: varchar('email_normalized', { length: 255 }).notNull(),
-    invitedUserId: uuid('invited_user_id').references(() => users.id, { onDelete: 'set null' }),
+    invitedUserId: uuid('invited_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     role: varchar('role', { length: 10 }).notNull(),
-    invitedBy: uuid('invited_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    invitedBy: uuid('invited_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     tokenHash: text('token_hash').notNull().unique(),
     status: varchar('status', { length: 10 }).notNull().default('pending'),
     expiresAt: timestamp('expires_at').notNull(),
@@ -642,21 +846,33 @@ export const challenges = pgTable(
     rewardType: varchar('reward_type', { length: 32 }),
     rewardValue: integer('reward_value'),
     badgeKey: varchar('badge_key', { length: 120 }),
-    createdByAdminId: uuid('created_by_admin_id').notNull().references(() => users.id),
+    createdByAdminId: uuid('created_by_admin_id')
+      .notNull()
+      .references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     publishedAt: timestamp('published_at'),
     cancelledAt: timestamp('cancelled_at'),
   },
-  (table) => [index('idx_challenges_status_window').on(table.status, table.startAt, table.endAt)],
+  (table) => [
+    index('idx_challenges_status_window').on(
+      table.status,
+      table.startAt,
+      table.endAt,
+    ),
+  ],
 );
 
 export const userChallengeProgress = pgTable(
   'user_challenge_progress',
   {
     id: id(),
-    challengeId: uuid('challenge_id').notNull().references(() => challenges.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    challengeId: uuid('challenge_id')
+      .notNull()
+      .references(() => challenges.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     progressValue: integer('progress_value').notNull().default(0),
     completedAt: timestamp('completed_at'),
     rewardGrantedAt: timestamp('reward_granted_at'),
@@ -664,7 +880,10 @@ export const userChallengeProgress = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex('uq_user_challenge_progress_challenge_user').on(table.challengeId, table.userId),
+    uniqueIndex('uq_user_challenge_progress_challenge_user').on(
+      table.challengeId,
+      table.userId,
+    ),
     index('idx_user_challenge_progress_challenge').on(table.challengeId),
   ],
 );
@@ -692,13 +911,19 @@ export const timeCapsules = pgTable(
   'time_capsules',
   {
     id: id(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     title: varchar('title', { length: 255 }).notNull(),
     message: text('message').notNull(),
     unlockType: varchar('unlock_type', { length: 32 }).notNull(),
     unlockAt: timestamp('unlock_at'),
-    linkedTaskId: uuid('linked_task_id').references(() => tasks.id, { onDelete: 'set null' }),
-    linkedProjectId: uuid('linked_project_id').references(() => tasks.id, { onDelete: 'set null' }),
+    linkedTaskId: uuid('linked_task_id').references(() => tasks.id, {
+      onDelete: 'set null',
+    }),
+    linkedProjectId: uuid('linked_project_id').references(() => tasks.id, {
+      onDelete: 'set null',
+    }),
     status: varchar('status', { length: 20 }).notNull().default('locked'),
     sealedAt: timestamp('sealed_at'),
     openedAt: timestamp('opened_at'),
@@ -719,8 +944,12 @@ export const timeCapsuleAttachments = pgTable(
   'time_capsule_attachments',
   {
     id: id(),
-    capsuleId: uuid('capsule_id').notNull().references(() => timeCapsules.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    capsuleId: uuid('capsule_id')
+      .notNull()
+      .references(() => timeCapsules.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     type: varchar('type', { length: 16 }).notNull(), // image | video | file | audio
     fileName: varchar('file_name', { length: 255 }).notNull(),
     mimeType: varchar('mime_type', { length: 120 }).notNull(),
@@ -729,7 +958,9 @@ export const timeCapsuleAttachments = pgTable(
     durationSeconds: integer('duration_seconds'),
     createdAt: createdAt(),
   },
-  (table) => [index('idx_time_capsule_attachments_capsule').on(table.capsuleId)],
+  (table) => [
+    index('idx_time_capsule_attachments_capsule').on(table.capsuleId),
+  ],
 );
 
 export const subtasks = pgTable(
@@ -1018,6 +1249,16 @@ export const focusRooms = pgTable(
       .default(false),
     statisticsVisible: boolean('statistics_visible').notNull().default(true),
     leaderboardEnabled: boolean('leaderboard_enabled').notNull().default(false),
+    aiFocusCoachEnabled: boolean('ai_focus_coach_enabled')
+      .notNull()
+      .default(true),
+    aiFocusCoachMode: varchar('ai_focus_coach_mode', { length: 20 })
+      .notNull()
+      .default('balanced'),
+    lastFocusCoachInterventionAt: timestamp('last_focus_coach_intervention_at'),
+    distractingMessageCount: integer('distracting_message_count')
+      .notNull()
+      .default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -1073,7 +1314,9 @@ export const focusRoomCommitmentSessions = pgTable(
     startedAt: timestamp('started_at'),
     expectedEndAt: timestamp('expected_end_at'),
     pausedAt: timestamp('paused_at'),
-    accumulatedPausedSeconds: integer('accumulated_paused_seconds').notNull().default(0),
+    accumulatedPausedSeconds: integer('accumulated_paused_seconds')
+      .notNull()
+      .default(0),
     endedAt: timestamp('ended_at'),
     endedByUserId: uuid('ended_by_user_id').references(() => users.id, {
       onDelete: 'set null',
@@ -1161,6 +1404,29 @@ export const focusRoomActivityEvents = pgTable(
   ],
 );
 
+export const focusRoomMessages = pgTable(
+  'focus_room_messages',
+  {
+    id: id(),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => focusRooms.id, { onDelete: 'cascade' }),
+    senderUserId: uuid('sender_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    senderType: varchar('sender_type', { length: 16 })
+      .notNull()
+      .default('user'),
+    content: varchar('content', { length: 2000 }).notNull(),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_focus_room_messages_history').on(table.roomId, table.createdAt),
+    index('idx_focus_room_messages_sender').on(table.senderUserId),
+  ],
+);
+
 export const focusRoomInvitations = pgTable(
   'focus_room_invitations',
   {
@@ -1242,152 +1508,6 @@ export const reminders = pgTable(
     index('idx_reminders_task_id').on(table.taskId),
   ],
 );
-
-export const habits = pgTable('habits', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  frequency: varchar('frequency', { length: 20 }).notNull(),
-  targetCount: integer('target_count').notNull().default(1),
-  reminderTime: time('reminder_time'),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: createdAt(),
-});
-
-export const habitLogs = pgTable('habit_logs', {
-  id: id(),
-  habitId: uuid('habit_id')
-    .notNull()
-    .references(() => habits.id, { onDelete: 'cascade' }),
-  logDate: date('log_date').notNull(),
-  completedCount: integer('completed_count').notNull().default(0),
-  isCompleted: boolean('is_completed').notNull().default(false),
-});
-
-export const courses = pgTable('courses', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 255 }).notNull(),
-  color: varchar('color', { length: 32 }),
-  description: text('description'),
-});
-
-export const exams = pgTable('exams', {
-  id: id(),
-  courseId: uuid('course_id')
-    .notNull()
-    .references(() => courses.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  examDate: timestamp('exam_date').notNull(),
-  notes: text('notes'),
-});
-
-export const assignments = pgTable('assignments', {
-  id: id(),
-  courseId: uuid('course_id')
-    .notNull()
-    .references(() => courses.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  dueDate: timestamp('due_date').notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('todo'),
-  grade: decimal('grade', { precision: 5, scale: 2 }),
-});
-
-export const studySessions = pgTable('study_sessions', {
-  id: id(),
-  courseId: uuid('course_id')
-    .notNull()
-    .references(() => courses.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  startTime: timestamp('start_time').notNull(),
-  endTime: timestamp('end_time').notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('planned'),
-});
-
-export const shoppingLists = pgTable('shopping_lists', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  storeName: varchar('store_name', { length: 255 }),
-  locationId: uuid('location_id').references(() => savedLocations.id, {
-    onDelete: 'set null',
-  }),
-});
-
-export const shoppingItems = pgTable('shopping_items', {
-  id: id(),
-  listId: uuid('list_id')
-    .notNull()
-    .references(() => shoppingLists.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 255 }).notNull(),
-  quantity: integer('quantity').notNull().default(1),
-  isDone: boolean('is_done').notNull().default(false),
-});
-
-export const goals = pgTable('goals', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  targetDate: date('target_date'),
-  progress: integer('progress').notNull().default(0),
-  status: varchar('status', { length: 20 }).notNull().default('active'),
-});
-
-export const goalTasks = pgTable(
-  'goal_tasks',
-  {
-    goalId: uuid('goal_id')
-      .notNull()
-      .references(() => goals.id, { onDelete: 'cascade' }),
-    taskId: uuid('task_id')
-      .notNull()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-  },
-  (table) => [primaryKey({ columns: [table.goalId, table.taskId] })],
-);
-
-export const groups = pgTable('groups', {
-  id: id(),
-  name: varchar('name', { length: 255 }).notNull(),
-  ownerId: uuid('owner_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  createdAt: createdAt(),
-});
-
-export const groupMembers = pgTable('group_members', {
-  id: id(),
-  groupId: uuid('group_id')
-    .notNull()
-    .references(() => groups.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  role: varchar('role', { length: 20 }).notNull().default('member'),
-});
-
-export const sharedTasks = pgTable('shared_tasks', {
-  id: id(),
-  taskId: uuid('task_id')
-    .notNull()
-    .references(() => tasks.id, { onDelete: 'cascade' }),
-  groupId: uuid('group_id')
-    .notNull()
-    .references(() => groups.id, { onDelete: 'cascade' }),
-  assignedTo: uuid('assigned_to').references(() => users.id, {
-    onDelete: 'set null',
-  }),
-});
 
 export const notifications = pgTable(
   'notifications',
@@ -1589,16 +1709,6 @@ export const aiRecommendations = pgTable(
   (table) => [index('idx_ai_reco_task').on(table.taskId, table.createdAt)],
 );
 
-export const deviceTokens = pgTable('device_tokens', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  token: text('token').notNull(),
-  platform: varchar('platform', { length: 20 }).notNull(),
-  createdAt: createdAt(),
-});
-
 // A directional friend request that becomes a mutual friendship once accepted.
 // `requesterId` sent the request to `addresseeId`. Uniqueness is enforced on
 // the ordered pair; the service also blocks a reverse-direction duplicate.
@@ -1669,18 +1779,6 @@ export const userLocationSnapshots = pgTable('user_location_snapshots', {
   accuracyMeters: integer('accuracy_meters'),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
   updatedAt: updatedAt(),
-});
-
-export const dailyUserStats = pgTable('daily_user_stats', {
-  id: id(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  date: date('date').notNull(),
-  completedTasks: integer('completed_tasks').notNull().default(0),
-  missedTasks: integer('missed_tasks').notNull().default(0),
-  completedHabits: integer('completed_habits').notNull().default(0),
-  missedReminders: integer('missed_reminders').notNull().default(0),
 });
 
 // ---------------------------------------------------------------------------
@@ -1807,18 +1905,34 @@ export const plannerDailySelections = pgTable(
   'planner_daily_selections',
   {
     id: id(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     plannerDate: varchar('planner_date', { length: 10 }).notNull(),
-    taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-    subtaskId: uuid('subtask_id').references(() => subtasks.id, { onDelete: 'cascade' }),
-    selectionSource: varchar('selection_source', { length: 20 }).notNull().default('user'),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, {
+      onDelete: 'cascade',
+    }),
+    selectionSource: varchar('selection_source', { length: 20 })
+      .notNull()
+      .default('user'),
     selectedAt: timestamp('selected_at').defaultNow().notNull(),
     removedAt: timestamp('removed_at'),
     plannerRunId: uuid('planner_run_id'),
   },
   (table) => [
-    uniqueIndex('planner_daily_selections_unique').on(table.userId, table.plannerDate, table.taskId, table.subtaskId),
-    index('planner_daily_selections_user_date').on(table.userId, table.plannerDate),
+    uniqueIndex('planner_daily_selections_unique').on(
+      table.userId,
+      table.plannerDate,
+      table.taskId,
+      table.subtaskId,
+    ),
+    index('planner_daily_selections_user_date').on(
+      table.userId,
+      table.plannerDate,
+    ),
   ],
 );
 
@@ -1854,9 +1968,15 @@ export const aiTaskManagerNotifications = pgTable(
   'ai_task_manager_notifications',
   {
     id: id(),
-    taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
-    subtaskId: uuid('subtask_id').references(() => subtasks.id, { onDelete: 'cascade' }),
-    recipientUserId: uuid('recipient_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    subtaskId: uuid('subtask_id').references(() => subtasks.id, {
+      onDelete: 'cascade',
+    }),
+    recipientUserId: uuid('recipient_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     notificationType: varchar('notification_type', { length: 50 }).notNull(),
     severity: varchar('severity', { length: 20 }).notNull().default('info'),
     title: varchar('title', { length: 255 }).notNull(),
@@ -1887,13 +2007,17 @@ export const achievements = pgTable(
   'achievements',
   {
     id: id(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     title: varchar('title', { length: 255 }).notNull(),
     description: text('description'),
     reflection: text('reflection'),
     achievementDate: date('achievement_date').notNull(),
     category: varchar('category', { length: 40 }).notNull().default('Other'),
-    relatedTaskId: uuid('related_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    relatedTaskId: uuid('related_task_id').references(() => tasks.id, {
+      onDelete: 'set null',
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -1907,8 +2031,12 @@ export const achievementImages = pgTable(
   'achievement_images',
   {
     id: id(),
-    achievementId: uuid('achievement_id').notNull().references(() => achievements.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    achievementId: uuid('achievement_id')
+      .notNull()
+      .references(() => achievements.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     fileName: varchar('file_name', { length: 255 }).notNull(),
     storageKey: text('storage_key').notNull(),
     mimeType: varchar('mime_type', { length: 120 }).notNull(),
@@ -1917,7 +2045,9 @@ export const achievementImages = pgTable(
     isCover: boolean('is_cover').notNull().default(false),
     createdAt: createdAt(),
   },
-  (table) => [index('idx_achievement_images_achievement').on(table.achievementId)],
+  (table) => [
+    index('idx_achievement_images_achievement').on(table.achievementId),
+  ],
 );
 
 export const userPushDevices = pgTable(
@@ -2398,51 +2528,269 @@ export const taskAssistantNotifications = pgTable(
 );
 
 /** Consent-based Guardian / Supervision data. Opaque device selections never leave the supervised device. */
-export const supervisionRelationships = pgTable('supervision_relationships', {
+export const supervisionRelationships = pgTable(
+  'supervision_relationships',
+  {
+    id: id(),
+    guardianUserId: uuid('guardian_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    supervisedUserId: uuid('supervised_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 16 }).notNull().default('pending'),
+    permissions: jsonb('permissions').notNull().default({ level: 'plan_only' }),
+    createdAt: createdAt(),
+    acceptedAt: timestamp('accepted_at'),
+    revokedAt: timestamp('revoked_at'),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('idx_supervision_guardian').on(t.guardianUserId, t.status),
+    index('idx_supervision_supervised').on(t.supervisedUserId, t.status),
+  ],
+);
+
+export const supervisionRules = pgTable(
+  'supervision_rules',
+  {
+    id: id(),
+    relationshipId: uuid('relationship_id')
+      .notNull()
+      .references(() => supervisionRelationships.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    startsAt: timestamp('starts_at').notNull(),
+    endsAt: timestamp('ends_at').notNull(),
+    repeat: jsonb('repeat').notNull().default({ type: 'once' }),
+    mode: varchar('mode', { length: 24 }).notNull(),
+    status: varchar('status', { length: 16 }).notNull().default('scheduled'),
+    taskId: uuid('task_id').references(() => tasks.id, {
+      onDelete: 'set null',
+    }),
+    restrictionMode: varchar('restriction_mode', { length: 24 })
+      .notNull()
+      .default('time'),
+    completionTrigger: varchar('completion_trigger', { length: 24 })
+      .notNull()
+      .default('time_expired'),
+    appSelection: jsonb('app_selection').notNull().default({}),
+    completedAt: timestamp('completed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('idx_supervision_rules_relationship').on(t.relationshipId, t.status),
+    index('idx_supervision_rules_schedule').on(t.status, t.startsAt, t.endsAt),
+  ],
+);
+
+export const supervisionOverrides = pgTable(
+  'supervision_overrides',
+  {
+    id: id(),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => supervisionRules.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    reason: varchar('reason', { length: 40 }).notNull(),
+    requestedAt: createdAt(),
+    effectiveAt: timestamp('effective_at').notNull().defaultNow(),
+  },
+  (t) => [index('idx_supervision_overrides_rule').on(t.ruleId)],
+);
+
+/** Server-authoritative, short-lived exceptions. Justifications are deliberately not retained here. */
+export const supervisionAccessRequests = pgTable(
+  'supervision_access_requests',
+  {
+    id: id(),
+    relationshipId: uuid('relationship_id')
+      .notNull()
+      .references(() => supervisionRelationships.id, { onDelete: 'cascade' }),
+    supervisedUserId: uuid('supervised_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => supervisionRules.id, { onDelete: 'cascade' }),
+    packageName: varchar('package_name', { length: 255 }).notNull(),
+    decision: varchar('decision', { length: 24 }).notNull(),
+    category: varchar('category', { length: 24 }).notNull().default('unclear'),
+    confidence: real('confidence').notNull().default(0),
+    reason: varchar('reason', { length: 500 }).notNull(),
+    durationMinutes: integer('duration_minutes'),
+    decisionSource: varchar('decision_source', { length: 24 }).notNull(),
+    expiresAt: timestamp('expires_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('idx_supervision_access_user_created').on(
+      t.supervisedUserId,
+      t.createdAt,
+    ),
+    index('idx_supervision_access_relationship').on(
+      t.relationshipId,
+      t.createdAt,
+    ),
+    index('idx_supervision_access_package_expiry').on(
+      t.packageName,
+      t.expiresAt,
+    ),
+  ],
+);
+
+export const supervisionAuditLogs = pgTable(
+  'supervision_audit_logs',
+  {
+    id: id(),
+    relationshipId: uuid('relationship_id')
+      .notNull()
+      .references(() => supervisionRelationships.id, { onDelete: 'cascade' }),
+    actorUserId: uuid('actor_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    event: varchar('event', { length: 48 }).notNull(),
+    ruleId: uuid('rule_id').references(() => supervisionRules.id, {
+      onDelete: 'set null',
+    }),
+    metadata: jsonb('metadata').notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('idx_supervision_audit_relationship').on(
+      t.relationshipId,
+      t.createdAt,
+    ),
+  ],
+);
+
+export const supervisionDevices = pgTable(
+  'supervision_devices',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    platform: varchar('platform', { length: 12 }).notNull(),
+    deviceId: varchar('device_id', { length: 255 }).notNull(),
+    deviceName: varchar('device_name', { length: 255 }),
+    capabilityLevel: varchar('capability_level', { length: 32 })
+      .notNull()
+      .default('none'),
+    permissionState: varchar('permission_state', { length: 24 })
+      .notNull()
+      .default('not_requested'),
+    appManagementEnabled: boolean('app_management_enabled')
+      .notNull()
+      .default(false),
+    selectionConfigured: boolean('selection_configured')
+      .notNull()
+      .default(false),
+    selectedAppCount: integer('selected_app_count').notNull().default(0),
+    categoriesConfigured: boolean('categories_configured')
+      .notNull()
+      .default(false),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('uq_supervision_device_user_device').on(t.userId, t.deviceId),
+    index('idx_supervision_device_user').on(t.userId),
+  ],
+);
+
+export const supervisionManagedApps = pgTable(
+  'supervision_managed_apps',
+  {
+    id: id(),
+    deviceId: uuid('device_id')
+      .notNull()
+      .references(() => supervisionDevices.id, { onDelete: 'cascade' }),
+    platformAppIdentifier: varchar('platform_app_identifier', {
+      length: 255,
+    }).notNull(),
+    displayName: varchar('display_name', { length: 255 }).notNull(),
+    iconReference: text('icon_reference'),
+    enabledForGuardianManagement: boolean('enabled_for_guardian_management')
+      .notNull()
+      .default(false),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('uq_supervision_managed_app_device_identifier').on(
+      t.deviceId,
+      t.platformAppIdentifier,
+    ),
+    index('idx_supervision_managed_apps_device_enabled').on(
+      t.deviceId,
+      t.enabledForGuardianManagement,
+    ),
+  ],
+);
+
+/** Self-owned AI App Guard. Legacy supervision data remains separate for migration safety. */
+export const appGuardSettings = pgTable('app_guard_settings', {
   id: id(),
-  guardianUserId: uuid('guardian_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  supervisedUserId: uuid('supervised_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  status: varchar('status', { length: 16 }).notNull().default('pending'),
-  permissions: jsonb('permissions').notNull().default({ level: 'plan_only' }),
-  createdAt: createdAt(), acceptedAt: timestamp('accepted_at'), revokedAt: timestamp('revoked_at'), updatedAt: updatedAt(),
-}, (t) => [index('idx_supervision_guardian').on(t.guardianUserId, t.status), index('idx_supervision_supervised').on(t.supervisedUserId, t.status)]);
-
-export const supervisionRules = pgTable('supervision_rules', {
-  id: id(), relationshipId: uuid('relationship_id').notNull().references(() => supervisionRelationships.id, { onDelete: 'cascade' }),
-  createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'cascade' }), name: varchar('name', { length: 255 }).notNull(),
-  startsAt: timestamp('starts_at').notNull(), endsAt: timestamp('ends_at').notNull(), repeat: jsonb('repeat').notNull().default({ type: 'once' }),
-  mode: varchar('mode', { length: 24 }).notNull(), status: varchar('status', { length: 16 }).notNull().default('scheduled'),
-  taskId: uuid('task_id').references(() => tasks.id, { onDelete: 'set null' }),
-  restrictionMode: varchar('restriction_mode', { length: 24 }).notNull().default('time'),
-  completionTrigger: varchar('completion_trigger', { length: 24 }).notNull().default('time_expired'),
-  appSelection: jsonb('app_selection').notNull().default({}), completedAt: timestamp('completed_at'),
-  createdAt: createdAt(), updatedAt: updatedAt(),
-}, (t) => [index('idx_supervision_rules_relationship').on(t.relationshipId, t.status), index('idx_supervision_rules_schedule').on(t.status, t.startsAt, t.endsAt)]);
-
-export const supervisionOverrides = pgTable('supervision_overrides', {
-  id: id(), ruleId: uuid('rule_id').notNull().references(() => supervisionRules.id, { onDelete: 'cascade' }), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  reason: varchar('reason', { length: 40 }).notNull(), requestedAt: createdAt(), effectiveAt: timestamp('effective_at').notNull().defaultNow(),
-}, (t) => [index('idx_supervision_overrides_rule').on(t.ruleId)]);
-
-export const supervisionAuditLogs = pgTable('supervision_audit_logs', {
-  id: id(), relationshipId: uuid('relationship_id').notNull().references(() => supervisionRelationships.id, { onDelete: 'cascade' }), actorUserId: uuid('actor_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  event: varchar('event', { length: 48 }).notNull(), ruleId: uuid('rule_id').references(() => supervisionRules.id, { onDelete: 'set null' }), metadata: jsonb('metadata').notNull().default({}), createdAt: createdAt(),
-}, (t) => [index('idx_supervision_audit_relationship').on(t.relationshipId, t.createdAt)]);
-
-export const supervisionDevices = pgTable('supervision_devices', {
-  id: id(), userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  platform: varchar('platform', { length: 12 }).notNull(), deviceId: varchar('device_id', { length: 255 }).notNull(), deviceName: varchar('device_name', { length: 255 }),
-  capabilityLevel: varchar('capability_level', { length: 32 }).notNull().default('none'), permissionState: varchar('permission_state', { length: 24 }).notNull().default('not_requested'),
-  appManagementEnabled: boolean('app_management_enabled').notNull().default(false),
-  selectionConfigured: boolean('selection_configured').notNull().default(false),
-  selectedAppCount: integer('selected_app_count').notNull().default(0),
-  categoriesConfigured: boolean('categories_configured').notNull().default(false),
-  lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(), createdAt: createdAt(), updatedAt: updatedAt(),
-  }, (t) => [uniqueIndex('uq_supervision_device_user_device').on(t.userId, t.deviceId), index('idx_supervision_device_user').on(t.userId)]);
-
-export const supervisionManagedApps = pgTable('supervision_managed_apps', {
-  id: id(), deviceId: uuid('device_id').notNull().references(() => supervisionDevices.id, { onDelete: 'cascade' }),
-  platformAppIdentifier: varchar('platform_app_identifier', { length: 255 }).notNull(), displayName: varchar('display_name', { length: 255 }).notNull(),
-  iconReference: text('icon_reference'), enabledForGuardianManagement: boolean('enabled_for_guardian_management').notNull().default(false),
-  lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(), createdAt: createdAt(), updatedAt: updatedAt(),
-}, (t) => [uniqueIndex('uq_supervision_managed_app_device_identifier').on(t.deviceId, t.platformAppIdentifier), index('idx_supervision_managed_apps_device_enabled').on(t.deviceId, t.enabledForGuardianManagement)]);
+  userId: uuid('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull().default(false),
+  maxTemporaryMinutes: integer('max_temporary_minutes').notNull().default(10),
+  strictness: varchar('strictness', { length: 16 })
+    .notNull()
+    .default('balanced'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+export const appGuardRestrictedApps = pgTable(
+  'app_guard_restricted_apps',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    packageName: varchar('package_name', { length: 255 }).notNull(),
+    displayName: varchar('display_name', { length: 255 }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('uq_app_guard_user_package').on(t.userId, t.packageName),
+    index('idx_app_guard_user').on(t.userId),
+  ],
+);
+export const appGuardAccessDecisions = pgTable(
+  'app_guard_access_decisions',
+  {
+    id: id(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    clientRequestId: uuid('client_request_id'),
+    packageName: varchar('package_name', { length: 255 }).notNull(),
+    decision: varchar('decision', { length: 12 }).notNull(),
+    category: varchar('category', { length: 24 }).notNull(),
+    confidence: real('confidence').notNull(),
+    reason: varchar('reason', { length: 500 }).notNull(),
+    durationMinutes: integer('duration_minutes'),
+    expiresAt: timestamp('expires_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('idx_app_guard_decisions_user').on(t.userId, t.createdAt),
+    uniqueIndex('uq_app_guard_user_client_request').on(
+      t.userId,
+      t.clientRequestId,
+    ),
+  ],
+);

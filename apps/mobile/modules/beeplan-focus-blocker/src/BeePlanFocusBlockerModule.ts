@@ -3,6 +3,7 @@ import { NativeModule, requireNativeModule } from 'expo';
 import type {
   BlockAttemptEvent,
   EmergencyExitEvent,
+  BeeJustificationRequestEvent,
   FocusBlockerStatus,
   InstalledApp,
   SessionEndedEvent,
@@ -22,6 +23,7 @@ declare class BeePlanFocusBlockerModuleType extends NativeModule<{
   onBlockAttempt: (event: BlockAttemptEvent) => void;
   onSessionEnded: (event: SessionEndedEvent) => void;
   onEmergencyExit: (event: EmergencyExitEvent) => void;
+  onBeeJustificationRequested: (event: BeeJustificationRequestEvent) => void;
 }> {
   /** Synchronously returns whether Usage Access is granted. */
   hasUsageAccess(): boolean;
@@ -41,6 +43,7 @@ declare class BeePlanFocusBlockerModuleType extends NativeModule<{
   getSuspendedPackages(packageNames: string[]): Promise<Record<string, boolean>>;
   reconcileSuspendedPackages(packageNames: string[]): Promise<{ requested: string[]; suspended: string[]; released: string[]; failed: string[]; capability: string; state: 'released' | 'enforced' | 'partially_enforced' | 'failed' }>;
   setGuardianRestrictionSources(sources: { sourceId: string; packages: string[]; endsAtMs: number }[]): Promise<{ sources: string[]; blockedPackages: string[] }>;
+  setAppGuardRestrictionSources(sources: { sourceId: string; packages: string[]; endsAtMs: number }[]): Promise<{ sources: string[]; blockedPackages: string[] }>;
   /** Arms the foreground service + blocking for the given config. */
   startStrictMode(config: StartStrictModeConfig): Promise<FocusBlockerStatus>;
   /** Tears down the service and blocking. Safe to call when idle. */
@@ -59,7 +62,14 @@ declare class BeePlanFocusBlockerModuleType extends NativeModule<{
   getStatistics(sessionId?: string | null): Promise<unknown>;
   /** Logs an emergency exit and ends the session. */
   emergencyExit(reason: string): Promise<FocusBlockerStatus>;
-  /** Temporarily whitelists a package (e.g. after "I really need this app"). */
+  /** Installs an RSA-signed, server-authorized temporary grant. */
+  installSignedTemporaryGrant(token: string, userId: string): Promise<boolean>;
+  /** Process-memory-only capability for native App Guard requests while RN is backgrounded. */
+  configureAppGuardRequestClient(apiBaseUrl: string | null, accessToken: string | null, userId: string | null): Promise<boolean>;
+  getPendingAppGuardRequest(): Promise<BeeJustificationRequestEvent | null>;
+  deliverAppGuardRequestResult(requestId: string, decision: 'allow' | 'deny' | 'error', reason?: string | null, signedGrant?: string | null, userId?: string | null): Promise<boolean>;
+  expireAppGuardRequest(requestId: string): void;
+  /** Focus-session-only escape; native refuses guardian-restricted packages. */
   allowAppTemporarily(packageName: string, durationMs: number): Promise<void>;
 }
 

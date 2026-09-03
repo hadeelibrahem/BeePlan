@@ -107,7 +107,7 @@ const NAV_GROUPS = [
       { page: 'people', labelKey: 'navigation.people', Icon: PeopleIcon, handler: 'onNavigatePeople' },
       { page: 'feedback', labelKey: 'navigation.feedback', Icon: PlannerIcon, handler: 'onNavigateFeedback' },
       { page: 'challenges', labelKey: 'navigation.challenges', Icon: AchievementIcon, handler: 'onNavigateChallenges' },
-      { page: 'supervision', labelKey: 'Supervision', Icon: PeopleIcon, handler: 'onNavigateSupervision' },
+      { page: 'supervision', labelKey: 'navigation.supervision', Icon: PeopleIcon, handler: 'onNavigateSupervision' },
     ]
   },
   {

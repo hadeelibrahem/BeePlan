@@ -1,9 +1,19 @@
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable prettier/prettier */
 import { WhiteboardTaskCardsService } from './whiteboard-task-cards.service';
 
 describe('WhiteboardTaskCardsService', () => {
   it('returns only the safe summary for a referenced task card', async () => {
     const access = { require: jest.fn().mockResolvedValue({ board: { snapshot: { document: { store: { 'shape:1': { typeName: 'shape', type: 'beeplan-task', props: { taskId: 'task-1' } } } } } } }) };
-    const task = { id: 'task-1', title: 'Prepare demo', priority: 'high', status: 'todo', dueDate: new Date('2026-08-10T00:00:00.000Z'), description: 'private', notes: 'private' };
+    const task = {
+      id: 'task-1',
+      title: 'Prepare demo',
+      priority: 'high',
+      status: 'todo',
+      dueDate: new Date('2026-08-10T00:00:00.000Z'),
+      description: 'private',
+      notes: 'private',
+    };
     const db = {
       select: jest.fn()
         .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: async () => [task] }) }) })

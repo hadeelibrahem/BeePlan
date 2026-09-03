@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import FocusRoomsScreen from "./FocusRoomsScreen";
 import { renderWithProviders } from "../test/renderWithProviders";
-import { joinRoomByCode, listInvitations, roomDetails } from "../lib/focusRoomsApi";
+import { joinRoomByCode, listInvitations, roomDetails, roomMessages } from "../lib/focusRoomsApi";
+import { mergeFocusRoomChatMessages } from "../lib/focusRoomChatMessages";
 jest.mock("expo-audio", () => ({
   setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
   useAudioPlayer: () => ({ replace: jest.fn(), play: jest.fn(), pause: jest.fn(), seekTo: jest.fn(), volume: 1, muted: false, loop: false }),
@@ -30,6 +31,9 @@ jest.mock("../lib/focusRoomsApi", () => ({
   readyCommitment: jest.fn(),
   terminateRoom: jest.fn(),
   decideInvitation: jest.fn(),
+  roomMessages: jest.fn().mockResolvedValue({ messages: [] }),
+  sendRoomMessage: jest.fn(),
+  subscribeRoomEvents: jest.fn().mockResolvedValue(undefined),
 }));
 describe("mobile Focus Rooms", () => {
   beforeEach(() => {
@@ -139,5 +143,22 @@ describe("mobile Focus Rooms", () => {
     expect(screen.getByText(/complete/)).toBeTruthy();
     expect(screen.getByText("White Noise")).toBeTruthy();
     expect(screen.getByText("Pause")).toBeTruthy();
+  });
+
+  it("opens and closes chat without unmounting the active timer", async () => {
+    await renderWithProviders(<FocusRoomsScreen accessToken="token" initialRoomId="room-1" onBack={() => undefined} />);
+    await waitFor(() => expect(screen.getByTestId("shared-focus-active")).toBeTruthy());
+    fireEvent.press(screen.getByText("Chat"));
+    expect(await screen.findByText("Focus Chat")).toBeTruthy();
+    expect(roomMessages).toHaveBeenCalledWith("token", "room-1");
+    fireEvent.press(screen.getByText("Close"));
+    await waitFor(() => expect(screen.queryByText("Focus Chat")).toBeNull());
+    expect(screen.getByTestId("shared-focus-active")).toBeTruthy();
+  });
+
+  it("keeps another participant's realtime message when history reconciles", () => {
+    const otherParticipant = { id: "other-user", roomId: "room-1", senderUserId: "u2", senderType: "user" as const, senderName: "Hadeel", content: "from another participant", metadata: {}, createdAt: "2026-08-28T10:01:00.000Z" };
+    const history = { id: "history", roomId: "room-1", senderUserId: "u1", senderType: "user" as const, senderName: "Saleh", content: "history", metadata: {}, createdAt: "2026-08-28T10:00:00.000Z" };
+    expect(mergeFocusRoomChatMessages([otherParticipant], [history, otherParticipant])).toEqual([history, otherParticipant]);
   });
 });

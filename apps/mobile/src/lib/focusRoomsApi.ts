@@ -1,4 +1,4 @@
-import { apiFetch, readJsonOrThrow } from "./apiClient";
+import { apiFetch, apiFetchStream, readJsonOrThrow } from "./apiClient";
 export type FocusRoom = {
   id: string;
   title: string;
@@ -30,8 +30,10 @@ export type FocusRoom = {
   currentUserId: string;
   isCurrentUserMember: boolean;
   canManageInvitations: boolean;
+  aiFocusCoachEnabled?: boolean;
   events?: { id: string; eventType: string; userId: string | null; createdAt: string; metadata?: Record<string, unknown> }[];
 };
+export type FocusRoomChatMessage = { id: string; roomId: string; senderUserId: string | null; senderType: "user" | "ai" | "system"; senderName: string; content: string; metadata: Record<string, unknown>; createdAt: string };
 async function req<T>(
   token: string,
   path: string,
@@ -155,3 +157,11 @@ export const roomInvitations = (t: string, roomId: string) =>
   req<ManagedInvitation[]>(t, `/focus-rooms/${roomId}/invitations`);
 export const revokeInvitation = (t: string, id: string) =>
   req(t, `/focus-rooms/invitations/${id}/revoke`, "POST");
+export const roomMessages = (t: string, roomId: string) => req<{ messages: FocusRoomChatMessage[] }>(t, `/focus-rooms/${roomId}/chat/messages`);
+export const sendRoomMessage = (t: string, roomId: string, content: string) => req<FocusRoomChatMessage>(t, `/focus-rooms/${roomId}/chat/messages`, "POST", { content });
+export async function subscribeRoomEvents(token: string, roomId: string, onEvent: (event: { id?: string; type: string; payload?: { message?: FocusRoomChatMessage } }) => void, signal: AbortSignal) {
+  const response = await apiFetchStream(`/focus-rooms/${roomId}/events`, { headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" }, signal });
+  if (!response.ok || !response.body) throw new Error("Realtime connection failed.");
+  const reader = response.body.getReader(), decoder = new TextDecoder(); let buffer = "";
+  while (!signal.aborted) { const part = await reader.read(); if (part.done) break; buffer += decoder.decode(part.value, { stream: true }); const entries = buffer.split("\n\n"); buffer = entries.pop() ?? ""; for (const entry of entries) { const data = entry.split("\n").find(line => line.startsWith("data:"))?.slice(5).trim(); if (data) try { onEvent(JSON.parse(data)); } catch { /* ignore malformed SSE event */ } } }
+}

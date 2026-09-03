@@ -11,6 +11,8 @@ type Props = {
   fullscreenSupported: boolean;
   isFullscreen: boolean;
   onOpenSounds: () => void;
+  onOpenChat?: () => void;
+  chatUnreadCount?: number;
   onToggleFullscreen: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -23,8 +25,8 @@ type Props = {
   children?: ReactNode;
 };
 
-export function SharedFocusExperienceAdapter({ room, remainingSeconds, progress, soundPanel, fullscreenSupported, isFullscreen, onOpenSounds, onToggleFullscreen, onPause, onResume, onAddTime, onFinish, onCancel, busy, error, participants, children }: Props) {
+export function SharedFocusExperienceAdapter({ room, remainingSeconds, progress, soundPanel, fullscreenSupported, isFullscreen, onOpenSounds, onOpenChat, chatUnreadCount, onToggleFullscreen, onPause, onResume, onAddTime, onFinish, onCancel, busy, error, participants, children }: Props) {
   const { t } = useLanguage();
   const paused = Boolean(room.commitment?.pausedAt);
-  return <><FocusExperienceView title={t('focusUi.sharedSession')} goal={room.commitment?.goalLabel} durationMinutes={room.commitment?.durationMinutes ?? 0} remainingSeconds={remainingSeconds} progress={progress} isPaused={paused} state={paused ? 'paused' : 'active'} participants={participants} onOpenSounds={onOpenSounds} fullscreenSupported={fullscreenSupported} isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} onExit={onCancel} onPause={onPause} onResume={onResume} onAddTime={onAddTime} onFinish={onFinish} onCancel={onCancel} busy={busy} error={error}>{children}</FocusExperienceView>{soundPanel}</>;
+  return <><FocusExperienceView title={t('focusUi.sharedSession')} goal={room.commitment?.goalLabel} durationMinutes={room.commitment?.durationMinutes ?? 0} remainingSeconds={remainingSeconds} progress={progress} isPaused={paused} state={paused ? 'paused' : 'active'} participants={participants} onOpenSounds={onOpenSounds} onOpenChat={onOpenChat} chatUnreadCount={chatUnreadCount} fullscreenSupported={fullscreenSupported} isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} onExit={onCancel} onPause={onPause} onResume={onResume} onAddTime={onAddTime} onFinish={onFinish} onCancel={onCancel} busy={busy} error={error}>{children}</FocusExperienceView>{soundPanel}</>;
 }

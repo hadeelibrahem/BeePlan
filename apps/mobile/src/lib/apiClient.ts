@@ -187,6 +187,27 @@ export async function apiFetch(
 }
 
 /**
+ * SSE responses intentionally remain open. They must not inherit the normal
+ * REST timeout or GET de-duplication (a stream is a distinct subscription).
+ * The caller-provided AbortSignal remains the authoritative close mechanism.
+ */
+export async function apiFetchStream(path: string, init: RequestInit = {}): Promise<Response> {
+  if (!API_BASE_URL) {
+    throw new ApiRequestError('BeePlan API URL is not configured.', 'config');
+  }
+  const url = `${API_BASE_URL}${path}`;
+  if (__DEV__) console.log('[BeePlan API] stream open ->', url);
+  try {
+    const response = await fetch(url, init);
+    if (__DEV__) console.log('[BeePlan API] stream connected <-', url, response.status);
+    return response;
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
+    throw new ApiRequestError(`Unable to open BeePlan event stream at ${url}.`, 'network');
+  }
+}
+
+/**
  * Reads the JSON body of a response, then throws a classified ApiRequestError
  * if the response was not ok (5xx -> 'server', anything else -> 'http').
  */

@@ -81,7 +81,7 @@ describe('normalizeTaskPlanChatResponse', () => {
       description: 'Cover chapters 4-7 and take two mock exams.',
       dueDate: '2026-07-25T08:00:00.000Z',
       priority: 'high',
-      scheduledDate: '2026-07-19T00:00:00.000Z',
+      scheduledDate: '2026-07-19',
       scheduledStartTime: '09:00',
       scheduledEndTime: '11:00',
     });

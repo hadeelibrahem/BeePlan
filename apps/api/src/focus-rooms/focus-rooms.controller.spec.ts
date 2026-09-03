@@ -13,6 +13,7 @@ import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FocusRoomsController } from './focus-rooms.controller';
 import { FocusRoomsService } from './focus-rooms.service';
+import { FocusRoomChatService } from './focus-room-chat.service';
 
 describe('FocusRoomsController invitations', () => {
   it('registers the canonical current-user invitation route', () => {
@@ -30,7 +31,7 @@ describe('FocusRoomsController invitations', () => {
     const invitations = jest.fn().mockResolvedValue([]);
     const controller = new FocusRoomsController({
       invitations,
-    } as unknown as FocusRoomsService);
+    } as unknown as FocusRoomsService, {} as FocusRoomChatService);
     const request = { user: { id: 'current-user' } } as AuthenticatedRequest;
 
     await expect(controller.invitations(request)).resolves.toEqual([]);
@@ -46,6 +47,7 @@ describe('FocusRoomsController HTTP registration', () => {
     create: jest.fn(),
     invitations: jest.fn(),
   };
+  const chat = { history: jest.fn(), send: jest.fn(), updateCoach: jest.fn() };
   const authenticatedGuard: CanActivate = {
     canActivate(context: ExecutionContext) {
       const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -60,7 +62,7 @@ describe('FocusRoomsController HTTP registration', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [FocusRoomsController],
-      providers: [{ provide: FocusRoomsService, useValue: rooms }],
+      providers: [{ provide: FocusRoomsService, useValue: rooms }, { provide: FocusRoomChatService, useValue: chat }],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(authenticatedGuard)

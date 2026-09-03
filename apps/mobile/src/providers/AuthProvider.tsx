@@ -20,6 +20,10 @@ import {
   type AuthUser,
 } from '../lib/api';
 import { setAuthToken } from '../lib/authToken';
+import { API_BASE_URL } from '../lib/apiClient';
+import { setProximityMonitorAppActive, setProximityMonitorAuth } from '../services/proximityMonitor';
+import { onAppGuardAppStateChanged, registerJustificationFlow } from '../features/supervision/restrictionEnforcement';
+import { configureAppGuardRequestClient } from '../../modules/beeplan-focus-blocker';
 import { disableCurrentDevice, registerCurrentDevice } from '../lib/pushDevicesApi';
 import {
   getGoogleApprovalStatus,
@@ -100,7 +104,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // of how deep the consumer is.
   useLayoutEffect(() => {
     setAuthToken(session?.accessToken ?? null);
-  }, [session]);
+    setProximityMonitorAuth({ hydrated: !loading, userId: session?.user.id ?? null, accessToken: session?.accessToken ?? null });
+    // Native retains this only in RAM so a BlockActivity can complete an App
+    // Guard decision while React Native is background-suspended.
+    void configureAppGuardRequestClient(
+      !loading && session?.accessToken ? API_BASE_URL : null,
+      !loading ? session?.accessToken ?? null : null,
+      !loading ? session?.user.id ?? null : null,
+    );
+  }, [loading, session]);
+
+  useEffect(() => {
+    setProximityMonitorAppActive(AppState.currentState === 'active');
+    const subscription = AppState.addEventListener('change', (state) => {
+      setProximityMonitorAppActive(state === 'active');
+      if (__DEV__) console.info(`[AppGuard:Mobile] app state changed state=${state}`);
+      onAppGuardAppStateChanged(state);
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // This is intentionally root-owned: the native BlockScreen may foreground a
+  // different Activity while React Navigation screens are unmounted/backgrounded.
+  useEffect(() => {
+    if (loading || !session?.user.id || !session.accessToken) return;
+    const subscription = registerJustificationFlow(session.user.id);
+    return () => {
+      subscription.remove();
+      if (__DEV__) console.info('[AppGuard:Mobile] listener removed reason=session unavailable or replaced');
+    };
+  }, [loading, session?.accessToken, session?.user.id]);
 
   useEffect(() => {
     const accessToken = session?.accessToken;

@@ -73,10 +73,10 @@ export async function apiRequest(path: string, init?: RequestInit) {
   const method = init?.method ?? 'GET';
 
   if (import.meta.env.DEV) {
-    console.log('[BeePlan API] ->', method, path);
+    console.log('[BeePlan API] ->', method, path, { authHeaderPresent: new Headers(init?.headers).has('Authorization') });
   }
 
-  let response: Response;
+  let response!: Response;
 
   try {
     response = await fetch(url, {
@@ -93,6 +93,7 @@ export async function apiRequest(path: string, init?: RequestInit) {
         method,
         error: error instanceof Error ? error.message : error,
       });
+      if (response.status === 401) console.info('[WebAuth] response status=401');
     }
       throw new Error(`Unable to reach BeePlan API at ${API_BASE_URL}. Make sure the backend is running on port 3000.`);
   }
@@ -125,6 +126,11 @@ export async function logout(accessToken: string): Promise<void> {
     method: 'POST',
     headers: getAuthHeaders(accessToken),
   });
+}
+
+/** Validates expiry, signature, account state, and token version server-side. */
+export async function validateAccessToken(accessToken: string): Promise<void> {
+  await apiRequest('/auth/session', { headers: getAuthHeaders(accessToken) });
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {

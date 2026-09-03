@@ -29,6 +29,13 @@ export class AuthController {
     return this.authService.logout(request.user.id);
   }
 
+  /** Lightweight canonical session check for clients hydrating persisted JWTs. */
+  @Get('session')
+  @UseGuards(JwtAuthGuard)
+  session(@Req() request: AuthenticatedRequest) {
+    return { authenticated: true, userId: request.user.id };
+  }
+
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
   updateProfile(@Req() request: AuthenticatedRequest, @Body() body: unknown) {

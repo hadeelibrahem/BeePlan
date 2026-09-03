@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import FocusRoomsScreen from "./FocusRoomsScreen";
-import { createRoomInvitation, getFocusRoom, listFocusRooms } from "../lib/focusRoomsApi";
+import { createRoomInvitation, getFocusRoom, getFocusRoomMessages, listFocusRooms, subscribeRoomEvents } from "../lib/focusRoomsApi";
 import { LanguageProvider } from "../i18n/LanguageContext";
 
 vi.mock("../lib/focusRoomsApi", () => ({
@@ -35,6 +35,9 @@ vi.mock("../lib/focusRoomsApi", () => ({
   extendCommitment: vi.fn(),
   presence: vi.fn().mockResolvedValue(undefined),
   subscribeRoomEvents: vi.fn().mockResolvedValue(undefined),
+  getFocusRoomMessages: vi.fn().mockResolvedValue({ messages: [] }),
+  sendFocusRoomMessage: vi.fn(),
+  setFocusRoomCoach: vi.fn(),
   decideRoomInvitation: vi.fn(),
   createRoomInvitation: vi.fn(),
   revokeRoomInvitation: vi.fn(),
@@ -72,6 +75,7 @@ const room = {
 };
 describe("Focus Rooms UI", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     window.localStorage.removeItem("beeplan.language-preference");
     vi.mocked(getFocusRoom).mockResolvedValue(room);
     vi.mocked(createRoomInvitation).mockResolvedValue({
@@ -257,6 +261,38 @@ describe("Focus Rooms UI", () => {
     expect(screen.getByText("Nature")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText("Nature")).not.toBeInTheDocument();
+  });
+
+  it("opens and closes Focus Chat above the active timer without unmounting it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getFocusRoom).mockResolvedValue({ ...room, commitment: { id: "session-chat", status: "active", durationMinutes: 25, goalLabel: "Study together", breakMinutes: null, reconnectGraceSeconds: 60, startedAt: new Date().toISOString(), expectedEndAt: new Date(Date.now() + 25 * 60_000).toISOString(), pausedAt: null, accumulatedPausedSeconds: 0, endedAt: null, endReason: null, endedByUserId: null } });
+    render(<FocusRoomsScreen accessToken="token" roomId="room-1" onBack={() => undefined} onOpenRoom={() => undefined} />);
+    await user.click(await screen.findByRole("button", { name: "Chat" }));
+    expect(screen.getByRole("dialog", { name: "Focus Chat" })).toBeInTheDocument();
+    expect(screen.getByTestId("focus-experience")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog", { name: "Focus Chat" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("focus-experience")).toBeInTheDocument();
+  });
+
+  it("merges human and AI chat_message SSE events into an open chat without refetching history", async () => {
+    const user = userEvent.setup();
+    const activeRoom = { ...room, commitment: { id: "session-chat", status: "active", durationMinutes: 25, goalLabel: "Study together", breakMinutes: null, reconnectGraceSeconds: 60, startedAt: new Date().toISOString(), expectedEndAt: new Date(Date.now() + 25 * 60_000).toISOString(), pausedAt: null, accumulatedPausedSeconds: 0, endedAt: null, endReason: null, endedByUserId: null } };
+    vi.mocked(getFocusRoom).mockResolvedValue(activeRoom);
+    vi.mocked(getFocusRoomMessages).mockResolvedValue({ messages: [{ id: "history", roomId: "room-1", senderUserId: "u1", senderType: "user", senderName: "Saleh Emad", content: "history", metadata: {}, createdAt: "2026-08-28T10:00:00.000Z" }], nextBefore: null });
+    let eventHandler: ((event: { type: string; payload?: { message?: unknown } }) => void) | undefined;
+    vi.mocked(subscribeRoomEvents).mockImplementation((_token, _roomId, handler) => { eventHandler = handler as typeof eventHandler; return Promise.resolve(); });
+    const view = render(<FocusRoomsScreen accessToken="token" roomId="room-1" onBack={() => undefined} onOpenRoom={() => undefined} />);
+    await user.click(await screen.findByRole("button", { name: "Chat" }));
+    await waitFor(() => expect(getFocusRoomMessages).toHaveBeenCalledTimes(1));
+    view.rerender(<FocusRoomsScreen accessToken="token" roomId="room-1" onBack={() => undefined} onOpenRoom={() => undefined} />);
+    expect(getFocusRoomMessages).toHaveBeenCalledTimes(1);
+    await act(async () => { eventHandler?.({ type: "chat_message", payload: { message: { id: "other-user", roomId: "room-1", senderUserId: "u2", senderType: "user", senderName: "Hadeel", content: "from another participant", metadata: {}, createdAt: "2026-08-28T10:01:00.000Z" } } }); });
+    expect(await screen.findByText("from another participant")).toBeInTheDocument();
+    await act(async () => { eventHandler?.({ type: "chat_message", payload: { message: { id: "coach", roomId: "room-1", senderUserId: null, senderType: "ai", senderName: "Bee Focus Coach", content: "coach live message", metadata: {}, createdAt: "2026-08-28T10:02:00.000Z" } } }); });
+    expect(await screen.findByText("coach live message")).toBeInTheDocument();
+    expect(screen.getByText("history")).toBeInTheDocument();
+    expect(getFocusRoomMessages).toHaveBeenCalledTimes(1);
   });
 
   it("wires pause and add-time confirmations to authoritative shared actions", async () => {
