@@ -38,6 +38,14 @@ export async function unsuspendPackages(packageNames: string[]): Promise<Package
 export async function getSuspendedPackages(packageNames: string[]): Promise<Record<string, boolean>> { return (await native?.getSuspendedPackages(packageNames)) ?? {}; }
 export async function reconcileSuspendedPackages(packageNames: string[]) { return await native?.reconcileSuspendedPackages(packageNames) ?? { requested: packageNames, suspended: [], released: [], failed: packageNames, capability: 'accountability_only', state: 'failed' as const }; }
 export async function setGuardianRestrictionSources(sources: { sourceId: string; packages: string[]; endsAtMs: number }[]) { return await native?.setGuardianRestrictionSources(sources) ?? { sources: [], blockedPackages: [] }; }
+export function isAppGuardRestrictionSyncAvailable() { return typeof native?.setAppGuardRestrictionSources === 'function'; }
+export async function setAppGuardRestrictionSources(sources: { sourceId: string; packages: string[]; endsAtMs: number }[]) {
+  if (!isAppGuardRestrictionSyncAvailable()) {
+    if (__DEV__) console.info('[AppGuard:Mobile] restriction sync method available=false')
+    throw new Error("App Guard couldn't sync with this device. Try again.")
+  }
+  return await native!.setAppGuardRestrictionSources(sources)
+}
 
 export const IDLE_STATUS: FocusBlockerStatus = {
   isActive: false,
@@ -117,12 +125,24 @@ export async function emergencyExit(
   return (await native?.emergencyExit(reason)) ?? IDLE_STATUS;
 }
 
-export async function allowAppTemporarily(
-  packageName: string,
-  durationMs: number,
-): Promise<void> {
-  await native?.allowAppTemporarily(packageName, durationMs);
+export async function installSignedTemporaryGrant(token: string, userId: string): Promise<boolean> { return await native?.installSignedTemporaryGrant(token, userId) ?? false; }
+export async function configureAppGuardRequestClient(apiBaseUrl: string | null, accessToken: string | null, userId: string | null): Promise<boolean> {
+  return await native?.configureAppGuardRequestClient(apiBaseUrl, accessToken, userId) ?? false;
 }
+export async function getPendingAppGuardRequest(): Promise<import('./FocusBlocker.types').BeeJustificationRequestEvent | null> {
+  return await native?.getPendingAppGuardRequest() ?? null;
+}
+export function isAppGuardResultDeliveryAvailable(): boolean {
+  return typeof native?.deliverAppGuardRequestResult === 'function';
+}
+export async function deliverAppGuardRequestResult(requestId: string, decision: 'allow' | 'deny' | 'error', reason?: string | null, signedGrant?: string | null, userId?: string | null): Promise<boolean> {
+  if (!isAppGuardResultDeliveryAvailable()) {
+    throw new Error('The installed BeePlanFocusBlocker module does not support App Guard result delivery.')
+  }
+  return native!.deliverAppGuardRequestResult(requestId, decision, reason ?? null, signedGrant ?? null, userId ?? null)
+}
+export function expireAppGuardRequest(requestId: string): void { native?.expireAppGuardRequest(requestId) }
+export async function allowAppTemporarily(packageName: string, durationMs: number): Promise<void> { await native?.allowAppTemporarily(packageName, durationMs); }
 
 export function subscribeToEvents<K extends keyof FocusBlockerEvents>(
   event: K,

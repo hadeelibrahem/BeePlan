@@ -129,6 +129,23 @@ function readIsoDate(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+/**
+ * Scheduled dates are persisted in date-only columns. AI providers often
+ * return an ISO timestamp here, so retain its calendar portion rather than
+ * passing the timestamp through to the task DTO.
+ */
+function readScheduledDate(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})(?:T.*)?$/);
+  if (!match) return null;
+
+  const [year, month, day] = match[1].split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+    ? match[1]
+    : null;
+}
+
 function readMinutes(value: unknown): number {
   const num = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   if (!Number.isFinite(num)) return 30;
@@ -174,7 +191,7 @@ function normalizeSubtasks(value: unknown): TaskPlanSubtask[] {
         priority: readPriority(record.priority),
         startDate: readIsoDate(record.startDate),
         dueDate: readIsoDate(record.dueDate),
-        scheduledDate: readIsoDate(record.scheduledDate),
+        scheduledDate: readScheduledDate(record.scheduledDate),
         scheduledStartTime: readNullableString(record.scheduledStartTime, 5),
         scheduledEndTime: readNullableString(record.scheduledEndTime, 5),
         isFocusTask: record.isFocusTask !== false,
@@ -282,8 +299,8 @@ export function normalizeTaskPlanChatResponse(raw: unknown, now = new Date()): T
             description: readString(mainRecord.description, 2000),
             dueDate: readIsoDate(mainRecord.dueDate),
             priority: readPriority(mainRecord.priority),
-            ...(readIsoDate(mainRecord.scheduledDate) || focusSessions[0]
-              ? { scheduledDate: readIsoDate(mainRecord.scheduledDate) ?? focusSessions[0]?.startTime.slice(0, 10) }
+            ...(readScheduledDate(mainRecord.scheduledDate) || focusSessions[0]
+              ? { scheduledDate: readScheduledDate(mainRecord.scheduledDate) ?? focusSessions[0]?.startTime.slice(0, 10) }
               : {}),
             ...(readNullableString(mainRecord.scheduledStartTime, 5) || focusSessions[0]
               ? { scheduledStartTime: readNullableString(mainRecord.scheduledStartTime, 5) ?? focusSessions[0]?.startTime.slice(11, 16) }

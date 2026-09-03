@@ -1,6 +1,7 @@
 import type {
   BlockAttemptEvent,
   EmergencyExitEvent,
+  BeeJustificationRequestEvent,
   FocusBlockerStatus,
   InstalledApp,
   SessionEndedEvent,
@@ -14,6 +15,12 @@ export {
   type UseFocusBlockerOptions,
 } from "./src/hooks/useFocusBlocker";
 export {
+  installSignedTemporaryGrant,
+  configureAppGuardRequestClient,
+  getPendingAppGuardRequest,
+  deliverAppGuardRequestResult,
+  isAppGuardResultDeliveryAvailable,
+  expireAppGuardRequest,
   allowAppTemporarily,
   emergencyExit,
   getInstalledApps,
@@ -24,6 +31,7 @@ export {
   hasOverlayPermission,
   hasUsageAccess,
   isFocusBlockerAvailable,
+  isAppGuardRestrictionSyncAvailable,
   isFocusBlockerSupported,
   openOverlaySettings,
   openUsageAccessSettings,
@@ -31,6 +39,7 @@ export {
   resumeStrictMode,
   reconcileSuspendedPackages,
   startStrictMode,
+  setAppGuardRestrictionSources,
   setGuardianRestrictionSources,
   stopStrictMode,
   suspendPackages,
@@ -41,6 +50,7 @@ export {
 export type {
   BlockAttemptEvent,
   EmergencyExitEvent,
+  BeeJustificationRequestEvent,
   FocusBlockerStatus,
   InstalledApp,
   SessionEndedEvent,

@@ -113,6 +113,7 @@ export type EmergencyExitEvent = {
   reason: string;
   timestampMs: number;
 };
+export type BeeJustificationRequestEvent = { requestId: string; packageName: string; justification: string };
 
 /** Event map consumed by `addListener`. */
 export type FocusBlockerEvents = {
@@ -120,4 +121,5 @@ export type FocusBlockerEvents = {
   onBlockAttempt: (event: BlockAttemptEvent) => void;
   onSessionEnded: (event: SessionEndedEvent) => void;
   onEmergencyExit: (event: EmergencyExitEvent) => void;
+  onBeeJustificationRequested: (event: BeeJustificationRequestEvent) => void;
 };

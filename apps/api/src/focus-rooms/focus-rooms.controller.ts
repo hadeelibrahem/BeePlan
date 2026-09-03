@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Logger,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -28,13 +29,17 @@ import {
   UpdateRoomGoalDto,
   TerminateCommitmentDto,
   ExtendCommitmentDto,
+  SendFocusRoomMessageDto,
+  UpdateFocusCoachDto,
 } from './focus-rooms.dto';
 import { FocusRoomsService } from './focus-rooms.service';
+import { FocusRoomChatService } from './focus-room-chat.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('focus-rooms')
 export class FocusRoomsController {
-  constructor(private readonly rooms: FocusRoomsService) {}
+  private readonly logger = new Logger(FocusRoomsController.name);
+  constructor(private readonly rooms: FocusRoomsService, private readonly chat: FocusRoomChatService) {}
   @Get() list(@Req() req: AuthenticatedRequest) {
     return this.rooms.discover(req.user.id);
   }
@@ -48,7 +53,12 @@ export class FocusRoomsController {
     @Req() req: AuthenticatedRequest,
     @Body() dto: JoinFocusRoomByCodeDto,
   ) {
-    return this.rooms.joinByCode(req.user.id, dto.code);
+    const started = Date.now();
+    this.logger.debug(`focus-room join-by-code received user=${req.user.id}`);
+    return this.rooms.joinByCode(req.user.id, dto.code).then(result => {
+      this.logger.debug(`focus-room join-by-code completed room=${result.id} durationMs=${Date.now() - started}`);
+      return result;
+    });
   }
   @Get(':roomId') get(
     @Req() req: AuthenticatedRequest,
@@ -56,12 +66,26 @@ export class FocusRoomsController {
   ) {
     return this.rooms.snapshot(roomId, req.user.id);
   }
+  @Get(':roomId/chat/messages') messages(@Req() req: AuthenticatedRequest, @Param('roomId', ParseUUIDPipe) roomId: string) {
+    return this.chat.history(roomId, req.user.id);
+  }
+  @Post(':roomId/chat/messages') message(@Req() req: AuthenticatedRequest, @Param('roomId', ParseUUIDPipe) roomId: string, @Body() dto: SendFocusRoomMessageDto) {
+    return this.chat.send(roomId, req.user.id, dto.content);
+  }
+  @Patch(':roomId/ai-focus-coach') coach(@Req() req: AuthenticatedRequest, @Param('roomId', ParseUUIDPipe) roomId: string, @Body() dto: UpdateFocusCoachDto) {
+    return this.chat.updateCoach(req.user.id, roomId, dto.enabled);
+  }
   @Post(':roomId/join') join(
     @Req() req: AuthenticatedRequest,
     @Param('roomId', ParseUUIDPipe) roomId: string,
     @Body() dto: JoinFocusRoomDto,
   ) {
-    return this.rooms.join(req.user.id, roomId, dto);
+    const started = Date.now();
+    this.logger.debug(`focus-room join received room=${roomId} user=${req.user.id}`);
+    return this.rooms.join(req.user.id, roomId, dto).then(result => {
+      this.logger.debug(`focus-room join completed room=${roomId} durationMs=${Date.now() - started}`);
+      return result;
+    });
   }
   @Get('invitations/mine') invitations(@Req() req: AuthenticatedRequest) {
     return this.rooms.invitations(req.user.id);
@@ -182,6 +206,7 @@ export class FocusRoomsController {
     @Req() req: AuthenticatedRequest,
     @Param('roomId', ParseUUIDPipe) roomId: string,
   ) {
+    this.logger.debug(`focus-room event stream opened room=${roomId} user=${req.user.id}`);
     return this.rooms.stream(roomId, req.user.id);
   }
 }

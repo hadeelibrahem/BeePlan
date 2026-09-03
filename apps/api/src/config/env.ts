@@ -25,6 +25,8 @@ export const envSchema = z.object({
   DB_APPLICATION_NAME: z.string().min(1).max(63).default('beeplan-api'),
   NODE_ENV: z.string().optional(),
   JWT_SECRET: z.string().min(16),
+  // PKCS#8 RSA private key (base64-encoded PEM). Never expose this to clients.
+  SUPERVISION_GRANT_PRIVATE_KEY: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   RESET_EMAIL_FROM: z.string().optional(),
@@ -44,6 +46,8 @@ export const envSchema = z.object({
   QWEN_API_KEY: z.string().optional(),
   QWEN_BASE_URL: z.string().url().optional(),
   QWEN_MODEL: z.string().optional(),
+  SUPERVISION_ACCESS_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(60_000).optional(),
+  FOCUS_COACH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   ADMIN_ERROR_ANALYSIS_MODEL: z.string().optional(),
   ADMIN_FEEDBACK_CLUSTERING_MODEL: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),

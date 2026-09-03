@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import {
   Activity,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ExternalLink,
@@ -1036,6 +1037,7 @@ function ChallengeModal({
   onSave: (body: unknown) => void;
   busy: boolean;
 }) {
+  const { t } = useLanguage();
   const [type, setType] = useState<
     "focus_minutes" | "focus_sessions" | "tasks_completed"
   >("focus_minutes");
@@ -1043,6 +1045,13 @@ function ChallengeModal({
   const [target, setTarget] = useState(60);
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
+  const updateStartAt = (value: string) => {
+    setStartAt(value);
+    if (value && endAt && endAt < value) setEndAt("");
+  };
+  const updateEndAt = (value: string) => {
+    if (!value || !startAt || value >= startAt) setEndAt(value);
+  };
   const label =
     type === "focus_minutes"
       ? "Target minutes"
@@ -1091,26 +1100,8 @@ function ChallengeModal({
             className="mt-1 w-full rounded border p-2"
           />
         </label>
-        <label className="block text-sm">
-          Start date
-          <input
-            required
-            type="datetime-local"
-            value={startAt}
-            onChange={(e) => setStartAt(e.target.value)}
-            className="mt-1 w-full rounded border p-2"
-          />
-        </label>
-        <label className="block text-sm">
-          End date
-          <input
-            required
-            type="datetime-local"
-            value={endAt}
-            onChange={(e) => setEndAt(e.target.value)}
-            className="mt-1 w-full rounded border p-2"
-          />
-        </label>
+        <EnglishChallengeDateTimeField label={t("admin.challengeStartDate")} value={startAt} onChange={updateStartAt} />
+        <EnglishChallengeDateTimeField label={t("admin.challengeEndDate")} value={endAt} onChange={updateEndAt} minValue={startAt} />
         <p className="text-xs text-[var(--bp-muted)]">
           Rewards are not enabled yet.
         </p>
@@ -1128,6 +1119,74 @@ function ChallengeModal({
       </form>
     </Modal>
   );
+}
+
+const ENGLISH_DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+const ENGLISH_TIME = /^(\d{1,2}):([0-5]\d)\s*([AaPp][Mm])$/;
+
+export function splitChallengeDateTime(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return { date: "", time: "" };
+  const [, year, month, day, hour, minute] = match;
+  const hour24 = Number(hour);
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  return { date: `${month}/${day}/${year}`, time: `${String(hour12).padStart(2, "0")}:${minute} ${period}` };
+}
+
+export function serializeChallengeDateTime(date: string, time: string) {
+  const dateMatch = ENGLISH_DATE.exec(date.trim());
+  const timeMatch = ENGLISH_TIME.exec(time.trim());
+  if (!dateMatch || !timeMatch) return "";
+  const [, monthText, dayText, year] = dateMatch;
+  const [, hourText, minute, periodText] = timeMatch;
+  const month = Number(monthText), day = Number(dayText), hour12 = Number(hourText);
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour12 < 1 || hour12 > 12) return "";
+  const candidate = new Date(Number(year), month - 1, day);
+  if (candidate.getFullYear() !== Number(year) || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return "";
+  const hour24 = (hour12 % 12) + (periodText.toUpperCase() === "PM" ? 12 : 0);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour24).padStart(2, "0")}:${minute}`;
+}
+
+function openNativePicker(input: HTMLInputElement | null) {
+  if (!input) return;
+  if (typeof input.showPicker === "function") input.showPicker();
+  else input.click();
+}
+
+export function EnglishChallengeDateTimeField({ label, value, onChange, minValue = "" }: { label: string; value: string; onChange: (value: string) => void; minValue?: string }) {
+  const initial = splitChallengeDateTime(value);
+  const [date, setDate] = useState(initial.date);
+  const [time, setTime] = useState(initial.time);
+  const datePickerRef = useRef<HTMLInputElement>(null);
+  const timePickerRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const next = splitChallengeDateTime(value);
+    setDate(next.date);
+    setTime(next.time);
+  }, [value]);
+
+  const update = (nextDate: string, nextTime: string) => {
+    setDate(nextDate);
+    setTime(nextTime);
+    const serialized = serializeChallengeDateTime(nextDate, nextTime);
+    if (serialized && minValue && serialized < minValue) {
+      setDate("");
+      setTime("");
+      onChange("");
+      return;
+    }
+    if (serialized) onChange(serialized);
+  };
+
+  const nativeDate = date ? serializeChallengeDateTime(date, "12:00 AM").slice(0, 10) : "";
+  const nativeTime = time ? serializeChallengeDateTime("01/01/2000", time).slice(11) : "";
+  const min = splitChallengeDateTime(minValue);
+  const minNativeDate = min.date ? serializeChallengeDateTime(min.date, "12:00 AM").slice(0, 10) : "";
+  const minNativeTime = nativeDate && nativeDate === minNativeDate && min.time ? serializeChallengeDateTime("01/01/2000", min.time).slice(11) : undefined;
+
+  return <div className="block text-sm"><span>{label}</span><div dir="ltr" lang="en" className="mt-1 grid gap-2 sm:grid-cols-2"><label className="relative block"><CalendarDays aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--bp-muted)]" /><input data-testid={`${label}-date`} required readOnly aria-label={`${label} date`} placeholder="MM/DD/YYYY" value={date} onClick={() => openNativePicker(datePickerRef.current)} onKeyDown={(event) => event.preventDefault()} onChange={(event) => update(event.target.value, time)} className="w-full cursor-pointer rounded border py-2 pl-9 pr-3 text-left [font-variant-numeric:tabular-nums]" /><input ref={datePickerRef} data-testid={`${label}-date-picker`} aria-hidden tabIndex={-1} required type="date" min={minNativeDate || undefined} value={nativeDate} onChange={(event) => update(splitChallengeDateTime(`${event.target.value}T00:00`).date, time)} className="pointer-events-none absolute h-px w-px opacity-0" /></label><label className="relative block"><Clock3 aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--bp-muted)]" /><input data-testid={`${label}-time`} required readOnly aria-label={`${label} time`} placeholder="hh:mm AM" value={time} onClick={() => openNativePicker(timePickerRef.current)} onKeyDown={(event) => event.preventDefault()} onChange={(event) => update(date, event.target.value)} className="w-full cursor-pointer rounded border py-2 pl-9 pr-3 text-left [font-variant-numeric:tabular-nums]" /><input ref={timePickerRef} data-testid={`${label}-time-picker`} aria-hidden tabIndex={-1} required type="time" min={minNativeTime} value={nativeTime} onChange={(event) => { const [hours, minutes] = event.target.value.split(":").map(Number); if (Number.isFinite(hours) && Number.isFinite(minutes)) update(date, `${String(hours % 12 || 12).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${hours >= 12 ? "PM" : "AM"}`); }} className="pointer-events-none absolute h-px w-px opacity-0" /></label></div></div>;
 }
 
 function Users({ token }: { token: string }) {

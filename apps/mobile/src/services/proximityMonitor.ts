@@ -1,4 +1,5 @@
 import { checkNearby, updateLocationSnapshot } from '../features/social/api/social.api';
+import { ApiRequestError } from '../lib/apiClient';
 import { getCurrentSnapshot, requestForegroundLocationPermission } from '../lib/location';
 import { showPersonNearbyNotification } from '../lib/notifications';
 
@@ -25,6 +26,27 @@ const DEFAULT_INTERVAL_MS = 60_000;
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let running = false;
+let appIsActive = true;
+let resumeOnForeground = false;
+let lastIntervalMs = DEFAULT_INTERVAL_MS;
+let auth: { hydrated: boolean; userId: string; accessToken: string; generation: number } | null = null;
+let generation = 0;
+
+export type ProximityMonitorAuth = {
+  hydrated: boolean;
+  userId: string | null;
+  accessToken: string | null;
+};
+
+/** Called by AuthProvider; a session transition invalidates all in-flight ticks. */
+export function setProximityMonitorAuth(next: ProximityMonitorAuth): void {
+  const valid = next.hydrated && Boolean(next.userId?.trim()) && Boolean(next.accessToken?.trim());
+  const unchanged = valid && auth?.userId === next.userId && auth.accessToken === next.accessToken;
+  if (unchanged) return;
+  generation += 1;
+  auth = valid ? { hydrated: true, userId: next.userId!, accessToken: next.accessToken!, generation } : null;
+  if (!auth) stopProximityMonitor('auth unavailable');
+}
 
 // Dev-only structured logging so the whole notification path is traceable.
 function debug(message: string, extra?: unknown): void {
@@ -36,9 +58,28 @@ function debug(message: string, extra?: unknown): void {
   }
 }
 
+function ownsAuth(owner: NonNullable<typeof auth>): boolean {
+  return appIsActive && auth?.generation === owner.generation && auth.userId === owner.userId && auth.accessToken === owner.accessToken;
+}
+
+function ownsTick(owner: NonNullable<typeof auth>): boolean {
+  return running && ownsAuth(owner);
+}
+
+function isExpectedUnauthenticated(error: unknown): boolean {
+  if (error instanceof ApiRequestError) return error.status === 401 || error.status === 403;
+  return error instanceof Error && /please sign in|unauthenticated|session.*expired/i.test(error.message);
+}
+
 async function tick(): Promise<void> {
+  const owner = auth;
+  if (!owner || !ownsTick(owner)) {
+    debug('tick skipped — no active authenticated monitor owner');
+    return;
+  }
   try {
     const snapshot = await getCurrentSnapshot();
+    if (!ownsTick(owner)) return;
     if (!snapshot) {
       debug('tick skipped — no location snapshot (permission denied or fix failed)');
       return;
@@ -46,9 +87,11 @@ async function tick(): Promise<void> {
     debug('location snapshot captured', snapshot);
 
     await updateLocationSnapshot(snapshot);
+    if (!ownsTick(owner)) return;
     debug('location snapshot sent to backend');
 
     const hits = await checkNearby();
+    if (!ownsTick(owner)) return;
     debug(`nearby response — ${hits.length} reminder(s) to fire`, hits);
 
     for (const hit of hits) {
@@ -63,6 +106,11 @@ async function tick(): Promise<void> {
       );
     }
   } catch (error) {
+    if (isExpectedUnauthenticated(error)) {
+      debug('tick suspended — authenticated session is no longer available');
+      stopProximityMonitor('session expired');
+      return;
+    }
     // A failed poll (network blip, permission change) must never crash the app —
     // just log and let the next interval retry.
     debug('tick failed', error);
@@ -76,7 +124,17 @@ export async function startProximityMonitor(intervalMs: number = DEFAULT_INTERVA
     return true;
   }
 
+  if (!auth || !appIsActive) {
+    debug('start skipped — auth hydration/session is unavailable or app is backgrounded');
+    return false;
+  }
+  const owner = auth;
+
   const granted = await requestForegroundLocationPermission();
+  if (!ownsAuth(owner)) {
+    debug('start abandoned — auth/session changed while waiting for location permission');
+    return false;
+  }
   debug(`foreground location permission ${granted ? 'granted' : 'denied'}`);
   if (!granted) {
     console.warn('[proximityMonitor] location permission not granted — monitor not started.');
@@ -84,6 +142,8 @@ export async function startProximityMonitor(intervalMs: number = DEFAULT_INTERVA
   }
 
   running = true;
+  resumeOnForeground = true;
+  lastIntervalMs = intervalMs;
   debug(`monitor started (interval ${intervalMs}ms)`);
   // Run one tick right away so a nearby friend is caught without waiting a full
   // interval, then poll on a cadence.
@@ -92,15 +152,26 @@ export async function startProximityMonitor(intervalMs: number = DEFAULT_INTERVA
   return true;
 }
 
-export function stopProximityMonitor(): void {
+export function stopProximityMonitor(reason?: string, preserveForegroundResume = false): void {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
   }
   if (running) {
-    debug('monitor stopped');
+    debug(`monitor stopped${reason ? ` — ${reason}` : ''}`);
   }
   running = false;
+  if (!preserveForegroundResume) resumeOnForeground = false;
+}
+
+/** Foreground-only policy: suspend polling in background; callers may resume it on active. */
+export function setProximityMonitorAppActive(active: boolean): void {
+  appIsActive = active;
+  if (!active) {
+    stopProximityMonitor('app backgrounded', true);
+  } else if (resumeOnForeground && auth) {
+    void startProximityMonitor(lastIntervalMs);
+  }
 }
 
 export function isProximityMonitorRunning(): boolean {

@@ -8,6 +8,7 @@ import com.beeplan.focusblocker.core.FocusStatus
  * compile error until they are wired to `sendEvent`.
  */
 sealed interface BlockerEvent {
+  data class BeeJustificationRequested(val requestId: String, val packageName: String, val justification: String) : BlockerEvent
   data class StatusChanged(val status: FocusStatus) : BlockerEvent
 
   data class BlockAttempt(

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View, type GestureResponderEvent } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { createGuardedSoundPlayer, type GuardedSoundPlayer } from '../lib/focusSoundPlayer';
 import { DangerButton, OutlineButton, PrimaryButton, SecondaryButton } from '../components/layout';
@@ -55,6 +56,7 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
   const { t } = useLanguage();
   const { theme } = useTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
   const {
     active,
     breakState,
@@ -141,8 +143,9 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
   const percent = Math.round(fraction * 100);
 
   return (
-    <View className="flex-1" style={{ backgroundColor: colors.background }}>
-      <View className="flex-1 items-center justify-between px-6 pb-8 pt-14">
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1" style={{ backgroundColor: colors.background }}>
+      <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1, paddingBottom: Math.max(insets.bottom, 16) }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <View className="items-center px-6 pb-6 pt-8">
         <View className="flex-row items-center gap-2">
           <View
             className="h-7 w-7 items-center justify-center rounded-lg"
@@ -228,7 +231,7 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
           ) : null}
         </View>
 
-        <View className="flex-row flex-wrap items-center justify-center gap-1">
+        <View className="mt-8 flex-row flex-wrap items-center justify-center gap-1">
           <UtilityButton theme={theme} label={t('focusUi.whiteNoise')} onPress={() => setSoundsOpen(true)} />
           <UtilityButton theme={theme} label={t('sharedFocus.ambient')} onPress={() => setSoundsOpen(true)} />
           {soundPlayer.activeSound && soundPlayer.isPlaying ? (
@@ -241,6 +244,7 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
           <UtilityButton theme={theme} label={t('focusUi.exitFocus')} accent onPress={handleExitFocus} />
         </View>
       </View>
+      </ScrollView>
 
       <Modal visible={Boolean(active && sessionComplete)} transparent animationType="fade">
         <CompletionModal
@@ -297,7 +301,7 @@ export default function FocusSessionScreen({ focus, tasks = [], onExit }: Props)
         onStop={soundPlayer.stop}
         onVolumeChange={soundPlayer.setVolume}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1114,7 +1118,7 @@ function StrictStatusCard({
 
   return (
     <View className="mt-5 w-full rounded-2xl border p-4" style={{ borderColor: colors.accent, backgroundColor: colors.accentSoft }}>
-      <View className="flex-row items-center justify-between">
+      <View className="flex-row flex-wrap items-start gap-2">
         <View className="flex-row items-center gap-2">
           <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.accent }}>
             <Text className="text-[10px] font-black uppercase" style={{ color: colors.accentText, letterSpacing: 1 }}>
@@ -1122,13 +1126,13 @@ function StrictStatusCard({
             </Text>
           </View>
         </View>
-        <Text className="text-xs font-semibold" style={{ color: usageAccess ? colors.success : colors.warning }}>
+        <Text className="min-w-0 flex-1 text-xs font-semibold" style={{ color: usageAccess ? colors.success : colors.warning, flexShrink: 1 }}>
           {usageAccess ? t('focusUi.usageAccessRequired') : t('focusUi.noAppsChosen')}
         </Text>
       </View>
 
-      <View className="mt-3 flex-row items-center justify-between">
-        <View>
+      <View className="mt-3 gap-3">
+        <View className="min-w-0" style={{ flexShrink: 1 }}>
           <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
             {t('focusUi.blockingApps', { count: blockedCount })}
           </Text>
@@ -1136,7 +1140,7 @@ function StrictStatusCard({
             {t('focusUi.blockingApps', { count: blockedCount })}
           </Text>
         </View>
-        <View>
+        <View className="min-w-0" style={{ flexShrink: 1 }}>
           <Text className="text-[10px] font-black uppercase" style={{ color: colors.secondaryText }}>
             {t('focusUi.strictDescription')}
           </Text>
@@ -1144,7 +1148,7 @@ function StrictStatusCard({
             {attempts}
           </Text>
         </View>
-        <Pressable onPress={onViewAttempts} accessibilityRole="button" className="rounded-xl px-3 py-2 active:opacity-70" style={{ backgroundColor: colors.surface }}>
+        <Pressable onPress={onViewAttempts} accessibilityRole="button" className="self-start rounded-xl px-3 py-2 active:opacity-70" style={{ backgroundColor: colors.surface }}>
           <Text className="text-xs font-black" style={{ color: colors.primary }}>
             {t('focusUi.focusSounds')}
           </Text>
@@ -1152,7 +1156,7 @@ function StrictStatusCard({
       </View>
 
       {!usageAccess ? (
-        <Text className="mt-2 text-[11px]" style={{ color: colors.warning }}>
+        <Text className="mt-2 text-[11px]" style={{ color: colors.warning, flexShrink: 1 }}>
           {t('focusUi.usageAccessRequired')}
         </Text>
       ) : null}

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
+  KeyboardAvoidingView,
   FlatList,
   Modal,
   Pressable,
@@ -10,8 +11,9 @@ import {
   Text,
   TextInput,
   View,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   DangerButton,
   OutlineButton,
@@ -39,7 +41,11 @@ import {
   pauseCommitment,
   resumeCommitment,
   extendCommitment,
+  roomMessages,
+  sendRoomMessage,
+  subscribeRoomEvents,
   type FocusRoom,
+  type FocusRoomChatMessage,
   type RoomInvitation,
 } from "../lib/focusRoomsApi";
 import { useTheme } from "../theme/useTheme";
@@ -47,6 +53,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { useFocusAudio } from "../lib/useFocusAudio";
 import { getSharedSessionRemainingMs } from "../lib/sharedSessionTiming";
 import { ActiveTimer, FocusSoundsSheet, UtilityButton } from "./FocusSessionScreen";
+import { mergeFocusRoomChatMessages } from "../lib/focusRoomChatMessages";
 const AGREEMENT_KEY = "sharedFocus.acceptAgreement";
 const commandId = () =>
   "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
@@ -62,14 +69,17 @@ export default function FocusRoomsScreen({
   accessToken,
   initialRoomId,
   onBack,
+  onSharedFocusForegroundChange,
 }: {
   accessToken: string;
   initialRoomId?: string;
   onBack: () => void;
+  onSharedFocusForegroundChange?: (active: boolean) => void;
 }) {
   const connectionId = useRef(commandId());
   const { theme } = useTheme(),
     c = theme.colors;
+  const insets = useSafeAreaInsets();
   const { t, language } = useLanguage();
   const [rooms, setRooms] = useState<FocusRoom[]>([]),
     [room, setRoom] = useState<FocusRoom | null>(null),
@@ -90,19 +100,31 @@ export default function FocusRoomsScreen({
   const [controlBusy, setControlBusy] = useState(false), [controlError, setControlError] = useState(""), [pauseOpen, setPauseOpen] = useState(false), [addTimeOpen, setAddTimeOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [soundsOpen, setSoundsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false), [chatMessages, setChatMessages] = useState<FocusRoomChatMessage[]>([]), [chatDraft, setChatDraft] = useState(""), [chatLoading, setChatLoading] = useState(false), [chatSending, setChatSending] = useState(false), [chatError, setChatError] = useState("");
+  const chatMessageIds = useRef(new Set<string>());
+  const chatRequestGeneration = useRef(0);
+  const currentRoomIdRef = useRef<string | undefined>(undefined);
+  currentRoomIdRef.current = room?.id;
+  const setRoomState = useCallback((next: FocusRoom | null, source: string) => {
+    if (__DEV__) console.info(`[SharedFocusState] set room source=${source} roomId=${next?.id ?? "none"}`);
+    setRoom(next);
+  }, []);
   const [invitationLoadError, setInvitationLoadError] = useState("");
   const presenceAttempt = useRef<string | null>(null), presenceConnected = useRef(false), terminalSync = useRef(false);
   const focusAudio = useFocusAudio();
   const previousCommitmentStatus = useRef<string | null>(null);
   const refreshSequence = useRef(0);
-  const refresh = async () => {
+  const refresh = async (source = "refresh") => {
     const sequence = ++refreshSequence.current;
     if (room) {
-      const next = await roomDetails(accessToken, room.id);
+      const roomId = room.id;
+      if (__DEV__) console.info(`[SharedFocusState] resync start roomId=${roomId}`);
+      const next = await roomDetails(accessToken, roomId);
       if (sequence !== refreshSequence.current) return;
-      setRoom(next);
+      setRoomState(next, source);
+      if (__DEV__) console.info(`[SharedFocusState] resync success roomId=${roomId}`);
       if (next.canManageInvitations)
-        setManagedInvites(await roomInvitations(accessToken, room.id));
+        setManagedInvites(await roomInvitations(accessToken, roomId));
     } else {
       const nextRooms = await listRooms(accessToken);
       setRooms(nextRooms);
@@ -115,6 +137,28 @@ export default function FocusRoomsScreen({
       }
     }
   };
+  const appendChatMessage = useCallback((message: FocusRoomChatMessage) => {
+    chatMessageIds.current.add(message.id);
+    setChatMessages(items => mergeFocusRoomChatMessages(items, [message]));
+  }, []);
+  const loadChat = useCallback((targetRoomId = room?.id) => {
+    if (!targetRoomId) return;
+    const request = ++chatRequestGeneration.current;
+    setChatLoading(current => current || chatMessages.length === 0);
+    setChatError("");
+    if (__DEV__) console.info(`[FocusChat] history fetch start roomId=${targetRoomId}`);
+    void roomMessages(accessToken, targetRoomId)
+      .then(result => {
+        if (request !== chatRequestGeneration.current || targetRoomId !== currentRoomIdRef.current) return;
+        chatMessageIds.current = new Set([...chatMessageIds.current, ...result.messages.map(message => message.id)]);
+        setChatMessages(current => mergeFocusRoomChatMessages(current, result.messages));
+        if (__DEV__) console.info(`[FocusChat] history fetch success count=${result.messages.length}`);
+      })
+      .catch(() => request === chatRequestGeneration.current && setChatError(t("sharedFocusChat.loadFailed")))
+      .finally(() => { if (request === chatRequestGeneration.current) setChatLoading(false); });
+  }, [accessToken, chatMessages.length, room?.id, t]);
+  const openChat = () => { setChatOpen(true); loadChat(room?.id); };
+  const sendChat = () => { if (!room || !chatDraft.trim() || chatSending) return; const content = chatDraft.trim(); setChatSending(true); setChatError(""); void sendRoomMessage(accessToken, room.id, content).then(message => { appendChatMessage(message); setChatDraft(""); }).catch(() => setChatError(t("sharedFocusChat.sendFailed"))).finally(() => setChatSending(false)); };
   const sendInvite = async () => {
     const normalized = inviteEmail.trim().toLowerCase();
     setInviteError("");
@@ -150,7 +194,7 @@ export default function FocusRoomsScreen({
       setInviteLoading(false);
     }
   };
-  const sharedControl = async (action: () => Promise<FocusRoom>, allowed = true) => { if (!allowed || isTerminalStatus(room?.commitment?.status)) { void refresh().catch(() => undefined); return; } setControlBusy(true); setControlError(""); try { setRoom(await action()); } catch (cause) { if (cause instanceof Error && cause.message.includes("This shared session has ended")) terminalSync.current = true; console.error("[SharedFocus] control failed", cause); setControlError(t("sharedFocus.actionFailed")); void refresh().catch(() => undefined); } finally { setControlBusy(false); } };
+  const sharedControl = async (action: () => Promise<FocusRoom>, allowed = true) => { if (!allowed || isTerminalStatus(room?.commitment?.status)) { void refresh("authoritative-control-refresh").catch(() => undefined); return; } setControlBusy(true); setControlError(""); try { setRoomState(await action(), "shared-control"); } catch (cause) { if (cause instanceof Error && cause.message.includes("This shared session has ended")) terminalSync.current = true; console.error("[SharedFocusState] request failed source=shared-control", cause); setControlError(t("sharedFocus.actionFailed")); void refresh("shared-control-recovery").catch(() => undefined); } finally { setControlBusy(false); } };
   useEffect(() => {
     if (room?.commitment?.pausedAt) setNow(new Date(room.commitment.pausedAt).getTime());
     const timer = setInterval(() => { if (!room?.commitment?.pausedAt) setNow(Date.now()); }, 1000);
@@ -161,12 +205,12 @@ export default function FocusRoomsScreen({
       const sequence = ++refreshSequence.current;
       void roomDetails(accessToken, initialRoomId).then(async (next) => {
         if (sequence !== refreshSequence.current) return;
-        setRoom(next);
+        setRoomState(next, "initial-room-load");
         if (next.canManageInvitations)
           setManagedInvites(await roomInvitations(accessToken, next.id));
       });
-    } else void refresh();
-    const poll = setInterval(() => { if (!isTerminalStatus(room?.commitment?.status)) void refresh().catch(() => undefined); }, room ? 1_000 : 30_000);
+    } else void refresh("lobby-or-room-poll").catch(cause => { if (__DEV__) console.info("[SharedFocusState] request failed source=lobby-or-room-poll", cause); });
+    const poll = setInterval(() => { if (!isTerminalStatus(room?.commitment?.status)) void refresh().catch(() => undefined); }, 30_000);
     return () => clearInterval(poll);
   }, [initialRoomId, accessToken, room?.id, room?.commitment?.status]);
   useEffect(() => {
@@ -190,6 +234,12 @@ export default function FocusRoomsScreen({
     };
   }, [room?.id, room?.commitment?.id, room?.commitment?.status, accessToken]);
   useEffect(() => {
+    if (!room?.id || !room.isCurrentUserMember) return;
+    const controller = new AbortController();
+    void subscribeRoomEvents(accessToken, room.id, event => { if (event.type === "chat_message" && event.payload?.message) { if (__DEV__) console.info(`[FocusChat] socket receive messageId=${event.payload.message.id} senderId=${event.payload.message.senderUserId ?? "system"}`); appendChatMessage(event.payload.message); } }, controller.signal).catch(() => undefined);
+    return () => controller.abort();
+  }, [accessToken, room?.id, room?.isCurrentUserMember, appendChatMessage]);
+  useEffect(() => {
     const sessionActive = Boolean(room?.commitment && ["active", "break"].includes(room.commitment.status));
     const sessionTerminal = Boolean(room?.commitment && ["completed", "ended_early", "cancelled", "terminated"].includes(room.commitment.status));
     const status = room?.commitment?.status ?? null;
@@ -200,9 +250,25 @@ export default function FocusRoomsScreen({
     if (!sessionActive || sessionTerminal) focusAudio.stop();
     return () => { if (!sessionActive) focusAudio.stop(); };
   }, [room?.commitment?.status, room?.commitment?.pausedAt, focusAudio.stop, focusAudio.pause, focusAudio.play, focusAudio.activeSound]);
+  useEffect(() => {
+    const sharedRoomActive = Boolean(room?.commitment && ["active", "break"].includes(room.commitment.status));
+    if (__DEV__ && sharedRoomActive && room) console.info('[NavTrace] shared focus ownership', { currentScreen: 'FocusRooms', sharedRoomActive: true, sharedRoomId: room.id, commitmentId: room.commitment?.id ?? 'none' });
+    onSharedFocusForegroundChange?.(sharedRoomActive);
+  }, [room?.id, room?.commitment?.id, room?.commitment?.status, onSharedFocusForegroundChange]);
+  useEffect(() => () => onSharedFocusForegroundChange?.(false), [onSharedFocusForegroundChange]);
+  useEffect(() => {
+    if (__DEV__) console.info("[SharedFocusState] mount");
+    return () => { if (__DEV__) console.info("[SharedFocusState] unmount"); };
+  }, []);
   if (!room)
     return (
-      <View className="flex-1 p-4" style={{ backgroundColor: c.background }}>
+      <SafeAreaView edges={["top", "bottom", "left", "right"]} className="flex-1" style={{ backgroundColor: c.background }}>
+      <FlatList
+        className="flex-1"
+        contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 16), flexGrow: 1 }}
+        data={rooms}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={<>
         <PageHeader
           title={t("sharedFocus.sessions")}
           subtitle={t("sharedFocus.subtitle")}
@@ -240,7 +306,7 @@ export default function FocusRoomsScreen({
                   await makeCommitment(accessToken, created.id, durationMinutes, goalLabel.trim() || undefined);
                   return roomDetails(accessToken, created.id);
                 })
-                .then(setRoom)
+                .then(next => setRoomState(next, "create-room"))
             }
           >
             {t("sharedFocus.createSession")}
@@ -274,7 +340,7 @@ export default function FocusRoomsScreen({
                     accessToken,
                     invitation.id,
                     "reject",
-                  ).then(refresh)
+                  ).then(() => refresh("invitation-decision"))
                 }
               >
                 {t("sharedFocus.reject")}
@@ -283,7 +349,7 @@ export default function FocusRoomsScreen({
                 onPress={() =>
                   void decideInvitation(accessToken, invitation.id, "accept")
                     .then(() => roomDetails(accessToken, invitation.roomId))
-                    .then(setRoom)
+                    .then(next => setRoomState(next, "accept-invitation"))
                 }
               >
                 {t("sharedFocus.accept")}
@@ -291,13 +357,11 @@ export default function FocusRoomsScreen({
             </View>
           </View>
         ))}
-        <FlatList
-          data={rooms}
-          keyExtractor={(x) => x.id}
-          renderItem={({ item }) => (
+        </>}
+        renderItem={({ item }) => (
             <Pressable
               accessibilityRole="button"
-              onPress={() => setRoom(item)}
+              onPress={() => setRoomState(item, "room-card-open")}
               className="mb-3 min-h-28 rounded-2xl border p-4"
               style={{ borderColor: c.border, backgroundColor: c.card }}
             >
@@ -314,8 +378,8 @@ export default function FocusRoomsScreen({
                 {t("sharedFocus.participantsCount", { count: item.members.length })}
               </Text>
             </Pressable>
-          )}
-        />
+        )}
+      />
         <Modal visible={joinOpen} transparent animationType="slide" onRequestClose={() => setJoinOpen(false)}>
           <View className="flex-1 justify-end bg-black/60">
             <View className="rounded-t-3xl border p-6" style={{ backgroundColor: c.surfaceElevated, borderColor: c.border }}>
@@ -335,12 +399,12 @@ export default function FocusRoomsScreen({
               {joinError ? <Text accessibilityRole="alert" className="mt-3" style={{ color: c.error }}>{joinError}</Text> : null}
               <View className="mt-5 flex-row gap-3">
                 <View className="flex-1"><SecondaryButton fullWidth disabled={joining} onPress={() => setJoinOpen(false)}>{t('common.cancel')}</SecondaryButton></View>
-                <View className="flex-1"><PrimaryButton fullWidth disabled={joining || !joinCode.trim()} onPress={() => { setJoining(true); setJoinError(""); void joinRoomByCode(accessToken, joinCode).then((joined) => { setJoinOpen(false); setJoinCode(""); setRoom(joined); }).catch(() => setJoinError(t("sharedFocus.joinFailed"))).finally(() => setJoining(false)); }}>{t("sharedFocus.joinSession")}</PrimaryButton></View>
+                <View className="flex-1"><PrimaryButton fullWidth disabled={joining || !joinCode.trim()} onPress={() => { setJoining(true); setJoinError(""); void joinRoomByCode(accessToken, joinCode).then((joined) => { setJoinOpen(false); setJoinCode(""); setRoomState(joined, "join-by-code"); }).catch((cause) => { if (__DEV__) console.info("[SharedFocusState] request failed source=join-by-code", cause); setJoinError(t("sharedFocus.joinFailed")); }).finally(() => setJoining(false)); }}>{t("sharedFocus.joinSession")}</PrimaryButton></View>
               </View>
             </View>
           </View>
         </Modal>
-      </View>
+      </SafeAreaView>
     );
   const active =
       !!room.commitment && ["active", "break"].includes(room.commitment.status),
@@ -358,7 +422,7 @@ export default function FocusRoomsScreen({
         <PageHeader
           title={room.title}
             subtitle={t("sharedFocus.collectiveEndHelp")}
-          onBack={() => (active ? setLeaveOpen(true) : setRoom(null))}
+          onBack={() => (active ? setLeaveOpen(true) : setRoomState(null, "room-header-back"))}
         />
       </View>}
       <ScrollView className="flex-1" contentContainerStyle={{ padding: active ? 0 : 16, paddingBottom: active ? 24 : 80, flexGrow: 1 }}>
@@ -413,7 +477,7 @@ export default function FocusRoomsScreen({
               </View>
               {controlError ? <Text className="mt-3 text-center" style={{ color: c.error }}>{controlError}</Text> : null}
             </View>
-            <View className="flex-row flex-wrap items-center justify-center gap-1"><UtilityButton theme={theme} label={t("sharedFocus.whiteNoise")} onPress={() => setSoundsOpen(true)} /><UtilityButton theme={theme} label={t("sharedFocus.ambient")} onPress={() => setSoundsOpen(true)} />{focusAudio.activeSound && focusAudio.isPlaying ? <Text className="px-2 text-xs font-bold" style={{ color: c.secondaryText }}>{focusAudio.activeSound.name}</Text> : null}<UtilityButton theme={theme} label={t("sharedFocus.exitFocus")} accent onPress={() => setLeaveOpen(true)} /></View>
+            <View className="flex-row flex-wrap items-center justify-center gap-1"><UtilityButton theme={theme} label={t("sharedFocus.whiteNoise")} onPress={() => setSoundsOpen(true)} /><UtilityButton theme={theme} label={t("sharedFocus.ambient")} onPress={() => setSoundsOpen(true)} /><UtilityButton theme={theme} label={t("sharedFocusChat.chat")} onPress={openChat} />{focusAudio.activeSound && focusAudio.isPlaying ? <Text className="px-2 text-xs font-bold" style={{ color: c.secondaryText }}>{focusAudio.activeSound.name}</Text> : null}<UtilityButton theme={theme} label={t("sharedFocus.exitFocus")} accent onPress={() => setLeaveOpen(true)} /></View>
           </View>
         ) : (
           <>
@@ -454,7 +518,7 @@ export default function FocusRoomsScreen({
                         .then(() =>
                           readyCommitment(accessToken, room.commitment!.id),
                         )
-                        .then(setRoom)
+                .then(createdRoom => setRoomState(createdRoom, "create-room"))
                     }
                   >
                     {room.members.find(
@@ -463,13 +527,13 @@ export default function FocusRoomsScreen({
                       ? `${t("sharedFocus.ready")} ✓`
                       : t("sharedFocus.imReady")}
                   </PrimaryButton>
-                  {room.ownerUserId === room.currentUserId ? <PrimaryButton disabled={!allReady} fullWidth onPress={() => void startCommitment(accessToken, room.commitment!.id).then(setRoom).catch(() => setControlError(t("sharedFocus.actionFailed")))}>{t("sharedFocus.startSession")}</PrimaryButton> : null}
+                  {room.ownerUserId === room.currentUserId ? <PrimaryButton disabled={!allReady} fullWidth onPress={() => void startCommitment(accessToken, room.commitment!.id).then(next => setRoomState(next, "start-commitment")).catch(() => setControlError(t("sharedFocus.actionFailed")))}>{t("sharedFocus.startSession")}</PrimaryButton> : null}
                 </View>
               ) : room.mode === "commitment" && !room.commitment ? (
                 <View className="mt-4">
                   <PrimaryButton
                     onPress={() =>
-                      void makeCommitment(accessToken, room.id).then(refresh)
+                      void makeCommitment(accessToken, room.id).then(() => refresh("create-commitment"))
                     }
                   >
                     {t("sharedFocus.createSession")}
@@ -516,9 +580,7 @@ export default function FocusRoomsScreen({
                       {invite.status === "pending" ? (
                         <SecondaryButton
                           onPress={() =>
-                            void revokeInvitation(accessToken, invite.id).then(
-                              refresh,
-                            )
+                            void revokeInvitation(accessToken, invite.id).then(() => refresh("revoke-invitation"))
                           }
                         >
                           {t("sharedFocus.revoke")}
@@ -556,7 +618,7 @@ export default function FocusRoomsScreen({
       {!terminal && !active ? <View className="absolute bottom-4 left-4 right-4">
         <PrimaryButton
           fullWidth
-          onPress={() => (active ? setLeaveOpen(true) : setRoom(null))}
+          onPress={() => (active ? setLeaveOpen(true) : setRoomState(null, "leave-room"))}
         >
           {t("sharedFocus.leave")}
         </PrimaryButton>
@@ -707,6 +769,7 @@ export default function FocusRoomsScreen({
         </View>
       </Modal>
       <FocusSoundsSheet visible={soundsOpen} theme={theme} activeSound={focusAudio.activeSound} isPlaying={focusAudio.isPlaying} muted={focusAudio.muted} volume={focusAudio.volume} onClose={() => setSoundsOpen(false)} onMuteToggle={focusAudio.toggleMuted} onPause={focusAudio.pause} onPlay={focusAudio.play} onStop={focusAudio.stop} onVolumeChange={focusAudio.setVolume} />
+      <Modal visible={chatOpen} transparent animationType="slide" onRequestClose={() => setChatOpen(false)}><KeyboardAvoidingView className="flex-1 justify-end bg-black/60" behavior={Platform.OS === "ios" ? "padding" : "height"}><View className="h-4/5 rounded-t-3xl px-5 pt-5" style={{ backgroundColor: c.card, paddingBottom: Math.max(insets.bottom, 16) }}><View className="flex-row items-center justify-between"><Text className="text-xl font-black" style={{ color: c.text }}>{t("sharedFocusChat.title")}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("sharedFocusChat.close")} onPress={() => setChatOpen(false)}><Text style={{ color: c.accentInk }}>{t("sharedFocusChat.close")}</Text></Pressable></View><Text className="mt-1 text-xs" style={{ color: c.secondaryText }}>{room?.aiFocusCoachEnabled !== false ? t("sharedFocusChat.coachOn") : t("sharedFocusChat.coachOff")}</Text><ScrollView className="mt-4 flex-1" contentContainerClassName="gap-3 pb-3">{chatLoading && chatMessages.length === 0 ? <Text style={{ color: c.secondaryText }}>{t("sharedFocusChat.loading")}</Text> : chatError && chatMessages.length === 0 ? <View className="gap-3"><Text style={{ color: c.error }}>{chatError}</Text><SecondaryButton onPress={() => loadChat(room?.id)}>{t("sharedFocusChat.retry")}</SecondaryButton></View> : chatMessages.length ? chatMessages.map(message => <View key={message.id} className="rounded-xl p-3" style={{ backgroundColor: message.senderType === "ai" ? c.accentSoft : c.background }}><Text className="font-bold" style={{ color: c.text }}>{message.senderType === "ai" ? t("sharedFocusChat.coach") : message.senderName}</Text><Text className="mt-1" style={{ color: c.text }}>{message.content}</Text></View>) : <Text style={{ color: c.secondaryText }}>{t("sharedFocusChat.empty")}</Text>}</ScrollView>{chatError && chatMessages.length > 0 ? <Text style={{ color: c.error }}>{chatError}</Text> : null}<View className="flex-row gap-2"><TextInput value={chatDraft} onChangeText={setChatDraft} placeholder={t("sharedFocusChat.placeholder")} placeholderTextColor={c.secondaryText} className="min-h-12 flex-1 rounded-xl border px-3" style={{ color: c.text, borderColor: c.border }} /><PrimaryButton disabled={!chatDraft.trim() || chatSending} onPress={sendChat}>{t("sharedFocusChat.send")}</PrimaryButton></View></View></KeyboardAvoidingView></Modal>
     </SafeAreaView>
   );
 }

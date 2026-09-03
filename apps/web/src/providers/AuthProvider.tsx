@@ -11,6 +11,7 @@ import {
   forgotPassword,
   login,
   logout as logoutRequest,
+  validateAccessToken,
   register,
   resetPassword,
   verifyResetCode,
@@ -119,19 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => { active = false; window.clearTimeout(readyTimer); window.removeEventListener('message', onMessage); document.removeEventListener('message', onMessage as EventListener); };
     }
 
-    const storedSession = window.localStorage.getItem(AUTH_STORAGE_KEY);
-
-    if (storedSession) {
-      try {
-        if (active) setSession(JSON.parse(storedSession) as AuthSession);
-      } catch {
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-      }
-    }
+    let storedSession: AuthSession | null = null;
+    const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (stored) { try { storedSession = JSON.parse(stored) as AuthSession; } catch { window.localStorage.removeItem(AUTH_STORAGE_KEY); } }
 
     authService
       .getSocialSession()
-      .then((socialSession) => {
+      .then(async (socialSession) => {
         if (!active) return;
 
         const socialMessage = authService.getSocialMessage();
@@ -145,12 +140,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (!socialSession) return;
+        if (socialSession) {
+          saveSession(socialSession);
+          setOauthError(''); setOauthMessage(''); authService.clearSocialSessionFromUrl();
+          return;
+        }
 
-        saveSession(socialSession);
-        setOauthError('');
-        setOauthMessage('');
-        authService.clearSocialSessionFromUrl();
+        if (!storedSession?.accessToken) return;
+        if (import.meta.env.DEV) console.info('[WebAuth] hydrated authenticated=true tokenPresent=true');
+        try {
+          await validateAccessToken(storedSession.accessToken);
+          if (active) setSession(storedSession);
+        } catch {
+          // There is no refresh-token contract. A rejected persisted token must
+          // not leave the shell authenticated or trigger a request storm.
+          window.localStorage.removeItem(AUTH_STORAGE_KEY);
+          setAuthToken(null);
+          if (active) setSession(null);
+          if (import.meta.env.DEV) console.info('[WebAuth] persisted session rejected status=401');
+        }
       })
       .catch((error) => {
         if (active) {

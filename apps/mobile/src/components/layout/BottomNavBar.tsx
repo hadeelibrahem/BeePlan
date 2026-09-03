@@ -40,7 +40,7 @@ const MORE_DESTINATIONS: Array<{ label: string; labelKey?: string; route: MoreTa
   { label: 'navigation.whiteboards', route: 'Whiteboards', icon: 'whiteboard' },
   { label: 'feedback.title', route: 'Feedback', icon: 'lightbulb' },
   { label: 'navigation.challenges', route: 'Challenges', icon: 'trophy' },
-  { label: 'Supervision', route: 'Supervision', icon: 'people' },
+  { label: 'navigation.appGuard', route: 'Supervision', icon: 'focus' },
 ]
 
 /** The single visual tab bar for navigator-backed main screens. */

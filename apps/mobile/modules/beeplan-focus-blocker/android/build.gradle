@@ -40,6 +40,8 @@ android {
   defaultConfig {
     minSdk safeExtGet('minSdkVersion', 24)
     targetSdk safeExtGet('targetSdkVersion', 35)
+    // Supplied by the host Gradle project; public material only. Empty means fail closed.
+    buildConfigField 'String', 'SUPERVISION_GRANT_PUBLIC_KEY_PEM', '"' + (rootProject.ext.has('supervisionGrantPublicKeyPem') ? rootProject.ext.get('supervisionGrantPublicKeyPem').replace('\n', '\\n').replace('"', '\\"') : '') + '"'
   }
 
   compileOptions {
@@ -53,6 +55,7 @@ android {
 
   buildFeatures {
     compose true
+    buildConfig true
   }
 }
 

@@ -9,7 +9,7 @@
     "comingSoon": "Coming Soon"
   },
   "navigation": {
-    "dashboard":"Dashboard","tasks":"Tasks","focus":"Focus","dailyPlanner":"AI Planner","reminders":"Reminders","calendar":"Calendar","notes":"Notes","whiteboard":"Personal Whiteboard","timeCapsule":"Time Capsule","people":"People","feedback":"Feedback & Ideas","challenges":"Challenges","notifications":"Notifications","analytics":"Analytics","achievementMuseum":"Achievement Museum","settings":"Settings","main":"Main","workspace":"Workspace","system":"System"
+    "dashboard":"Dashboard","tasks":"Tasks","focus":"Focus","dailyPlanner":"AI Planner","reminders":"Reminders","calendar":"Calendar","notes":"Notes","whiteboard":"Personal Whiteboard","timeCapsule":"Time Capsule","people":"People","feedback":"Feedback & Ideas","challenges":"Challenges","supervision":"AI App Guard","notifications":"Notifications","analytics":"Analytics","achievementMuseum":"Achievement Museum","settings":"Settings","main":"Main","workspace":"Workspace","system":"System"
   },
   "taskLabels": {
     "status": {
@@ -1253,6 +1253,8 @@
     "email": "Email",
     "role": "Role",
     "status": "Status",
+    "challengeStartDate": "Start date",
+    "challengeEndDate": "End date",
     "joined": "Joined",
     "actions": "Actions",
     "noUsersFound": "No users found",
@@ -1878,6 +1880,18 @@
     "transferFailed": "Could not transfer ownership.",
     "menu": "More member actions"
   },
-  "achievementMuseum": {"title":"Achievement Museum","journey":"Your Journey","subtitle":"A collection of the moments, projects, and milestones that shaped your path.","collection":"Collection","search":"Search your museum...","add":"Add Achievement","count":"{{count}} achievement","countPlural":"{{count}} achievements","since":"Since {{year}}","clear":"Clear","yourCollection":"Your Collection","featured":"Featured Exhibit","explore":"Explore exhibit","hall":"Hall {{number}}","moments":"{{count}} moment worth remembering","momentsPlural":"{{count}} moments worth remembering","emptyTitle":"Your museum is waiting for its first story.","emptyHelp":"Save the projects, milestones, and moments you want to remember years from now.","emptyAction":"Add Your First Achievement","loading":"Loading your museum...","category":{"All":"All","Education":"Education","Career":"Career","Skills":"Skills","Personal":"Personal","Learning":"Learning","Health":"Health","Financial":"Financial","Milestone":"Milestone","Other":"Other"},"error":"Unable to load your achievements.","review":"Review {{year}} →"}
-
+  "achievementMuseum": {"title":"Achievement Museum","journey":"Your Journey","subtitle":"A collection of the moments, projects, and milestones that shaped your path.","collection":"Collection","search":"Search your museum...","add":"Add Achievement","count":"{{count}} achievement","countPlural":"{{count}} achievements","since":"Since {{year}}","clear":"Clear","yourCollection":"Your Collection","featured":"Featured Exhibit","explore":"Explore exhibit","hall":"Hall {{number}}","moments":"{{count}} moment worth remembering","momentsPlural":"{{count}} moments worth remembering","emptyTitle":"Your museum is waiting for its first story.","emptyHelp":"Save the projects, milestones, and moments you want to remember years from now.","emptyAction":"Add Your First Achievement","loading":"Loading your museum...","category":{"All":"All","Education":"Education","Career":"Career","Skills":"Skills","Personal":"Personal","Learning":"Learning","Health":"Health","Financial":"Financial","Milestone":"Milestone","Other":"Other"},"error":"Unable to load your achievements.","review":"Review {{year}} →"},
+  "supervision": {
+    "title":"Supervision","heading":"Manage progress and restrictions","description":"Study progress and approved device restrictions stay private and consent-based.","userFallback":"BeePlan user","durationMinutes":"{{count}} minutes",
+    "loading":"Loading supervision data…",
+    "empty":{"title":"No supervised people yet","description":"Accepted supervision relationships will appear here."},
+    "actions":{"openDashboard":"Open dashboard","people":"People","retry":"Try again","createRestriction":"Create Restriction","creatingRestriction":"Creating restriction…"},
+    "status":{"active":"Active","scheduled":"Scheduled","paused":"Paused","cancelled":"Cancelled","overridden":"Overridden","completed":"Completed"},"levels":{"planOnly":"Plan only","accountability":"Accountability","progressOnly":"Progress only","deviceRestrictions":"Device restrictions"},"app":{"strictModeIntervention":"Strict Mode intervention","accountabilityOnly":"Accountability only"},
+    "restrictions":{"title":"Active Restrictions","description":"Current Guardian-created study rules.","restrictedApps":"Restricted apps","approvedApps":"Approved apps","approvedAppsUnavailable":"Approved apps are unavailable.","endsWhen":"Ends when","enforcement":"Enforcement","noneActive":"No restrictions are currently active."},
+    "create":{"title":"Create Restriction","description":"Choose approved apps and when the restriction should end.","fields":{"restriction":"Restriction","releaseCondition":"Release condition","task":"Task","maximumDuration":"Maximum duration"},"selectTask":"Select supervised task"},
+    "options":{"untilTime":"Until time","untilTaskCompleted":"Until task completed","taskOrTime":"Task or time"},"activity":{"title":"Activity","empty":"No activity yet."},"defaults":{"restrictionName":"Study Mode"},
+    "audit":{"appManagementConsentUpdated":"App management consent updated","appManagementConsentRevoked":"App management consent revoked","permissionsUpdated":"Sharing permissions updated","accepted":"Supervision accepted","rejected":"Supervision rejected","requested":"Supervision requested","revoked":"Supervision revoked","ruleCreated":"Restriction created","ruleUpdated":"Restriction updated","overrideUsed":"Restriction override used","rulePaused":"Restriction paused","ruleResumed":"Restriction resumed","ruleEnded":"Restriction ended","ruleStarted":"Restriction started","ruleTaskCompleted":"Restriction ended when the task was completed","ruleTimeExpired":"Restriction ended when time expired"},"errors":{"loadFailed":"Could not load supervision data.","detailLoadFailed":"Could not load restriction details. Try again by reopening this person.","createFailed":"Could not create restriction."}
+  },
+  "appGuard": {"title":"AI App Guard","subtitle":"Bee helps you pause before opening apps you've chosen to limit.","enabled":"ON","disabled":"OFF","temporaryAccess":"Temporary access","strictness":"Bee strictness","flexible":"Flexible","balanced":"Balanced","strict":"Strict","appsToLimit":"Apps to limit","emptyTitle":"No apps limited yet","emptyHelp":"Choose apps on your Android device where you'd like Bee to help you stay intentional.","manageOnAndroid":"Manage apps on your Android device","recentRequests":"Recent requests","approved":"Approved · {{count}} min","notApproved":"Not approved","noRequests":"No requests yet.","updated":"App Guard updated","loading":"Loading AI App Guard…"},
+  "sharedFocusChat": {"chat":"Chat","title":"Focus Chat","close":"Close","send":"Send","retry":"Retry","placeholder":"Message...","loading":"Loading chat...","empty":"No messages yet. Stay focused together.","coach":"Bee Focus Coach","coachOn":"AI Focus Coach on","coachOff":"AI Focus Coach off","loadFailed":"Unable to load chat.","sendFailed":"Message could not be sent."}
 }

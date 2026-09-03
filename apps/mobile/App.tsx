@@ -53,6 +53,7 @@ import FocusSessionScreen from './src/screens/FocusSessionScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import { useFocusSession } from './src/lib/useFocusSession';
+import { listRooms } from './src/lib/focusRoomsApi';
 import { syncWidget, pushSignedOutWidget } from './src/lib/widgetSync';
 import { StrictFocusProvider } from './src/features/focus/StrictFocusContext';
 import TasksDashboardScreen from './src/screens/TasksDashboardScreen';
@@ -225,7 +226,10 @@ function ThemedApp() {
       // open the live full-screen session when one exists.
       if (url.includes('focus') && url.includes('action=resume') && focusHasSessionRef.current) {
         requestAnimationFrame(() => {
-          if (navigationRef.isReady()) navigationRef.navigate('FocusSession');
+          if (navigationRef.isReady()) {
+            if (__DEV__) console.info('[NavTrace] entering FocusSession', { source: 'widget-deep-link-resume', currentRoute: navigationRef.getCurrentRoute()?.name ?? 'none', focusHasSession: focusHasSessionRef.current });
+            navigationRef.navigate('FocusSession');
+          }
         });
       }
     };
@@ -481,6 +485,8 @@ function ThemedApp() {
       loadDashboardSummary();
     },
   });
+  const [sharedFocusForegroundActive, setSharedFocusForegroundActive] = useState(false);
+  const [sharedStartup, setSharedStartup] = useState<{ resolved: boolean; roomId: string | null }>({ resolved: false, roomId: null });
 
   // Keep the deep-link handler's view of session presence current.
   useEffect(() => {
@@ -519,16 +525,45 @@ function ThemedApp() {
     return () => subscription.remove();
   }, [user, accessToken, loadDashboardSummary]);
 
-  // Restore the full-screen workspace once if a session was live at launch.
+  // Resolve Shared Focus from its server-backed room snapshot before choosing a
+  // foreground focus experience. Unknown Shared Focus state must not be
+  // treated as absent while local AsyncStorage is hydrating.
+  useEffect(() => {
+    let active = true;
+    if (!user || !accessToken) {
+      setSharedStartup({ resolved: true, roomId: null });
+      return;
+    }
+    if (__DEV__) console.info('[StartupFocus] shared hydration start');
+    setSharedStartup({ resolved: false, roomId: null });
+    void listRooms(accessToken)
+      .then((rooms) => {
+        const shared = rooms.find((room) => room.isCurrentUserMember && (room.commitment?.status === 'active' || room.commitment?.status === 'break'));
+        if (!active) return;
+        if (__DEV__) console.info(`[StartupFocus] shared hydration complete active=${Boolean(shared)}${shared ? ` roomId=${shared.id}` : ''}`);
+        setSharedStartup({ resolved: true, roomId: shared?.id ?? null });
+      })
+      .catch(() => { if (active) setSharedStartup({ resolved: true, roomId: null }); });
+    return () => { active = false; };
+  }, [accessToken, user?.id]);
+
+  // Restore one focus foreground once after both local and Shared hydration.
   const focusRestoredRef = useRef(false);
   const deletingTaskRef = useRef<Promise<void> | null>(null);
   useEffect(() => {
-    if (focusRestoredRef.current) return;
-    if (user && focus.hydrated && focus.hasSession) {
+    if (focusRestoredRef.current || !user || !focus.hydrated || !sharedStartup.resolved) return;
+    const currentRoute = navigationRef.getCurrentRoute()?.name;
+    if (__DEV__) console.info(`[StartupFocus] local hydration complete hasSession=${focus.hasSession}`);
+    if (sharedStartup.roomId) {
       focusRestoredRef.current = true;
+      if (__DEV__) console.info(`[StartupFocus] restoring route=FocusRooms roomId=${sharedStartup.roomId}`);
+      navigationRef.navigate('FocusRooms', { roomId: sharedStartup.roomId });
+    } else if (focus.hasSession && !sharedFocusForegroundActive && currentRoute !== 'FocusRooms') {
+      focusRestoredRef.current = true;
+      if (__DEV__) console.info('[StartupFocus] restoring route=FocusSession');
       navigationRef.navigate('FocusSession');
     }
-  }, [user, focus.hydrated, focus.hasSession]);
+  }, [user, focus.hydrated, focus.hasSession, sharedStartup.resolved, sharedStartup.roomId, sharedFocusForegroundActive]);
 
   useEffect(() => {
     if (!user || !accessToken) return;
@@ -741,15 +776,6 @@ function ThemedApp() {
     />
   ), []);
 
-  if (loading) {
-    return (
-      <View style={{ alignItems: 'center', backgroundColor: theme.colors.background, flex: 1, justifyContent: 'center' }}>
-        <StatusBar backgroundColor={theme.colors.background} style={theme.statusBarStyle} translucent />
-        <ActivityIndicator color={theme.colors.accent} />
-      </View>
-    );
-  }
-
   // Stage 2A adapter: Dashboard is navigator-backed; destinations remain on
   // the legacy flow until their own tab/stack migrations land.
   const DashboardTab = () => {
@@ -776,8 +802,8 @@ function ThemedApp() {
       onViewAiDailyPlanner={() => rootNavigation?.navigate('AiDailyPlanner')}
       onViewNotifications={() => rootNavigation?.navigate('Notifications')}
       unreadCount={unreadNotificationCount}
-      onStartFocus={async (item) => { const started = await focus.start({ id: item.taskId, title: item.taskTitle, subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle }, 'pomodoro', item.estimatedMinutes ?? 25); if (started) rootNavigation?.navigate('FocusSession'); }}
-      onContinueFocus={() => rootNavigation?.navigate('FocusSession')}
+      onStartFocus={async (item) => { const started = await focus.start({ id: item.taskId, title: item.taskTitle, subtaskId: item.subtaskId, subtaskTitle: item.subtaskTitle }, 'pomodoro', item.estimatedMinutes ?? 25); if (started) { if (__DEV__) console.info('[NavTrace] entering FocusSession', { source: 'dashboard-start-local-focus', focusHasSession: focus.hasSession, localSessionId: focus.active?.sessionId ?? 'new' }); rootNavigation?.navigate('FocusSession'); } }}
+      onContinueFocus={() => { if (__DEV__) console.info('[NavTrace] entering FocusSession', { source: 'dashboard-continue-local-focus', focusHasSession: focus.hasSession, localSessionId: focus.active?.sessionId ?? 'none' }); rootNavigation?.navigate('FocusSession'); }}
     />
     <AddTaskSheet
       visible={addTaskSheetVisible}
@@ -829,7 +855,7 @@ function ThemedApp() {
         accessToken={accessToken ?? ''}
         onTaskUpdated={handleTaskUpdated}
         focus={focus}
-        onOpenWorkspace={() => rootNavigation?.navigate('FocusSession')}
+        onOpenWorkspace={() => { if (__DEV__) console.info('[NavTrace] entering FocusSession', { source: 'focus-tab-open-local-workspace', focusHasSession: focus.hasSession, localSessionId: focus.active?.sessionId ?? 'none' }); rootNavigation?.navigate('FocusSession'); }}
         onOpenRooms={() => rootNavigation?.navigate('FocusRooms')}
       />
     );
@@ -916,13 +942,16 @@ function ThemedApp() {
       onViewTask={(taskId) => navigation.navigate('TaskDetails', { taskId })}
       onStartFocus={async (task) => {
         const started = await focus.start({ id: task.taskId ?? task.id, title: task.parentTitle ?? task.title, subtaskId: task.itemType === 'subtask' ? task.id : undefined, subtaskTitle: task.itemType === 'subtask' ? task.title : undefined }, 'pomodoro', task.estimatedTimeMinutes ?? 25)
-        if (started) navigation.replace('FocusSession')
+        if (started) { if (__DEV__) console.info('[NavTrace] entering FocusSession', { source: 'random-start-local-focus', focusHasSession: focus.hasSession, localSessionId: focus.active?.sessionId ?? 'new' }); navigation.replace('FocusSession') }
       }}
     />
   );
-  const FocusRoomsStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'FocusRooms'>) => (
-    <FocusRoomsScreen accessToken={accessToken ?? ''} initialRoomId={props.route.params?.roomId} onBack={() => props.navigation.goBack()} />
-  );
+  // React Navigation treats a changed `component` reference as a replacement.
+  // Keep this route component stable across dashboard/session renders so an
+  // active Shared Focus room is not unmounted back to its lobby.
+  const FocusRoomsStackRoute = useCallback((props: NativeStackScreenProps<RootStackParamList, 'FocusRooms'>) => (
+    <FocusRoomsScreen accessToken={accessToken ?? ''} initialRoomId={props.route.params?.roomId} onBack={() => props.navigation.goBack()} onSharedFocusForegroundChange={setSharedFocusForegroundActive} />
+  ), [accessToken]);
   const AiTaskBuilderStackRoute = (props: NativeStackScreenProps<RootStackParamList, 'AiTaskBuilder'>) => (
     <AiTaskBuilderScreen accessToken={accessToken ?? ''} onCancel={() => {
       if (props.navigation.canGoBack()) props.navigation.goBack()
@@ -998,6 +1027,15 @@ function ThemedApp() {
   // StrictFocusProvider is the ROOT element of BOTH return paths. React keeps a
   // single instance across the tab-navigator ↔ focusSession transition, so
   // native app-blocking is never restarted merely because we switch screens.
+  if (loading) {
+    return (
+      <View style={{ alignItems: 'center', backgroundColor: theme.colors.background, flex: 1, justifyContent: 'center' }}>
+        <StatusBar backgroundColor={theme.colors.background} style={theme.statusBarStyle} translucent />
+        <ActivityIndicator color={theme.colors.accent} />
+      </View>
+    );
+  }
+
   if (user) {
     return (
       <StrictFocusProvider active={focus.active} remainingMs={focus.remainingMs}>

@@ -48,7 +48,9 @@ export type FocusRoom = {
   currentUserId: string;
   isCurrentUserMember: boolean;
   canManageInvitations: boolean;
+  aiFocusCoachEnabled?: boolean;
 };
+export type FocusRoomChatMessage = { id: string; roomId: string; senderUserId: string | null; senderType: 'user' | 'ai' | 'system'; senderName: string; content: string; metadata: Record<string, unknown>; createdAt: string };
 async function request<T>(
   token: string,
   path: string,
@@ -72,6 +74,9 @@ export const listFocusRooms = (t: string) =>
   request<FocusRoom[]>(t, "/focus-rooms");
 export const getFocusRoom = (t: string, id: string) =>
   request<FocusRoom>(t, `/focus-rooms/${id}`);
+export const getFocusRoomMessages = (t: string, id: string) => request<{ messages: FocusRoomChatMessage[]; nextBefore: string | null }>(t, `/focus-rooms/${id}/chat/messages`);
+export const sendFocusRoomMessage = (t: string, id: string, content: string) => request<FocusRoomChatMessage>(t, `/focus-rooms/${id}/chat/messages`, 'POST', { content });
+export const setFocusRoomCoach = (t: string, id: string, enabled: boolean) => request<{ aiFocusCoachEnabled: boolean }>(t, `/focus-rooms/${id}/ai-focus-coach`, 'PATCH', { enabled });
 export const createFocusRoom = (
   t: string,
   body: {
@@ -133,7 +138,7 @@ export const presence = (
 export async function subscribeRoomEvents(
   token: string,
   roomId: string,
-  onEvent: (event: { id?: string; type: string }) => void,
+  onEvent: (event: { id?: string; type: string; payload?: { message?: FocusRoomChatMessage } }) => void,
   signal: AbortSignal,
 ) {
   const response = await fetch(`${base}/focus-rooms/${roomId}/events`, {
@@ -142,6 +147,7 @@ export async function subscribeRoomEvents(
   });
   if (!response.ok || !response.body)
     throw new Error("Realtime connection failed.");
+  if (import.meta.env.DEV) console.info(`[FocusChat:Web] stream open roomId=${roomId}`);
   const reader = response.body.getReader(),
     decoder = new TextDecoder();
   let buffer = "";

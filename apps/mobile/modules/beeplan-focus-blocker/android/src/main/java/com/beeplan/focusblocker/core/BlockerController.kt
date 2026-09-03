@@ -2,6 +2,7 @@ package com.beeplan.focusblocker.core
 
 import android.content.Context
 import android.util.Log
+import com.beeplan.focusblocker.BuildConfig
 import com.beeplan.focusblocker.events.BlockerEvent
 import com.beeplan.focusblocker.events.BlockerEventBus
 import com.beeplan.focusblocker.notification.FocusNotificationManager
@@ -13,13 +14,24 @@ import com.beeplan.focusblocker.session.FocusSession
 import com.beeplan.focusblocker.session.SessionStore
 import com.beeplan.focusblocker.session.GuardianRestrictionSource
 import com.beeplan.focusblocker.session.GuardianRestrictionStore
+import com.beeplan.focusblocker.supervision.SignedGrantStore
+import com.beeplan.focusblocker.supervision.SignedTemporaryGrantVerifier
 import com.beeplan.focusblocker.stats.BlockEvent
 import com.beeplan.focusblocker.stats.BlockEventStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.UUID
 
 /**
  * Single source of truth for strict focus mode.
@@ -40,6 +52,8 @@ object BlockerController {
   // Collaborators are lazy so `initialize` is cheap and re-entrant.
   private val sessionStore by lazy { SessionStore(appContext) }
   private val guardianStore by lazy { GuardianRestrictionStore(appContext) }
+  private val signedGrantStore by lazy { SignedGrantStore(appContext) }
+  @Volatile private var supervisedUserId: String? = null
   private val eventStore by lazy { BlockEventStore(appContext) }
   private val usageAccess by lazy { UsageAccessManager(appContext) }
   private val overlayPermission by lazy { OverlayPermissionManager(appContext) }
@@ -57,7 +71,7 @@ object BlockerController {
   )
   val status: StateFlow<FocusStatus> = _status.asStateFlow()
 
-  /** package -> wall-clock expiry of a temporary "I really need this app" grant. */
+  /** package -> wall-clock expiry of a server-authorized temporary access grant. */
   private val temporarilyAllowed = ConcurrentHashMap<String, Long>()
 
   /** package -> when its block screen was raised, used to measure interruption. */
@@ -65,6 +79,23 @@ object BlockerController {
 
   /** Guards against raising more than one block screen at a time. */
   private val blockScreenActive = AtomicBoolean(false)
+  data class AppGuardRequestResult(val requestId: String, val state: String, val reason: String? = null, val expiresAt: Long? = null)
+  data class PendingAppGuardRequest(
+    val requestId: String,
+    val packageName: String,
+    val justification: String,
+    /** Native-owned requests must never be claimed by the JS fallback. */
+    val nativeOwned: Boolean,
+  )
+  private val _appGuardRequestResult = MutableStateFlow<AppGuardRequestResult?>(null)
+  val appGuardRequestResult: StateFlow<AppGuardRequestResult?> = _appGuardRequestResult.asStateFlow()
+  @Volatile private var pendingAppGuardRequestId: String? = null
+  @Volatile private var pendingAppGuardRequest: PendingAppGuardRequest? = null
+  private val appGuardRequestGate = AppGuardRequestGate()
+  @Volatile private var lastAppGuardDiagnosticPackage: String? = null
+  private data class AppGuardRequestClient(val apiBaseUrl: String, val accessToken: String, val userId: String)
+  private val appGuardRequestScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  @Volatile private var appGuardRequestClient: AppGuardRequestClient? = null
 
   /** The package whose launch is currently being blocked, for the block screen. */
   @Volatile
@@ -78,6 +109,7 @@ object BlockerController {
     if (!::appContext.isInitialized) {
       appContext = context.applicationContext
     }
+    if (supervisedUserId == null) supervisedUserId = signedGrantStore.userId()
     // Rehydrate a persisted session (e.g. after process death) if we have none.
     if (session == null) {
       sessionStore.load()?.let { restored ->
@@ -179,10 +211,122 @@ object BlockerController {
   }
 
   fun allowTemporarily(packageName: String, durationMs: Long) {
+    // JS focus-session convenience grants can never override guardian restrictions.
+    if (guardianSources.values.any { packageName in it.packages }) return
     temporarilyAllowed[packageName] = System.currentTimeMillis() + durationMs
     // Let the user through immediately: drop the current block screen.
     onBlockScreenDismissed(packageName)
   }
+  fun installSignedTemporaryGrant(token: String, userId: String): Boolean { val grant = SignedTemporaryGrantVerifier.verify(token, userId) ?: run { Log.w(TAG, "[AppGuard:Native] signed grant rejected"); return false }; supervisedUserId = userId; signedGrantStore.save(token, userId); temporarilyAllowed[grant.packageName] = grant.expiresAt; Log.i(TAG, "[AppGuard:Native] signed grant accepted package=${grant.packageName}"); onBlockScreenDismissed(grant.packageName); return true }
+  fun isAppGuardRestrictionActive(): Boolean = guardianSources.containsKey("app-guard")
+  /**
+   * Installs the minimum session capability needed by the native BlockActivity.
+   * It remains process-memory only and is cleared on logout/session replacement.
+   */
+  fun configureAppGuardRequestClient(apiBaseUrl: String?, accessToken: String?, userId: String?): Boolean {
+    val baseUrl = apiBaseUrl?.trim()?.trimEnd('/')
+    appGuardRequestClient = if (!baseUrl.isNullOrBlank() && !accessToken.isNullOrBlank() && !userId.isNullOrBlank() &&
+      (baseUrl.startsWith("https://") || baseUrl.startsWith("http://"))) {
+      AppGuardRequestClient(baseUrl, accessToken, userId)
+    } else null
+    if (appGuardRequestClient == null) {
+      pendingAppGuardRequestId?.let { requestId ->
+        deliverAppGuardResult(requestId, "error", "We couldn't review your request right now. This app remains restricted.", null, null)
+      }
+    }
+    return appGuardRequestClient != null
+  }
+
+  /** Native execution avoids relying on a suspended React Native continuation. */
+  fun requestBeeJustification(packageName: String, justification: String): String {
+    val requestId = appGuardRequestGate.begin { UUID.randomUUID().toString() }
+    if (requestId == null) {
+      val existingRequestId = appGuardRequestGate.activeId()
+      if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] submission ignored reason=already_in_flight requestId=${existingRequestId ?: "unknown"}")
+      return existingRequestId ?: ""
+    }
+    val client = appGuardRequestClient
+    val request = PendingAppGuardRequest(requestId, packageName, justification, nativeOwned = client != null)
+    pendingAppGuardRequestId = requestId
+    pendingAppGuardRequest = request
+    _appGuardRequestResult.value = null
+    if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] submission accepted requestId=$requestId")
+    if (client != null) {
+      appGuardRequestScope.launch { submitNativeAppGuardRequest(client, request) }
+      return requestId
+    }
+    if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] emitting justification event requestId=$requestId")
+    BlockerEventBus.emit(BlockerEvent.BeeJustificationRequested(requestId, packageName, justification))
+    if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] event emission completed requestId=$requestId")
+    return requestId
+  }
+
+  private fun submitNativeAppGuardRequest(client: AppGuardRequestClient, request: PendingAppGuardRequest) {
+    val startedAt = System.currentTimeMillis()
+    try {
+      if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] native request started requestId=${request.requestId}")
+      val connection = (URL("${client.apiBaseUrl}/supervision/app-guard/access-requests").openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        connectTimeout = 42_000
+        readTimeout = 42_000
+        doOutput = true
+        setRequestProperty("Authorization", "Bearer ${client.accessToken}")
+        setRequestProperty("Content-Type", "application/json")
+        setRequestProperty("Accept", "application/json")
+      }
+      val payload = JSONObject().put("packageName", request.packageName).put("justification", request.justification).put("requestId", request.requestId)
+      connection.outputStream.use { it.write(payload.toString().toByteArray(StandardCharsets.UTF_8)) }
+      val status = connection.responseCode
+      val responseText = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }
+      connection.disconnect()
+      if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] native request completed requestId=${request.requestId} status=$status durationMs=${System.currentTimeMillis() - startedAt}")
+      if (status !in 200..299 || responseText.isNullOrBlank()) {
+        deliverNativeAppGuardFailure(request.requestId, AppGuardHttpFailure.message(status, responseText))
+        return
+      }
+      val response = JSONObject(responseText)
+      when (response.optString("decision")) {
+        "deny" -> deliverNativeAppGuardResult(request.requestId, "deny", response.optString("reason").ifBlank { null }, null, client)
+        "allow" -> {
+          val grant = response.optString("signedGrant").ifBlank { null }
+          if (grant == null) deliverNativeAppGuardFailure(request.requestId)
+          else deliverNativeAppGuardResult(request.requestId, "allow", null, grant, client)
+        }
+        else -> deliverNativeAppGuardFailure(request.requestId)
+      }
+    } catch (_: Exception) {
+      if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] API request failed requestId=${request.requestId} durationMs=${System.currentTimeMillis() - startedAt}")
+      deliverNativeAppGuardFailure(request.requestId)
+    }
+  }
+
+  private fun deliverNativeAppGuardResult(requestId: String, decision: String, reason: String?, signedGrant: String?, client: AppGuardRequestClient) {
+    // A logout/session replacement or a newer Ask Bee request can never complete an old request.
+    if (appGuardRequestClient !== client || requestId != pendingAppGuardRequestId) return
+    deliverAppGuardResult(requestId, decision, reason, signedGrant, client.userId)
+  }
+
+  private fun deliverNativeAppGuardFailure(requestId: String, reason: String = "We couldn't review your request right now. This app remains restricted.") {
+    if (requestId != pendingAppGuardRequestId) return
+    deliverAppGuardResult(requestId, "error", reason, null, null)
+  }
+  /** Kept only in memory until JS claims a JS-owned fallback request. */
+  fun pendingAppGuardRequest(): PendingAppGuardRequest? = pendingAppGuardRequest?.takeUnless { it.nativeOwned }
+  fun deliverAppGuardResult(requestId: String, decision: String, reason: String?, signedGrant: String?, userId: String?): Boolean {
+    if (requestId != pendingAppGuardRequestId) {
+      if (BuildConfig.DEBUG) Log.w(TAG, "[AppGuard:Native] result rejected as stale requestId=$requestId")
+      return false
+    }
+    val result = if (decision == "allow" && signedGrant != null && userId != null && installSignedTemporaryGrant(signedGrant, userId)) {
+      val expiry = SignedTemporaryGrantVerifier.verify(signedGrant, userId)?.expiresAt
+      AppGuardRequestResult(requestId, "approved", expiresAt = expiry)
+    } else if (decision == "deny") AppGuardRequestResult(requestId, "denied", reason)
+    else AppGuardRequestResult(requestId, "error", reason ?: "We couldn't review your request right now. This app remains restricted.")
+    _appGuardRequestResult.value = result; pendingAppGuardRequestId = null; pendingAppGuardRequest = null; appGuardRequestGate.finish(requestId)
+    if (BuildConfig.DEBUG) Log.i(TAG, "[AppGuard:Native] request terminal state requestId=$requestId state=${if (result.state == "approved") "allow" else if (result.state == "denied") "deny" else "error"}")
+    return result.state != "error" || decision != "allow"
+  }
+  fun expireAppGuardRequest(requestId: String) { if (requestId == pendingAppGuardRequestId) deliverAppGuardResult(requestId, "error", "We couldn't review your request right now. This app remains restricted.", null, null) }
 
   fun statusMap(): Map<String, Any?> = currentStatus().toMap()
 
@@ -194,6 +338,20 @@ object BlockerController {
     if (effectiveSession() == null) FocusBlockerService.stop(appContext) else FocusBlockerService.start(appContext)
     publishStatus()
     return mapOf("sources" to guardianSources.keys.toList(), "blockedPackages" to guardianSources.values.flatMap { it.packages }.distinct())
+  }
+  fun setAppGuardSources(sources: List<GuardianRestrictionSource>): Map<String, Any> {
+    // App Guard owns only its source. Keep other long-lived sources intact;
+    // focus/strict-mode is independently unioned by effectiveSession().
+    val next = guardianSources.filterKeys { it != "app-guard" }.toMutableMap()
+    sources.filter { it.sourceId == "app-guard" && it.endsAtMs > System.currentTimeMillis() }.forEach { next[it.sourceId] = it }
+    guardianSources = next
+    lastAppGuardDiagnosticPackage = null
+    guardianStore.save(guardianSources.values)
+    if (effectiveSession() == null) FocusBlockerService.stop(appContext) else FocusBlockerService.start(appContext)
+    publishStatus()
+    val result = mapOf("sources" to guardianSources.keys.toList(), "blockedPackages" to guardianSources.values.flatMap { it.packages }.distinct())
+    Log.i(TAG, "[AppGuard:Native] restrictions updated enabled=${sources.isNotEmpty()} count=${sources.flatMap { it.packages }.distinct().size} packages=${sources.flatMap { it.packages }.distinct()}")
+    return result
   }
   fun currentSession(): FocusSession? = effectiveSession()
 
@@ -224,6 +382,16 @@ object BlockerController {
       publishStatus()
       return current
     }
+    if (foregroundPackage != null && foregroundPackage != appContext.packageName) {
+      val appGuardPackages = guardianSources["app-guard"]?.packages.orEmpty()
+      if (foregroundPackage in appGuardPackages && foregroundPackage != lastAppGuardDiagnosticPackage) {
+        lastAppGuardDiagnosticPackage = foregroundPackage
+        val activeGrant = isTemporarilyAllowed(foregroundPackage)
+        val decision = if (activeGrant) "allow reason=active_grant" else if (blockScreenActive.get()) "allow reason=block_screen_active" else "block"
+        Log.i(TAG, "[AppGuard:Native] checking package=$foregroundPackage appGuardEnabled=${guardianSources.containsKey("app-guard")} restricted=true activeGrant=$activeGrant decision=$decision")
+        if (activeGrant) publishStatus()
+      }
+    }
     if (foregroundPackage != null && shouldBlock(current, foregroundPackage)) {
       raiseBlockScreen(current, foregroundPackage)
     }
@@ -240,6 +408,8 @@ object BlockerController {
   }
 
   private fun isTemporarilyAllowed(packageName: String): Boolean {
+    val stored = signedGrantStore.load(); val user = supervisedUserId
+    if (stored != null && user != null) { val grant = SignedTemporaryGrantVerifier.verify(stored, user); if (grant != null && grant.packageName == packageName) return true; signedGrantStore.clear() }
     val expiry = temporarilyAllowed[packageName] ?: return false
     if (System.currentTimeMillis() >= expiry) {
       temporarilyAllowed.remove(packageName)
@@ -274,8 +444,9 @@ object BlockerController {
       val launched = runCatching {
         appContext.startActivity(BlockActivity.launchIntent(appContext))
       }.isSuccess
-      if (launched) return
+      if (launched) { Log.i(TAG, "[AppGuard:Native] block screen launched via overlay"); return }
     }
+    Log.w(TAG, "[AppGuard:Native] block screen using notification fallback overlayPermission=false")
     notifications.raiseBlockScreen(session)
   }
 

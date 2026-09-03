@@ -69,3 +69,9 @@ export class InviteDecisionDto {
 export class UpdateRoomGoalDto {
   @IsOptional() @IsInt() @Min(1) @Max(100000) goalTargetMinutes?: number;
 }
+export class SendFocusRoomMessageDto {
+  @IsString() @Length(1, 2000) content!: string;
+}
+export class UpdateFocusCoachDto {
+  @IsBoolean() enabled!: boolean;
+}
